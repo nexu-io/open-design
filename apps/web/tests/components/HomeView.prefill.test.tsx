@@ -779,7 +779,7 @@ describe('HomeView prompt handoff', () => {
     })));
     // Fidelity is deferred to first-turn discovery: the plugin is still applied
     // with its full inputs, but its default must NOT be forwarded to the run, so
-    // the AskUserQuestion flow collects it instead of inheriting a baked-in value.
+    // the question-form flow collects it instead of inheriting a baked-in value.
     const [{ pluginInputs: protoSubmittedInputs }] = onSubmit.mock.calls[0] as [
       { pluginInputs?: Record<string, unknown> },
     ];

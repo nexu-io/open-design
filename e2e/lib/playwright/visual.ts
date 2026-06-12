@@ -22,6 +22,7 @@ type VisualConfig = {
   designSystemId: string | null;
   onboardingCompleted: boolean;
   agentModels: Record<string, { model?: string; reasoning?: string }>;
+  agentCliEnv?: Record<string, Record<string, string>>;
   privacyDecisionAt: number | null;
   telemetry: { metrics?: boolean; content?: boolean; artifactManifest?: boolean };
 };

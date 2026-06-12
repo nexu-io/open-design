@@ -306,7 +306,7 @@ describe('HomeView media composer options', () => {
 
   it('strips deferred media settings from the forwarded pluginInputs', async () => {
     // The footer pills for ratio / duration / model / resolution / audioType /
-    // voice were removed so the agent asks for them via AskUserQuestion during
+    // voice were removed so the agent asks for them via question-form during
     // the run. `buildHomeMediaComposer` still seeds those defaults into the
     // composer state, so submission must strip them before forwarding —
     // otherwise the run arrives with `ratio: 16:9` / `duration: 5` baked in and
@@ -335,7 +335,7 @@ describe('HomeView media composer options', () => {
     // the `/apply` call that yields `appliedPluginSnapshotId`, so submission
     // must re-apply with the deferred footer/media fields stripped — otherwise
     // the run prompt carries `ratio: 16:9` / `duration: 5` / `model: …` and the
-    // first-turn AskUserQuestion discovery flow stays suppressed even though
+    // first-turn question-form discovery flow stays suppressed even though
     // `onSubmit.pluginInputs` was stripped.
     const fetchMock = stubFetch();
     const onSubmit = vi.fn();

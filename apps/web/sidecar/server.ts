@@ -50,6 +50,11 @@ type NextApp = {
   prepare(): Promise<void>;
 };
 
+type NextBundlerOptions = {
+  turbopack?: boolean;
+  webpack?: boolean;
+};
+
 type StandaloneBackend = {
   exitReason(): string | null;
   isRunning(): boolean;
@@ -57,9 +62,16 @@ type StandaloneBackend = {
   stop(): Promise<void>;
 };
 
-function createNextApp(options: { dev: boolean; dir: string }): NextApp {
-  const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string }) => NextApp;
+function createNextApp(options: { dev: boolean; dir: string } & NextBundlerOptions): NextApp {
+  const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string } & NextBundlerOptions) => NextApp;
   return createNextServer(options);
+}
+
+export function resolveNextBundlerOptions(isDev: boolean): NextBundlerOptions {
+  if (!isDev) return {};
+  const configured = (process.env.OD_WEB_DEV_BUNDLER ?? "webpack").trim().toLowerCase();
+  if (configured === "turbopack" || configured === "turbo") return { turbopack: true };
+  return { webpack: true };
 }
 
 export type WebSidecarHandle = {
@@ -750,7 +762,8 @@ async function startRegularNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   webRoot: string,
 ): Promise<WebSidecarHandle> {
-  const app = createNextApp({ dev: process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev", dir: webRoot });
+  const dev = process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev";
+  const app = createNextApp({ dev, dir: webRoot, ...resolveNextBundlerOptions(dev) });
   await prepareNextApp(app, webRoot);
 
   const daemonOrigin = resolveDaemonOrigin();

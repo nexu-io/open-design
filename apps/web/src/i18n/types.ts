@@ -2052,6 +2052,7 @@ export interface Dict {
   'chat.annotationSendDisabledReason': string;
   'chat.annotationPreviewMissing': string;
   'chat.annotationPreviewMissingInk': string;
+  'chat.annotationSentWithoutScreenshot': string;
   'chat.annotationTimeout': string;
   'chat.annotationFailed': string;
   'chat.annotationProjectCreateFailed': string;
@@ -2870,10 +2871,6 @@ export interface Dict {
   'tool.openInTab': string;
   'tool.open': string;
   'tool.todos': string;
-  'tool.askQuestion': string;
-  'tool.askQuestionSubmit': string;
-  'tool.askQuestionPending': string;
-  'tool.askQuestionAnswered': string;
   'tool.todosExpand': string;
   'tool.todosCollapse': string;
   'tool.todosDone': string;

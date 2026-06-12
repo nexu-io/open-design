@@ -267,6 +267,7 @@ describe('App media provider sync flows', () => {
           },
         },
       }),
+      expect.objectContaining({ throwOnError: true }),
     );
   });
 });

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-logo-outro",
+  "title": "Logo Outro Frame",
+  "title_i18n": {
+    "en": "Logo Outro Frame",
+    "zh-CN": "品牌 Logo 收尾帧"
+  },
+  "version": "0.1.0",
+  "description": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+  "description_i18n": {
+    "en": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+    "zh-CN": "Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "nexu-io",
+    "url": "https://github.com/nexu-io",
+    "contact": "open-design@nexu.io"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-logo-outro",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "logo",
+    "outro",
+    "branding",
+    "end-card",
+    "frame",
+    "glow",
+    "intro-outro"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Logo Outro Frame template to turn my content into a video outro or brand closing frame with segmented logo assembly, glow bloom, and tagline reveal. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「品牌 Logo 收尾帧」模板把我的内容做成一段「Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 15
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ]
+  }
+}

@@ -4515,10 +4515,21 @@ function HtmlViewer({
       const out = fn();
       if (out && typeof (out as Promise<unknown>).then === 'function') {
         (out as Promise<unknown>).then(
-          () => { finish('success'); if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' }); },
+          (result) => {
+            if (result === 'cancelled') {
+              finish('cancelled');
+              return;
+            }
+            finish('success');
+            if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' });
+          },
           (err) => finish('failed', err instanceof Error ? err.name : 'UNKNOWN'),
         );
       } else {
+        if (out === 'cancelled') {
+          finish('cancelled');
+          return;
+        }
         finish('success');
         if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' });
       }
@@ -7262,6 +7273,14 @@ function HtmlViewer({
     setDeployMenuOpen((v) => !v);
   };
   const captureExportImageSnapshot = useCallback(async () => {
+    // The host compositor grabs on-screen pixels, so any transient hover chrome
+    // over the preview leaks into the capture. The screenshot control's own
+    // tooltip is already dismissed by TooltipLayer's pointerdown/click listener,
+    // but that setState(null) has not repainted yet when capture starts. Wait
+    // two frames so the dismissal commits first — mirrors the double-rAF guard
+    // in the browser screenshot flow (DesignBrowserPanel).
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
     // Prefer the desktop compositor screenshot of the visible preview region:
     // it returns the real rendered pixels (fonts, external CSS, gradients,
     // images) and is never tainted, so it cannot produce the black/blank frames

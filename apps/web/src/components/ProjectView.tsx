@@ -305,6 +305,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onApiModelChange?: (model: string) => void;
   onRefreshAgents: () => void;
   onThemeChange?: (theme: AppConfig['theme']) => void;
   onOpenSettings: (section?: SettingsSection) => void;
@@ -806,6 +807,7 @@ export function ProjectView({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onApiModelChange,
   onRefreshAgents,
   onThemeChange,
   onOpenSettings,
@@ -1260,14 +1262,27 @@ export function ProjectView({
   }, [messages]);
   const openQuestionsTab = useCallback((request?: QuestionFormOpenRequest) => {
     if (request) {
-      setManualQuestionFormRequest({
-        ...request,
-        submittedAnswers:
-          request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
-      });
+      const opensCurrentLiveForm =
+        request.messageId === lastAssistantMessageId
+        && questionForm?.id === request.form.id
+        && questionFormSubmittedAnswers === undefined;
+      if (opensCurrentLiveForm) {
+        setManualQuestionFormRequest(null);
+      } else {
+        setManualQuestionFormRequest({
+          ...request,
+          submittedAnswers:
+            request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
+        });
+      }
     }
     setQuestionsFocusNonce((n) => n + 1);
-  }, [submittedAnswersForQuestionFormRequest]);
+  }, [
+    lastAssistantMessageId,
+    questionForm,
+    questionFormSubmittedAnswers,
+    submittedAnswersForQuestionFormRequest,
+  ]);
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
@@ -4823,10 +4838,6 @@ export function ProjectView({
             onSend: handleSend,
             onRetry: handleRetry,
             onStop: handleStop,
-            onSubmitForm: (text: string) => {
-              if (currentConversationActionDisabled) return;
-              void handleSend(text, [], []);
-            },
             onRemoveQueuedSend: removeQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
@@ -5537,9 +5548,18 @@ export function ProjectView({
         });
         onAgentModelChange(agentId, choice);
       }}
+      onApiModelChange={(model) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_model_select',
+          model_id: model,
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onApiModelChange?.(model);
+      }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
-      onBack={onBack}
       placement="up"
     />
   );
@@ -5615,10 +5635,6 @@ export function ProjectView({
               shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
-              onSubmitForm={(text) => {
-                if (currentConversationActionDisabled) return;
-                void handleSend(text, [], []);
-              }}
               onOpenQuestions={openQuestionsTab}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}

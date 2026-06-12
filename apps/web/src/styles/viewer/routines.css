@@ -2848,7 +2848,7 @@
 .project-ds-picker-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 210;
+  z-index: 1800;
   background: color-mix(in srgb, var(--text) 38%, transparent);
   backdrop-filter: blur(2px);
   display: flex;

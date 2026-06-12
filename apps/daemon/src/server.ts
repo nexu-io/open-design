@@ -26,6 +26,7 @@ import {
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
+import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
 import {
   applyBakedPreviews,
@@ -406,6 +407,7 @@ import {
   getConversation,
   getDeployment,
   getDeploymentById,
+  getMessageTelemetryFinalizationState,
   getProject,
   getTemplate,
   insertConversation,
@@ -489,7 +491,6 @@ import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { installRouteRegistrationGuard } from './route-registration-guard.js';
-import { submitToolResultToRunState } from './run-tool-results.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
 import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
@@ -2566,6 +2567,7 @@ async function ensureGhReady() {
 }
 
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
 function reconcileAssistantMessageOnRunEnd(db, runs, run) {
   if (!run.assistantMessageId) return;
@@ -2610,77 +2612,10 @@ async function hasGeneratedPluginArtifacts(projectRoot) {
   }
 }
 
-// Canonical open tag is `<question-form>`; `<ask-question>` is an accepted
-// alias models drift to. Mirrors the open-tag set in the web parser.
-const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
-
-// True when `body` is a renderable question-form body: JSON (optionally
-// fenced) parsing to an object with a non-empty `questions` array. This is
-// the minimal contract `tryParseForm` enforces in
-// `apps/web/src/artifacts/question-form.ts`; a body that fails it is kept as
-// raw prose by the UI (no form card renders).
-function questionFormBodyIsRenderable(body) {
-  const trimmed = typeof body === 'string' ? body.trim() : '';
-  if (!trimmed) return false;
-  const stripped = trimmed
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
-  let data;
-  try {
-    data = JSON.parse(stripped);
-  } catch {
-    return false;
-  }
-  if (!data || typeof data !== 'object') return false;
-  const questions = data.questions;
-  return Array.isArray(questions) && questions.some((q) => q && typeof q === 'object');
-}
-
-// Locate `closeTag` (case-insensitively) at or after `from`, returning an
-// index in the ORIGINAL `text` coordinate space. Mirrors the web parser's
-// `findCloseTag`: scanning char-by-char and lowercasing each fixed-length
-// candidate slice keeps the result aligned with `openEnd`. Lowercasing the
-// whole string up front instead would desync the index, because some code
-// points expand under `toLowerCase()` (e.g. `"İ" -> "i̇"`) and shift every
-// offset after them — corrupting the body slice and failing a valid form.
-function findQuestionFormCloseTag(text, from, closeTag) {
-  const closeLower = closeTag.toLowerCase();
-  const tagLen = closeTag.length;
-  const maxStart = text.length - tagLen;
-  for (let i = from; i <= maxStart; i++) {
-    if (text.slice(i, i + tagLen).toLowerCase() === closeLower) return i;
-  }
-  return -1;
-}
-
-// Whether the agent's visible text contains a *renderable* clarifying form —
-// a closed `<question-form>`/`<ask-question>` block whose body satisfies the
-// parser contract above. The plugin-authoring missing-artifacts guard treats
-// this as a legitimate "paused to ask the user" turn rather than a failure.
-//
-// We deliberately mirror (not import) the web parser: the app boundary
-// forbids `apps/daemon` importing `apps/web/src`. Matching only the open tag
-// would let a malformed, non-renderable body suppress the failure — a false
-// success with no usable brief card. Keep this in sync with
-// `apps/web/src/artifacts/question-form.ts`, or promote a shared parser into
-// `packages/contracts` if the two drift.
-function emittedRenderableQuestionForm(text) {
-  if (typeof text !== 'string' || !text) return false;
-  let cursor = 0;
-  while (cursor < text.length) {
-    const m = QUESTION_FORM_OPEN_RE.exec(text.slice(cursor));
-    if (!m) return false;
-    const tagName = (m[1] ?? 'question-form').toLowerCase();
-    const closeTag = `</${tagName}>`;
-    const openEnd = cursor + m.index + m[0].length;
-    const closeIdx = findQuestionFormCloseTag(text, openEnd, closeTag);
-    if (closeIdx === -1) return false;
-    if (questionFormBodyIsRenderable(text.slice(openEnd, closeIdx))) return true;
-    cursor = closeIdx + closeTag.length;
-  }
-  return false;
-}
+// Renderable `<question-form>`/`<ask-question>` detection now lives in
+// `./question-form-detect.ts` so the missing-artifacts guard, awaiting-input
+// status, and run analytics all share ONE renderable-form check. See
+// `emittedRenderableQuestionForm` imported above.
 
 function assistantMessageEmittedQuestionForm(db, assistantMessageId) {
   if (!assistantMessageId) return false;
@@ -3099,6 +3034,7 @@ export function createFinalizedMessageTelemetryReporter({
     durationMs,
     projectId,
     reportResult,
+    reportTrigger = 'final_message',
     run,
     runId,
     skipReason,
@@ -3123,7 +3059,7 @@ export function createFinalizedMessageTelemetryReporter({
           ? { langfuse_drop_reason: delivery.langfuse_drop_reason }
           : {}),
         langfuse_report_result: reportResult,
-        langfuse_report_trigger: 'final_message',
+        langfuse_report_trigger: reportTrigger,
         ...(skipReason ? { langfuse_report_skip_reason: skipReason } : {}),
         ...(durationMs !== undefined ? { report_duration_ms: durationMs } : {}),
         ...(terminalResult ? { result: terminalResult } : {}),
@@ -3131,7 +3067,7 @@ export function createFinalizedMessageTelemetryReporter({
         ...(run?.agentId ? { agent_provider_id: agentIdToTracking(run.agentId) } : {}),
         ...(run?.model !== undefined ? { model_id: modelIdForTracking(run.model) } : {}),
       },
-      insertId: `${runId}-langfuse-report-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
+      insertId: `${runId}-langfuse-report-${reportTrigger}-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
     });
   };
   return (saved, body = {}, options = {}) => {
@@ -3148,6 +3084,7 @@ export function createFinalizedMessageTelemetryReporter({
           langfuse_drop_reason: 'network_error',
         },
         projectId: options.projectId,
+        reportTrigger: options.reportTrigger,
         reportResult: 'skipped',
         runId,
         skipReason: 'run_not_found',
@@ -3155,6 +3092,7 @@ export function createFinalizedMessageTelemetryReporter({
       });
       return;
     }
+    const reportTrigger = options.reportTrigger ?? 'final_message';
     if (reportedRuns.has(run.id)) {
       captureResult({
         analyticsContext: options.analyticsContext,
@@ -3165,6 +3103,7 @@ export function createFinalizedMessageTelemetryReporter({
           langfuse_drop_reason: 'network_error',
         },
         projectId: options.projectId,
+        reportTrigger: options.reportTrigger,
         reportResult: 'skipped',
         run,
         runId: run.id,
@@ -3173,7 +3112,9 @@ export function createFinalizedMessageTelemetryReporter({
       });
       return;
     }
-    reportedRuns.add(run.id);
+    if (reportTrigger !== 'terminal_fallback') {
+      reportedRuns.add(run.id);
+    }
     void (async () => {
       const start = Date.now();
       const delivery = await report({
@@ -3194,6 +3135,7 @@ export function createFinalizedMessageTelemetryReporter({
         delivery: state,
         durationMs: Date.now() - start,
         projectId: options.projectId,
+        reportTrigger,
         reportResult: state.langfuse_expected === false
           ? 'skipped'
           : state.langfuse_delivery_status === 'accepted'
@@ -3208,6 +3150,10 @@ export function createFinalizedMessageTelemetryReporter({
       });
     })();
   };
+}
+
+export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
+  return status === 'failed' || status === 'canceled';
 }
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
@@ -4587,6 +4533,11 @@ type ClaudeStreamJsonBookkeepingRun = {
   } | null;
 };
 
+// Stream-json input mode keeps the child's stdin open across the turn so the
+// daemon can stream further user messages mid-conversation. The child has no
+// other way to know the turn is over, though — without an EOF it idles until
+// the inactivity watchdog kills it. So when a turn terminates cleanly we close
+// stdin to let the child exit.
 export function applyClaudeStreamJsonRunBookkeeping(
   run: ClaudeStreamJsonBookkeepingRun,
   ev: unknown,
@@ -4616,7 +4567,7 @@ export function applyClaudeStreamJsonRunBookkeeping(
       // execution (claude-code is about to run an internal tool, or we owe a
       // host tool_result). Either way the conversation is still in flight.
       event.stopReason !== 'tool_use') ||
-      event.type === 'usage') &&
+      (event.type === 'usage' && event.stopReason !== 'tool_use')) &&
     (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
   if (!cleanTerminalTurn) return;
 
@@ -5859,8 +5810,10 @@ export async function startServer({
     });
   });
 
-  // Tracks runs whose completion has already been forwarded to Langfuse so
-  // repeated message updates only emit one trace per run.
+  // Tracks runs whose finalized assistant message has already been forwarded
+  // to Langfuse so repeated message updates only emit one final trace per run.
+  // Terminal fallback reports intentionally do not claim this set; a delayed
+  // telemetry-finalized message can still replace the synthetic fallback.
   const reportedRuns = new Set();
 
   // App-version snapshot read once at server start for Langfuse trace metadata.
@@ -5889,6 +5842,42 @@ export async function startServer({
     reportedRuns,
     getAppVersion: () => cachedAppVersion,
   });
+  const reportRunCompletionTelemetryFallback = ({
+    analyticsContext,
+    run,
+    status,
+  }: {
+    analyticsContext: any;
+    run: any;
+    status: string;
+  }) => {
+    if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
+    const timer = setTimeout(() => {
+      if (reportedRuns.has(run.id)) return;
+      if (run.assistantMessageId) {
+        const messageTelemetry = getMessageTelemetryFinalizationState(db, run.assistantMessageId);
+        if (messageTelemetry.finalizedAt !== null) return;
+      }
+      reportFinalizedMessage(
+        {
+          id: run.assistantMessageId ?? `${run.id}-terminal`,
+          conversationId: run.conversationId,
+          endedAt: run.updatedAt,
+          role: 'assistant',
+          runId: run.id,
+          runStatus: status,
+        },
+        { telemetryFinalized: true },
+        {
+          analyticsContext,
+          conversationId: run.conversationId,
+          projectId: run.projectId,
+          reportTrigger: 'terminal_fallback',
+        },
+      );
+    }, LANGFUSE_TERMINAL_FALLBACK_DELAY_MS);
+    timer.unref?.();
+  };
 
   const reportFeedback = (req: {
     runId: string;
@@ -11914,7 +11903,40 @@ export async function startServer({
         ...(errorCode ? { error_code: errorCode } : {}),
       };
     };
+    const destroyChildStdio = (child) => {
+      // Best-effort cleanup of stdio streams on a child process we're about
+      // to drop. The daemon-sidecar (apps/daemon) keeps listeners attached
+      // to child.stdout / child.stderr / child.stdin across the run
+      // lifecycle (line ~12890..~13500+ in this file). Those listeners hold
+      // the Stream objects alive, and the Stream objects own the read side
+      // of the OS pipes — so dropping the child reference via
+      // `run.child = null` without destroying the streams leaks the pipe
+      // file descriptors. After a few hundred retries the daemon
+      // accumulates 10k+ FDs and posix_spawn returns EBADF.
+      //
+      // See: https://github.com/nexu-io/open-design/issues/4100
+      if (!child) return;
+      const destroyStream = (stream) => {
+        if (!stream || stream.destroyed) return;
+        try { stream.removeAllListeners(); } catch {}
+        try { stream.destroy(); } catch {}
+      };
+      destroyStream(child.stdout);
+      destroyStream(child.stderr);
+      destroyStream(child.stdin);
+    };
     const restartSameRunAfterRetry = () => {
+      // Release the previous child's stdio streams before letting the
+      // reference drop — see destroyChildStdio for rationale.
+      destroyChildStdio(run.child);
+      if (
+        run.child &&
+        typeof run.child.kill === 'function' &&
+        run.child.exitCode === null &&
+        !run.child.killed
+      ) {
+        try { run.child.kill('SIGTERM'); } catch {}
+      }
       run.status = 'queued';
       run.updatedAt = Date.now();
       run.child = null;
@@ -11924,7 +11946,6 @@ export async function startServer({
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
-      run.pendingHostAnswers?.clear?.();
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
@@ -12201,14 +12222,14 @@ export async function startServer({
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
     let opencodeConfigContent: string | null = null;
-    if (
-      def.externalMcpInjection === 'opencode-env-content' &&
-      enabledExternalMcp.length > 0
-    ) {
+    if (def.externalMcpInjection === 'opencode-env-content') {
       try {
         opencodeConfigContent = buildOpenCodeMcpConfigContent(
           enabledExternalMcp,
           oauthTokensForSpawn,
+          {
+            allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+          },
         );
       } catch (err) {
         console.warn(
@@ -12612,14 +12633,22 @@ export async function startServer({
         inactivityTimer = null;
       }
     };
+    let forcedChildShutdownTimers = [];
+    const clearForcedChildShutdown = () => {
+      for (const timer of forcedChildShutdownTimers) clearTimeout(timer);
+      forcedChildShutdownTimers = [];
+    };
     const scheduleForcedChildShutdown = () => {
       if (!child) return;
-      setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGTERM');
-      }, inactivityKillGraceMs).unref?.();
-      setTimeout(() => {
-        if (child && !child.killed) child.kill('SIGKILL');
-      }, inactivityKillGraceMs * 2).unref?.();
+      clearForcedChildShutdown();
+      forcedChildShutdownTimers = [
+        setTimeout(() => {
+          if (child) design.runs.signalChild(run, 'SIGTERM');
+        }, inactivityKillGraceMs),
+        setTimeout(() => {
+          if (child) design.runs.signalChild(run, 'SIGKILL');
+        }, inactivityKillGraceMs * 2),
+      ];
     };
     const failForInactivity = () => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
@@ -12642,7 +12671,7 @@ export async function startServer({
         if (acpSession?.abort) {
           acpSession.abort();
         }
-        if (child && !child.killed) child.kill('SIGTERM');
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
         scheduleForcedChildShutdown();
         return;
       }
@@ -12690,7 +12719,7 @@ export async function startServer({
       if (acpSession?.abort) {
         acpSession.abort();
       }
-      if (child && !child.killed) child.kill('SIGTERM');
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
       scheduleForcedChildShutdown();
     };
     const activeInactivityTimeoutMs = () =>
@@ -12875,6 +12904,7 @@ export async function startServer({
         stdio: [stdinMode, 'pipe', 'pipe'],
         cwd: effectiveCwd,
         shell: false,
+        detached: process.platform !== 'win32',
         // Required when invocation wraps a Windows .cmd/.bat shim through
         // cmd.exe; without this, Node re-escapes the inner command line and
         // breaks paths containing spaces (issue #315).
@@ -12885,6 +12915,11 @@ export async function startServer({
         processSpawnedAt: Date.now(),
       };
       run.child = child;
+      run.childPid = typeof child.pid === 'number' ? child.pid : null;
+      run.processGroupId =
+        process.platform !== 'win32' && typeof child.pid === 'number'
+          ? child.pid
+          : null;
       // Schedule release of the antigravity model lock once agy's
       // --log-file confirms the chosen model was propagated to the
       // backend (the upstream signal that settings.json was read).
@@ -13314,7 +13349,7 @@ export async function startServer({
           // ignore — best-effort
         }
       }
-      if (child && !child.killed) child.kill('SIGTERM');
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
       scheduleForcedChildShutdown();
     }
 
@@ -13430,12 +13465,10 @@ export async function startServer({
           abortForRoleMarker(typeof m === 'string' ? m : 'role marker');
         }
         // Stream-json input mode keeps the child's stdin open across the
-        // turn so we can answer interactive tools like `AskUserQuestion`
-        // with a real `tool_result`. The child has no other way to know
-        // the conversation is over, though — without an EOF it sits idle
-        // until the inactivity watchdog kills it. Bookkeeping here:
-        //   - tool_use(AskUserQuestion): record the id so we know we owe
-        //     the model a tool_result before the turn can end.
+        // turn so the daemon can stream further user messages mid-turn. The
+        // child has no other way to know the turn is over, though — without
+        // an EOF it sits idle until the inactivity watchdog kills it.
+        // Bookkeeping here closes stdin on a clean terminal turn:
         //   - turn_end (per-turn synthesized from `stop_reason`): fire on
         //     `end_turn` etc. but NOT on `tool_use` — that stop reason
         //     means the model paused mid-tool, not "turn complete".
@@ -13526,6 +13559,7 @@ export async function startServer({
         model: safeModel,
         imagePaths: def.supportsImagePaths ? amrStagedImages : [],
         mcpServers,
+        envFormat: def.acpMcpEnvFormat ?? 'array',
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
         send: (event, data) => {
           if (event === 'agent') {
@@ -13624,6 +13658,7 @@ export async function startServer({
     child.on('close', async (code, signal) => {
       try {
       clearInactivityWatchdog();
+      clearForcedChildShutdown();
       flushVisibleAgentStderr();
       if (watchdogRetryRestarted) {
         // The inactivity watchdog already failed this attempt and the same-run
@@ -14001,11 +14036,10 @@ export async function startServer({
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
         // JSONL line. Do NOT close stdin: claude-code keeps reading further
-        // messages until EOF, which is what lets us inject a `tool_result`
-        // block later when the user answers an `AskUserQuestion` card. The
-        // stdin is closed implicitly when the child exits (run terminates,
-        // user cancels, or the model finishes without an outstanding tool
-        // call).
+        // messages until EOF, which is what lets the daemon stream more user
+        // messages into the same turn. The stdin is closed on a clean terminal
+        // turn (see applyClaudeStreamJsonRunBookkeeping) or when the child
+        // exits (run terminates, user cancels).
         const userMessage = JSON.stringify({
           type: 'user',
           message: {
@@ -14026,21 +14060,6 @@ export async function startServer({
         child.stdin.end(composed, 'utf8');
       }
     }
-  };
-
-  // Send a `tool_result` content block into a still-running stream-json
-  // child. Used for interactive tools that the host answers (currently:
-  // Claude's `AskUserQuestion`). The run must still be active and its
-  // stdin must still be open — we never re-spawn a closed child.
-  const submitToolResultToRun = (runId, toolUseId, content, isError = false) => {
-    const run = design.runs.get(runId);
-    if (!run) return { ok: false, reason: 'not_found' };
-    return submitToolResultToRunState(run, {
-      content,
-      isError,
-      isTerminal: design.runs.isTerminal(run.status),
-      toolUseId,
-    });
   };
 
   orbitService.setRunHandler(async ({
@@ -14489,6 +14508,15 @@ export async function startServer({
     // here so PostHog actually receives the event. Both fire under the
     // same insert_id prefix so any web-side mirror dedupes by $insert_id.
     const analyticsContext = readAnalyticsContext(req);
+    design.runs.wait(run).then((status: { status: string }) => {
+      reportRunCompletionTelemetryFallback({
+        analyticsContext: analyticsContext ?? null,
+        run,
+        status: status.status,
+      });
+    }).catch(() => {
+      // wait() can't reject in current runs.ts impl, but guard anyway.
+    });
     if (analyticsContext) {
       const reqBody = (req.body || {}) as Record<string, unknown>;
       const runInsertId = newInsertId();
@@ -14831,10 +14859,10 @@ export async function startServer({
             // for the dedup semantics; tested in
             // `tests/run-artifacts.test.ts`.
             artifact_count: artifactCount,
-            // True when the run raised an AskUserQuestion clarification
-            // card. Clarification turns inherently produce no artifact, so
-            // the dashboard excludes them from the "run finished -> has
-            // artifact" funnel instead of counting them as failures. See
+            // True when the run raised a `<question-form>` clarification.
+            // Clarification turns inherently produce no artifact, so the
+            // dashboard excludes them from the "run finished -> has artifact"
+            // funnel instead of counting them as failures. See
             // `run-artifacts.ts`; tested in `tests/run-artifacts.test.ts`.
             asked_user_question: runAskedUserQuestion(run.events),
             retry_attempt_count: run.retryAttemptCount ?? 0,
@@ -14974,12 +15002,12 @@ export async function startServer({
     });
   });
 
-  app.post('/api/runs/:id/cancel', (req, res) => {
+  app.post('/api/runs/:id/cancel', async (req, res) => {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.cancel(run);
+    const status = await design.runs.cancel(run);
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true };
+    const body = { ok: true, run: status };
     res.json(body);
   });
 
@@ -15416,7 +15444,7 @@ export async function startServer({
     validation: validationDeps,
     finalize: finalizeDeps,
     handoff: handoffDeps,
-    chat: { startChatRun, submitToolResultToRun },
+    chat: { startChatRun },
     agents: agentDeps,
     critique: critiqueDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
@@ -15441,7 +15469,7 @@ export async function startServer({
     design,
     http: httpDeps,
     paths: pathDeps,
-    chat: { startChatRun, submitToolResultToRun },
+    chat: { startChatRun },
     agents: agentDeps,
     critique: critiqueDeps,
     validation: validationDeps,

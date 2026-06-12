@@ -200,7 +200,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
               plugin. Inputs fall back to their schema `default` values (seeded
               in handleApplied), so the brief still renders fully. When a plugin
               genuinely needs a user decision, that should surface as an
-              AskUserQuestion card in the chat stream, not as composer chrome.
+              question-form card in the chat stream, not as composer chrome.
             */}
           </div>
         ) : null}

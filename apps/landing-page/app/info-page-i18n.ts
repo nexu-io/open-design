@@ -6,6 +6,8 @@ import {
   type LandingLocaleCode,
 } from './i18n';
 import { buildLocalizedAgentGuides } from './agent-guides.i18n';
+import { EN_AGENT_GUIDES } from './agent-guides.en.i18n';
+import { ZH_AGENT_GUIDES } from './agent-guides.zh.i18n';
 import { LOCALIZED_ALTERNATIVES } from './alternatives-i18n';
 
 type LinkText = {
@@ -56,7 +58,7 @@ type AgentResourceLink = {
 // A single block inside a rich (long-form) agent guide section. Blocks
 // render in order: prose paragraphs, ordered/unordered lists, a fenced
 // code block, an image with alt text, or a comparison table.
-type AgentRichBlock =
+export type AgentRichBlock =
   | { kind: 'p'; text: string }
   | { kind: 'ol'; items: string[] }
   | { kind: 'ul'; items: string[] }
@@ -69,7 +71,7 @@ type AgentRichBlock =
       rows: string[][];
     };
 
-type AgentRichSection = {
+export type AgentRichSection = {
   // Stable anchor id used by the on-this-page TOC and deep links.
   id: string;
   heading: string;
@@ -77,7 +79,7 @@ type AgentRichSection = {
 };
 
 // One head CTA action. `variant: 'primary'` is the highlighted button.
-type AgentCtaAction = {
+export type AgentCtaAction = {
   label: string;
   href: string;
   variant: 'primary' | 'ghost';
@@ -88,7 +90,7 @@ type AgentCtaAction = {
 // industrial how-to layout (hero CTA + deep sections) instead of the
 // short default layout. Only pages that opt in carry this; the rest keep
 // the compact shape below untouched.
-type AgentRichCopy = {
+export type AgentRichCopy = {
   heroCtaLead: string;
   heroCtaActions: AgentCtaAction[];
   intro: string[];
@@ -104,7 +106,7 @@ type AgentRichCopy = {
   hubLinkLabel: string;
 };
 
-type AgentGuideCopy = {
+export type AgentGuideCopy = {
   title: string;
   description: string;
   breadcrumb: string;
@@ -505,9 +507,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         'You have the install path. Star the repo, grab the desktop build, or join Discord if anything breaks on first run.',
     },
     agents: {
-      title: 'Open Design agents — 17 BYOK adapters',
+      title: 'Open Design agents — {count} BYOK adapters',
       description:
-        'Open Design ships 17 BYOK adapters out of the box. Drive design from the same agent you use for code — no separate vendor login.',
+        'Open Design ships {count} BYOK adapters out of the box. Drive design from the same agent you use for code — no separate vendor login.',
       breadcrumb: 'Agents',
       label: 'Adapters · Nº 04',
       heading: (count) => `${count} BYOK agents, one skill protocol.`,
@@ -1919,923 +1921,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         },
       },
     },
-    agentGuides: {
-      'claude-code': {
-        title: 'Claude Code for design — Open Design',
-        description:
-          'How designers use Claude Code for UI and web design, and how Open Design turns it into a real design agent — local-first, BYOK, with a curated skill and design-system library.',
-        breadcrumb: 'Claude Code',
-        label: 'Agent · Claude Code',
-        heading: 'Claude Code for design.',
-        lead: 'Claude Code is Anthropic’s terminal coding agent. People already use it to build UIs, design systems, and landing pages. Open Design plugs it into a real design workflow — bring your Anthropic key or Claude subscription, keep every file local.',
-        tldrTitle: 'TL;DR',
-        tldrBody:
-          'Claude Code is a strong design generator once you give it taste — a design system, an aesthetic skill, a screenshot loop. Open Design ships exactly that as a local-first, open-source layer. Point Claude Code at it with your own key and start designing.',
-        toc: ['What is Claude Code', 'Designing with Claude Code', 'Resources', 'With Open Design', 'FAQ'],
-        rich: {
-          heroCtaLead:
-            'Open Design turns Claude Code into a local-first, open-source design agent — your Anthropic key or Claude subscription, your files, a curated skill and design-system library around it.',
-          heroCtaActions: [
-            { label: 'Use Claude Code inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          intro: [
-            'Claude Code is widely regarded as the coding agent with the best frontend taste — it reasons about interfaces with unusual specificity, naming exact hex values, spacing, and type scales, and it refactors UI across a large codebase without losing the thread. But out of the box it still drifts toward a generic look unless you hand it a design system, skills, and real references. This is a practical, end-to-end guide to using Claude Code for UI, frontend, and design-system work, and to wiring it into a structured workflow with Open Design.',
-            'It covers what Claude Code actually is, why it is strong at frontend, how to set it up from zero, the CLAUDE.md and Skills workflow, the official Figma round-trip, how it compares to Codex and Cursor, the pitfalls that make AI output look generic, and how Open Design closes the gap as an open, local-first design layer.',
-          ],
-          heroImage: {
-            src: '/agents/claude-code-design/claude-code-design-hero.webp',
-            alt: 'Claude Code design feedback loop: terminal agent making specific design decisions, a browser rendering the UI, and a workspace, with a feedback arrow looping back',
-            caption: 'The core loop: Claude Code reasons out specific UI decisions in the terminal, renders and verifies them in a real browser, and converges against your references.',
-          },
-          tocLabel: 'On this page',
-          toc: [
-            { id: 'what-is-claude-code', label: 'What Claude Code actually is' },
-            { id: 'why-design', label: 'Why Claude Code is good at design' },
-            { id: 'setup', label: 'Set up Claude Code for design (from zero)' },
-            { id: 'skills-workflow', label: 'The CLAUDE.md and Skills workflow' },
-            { id: 'figma', label: 'Claude Code + Figma round-trip' },
-            { id: 'vs', label: 'Claude Code vs Codex vs Cursor' },
-            { id: 'pitfalls', label: 'Pitfalls and the “AI slop” look' },
-            { id: 'open-design', label: 'Designing with Claude Code in Open Design' },
-            { id: 'faq', label: 'FAQ' },
-          ],
-          sections: [
-            {
-              id: 'what-is-claude-code',
-              heading: 'What Claude Code actually is',
-              blocks: [
-                { kind: 'p', text: 'Claude Code is Anthropic’s agentic coding tool. It reads your codebase, edits files, runs commands, and integrates with your dev tools — planning, writing, and verifying work from natural-language tasks rather than just autocompleting lines.' },
-                { kind: 'p', text: 'It ships across several surfaces that all share the same engine: a terminal CLI, IDE extensions for VS Code, Cursor, and JetBrains, a desktop app with visual diff review, and a web experience for long-running tasks. Your CLAUDE.md files, settings, and MCP servers carry across all of them.' },
-                { kind: 'steps', items: [
-                  { label: 'Instruction file', body: 'Claude Code reads a CLAUDE.md file in your project root at the start of every session — the natural place to encode your design conventions, tokens, and review checklists.' },
-                  { label: 'Skills', body: 'Agent Skills package repeatable instructions, scripts, and resources that Claude loads on demand, including Anthropic’s official Frontend Design skill for taste.' },
-                  { label: 'Plan and subagents', body: 'It can plan before acting and spawn subagents that work on different parts of a task in parallel, which keeps large UI refactors coherent.' },
-                ] },
-                { kind: 'ul', items: [
-                  'Vendor: Anthropic',
-                  'Credential: Anthropic API key (BYOK, via the Console) or a Claude subscription (Pro / Max)',
-                  'Surfaces: terminal CLI, VS Code / Cursor / JetBrains extensions, desktop app, web',
-                ] },
-              ],
-            },
-            {
-              id: 'why-design',
-              heading: 'Why Claude Code is good at design',
-              blocks: [
-                { kind: 'p', text: 'Among coding agents, Claude Code has a reputation for taste in frontend work. A few things explain it.' },
-                { kind: 'steps', items: [
-                  { label: 'Specific, not vague, decisions', body: 'Claude Code tends to commit to concrete choices — exact hex values, spacing scales, type ramps, and component hierarchy — instead of hand-waving, which is what separates a real interface from a placeholder.' },
-                  { label: 'Codebase-aware reasoning', body: 'With a large working context it refactors UI across many files at once, reusing your existing components and tokens rather than reinventing one-off styles.' },
-                  { label: 'An official frontend skill', body: 'Anthropic ships a Frontend Design skill that makes Claude write a design direction first and deliberately steers away from generic system fonts and predictable purple gradients.' },
-                ] },
-                { kind: 'image', src: '/agents/claude-code-design/claude-code-design-taste-triangle.webp', alt: 'Diagram showing design system, skill, and reference image converging into good design output', caption: 'Taste comes from three inputs you provide: a design system, a skill, and real reference images.' },
-                { kind: 'p', text: 'The lesson is the same one Anthropic makes about its own models: Claude does not have taste by default — left alone it converges on the statistical center of web design (Inter, purple gradients, soft shadows). It produces good design when you give it constraints. Open Design packages exactly those inputs, which is why the two fit together (more below).' },
-              ],
-            },
-            {
-              id: 'setup',
-              heading: 'Set up Claude Code for design work, from zero',
-              blocks: [
-                { kind: 'p', text: 'Here is the full path from a clean machine to a Claude Code that can build and verify UI.' },
-                { kind: 'code', lang: 'bash', code: '# 1. Install Claude Code (native install, recommended)\ncurl -fsSL https://claude.ai/install.sh | bash\n# or: brew install --cask claude-code\n# Windows PowerShell: irm https://claude.ai/install.ps1 | iex\n\n# 2. Start it in your project and sign in on first run\ncd your-project\nclaude            # sign in with your Claude subscription or API key\n\n# 3. Generate project context\n/init             # creates a CLAUDE.md for this project\n\n# 4. Add the official Frontend Design skill\nclaude plugin install frontend-design@claude-plugins-official\n\n# 5. Wire the Figma MCP server (optional, for design handoff)\nclaude plugin install figma@claude-plugins-official' },
-                { kind: 'image', src: '/agents/claude-code-design/claude-code-design-setup-flow.webp', alt: 'Five-step setup flow: install, authenticate, configure CLAUDE.md, add skill, verify', caption: 'The setup sequence: install → authenticate → configure CLAUDE.md → add the Frontend Design skill → enable browser verification.' },
-                { kind: 'steps', items: [
-                  { label: 'Encode your design rules', body: 'Put your tokens, primitives, and conventions in CLAUDE.md and point Claude at them, so output matches a brand instead of defaulting to a generic look.' },
-                  { label: 'Add browser verification', body: 'Wire a Playwright or Chrome MCP so Claude renders in a real browser and checks its output across breakpoints instead of only confirming the build passes.' },
-                ] },
-              ],
-            },
-            {
-              id: 'skills-workflow',
-              heading: 'The CLAUDE.md and Skills workflow',
-              blocks: [
-                { kind: 'p', text: 'The highest-leverage design loop with Claude Code is feeding it real references plus your design context, then iterating until the UI matches — with CLAUDE.md and Skills carrying the constraints so you do not re-explain them every prompt.' },
-                { kind: 'ol', items: [
-                  'Start from the clearest visual references you have — and include multiple states (desktop and mobile, hover, empty, loading), not just one hero shot.',
-                  'Be specific in the prompt; vague prompts produce generic UI even with a strong agent.',
-                  'Keep your design system and conventions in CLAUDE.md, and tell Claude where the tokens and canonical primitives live.',
-                  'Add the Frontend Design skill so Claude commits to a real aesthetic direction before writing code.',
-                  'Wire browser verification so Claude renders, resizes to breakpoints, and compares back to the references — not merely confirms it builds.',
-                ] },
-                { kind: 'p', text: 'Drop a reference image into the session and prompt with concrete constraints:' },
-                { kind: 'code', lang: 'bash', code: 'claude "Implement reference-desktop.png and reference-mobile.png in\n  React + Vite + Tailwind + TypeScript.\n  Reuse the design-system components and tokens described in CLAUDE.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser, verify it matches the references across\n  breakpoints, and iterate until it does."' },
-                { kind: 'p', text: 'Run a dev server alongside, keep prompts small and focused, and commit good iterations / revert bad ones (telling Claude when you revert) so each pass builds on a clean base. Use plan mode for larger refactors so you can review the approach before any file changes.' },
-              ],
-            },
-            {
-              id: 'figma',
-              heading: 'Claude Code + Figma: design ↔ code round-trip',
-              blocks: [
-                { kind: 'p', text: 'In February 2026 Anthropic and Figma shipped a first-class, bidirectional integration via the Figma MCP server. It works in both directions.' },
-                { kind: 'steps', items: [
-                  { label: 'Design → Code', body: 'Select a frame in Figma or paste a link into Claude Code, pull the design context, and ask it to implement the design using your existing component library. Code Connect keeps output aligned with your real components.' },
-                  { label: 'Code → Design', body: 'Build and preview a feature in the browser, then say “Send this to Figma” to capture the running UI as editable Figma layers — entire screen or a selected element.' },
-                ] },
-                { kind: 'p', text: 'Install it once with claude plugin install figma@claude-plugins-official (Dev Mode MCP requires a paid Figma plan). The same Figma MCP is available to Claude Code, Codex, Cursor, and VS Code — exactly the kind of portable, multi-agent capability Open Design is built to orchestrate.' },
-              ],
-            },
-            {
-              id: 'vs',
-              heading: 'Claude Code vs Codex vs Cursor for design',
-              blocks: [
-                { kind: 'p', text: 'There is no single winner for design work — each agent has a different strength, and experienced teams stack them. A fair summary:' },
-                { kind: 'table', columns: ['Agent', 'Design strength', 'Best for'], rows: [
-                  ['Claude Code', 'Specific design decisions (hex, spacing, type) and codebase-aware UX reasoning', 'Frontend reasoning and large-context refactors'],
-                  ['Codex', 'Strong visual polish and image understanding; sandboxed async builds', 'Delegated async builds and portable AGENTS.md rules'],
-                  ['Cursor', 'Visual build-and-see loop with live preview and inline edits', 'Tight iterate-and-watch UI work inside an IDE'],
-                ] },
-                { kind: 'p', text: 'The recurring community verdict is that taste comes from humans: all three default to a generic aesthetic without skills, references, and constraints. That is the real problem to solve — and it is design-tool-shaped, not model-shaped.' },
-              ],
-            },
-            {
-              id: 'pitfalls',
-              heading: 'Pitfalls, and how to avoid the “AI slop” look',
-              blocks: [
-                { kind: 'p', text: 'Even with Claude Code’s reputation for taste, the most common complaint about AI-generated design is that it looks generic — Inter fonts, purple gradients on white, soft shadows, oversized rounded corners, an aesthetic that “screams an AI made this.” Anthropic itself attributes this to distributional convergence: safe choices dominate web training data. Other reported issues include broken mobile layouts and instructions leaking into UI copy.' },
-                { kind: 'steps', items: [
-                  { label: 'Install the Frontend Design skill', body: 'It forces Claude to commit to a real direction and explicitly avoids fonts and gradients overused by AI.' },
-                  { label: 'Enable browser verification', body: 'Make Claude render and self-check across breakpoints so layouts do not silently break on mobile.' },
-                  { label: 'Supply tokens and references', body: 'Real design tokens and reference screenshots are the single biggest lever on output quality.' },
-                  { label: 'Encode rules in CLAUDE.md', body: 'Put “no hero cards, max two typefaces, brand-first hierarchy” style rules where the agent reads them every run.' },
-                ] },
-                { kind: 'p', text: 'Notice that every mitigation is about giving the agent a curated design context. Maintaining that context by hand, per project, is the toil Open Design removes.' },
-              ],
-            },
-            {
-              id: 'open-design',
-              heading: 'Designing with Claude Code inside Open Design',
-              blocks: [
-                { kind: 'p', text: 'Open Design is the open-source design layer the workflow above keeps asking for. It treats Claude Code as a first-party adapter and wraps it in a curated skill and design-system library, a structured render pipeline, and a local desktop UI — so the design context that makes Claude Code good is there from the first run, not assembled by hand each time.' },
-                { kind: 'ol', items: [
-                  'Install Open Design and select Claude Code as your agent.',
-                  'Authenticate with your Anthropic API key (BYOK) or Claude subscription — credentials stay on your machine and are never proxied through us.',
-                  'Pick a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
-                  'Every artifact and DESIGN.md file lives in your own repo, not a hosted cloud.',
-                ] },
-                { kind: 'p', text: 'Same Claude Code agent, same key — plus a real, portable, open-source design workflow around it. It is local-first and Apache-2.0, so nothing about your work or your credentials leaves your machine.' },
-              ],
-            },
-          ],
-          faqTitle: 'Frequently asked questions',
-          faq: [
-            { name: 'Is Claude Code good for design work?', text: 'Yes — it is widely regarded as the coding agent with the best frontend taste, making specific, codebase-aware decisions about hex values, spacing, and type scales. With the Frontend Design skill, a design system, and real reference images in context it produces production-quality, responsive UI and can verify it in a browser. Without that context it tends to default to a generic look, which is the gap Open Design fills.' },
-            { name: 'Do I need a Claude subscription to design with Claude Code?', text: 'You can use either an Anthropic API key (BYOK, via the Console) or a Claude subscription (Pro / Max). Either way Open Design never proxies your credentials — they are used directly by your agent on your machine.' },
-            { name: 'Claude Code or Codex for frontend design?', text: 'Both are strong. Claude Code is known for specific, codebase-aware design decisions and frontend reasoning; Codex has strong visual polish and excels at delegated, sandboxed builds. Many teams use both — Open Design lets you switch agents without changing your design workflow.' },
-            { name: 'How do I connect Claude Code to Figma?', text: 'Install the official Figma plugin with claude plugin install figma@claude-plugins-official. You can then implement Figma frames in code using the design context, and push a running UI back to editable Figma frames with “Send this to Figma.” Dev Mode MCP requires a paid Figma plan.' },
-            { name: 'What are Skills and CLAUDE.md?', text: 'CLAUDE.md is a markdown file in your project root that Claude Code reads at the start of every session — the place to encode your design conventions. Skills package repeatable instructions and resources Claude loads on demand, including Anthropic’s official Frontend Design skill. Open Design ships a curated library of both so you skip the per-project setup.' },
-            { name: 'How do I avoid the generic “AI slop” aesthetic?', text: 'Install the Frontend Design skill, supply real design tokens and reference screenshots, encode brand rules in CLAUDE.md, and enable browser verification. Open Design ships these as a curated library so you skip the per-project setup.' },
-            { name: 'Is Open Design affiliated with Anthropic?', text: 'No. Claude Code is a product of Anthropic; Open Design is an independent open-source project that supports it as a first-party adapter. Claude and Claude Code are trademarks of Anthropic.' },
-            { name: 'Are my files and credentials safe?', text: 'Yes — Open Design is local-first and Apache-2.0. Your files, artifacts, and DESIGN.md stay in your own repo, and your Anthropic credentials are used directly by your agent, never routed through Open Design servers.' },
-          ],
-          ctaTitle: 'Design with Claude Code, the open way.',
-          ctaBody: 'Bring your own Anthropic key or Claude subscription, keep every file local, and get a curated design library around the agent you already use.',
-          ctaActions: [
-            { label: 'Use Claude Code inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          hubLinkLabel: 'See all supported agents',
-        },
-        aboutTitle: 'What is Claude Code',
-        aboutBody: [
-          'Claude Code is Anthropic’s agentic command-line tool: you describe a task in natural language and it reads, writes, and runs code in your project until the task is done.',
-          'It is a coding agent, not a design tool — but design is one of its strongest emergent uses. With the right skills and a design system in context, it generates production HTML/CSS/React, iterates on screenshots, and maintains design tokens.',
-          'Open Design treats Claude Code as a first-party adapter, so the same agent you code with becomes the engine behind a structured design workflow.',
-        ],
-        vendorLabel: 'Vendor',
-        vendor: 'Anthropic',
-        credentialLabel: 'Credential',
-        credential: 'Anthropic API key (BYOK) or Claude subscription',
-        designTitle: 'Designing with Claude Code',
-        designLead:
-          'The community has converged on a few patterns that turn Claude Code from a generic code generator into something with real design judgment:',
-        designPoints: [
-          { label: 'Design system first', body: 'Drop a DESIGN.md / tokens / Tailwind config into the project so output matches a brand instead of defaulting to “AI slop”.' },
-          { label: 'Aesthetic skills', body: 'Skills like Anthropic’s frontend-design make Claude Code commit to a typography/color/motion direction before writing any markup.' },
-          { label: 'Figma → code', body: 'Wire the Figma MCP server in and Claude Code turns frames into production components with real tokens.' },
-          { label: 'Screenshot loop', body: 'Let it screenshot its own UI, compare to a reference, and iterate — the agentic design feedback loop.' },
-        ],
-        linksTitle: 'Real-world resources',
-        linksLead: 'Tutorials, skills, and walkthroughs people are actually using to design with Claude Code:',
-        links: [
-          { label: 'Designing with Claude Code (Steve Schoger, Tailwind Labs)', href: 'https://www.youtube.com/watch?v=lkKGQVHrXzE', source: 'YouTube · Steve Schoger' },
-          { label: 'Claude Code for Designers in 10 Minutes', href: 'https://www.youtube.com/watch?v=NMi2LnFrUxw', source: 'YouTube · Adrien' },
-          { label: 'anthropics/skills — frontend-design skill', href: 'https://github.com/anthropics/skills/blob/main/skills/frontend-design/SKILL.md', source: 'GitHub · Anthropic' },
-          { label: 'Claude Code for designers — full tutorial', href: 'https://www.builder.io/blog/claude-code-for-designers', source: 'Blog · Builder.io' },
-          { label: 'The web design workflow that actually works', href: 'https://tutorialsdojo.com/claude-code-the-web-design-workflow-that-actually-works/', source: 'Blog · Tutorials Dojo' },
-        ],
-        withOdTitle: 'Claude Code + Open Design',
-        withOdLead:
-          'Open Design is the design layer Claude Code is missing: a curated skill and design-system library, a structured render pipeline, and a desktop UI — all open-source and local-first.',
-        withOdSteps: [
-          'Install Open Design and select Claude Code as your agent.',
-          'Authenticate with your Anthropic API key (BYOK) or Claude subscription — nothing is proxied through us.',
-          'Pick a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
-          'Every artifact and DESIGN.md file stays in your own repo.',
-        ],
-        withOdClosing:
-          'Same agent, same key — plus a real design workflow around it.',
-        faqTitle: 'FAQ',
-        faq: [
-          { name: 'Can Claude Code really do design work?', text: 'Yes — with a design system and aesthetic skills in context it generates production-quality UI. Open Design provides both out of the box so you skip the setup.' },
-          { name: 'Do I need a Claude subscription?', text: 'You can use either an Anthropic API key (BYOK) or your Claude subscription. Open Design never proxies your credentials.' },
-          { name: 'Is this an official Anthropic product?', text: 'No. Open Design is an independent open-source project. Claude Code is a trademark of Anthropic; we integrate with it as a first-party adapter.' },
-        ],
-        ctaTitle: 'Design with Claude Code, the open way.',
-        ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
-      },
-      codex: {
-        title: 'Codex for design — Open Design',
-        description:
-          'How people use OpenAI Codex for UI and web design — the Product Design plugin, Figma integration, frontend skills — and how Open Design turns Codex into a local-first, open-source design agent.',
-        breadcrumb: 'Codex',
-        label: 'Agent · Codex',
-        heading: 'Codex for design.',
-        lead: 'Codex is OpenAI’s coding agent. With its Product Design plugin and Figma integration it has become a serious design tool. Open Design wires Codex into an open-source design workflow — your OpenAI key or ChatGPT subscription, your files, local-first.',
-        tldrTitle: 'TL;DR',
-        tldrBody:
-          'Codex turns screenshots and user stories into responsive UI, and round-trips designs to Figma. Open Design gives it a curated design-system and skill library plus a desktop workflow — bring your own key and keep everything local.',
-        toc: ['What is Codex', 'Designing with Codex', 'Resources', 'With Open Design', 'FAQ'],
-        rich: {
-          heroCtaLead:
-            'Open Design turns Codex into a local-first, open-source design agent — your OpenAI key, your files, a curated skill and design-system library around it.',
-          heroCtaActions: [
-            { label: 'Use Codex inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          intro: [
-            'OpenAI Codex started as a code generator, but in 2026 it became a credible tool for designing real interfaces — once you give it the right references, skills, and verification loop. This is a practical, end-to-end guide to using Codex for UI, frontend, and design-system work, and to wiring it into a structured design workflow with Open Design.',
-            'It covers what Codex is today, why it is suddenly good at frontend, how to set it up from zero, the screenshot-to-UI loop, the official Figma round-trip, how it compares to Cursor and Claude Code, the pitfalls that make AI output look generic, and how Open Design closes the gap as an open, local-first design layer.',
-          ],
-          heroImage: {
-            src: '/agents/codex-design/codex-design-workflow-loop.webp',
-            alt: 'Codex design feedback loop: terminal agent, browser rendering the UI, and a workspace, with a feedback arrow looping back',
-            caption: 'The core loop: Codex builds UI in the terminal, renders and verifies it in a real browser, and iterates against your references.',
-          },
-          tocLabel: 'On this page',
-          toc: [
-            { id: 'what-is-codex', label: 'What OpenAI Codex actually is' },
-            { id: 'why-design', label: 'Why Codex is good at design now' },
-            { id: 'setup', label: 'Set up Codex for design (from zero)' },
-            { id: 'screenshot-workflow', label: 'The screenshot-to-UI workflow' },
-            { id: 'figma', label: 'Codex + Figma round-trip' },
-            { id: 'vs', label: 'Codex vs Cursor vs Claude Code' },
-            { id: 'pitfalls', label: 'Pitfalls and the “AI slop” look' },
-            { id: 'open-design', label: 'Designing with Codex in Open Design' },
-            { id: 'faq', label: 'FAQ' },
-          ],
-          sections: [
-            {
-              id: 'what-is-codex',
-              heading: 'What OpenAI Codex actually is (and what it isn’t)',
-              blocks: [
-                { kind: 'p', text: 'First, a disambiguation that trips up almost everyone searching for “Codex.” The original OpenAI Codex was a 2021 code-completion model that powered early GitHub Copilot and was deprecated in 2023. That is not what this page is about. Today’s Codex is OpenAI’s agentic coding tool — it plans, writes, runs, and verifies code from natural-language tasks.' },
-                { kind: 'p', text: 'Modern Codex ships across four surfaces: a terminal CLI (rewritten in Rust, Apache-2.0 licensed), an IDE extension for VS Code, Cursor, and Windsurf, a cloud/web experience for delegated async tasks, and a desktop app with an in-app browser and Computer Use.' },
-                { kind: 'steps', items: [
-                  { label: 'Default model', body: 'As of mid-2026 the recommended model is gpt-5.5, with gpt-5.4 being the model OpenAI explicitly trained for frontend and computer use.' },
-                  { label: 'Instruction file', body: 'Codex reads an AGENTS.md file in your project (a cross-tool standard) for project rules — the natural place to encode your design conventions.' },
-                  { label: 'Sandbox', body: 'It runs in a kernel-level sandbox (workspace-write by default), so an agent editing your UI cannot wander outside the project.' },
-                ] },
-                { kind: 'ul', items: [
-                  'Vendor: OpenAI',
-                  'Credential: OpenAI API key (BYOK) or ChatGPT subscription (Free / Go / Plus / Pro / Business / Enterprise)',
-                  'License of the CLI: Apache-2.0, open source',
-                ] },
-              ],
-            },
-            {
-              id: 'why-design',
-              heading: 'Why Codex is good at design now',
-              blocks: [
-                { kind: 'p', text: 'Three things converged in early 2026 to make Codex a real design tool rather than a generic code generator.' },
-                { kind: 'steps', items: [
-                  { label: 'A frontend-trained model', body: 'OpenAI shipped GPT-5.4, its first mainline model trained for frontend and computer use, with much better image understanding across the design workflow and stronger self-verification. It can even generate mood boards and visual options before committing to final assets.' },
-                  { label: 'An official frontend skill', body: 'The openai/skills catalog ships a curated frontend-skill that enforces real taste: cardless layouts, full-bleed heroes, brand-first hierarchy, restrained motion, at most two typefaces and one accent color — and makes Codex write a visual thesis before building.' },
-                  { label: 'Browser verification', body: 'With the Playwright skill Codex opens a real browser, resizes to breakpoints, and compares its output back to the reference instead of just checking that the build passes.' },
-                ] },
-                { kind: 'image', src: '/agents/codex-design/codex-design-taste-triangle.webp', alt: 'Diagram showing design system, skill, and reference image converging into good design output', caption: 'Taste comes from three inputs you provide: a design system, a skill, and real reference images.' },
-                { kind: 'p', text: 'The lesson behind all three: Codex does not have taste by default. It produces good design when you give it constraints — a design system, an aesthetic skill, and concrete references. Open Design packages exactly those inputs, which is why the two fit together (more below).' },
-              ],
-            },
-            {
-              id: 'setup',
-              heading: 'Set up Codex for design work, from zero',
-              blocks: [
-                { kind: 'p', text: 'Here is the full path from a clean machine to a Codex that can build and verify UI.' },
-                { kind: 'code', lang: 'bash', code: '# 1. Install the Codex CLI\nnpm install -g @openai/codex\n# or: brew install --cask codex\n# or: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n\n# 2. Authenticate (ChatGPT sign-in recommended for higher limits)\ncodex            # then choose “Sign in with ChatGPT”\n\n# 3. Generate project context\ncodex            # inside your project, run /init to create AGENTS.md\n\n# 4. Add the official frontend skill, then restart Codex\n# (in the Codex app) $skill-installer frontend-skill\n\n# 5. Wire the Figma MCP server (optional, for design handoff)\ncodex mcp add figma --url https://mcp.figma.com/mcp' },
-                { kind: 'image', src: '/agents/codex-design/codex-design-setup-flow.webp', alt: 'Five-step setup flow: install, authenticate, configure, install skill, verify', caption: 'The setup sequence: install → authenticate → configure AGENTS.md → install the frontend skill → enable browser verification.' },
-                { kind: 'steps', items: [
-                  { label: 'Encode your design rules', body: 'Put your tokens, primitives, and conventions in AGENTS.md or a DESIGN.md and point Codex at them, so output matches a brand instead of defaulting to a generic look.' },
-                  { label: 'Choose the right reasoning level', body: 'OpenAI notes that low-to-medium reasoning levels often produce stronger frontend results than the highest setting.' },
-                ] },
-              ],
-            },
-            {
-              id: 'screenshot-workflow',
-              heading: 'The screenshot-to-UI workflow',
-              blocks: [
-                { kind: 'p', text: 'The highest-leverage design loop with Codex is turning a reference image into working, responsive UI and iterating until it matches. OpenAI’s own guidance distills to five steps.' },
-                { kind: 'ol', items: [
-                  'Start from the clearest visual references you have — and include multiple states (desktop and mobile, hover, empty, loading), not just one hero shot.',
-                  'Be specific in the prompt; vague prompts produce generic UI.',
-                  'Prepare a design system and tell Codex where the tokens and canonical primitives live.',
-                  'Enable the Playwright interactive skill so Codex renders in a real browser and resizes to breakpoints.',
-                  'Iterate by having Codex compare its implementation back to the screenshots — not merely confirm it builds.',
-                ] },
-                { kind: 'p', text: 'Feed images by dragging a screenshot into the terminal or with the image flag, then prompt with concrete constraints:' },
-                { kind: 'code', lang: 'bash', code: 'codex -i reference-desktop.png -i reference-mobile.png \\\n  "Implement this design in React + Vite + Tailwind + TypeScript.\n   Reuse my existing design-system components and tokens.\n   Match spacing, layout, and hierarchy; make it responsive.\n   Use the Playwright skill to verify the UI matches the\n   references and iterate until it does."' },
-                { kind: 'p', text: 'Run a dev server in a second terminal, keep prompts small and focused, and commit good iterations / revert bad ones (telling Codex when you revert) so each pass builds on a clean base.' },
-              ],
-            },
-            {
-              id: 'figma',
-              heading: 'Codex + Figma: design ↔ code round-trip',
-              blocks: [
-                { kind: 'p', text: 'In February 2026 OpenAI and Figma announced an official partnership, turning the earlier Figma MCP beta into a first-class, bidirectional integration. It works in both directions.' },
-                { kind: 'steps', items: [
-                  { label: 'Design → Code', body: 'Copy a frame’s “link to selection” in Figma, paste it into Codex with get_design_context, and ask it to implement the design using your existing component library.' },
-                  { label: 'Code → Design', body: 'The generate_figma_design tool (“Code to Canvas”) turns a live, running UI back into editable Figma frames — entire screen, a selected element, or a whole file.' },
-                ] },
-                { kind: 'p', text: 'The Figma MCP runs as a remote server and is exempt from rate limits. Add it once and it is available to Codex, Claude Code, Cursor, VS Code, and more — which is exactly the kind of portable, multi-agent capability Open Design is built to orchestrate.' },
-              ],
-            },
-            {
-              id: 'vs',
-              heading: 'Codex vs Cursor vs Claude Code for design',
-              blocks: [
-                { kind: 'p', text: 'There is no single winner for design work — each agent has a different strength, and experienced teams stack them. A fair summary:' },
-                { kind: 'table', columns: ['Agent', 'Design strength', 'Best for'], rows: [
-                  ['Codex', 'Strong visual polish after GPT-5.4 + frontend-skill; image understanding', 'Delegated async builds, sandboxed runs, portable AGENTS.md rules'],
-                  ['Cursor', 'Visual build-and-see loop with live preview and inline edits', 'Tight iterate-and-watch UI work inside an IDE'],
-                  ['Claude Code', 'Specific design decisions (hex, spacing, type) and codebase-aware UX', 'Frontend reasoning and large-context refactors'],
-                ] },
-                { kind: 'p', text: 'The recurring community verdict is that taste comes from humans: all three default to a generic aesthetic without skills, references, and constraints. That is the real problem to solve — and it is design-tool-shaped, not model-shaped.' },
-              ],
-            },
-            {
-              id: 'pitfalls',
-              heading: 'Pitfalls, and how to avoid the “AI slop” look',
-              blocks: [
-                { kind: 'p', text: 'The most common complaint about Codex-generated design is that it looks generic — soft gradients, floating panels, oversized rounded corners, dramatic shadows, an Inter-and-purple vibe that “screams an AI made this.” Other reported issues include broken mobile layouts, instructions leaking into UI copy, and hitting usage limits quickly.' },
-                { kind: 'steps', items: [
-                  { label: 'Install a frontend skill', body: 'A curated aesthetic skill forces Codex to commit to a real direction instead of the default look.' },
-                  { label: 'Enable Playwright verification', body: 'Make Codex render and self-check across breakpoints so layouts do not silently break on mobile.' },
-                  { label: 'Supply tokens and references', body: 'Real design tokens and reference screenshots are the single biggest lever on output quality.' },
-                  { label: 'Encode rules in AGENTS.md', body: 'Put “no hero cards, max two typefaces, brand-first hierarchy” style rules where the agent reads them every run.' },
-                ] },
-                { kind: 'p', text: 'Notice that every mitigation is about giving the agent a curated design context. Maintaining that context by hand, per project, is the toil Open Design removes.' },
-              ],
-            },
-            {
-              id: 'open-design',
-              heading: 'Designing with Codex inside Open Design',
-              blocks: [
-                { kind: 'p', text: 'Open Design is the open-source design layer the workflow above keeps asking for. It treats Codex as a first-party adapter and wraps it in a curated skill and design-system library, a structured render pipeline, and a local desktop UI — so the design context that makes Codex good is there from the first run, not assembled by hand each time.' },
-                { kind: 'ol', items: [
-                  'Install Open Design and select Codex as your agent.',
-                  'Authenticate with your OpenAI API key (BYOK) or ChatGPT subscription — credentials stay on your machine and are never proxied through us.',
-                  'Pick a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
-                  'Every artifact and DESIGN.md file lives in your own repo, not a hosted cloud.',
-                ] },
-                { kind: 'p', text: 'Same Codex agent, same key — plus a real, portable, open-source design workflow around it. It is local-first and Apache-2.0, so nothing about your work or your credentials leaves your machine.' },
-              ],
-            },
-          ],
-          faqTitle: 'Frequently asked questions',
-          faq: [
-            { name: 'Can OpenAI Codex really do design work?', text: 'Yes — with a frontend skill, a design system, and real reference images in context, Codex (especially on GPT-5.4) produces production-quality, responsive UI and can verify it in a browser. Without that context it tends to default to a generic look, which is the gap Open Design fills.' },
-            { name: 'Is this the OpenAI Codex Product Design plugin?', text: 'No. Open Design is an independent open-source project that integrates Codex as an agent. It complements OpenAI’s own tooling with a local-first, open skill and design-system library.' },
-            { name: 'Do I need a ChatGPT subscription to design with Codex?', text: 'You can use either an OpenAI API key (BYOK) or your ChatGPT subscription. ChatGPT sign-in generally gives more generous limits; Open Design never proxies your credentials either way.' },
-            { name: 'Codex or Claude Code for frontend design?', text: 'Both are strong. Claude Code is known for specific, codebase-aware design decisions; Codex has strong visual polish after GPT-5.4 and excels at delegated, sandboxed builds. Many teams use both — Open Design lets you switch agents without changing your design workflow.' },
-            { name: 'How do I connect Codex to Figma?', text: 'Add the official Figma MCP server (codex mcp add figma --url https://mcp.figma.com/mcp). You can then implement Figma frames in code with get_design_context and push a running UI back to editable Figma frames with generate_figma_design.' },
-            { name: 'How do I avoid the generic “AI slop” aesthetic?', text: 'Install a frontend skill, supply real design tokens and reference screenshots, encode brand rules in AGENTS.md, and enable Playwright verification. Open Design ships these as a curated library so you skip the per-project setup.' },
-            { name: 'Is Open Design affiliated with OpenAI?', text: 'No. Codex is a product of OpenAI; Open Design is an independent open-source project that supports it as a first-party adapter. OpenAI and Codex are trademarks of OpenAI.' },
-            { name: 'Are my files and credentials safe?', text: 'Yes — Open Design is local-first. Your files, artifacts, and DESIGN.md stay in your own repo, and your OpenAI credentials are used directly by your agent, never routed through Open Design servers.' },
-          ],
-          ctaTitle: 'Design with Codex, the open way.',
-          ctaBody: 'Bring your own OpenAI key, keep every file local, and get a curated design library around the agent you already use.',
-          ctaActions: [
-            { label: 'Use Codex inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          hubLinkLabel: 'See all supported agents',
-        },
-        aboutTitle: 'What is Codex',
-        aboutBody: [
-          'Codex is OpenAI’s agentic coding system — a CLI and ChatGPT-integrated agent that plans, writes, and runs code from natural-language tasks.',
-          'OpenAI now ships a role-specific Product Design plugin and a Figma integration, so Codex can explore directions, audit flows, prototype from a live URL, and export to Figma or Canva.',
-          'Open Design treats Codex as a first-party adapter, so the agent slots into a structured, open-source design pipeline.',
-        ],
-        vendorLabel: 'Vendor',
-        vendor: 'OpenAI',
-        credentialLabel: 'Credential',
-        credential: 'OpenAI API key (BYOK) or ChatGPT subscription',
-        designTitle: 'Designing with Codex',
-        designLead:
-          'Codex’s design story moved fast in 2026, clustered around a few official and community capabilities:',
-        designPoints: [
-          { label: 'Product Design plugin', body: 'OpenAI’s role plugin: explore directions, audit user flows, prototype from a live URL, make screenshots interactive, export to Figma/Canva.' },
-          { label: 'Screenshot → responsive UI', body: 'Codex turns a reference image into responsive markup and visually diffs against it across breakpoints with the Playwright skill.' },
-          { label: 'Codex ↔ Figma', body: 'The Figma MCP server brings design context into code and turns a running UI back into editable Figma frames.' },
-          { label: 'Frontend design skills', body: 'Community and official skills lock an aesthetic direction so output avoids the generic “purple AI slop” look.' },
-        ],
-        linksTitle: 'Real-world resources',
-        linksLead: 'Official docs, Figma integration, and walkthroughs for designing with Codex:',
-        links: [
-          { label: 'Build responsive front-end designs (Codex docs)', href: 'https://developers.openai.com/codex/use-cases/frontend-designs', source: 'Docs · OpenAI' },
-          { label: 'Introducing Codex to Figma', href: 'https://www.figma.com/blog/introducing-codex-to-figma/', source: 'Blog · Figma' },
-          { label: 'Design with ChatGPT and Codex: The Designer’s Guide', href: 'https://www.youtube.com/watch?v=rW7vVVmKTS8', source: 'YouTube · UI Collective' },
-          { label: 'openai/skills — frontend design skills', href: 'https://github.com/openai/skills', source: 'GitHub · OpenAI' },
-          { label: 'New Codex design workflow', href: 'https://www.youtube.com/watch?v=CPg5UYbYLhA', source: 'YouTube · Lukas Margerie' },
-        ],
-        withOdTitle: 'Codex + Open Design',
-        withOdLead:
-          'Open Design is the open-source design layer around Codex: a curated skill and design-system library, a structured render pipeline, and a local desktop UI.',
-        withOdSteps: [
-          'Install Open Design and select Codex as your agent.',
-          'Authenticate with your OpenAI API key (BYOK) or ChatGPT subscription — credentials stay on your machine.',
-          'Choose a design system and skill, then generate decks, prototypes, and landing pages with consistent taste.',
-          'Artifacts and DESIGN.md files live in your own repo, not a hosted cloud.',
-        ],
-        withOdClosing:
-          'The same Codex agent — with a real, portable design workflow around it.',
-        faqTitle: 'FAQ',
-        faq: [
-          { name: 'Is this the OpenAI Codex Product Design plugin?', text: 'No. Open Design is an independent open-source project that integrates Codex as an agent. It complements OpenAI’s own plugin with a local-first, open library.' },
-          { name: 'Do I need a ChatGPT subscription?', text: 'You can use an OpenAI API key (BYOK) or your ChatGPT subscription. Open Design never proxies your credentials.' },
-          { name: 'Is Open Design affiliated with OpenAI?', text: 'No. Codex is a product of OpenAI; Open Design is an independent open-source project that supports it as a first-party adapter.' },
-        ],
-        ctaTitle: 'Design with Codex, the open way.',
-        ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
-      },
-      cursor: {
-        title: 'Cursor for designers — Open Design',
-        description:
-          'How designers use Cursor for UI and web design — Design Mode, Figma-to-code, the Figma MCP — and how Open Design turns Cursor into a local-first, open-source design agent.',
-        breadcrumb: 'Cursor',
-        label: 'Agent · Cursor',
-        heading: 'Cursor for designers.',
-        lead: 'Cursor is the AI code editor, now with a visual Design Mode. Designers use it to edit UI by pointing and drawing, and to turn Figma into code. Open Design plugs Cursor Agent into an open-source design workflow that keeps your files local.',
-        tldrTitle: 'TL;DR',
-        tldrBody:
-          'Cursor’s Design Mode lets you edit a live UI by clicking, sketching, or talking; its Figma MCP integrations bring real design context into code. Open Design adds a curated skill and design-system library on top — your provider keys, your repo.',
-        toc: ['What is Cursor', 'Designing with Cursor', 'Resources', 'With Open Design', 'FAQ'],
-        rich: {
-          heroCtaLead:
-            'Open Design turns Cursor into a local-first, open-source design agent — your Cursor account or model keys, your files, a curated skill and design-system library around it.',
-          heroCtaActions: [
-            { label: 'Use Cursor inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          intro: [
-            'Cursor is the AI-first code editor that made “build it and watch it render” the default way to ship UI. With Agent mode, inline edits, an in-editor preview, and Figma over MCP, it has become a genuine design tool — once you give it the right references, rules, and a verification loop. This is a practical, end-to-end guide to using Cursor for UI, frontend, and design-system work, and to wiring it into a structured design workflow with Open Design.',
-            'It covers what Cursor actually is, why its tight iterate-and-watch loop is good for design, how to set it up from zero, the screenshot-and-preview-to-UI loop, the Figma round-trip over MCP, how it compares to Codex and Claude Code, the pitfalls that make AI output look generic, and how Open Design closes the gap as an open, local-first design layer.',
-          ],
-          heroImage: {
-            src: '/agents/cursor-design/cursor-design-hero.webp',
-            alt: 'Cursor design convergence: editor on the left, a curated skill and design-system hub in the middle with the Cursor mark at center, and a rendered UI on the right',
-            caption: 'The core idea: Cursor edits and renders UI in the editor, while a curated design hub feeds it the system, skills, and references that make output look intentional.',
-          },
-          tocLabel: 'On this page',
-          toc: [
-            { id: 'what-is-cursor', label: 'What Cursor actually is' },
-            { id: 'why-design', label: 'Why Cursor is good at design' },
-            { id: 'setup', label: 'Set up Cursor for design (from zero)' },
-            { id: 'preview-workflow', label: 'The preview-to-UI workflow' },
-            { id: 'figma', label: 'Cursor + Figma over MCP' },
-            { id: 'vs', label: 'Cursor vs Codex vs Claude Code' },
-            { id: 'pitfalls', label: 'Pitfalls and the “AI slop” look' },
-            { id: 'open-design', label: 'Designing with Cursor in Open Design' },
-            { id: 'faq', label: 'FAQ' },
-          ],
-          sections: [
-            {
-              id: 'what-is-cursor',
-              heading: 'What Cursor actually is',
-              blocks: [
-                { kind: 'p', text: 'Cursor is an AI-first code editor built by Anysphere. It is a fork of VS Code, so it keeps the familiar editor, extensions, and keybindings, but rebuilds the workflow around an AI agent that can read your whole project, edit multiple files, run commands, and iterate with you in the loop.' },
-                { kind: 'p', text: 'For design work the important surfaces are Agent mode (you describe an outcome and Cursor plans and edits across files), inline edits and Tab completions for fast tweaks, an in-editor preview / browser so you can see the running UI without leaving the window, and MCP support that lets it pull in external context like a live Figma file.' },
-                { kind: 'steps', items: [
-                  { label: 'Project rules', body: 'Cursor reads project instruction files — versioned `.mdc` rules under `.cursor/rules`, and a plain `AGENTS.md` — so you can encode your design conventions where the agent reads them every run.' },
-                  { label: 'Models', body: 'Cursor is model-flexible: it ships with frontier models through your subscription and also supports bringing your own model keys, so you choose the engine behind the same editor workflow.' },
-                  { label: 'MCP', body: 'It speaks the Model Context Protocol, so external servers — most relevantly the Figma MCP server — become first-class context for the agent.' },
-                ] },
-                { kind: 'ul', items: [
-                  'Vendor: Anysphere',
-                  'Credential: Cursor account / subscription (Hobby / Pro / Business) or your own model keys (BYOK)',
-                  'Form: AI-first code editor (VS Code fork) with an in-editor agent and preview',
-                ] },
-              ],
-            },
-            {
-              id: 'why-design',
-              heading: 'Why Cursor is good at design',
-              blocks: [
-                { kind: 'p', text: 'Cursor’s design edge is not a single feature — it is the tightness of the build-and-see loop. Three things make it feel like a design tool rather than a generic code generator.' },
-                { kind: 'steps', items: [
-                  { label: 'A tight iterate-and-watch loop', body: 'You prompt, Cursor edits across files, and the in-editor preview renders the result immediately — so you adjust spacing, hierarchy, and motion in seconds instead of round-tripping through a separate terminal and browser.' },
-                  { label: 'Direct visual editing', body: 'Beyond chat, Cursor lets you select elements in the preview and nudge styles, so small visual corrections feel like design edits rather than code archaeology.' },
-                  { label: 'Project rules and MCP context', body: 'With `.cursor/rules` (or `AGENTS.md`) and the Figma MCP server, the agent works against your tokens, components, and real design specs instead of guessing.' },
-                ] },
-                { kind: 'image', src: '/agents/cursor-design/cursor-design-taste-triangle.webp', alt: 'Diagram showing design system, skill, and reference image converging into good design output', caption: 'Taste comes from three inputs you provide: a design system, a skill, and real reference images.' },
-                { kind: 'p', text: 'The lesson is the same one every agent teaches: Cursor does not have taste by default. It produces good design when you give it constraints — a design system, an aesthetic skill, and concrete references. Open Design packages exactly those inputs, which is why the two fit together (more below).' },
-              ],
-            },
-            {
-              id: 'setup',
-              heading: 'Set up Cursor for design work, from zero',
-              blocks: [
-                { kind: 'p', text: 'Here is the full path from a clean machine to a Cursor that can build, preview, and verify UI against your design system.' },
-                { kind: 'ol', items: [
-                  'Install Cursor from cursor.com and sign in with your Cursor account, or configure your own model keys (BYOK) in Settings.',
-                  'Open your project and pick a model in the chat / Agent panel.',
-                  'Add project rules: create `.cursor/rules/*.mdc` for structured, glob-scoped conventions, or a plain `AGENTS.md` for simple, readable instructions.',
-                  'Connect the Figma MCP server (optional) so the agent can read live design context.',
-                  'Run your dev server and use the in-editor preview to see and verify the UI as you iterate.',
-                ] },
-                { kind: 'image', src: '/agents/cursor-design/cursor-design-setup-flow.webp', alt: 'Five-step setup flow: install, authenticate, configure rules, add skill, verify', caption: 'The setup sequence: install → authenticate → configure project rules → add a skill → enable preview verification.' },
-                { kind: 'p', text: 'A minimal project-rules file makes the agent design to a brand instead of defaulting to a generic look. Put it where Cursor reads it every run:' },
-                { kind: 'code', lang: 'markdown', code: '# .cursor/rules/design.mdc\n---\ndescription: Project design conventions\nalwaysApply: true\n---\n\n- Reuse existing design-system tokens and components; never hardcode hex or spacing.\n- At most two typefaces and one accent color.\n- Brand-first hierarchy; restrained motion. No hero cards, no oversized rounded corners.\n- Build responsive by default; verify desktop and mobile in the preview before finishing.' },
-                { kind: 'steps', items: [
-                  { label: 'Encode your design rules', body: 'Put your tokens, primitives, and conventions in `.cursor/rules` or `AGENTS.md` and point Cursor at them, so output matches a brand instead of defaulting to a generic look.' },
-                  { label: 'Keep prompts small', body: 'Cursor’s tight loop rewards focused asks — iterate one component or state at a time and watch the preview between passes.' },
-                ] },
-              ],
-            },
-            {
-              id: 'preview-workflow',
-              heading: 'The preview-to-UI workflow',
-              blocks: [
-                { kind: 'p', text: 'The highest-leverage design loop with Cursor is turning a reference into working, responsive UI and iterating in the editor until it matches — watching the live preview the whole time instead of guessing.' },
-                { kind: 'ol', items: [
-                  'Start from the clearest visual references you have — and include multiple states (desktop and mobile, hover, empty, loading), not just one hero shot.',
-                  'Be specific in the prompt; vague prompts produce generic UI.',
-                  'Prepare a design system and tell Cursor where the tokens and canonical primitives live.',
-                  'Keep the in-editor preview open and your dev server running so each edit renders immediately at the breakpoints you care about.',
-                  'Iterate by comparing the rendered UI back to the references — and use direct element selection in the preview for small visual corrections.',
-                ] },
-                { kind: 'p', text: 'Feed references by attaching an image to the chat, then prompt with concrete constraints:' },
-                { kind: 'code', lang: 'text', code: 'Implement this design in React + Vite + Tailwind + TypeScript.\nReuse my existing design-system components and tokens.\nMatch spacing, layout, and hierarchy; make it responsive.\nKeep the preview open — verify desktop and mobile match the\nreferences and iterate until they do.' },
-                { kind: 'p', text: 'Commit good iterations and revert bad ones (telling Cursor when you revert) so each pass builds on a clean base — the same discipline that keeps any agent loop from drifting.' },
-              ],
-            },
-            {
-              id: 'figma',
-              heading: 'Cursor + Figma: design ↔ code over MCP',
-              blocks: [
-                { kind: 'p', text: 'Cursor connects to Figma through the official Figma MCP server, which gives the agent structured access to a live Figma file instead of a flat screenshot. That removes the guesswork from handoff.' },
-                { kind: 'steps', items: [
-                  { label: 'Design → Code', body: 'Copy a frame’s link in Figma, paste it into Cursor, and ask it to implement the design. The MCP server exposes real design context — components, variables, layout data, tokens — so the generated code matches the source instead of approximating it.' },
-                  { label: 'Stay aligned', body: 'With design tokens, styles, and components used consistently in Figma (and Code Connect where available), Cursor’s output stays mapped to your real design system rather than re-inventing primitives.' },
-                ] },
-                { kind: 'p', text: 'Set the remote Figma MCP server up once and it is available to Cursor as first-class context. Because MCP is an open standard, the same server is reusable across Cursor, Claude Code, Codex, and VS Code — exactly the kind of portable, multi-agent capability Open Design is built to orchestrate.' },
-              ],
-            },
-            {
-              id: 'vs',
-              heading: 'Cursor vs Codex vs Claude Code for design',
-              blocks: [
-                { kind: 'p', text: 'There is no single winner for design work — each agent has a different strength, and experienced teams stack them. A fair summary:' },
-                { kind: 'table', columns: ['Agent', 'Design strength', 'Best for'], rows: [
-                  ['Cursor', 'Visual build-and-see loop with live in-editor preview and direct element editing', 'Tight iterate-and-watch UI work inside an IDE'],
-                  ['Codex', 'Strong visual polish with a frontend skill; image understanding and sandboxed runs', 'Delegated async builds and portable AGENTS.md rules'],
-                  ['Claude Code', 'Specific design decisions (hex, spacing, type) and codebase-aware UX', 'Frontend reasoning and large-context refactors'],
-                ] },
-                { kind: 'p', text: 'The recurring community verdict is that taste comes from humans: all three default to a generic aesthetic without skills, references, and constraints. That is the real problem to solve — and it is design-tool-shaped, not model-shaped.' },
-              ],
-            },
-            {
-              id: 'pitfalls',
-              heading: 'Pitfalls, and how to avoid the “AI slop” look',
-              blocks: [
-                { kind: 'p', text: 'The most common complaint about Cursor-generated design is that it looks generic — soft gradients, floating panels, oversized rounded corners, dramatic shadows, an Inter-and-purple vibe that “screams an AI made this.” Other reported issues include layouts that break on mobile and instructions leaking into UI copy.' },
-                { kind: 'steps', items: [
-                  { label: 'Add a design skill', body: 'A curated aesthetic skill forces Cursor to commit to a real direction instead of the default look.' },
-                  { label: 'Use the preview to verify', body: 'Render and self-check across breakpoints in the in-editor preview so layouts do not silently break on mobile.' },
-                  { label: 'Supply tokens and references', body: 'Real design tokens and reference screenshots are the single biggest lever on output quality.' },
-                  { label: 'Encode rules in `.cursor/rules`', body: 'Put “no hero cards, max two typefaces, brand-first hierarchy” style rules where the agent reads them every run.' },
-                ] },
-                { kind: 'p', text: 'Notice that every mitigation is about giving the agent a curated design context. Maintaining that context by hand, per project, is the toil Open Design removes.' },
-              ],
-            },
-            {
-              id: 'open-design',
-              heading: 'Designing with Cursor inside Open Design',
-              blocks: [
-                { kind: 'p', text: 'Open Design is the open-source design layer the workflow above keeps asking for. It treats Cursor as a first-party adapter and wraps it in a curated skill and design-system library, a structured render pipeline, and a local desktop UI — so the design context that makes Cursor good is there from the first run, not assembled by hand each time.' },
-                { kind: 'ol', items: [
-                  'Install Open Design and select Cursor as your agent.',
-                  'Authenticate with your Cursor account or your own model keys (BYOK) — credentials stay on your machine and are never proxied through us.',
-                  'Pick a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
-                  'Every artifact and DESIGN.md file lives in your own repo, not a hosted cloud.',
-                ] },
-                { kind: 'p', text: 'Same Cursor agent, same key — plus a real, portable, open-source design workflow around it. It is local-first and Apache-2.0, so nothing about your work or your credentials leaves your machine.' },
-              ],
-            },
-          ],
-          faqTitle: 'Frequently asked questions',
-          faq: [
-            { name: 'Can Cursor really do design work?', text: 'Yes — with a design skill, a design system, and real reference images in context, Cursor produces production-quality, responsive UI, and its in-editor preview lets you verify and refine it visually. Without that context it tends to default to a generic look, which is the gap Open Design fills.' },
-            { name: 'Is this an official Cursor product?', text: 'No. Open Design is an independent open-source project that integrates Cursor as an agent. It complements Cursor with a local-first, open skill and design-system library.' },
-            { name: 'Do I need a Cursor subscription to design with Cursor?', text: 'You can use a Cursor account / subscription or bring your own model keys (BYOK). Open Design never proxies your credentials either way — they are used directly by your agent.' },
-            { name: 'Cursor or Claude Code for frontend design?', text: 'Both are strong. Claude Code is known for specific, codebase-aware design decisions; Cursor’s edge is its tight build-and-see loop with a live preview inside the editor. Many teams use both — Open Design lets you switch agents without changing your design workflow.' },
-            { name: 'How do I connect Cursor to Figma?', text: 'Add the official Figma MCP server in Cursor, then paste a Figma frame link into the chat and ask Cursor to implement it. The server exposes real components, variables, and layout data so the generated code matches the source design.' },
-            { name: 'How do I avoid the generic “AI slop” aesthetic?', text: 'Add a design skill, supply real design tokens and reference screenshots, encode brand rules in `.cursor/rules` or `AGENTS.md`, and verify across breakpoints in the preview. Open Design ships these as a curated library so you skip the per-project setup.' },
-            { name: 'Is Open Design affiliated with Cursor or Anysphere?', text: 'No. Cursor is a product of Anysphere; Open Design is an independent open-source project that supports it as a first-party adapter. Cursor and Anysphere are trademarks of Anysphere, Inc.' },
-            { name: 'Are my files and credentials safe?', text: 'Yes — Open Design is local-first. Your files, artifacts, and DESIGN.md stay in your own repo, and your Cursor or model credentials are used directly by your agent, never routed through Open Design servers.' },
-          ],
-          ctaTitle: 'Design with Cursor, the open way.',
-          ctaBody: 'Bring your own Cursor account or model keys, keep every file local, and get a curated design library around the agent you already use.',
-          ctaActions: [
-            { label: 'Use Cursor inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          hubLinkLabel: 'See all supported agents',
-        },
-        aboutTitle: 'What is Cursor',
-        aboutBody: [
-          'Cursor is an AI-first code editor built on VS Code, with a built-in agent that edits across your whole project.',
-          'Cursor shipped Design Mode — point at an element, sketch a change, or describe it in words, and Cursor edits the underlying React/Vue/Svelte source. Combined with Figma MCP servers, it has become a credible design-to-code surface.',
-          'Open Design treats Cursor Agent as a first-party adapter so it can drive a structured, open-source design pipeline.',
-        ],
-        vendorLabel: 'Vendor',
-        vendor: 'Cursor (Anysphere)',
-        credentialLabel: 'Credential',
-        credential: 'Cursor account (uses your own provider keys)',
-        designTitle: 'Designing with Cursor',
-        designLead:
-          'Cursor’s design ecosystem centers on visual editing and Figma interop:',
-        designPoints: [
-          { label: 'Design Mode', body: 'Click, draw, or voice-describe a UI change and Cursor edits the source — visual editing backed by real code.' },
-          { label: 'Figma → code', body: 'Figma MCP servers feed real layout and tokens to Cursor so it builds from the design, not a screenshot.' },
-          { label: 'Bidirectional Figma', body: 'Some MCPs let Cursor read and modify Figma designs programmatically, not just consume them.' },
-          { label: 'Design-to-code loop', body: 'The common pattern: draft in a visual tool, import to Cursor, then refine and extend with the agent.' },
-        ],
-        linksTitle: 'Real-world resources',
-        linksLead: 'Announcements, tutorials, and tools for designing with Cursor:',
-        links: [
-          { label: 'Cursor Design Mode announcement', href: 'https://x.com/cursor_ai/status/2062950344687272144', source: 'X · @cursor_ai' },
-          { label: 'Cursor’s Design Mode (Visual Editing) explained', href: 'https://www.builder.io/blog/cursor-design-mode-visual-editing', source: 'Blog · Builder.io' },
-          { label: 'Cursor for Designers — Figma to code', href: 'https://www.builder.io/blog/figma-to-cursor-for-designers', source: 'Blog · Builder.io' },
-          { label: 'Framelink Figma-Context-MCP', href: 'https://github.com/GLips/Figma-Context-MCP', source: 'GitHub · GLips' },
-          { label: 'cursor-talk-to-figma-mcp', href: 'https://github.com/grab/cursor-talk-to-figma-mcp', source: 'GitHub · Grab' },
-        ],
-        withOdTitle: 'Cursor + Open Design',
-        withOdLead:
-          'Open Design is the open-source design layer around Cursor: a curated skill and design-system library, a structured render pipeline, and a local desktop UI.',
-        withOdSteps: [
-          'Install Open Design and select Cursor Agent.',
-          'Cursor uses your own provider keys — nothing is proxied through Open Design.',
-          'Pick a design system and skill, then generate decks, prototypes, and landing pages with consistent taste.',
-          'Everything stays in your repo, local-first.',
-        ],
-        withOdClosing:
-          'Cursor’s agent, plus an open and portable design workflow.',
-        faqTitle: 'FAQ',
-        faq: [
-          { name: 'Is Cursor good for design?', text: 'With Design Mode and Figma MCP it edits and builds UI well; from scratch it benefits from a design system. Open Design supplies one out of the box.' },
-          { name: 'Does Open Design replace Cursor’s Design Mode?', text: 'No — it complements it. Open Design adds an open, curated design-system and skill library and a structured render pipeline on top of the agent.' },
-          { name: 'Is Open Design affiliated with Cursor?', text: 'No. Cursor is a product of Anysphere; Open Design is an independent open-source project that integrates it as a first-party adapter.' },
-        ],
-        ctaTitle: 'Design with Cursor, the open way.',
-        ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
-      },
-      opencode: {
-        title: 'OpenCode for design — Open Design',
-        description:
-          'How people use OpenCode for UI and web design — design.md files, UI/UX skills, Figma MCP — and how Open Design turns OpenCode into a local-first, open-source design agent.',
-        breadcrumb: 'OpenCode',
-        label: 'Agent · OpenCode',
-        heading: 'OpenCode for design.',
-        lead: 'OpenCode is the open-source terminal AI coding agent. Designers bolt design skills and DESIGN.md files onto it to generate real UI. Open Design makes that a structured, open-source workflow — bring your provider keys, keep everything local.',
-        tldrTitle: 'TL;DR',
-        tldrBody:
-          'OpenCode is a fully open-source coding agent; design is an emergent use via skills, design.md files, and Figma MCP. Open Design packages a curated design-system and skill library plus a desktop workflow around it — your keys, your repo.',
-        toc: ['What is OpenCode', 'Designing with OpenCode', 'Resources', 'With Open Design', 'FAQ'],
-        rich: {
-          heroCtaLead:
-            'Open Design turns OpenCode into a local-first, open-source design agent — any model you choose with your own provider key, your files, a curated skill and design-system library around it.',
-          heroCtaActions: [
-            { label: 'Use OpenCode inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          intro: [
-            'OpenCode is an open-source, terminal-first AI coding agent that is deliberately model-agnostic: you bring your own provider key and run whatever model you want behind the same workflow. That openness makes it a natural base for design work — but like every agent, it only produces good UI when you give it the right references, skills, and a verification loop. This is a practical, end-to-end guide to using OpenCode for UI, frontend, and design-system work, and to wiring it into a structured design workflow with Open Design.',
-            'It covers what OpenCode actually is, why a model-agnostic open agent is a good fit for design, how to set it up from zero, the screenshot-to-UI loop, how AGENTS.md and MCP extend it, how it compares to Codex, Claude Code, and Cursor, the pitfalls that make AI output look generic, and how Open Design closes the gap as an open, local-first design layer — a natural pairing, since both projects are open-source and run on your own machine.',
-          ],
-          heroImage: {
-            src: '/agents/opencode-design/opencode-design-hero.webp',
-            alt: 'OpenCode design feedback loop: a terminal TUI agent, a browser rendering the UI, and a workspace, with a feedback arrow looping back',
-            caption: 'The core loop: OpenCode builds UI in the terminal, renders and verifies it in a real browser, and iterates against your references — on whatever model you choose.',
-          },
-          tocLabel: 'On this page',
-          toc: [
-            { id: 'what-is-opencode', label: 'What OpenCode actually is' },
-            { id: 'why-design', label: 'Why an open, any-model agent fits design' },
-            { id: 'setup', label: 'Set up OpenCode for design (from zero)' },
-            { id: 'screenshot-workflow', label: 'The screenshot-to-UI workflow' },
-            { id: 'extend', label: 'AGENTS.md, MCP, and shareable sessions' },
-            { id: 'vs', label: 'OpenCode vs Codex vs Claude Code vs Cursor' },
-            { id: 'pitfalls', label: 'Pitfalls and the “AI slop” look' },
-            { id: 'open-design', label: 'Designing with OpenCode in Open Design' },
-            { id: 'faq', label: 'FAQ' },
-          ],
-          sections: [
-            {
-              id: 'what-is-opencode',
-              heading: 'What OpenCode actually is',
-              blocks: [
-                { kind: 'p', text: 'OpenCode is an open-source AI coding agent built for the terminal, maintained by the team behind SST (Anomaly Innovations). It reads your repository, runs commands, edits files, and talks to a large language model — but unlike vendor-bound agents, it does not ship its own model. You point it at whatever provider and model you want and bring your own key.' },
-                { kind: 'p', text: 'It runs as a terminal UI (TUI), with a desktop app and IDE extensions on top of the same engine. Under the hood it uses a client/server architecture, so the agent that does the work is decoupled from the surface you drive it from. Two built-in agents — build and plan — toggle with the Tab key.' },
-                { kind: 'steps', items: [
-                  { label: 'Model-agnostic', body: 'Models and providers come from models.dev, an open catalog. You configure them in opencode.json with a provider/model-id string and can disable providers you do not want loaded — so the same design workflow runs on Anthropic, OpenAI, Google, OpenRouter, local models, and more.' },
-                  { label: 'Instruction file', body: 'OpenCode reads an AGENTS.md file in your project (the cross-tool standard, also compatible with CLAUDE.md) for project rules — the natural place to encode your design conventions. Run /init to generate one.' },
-                  { label: 'Extensible', body: 'It supports LSP integration, MCP servers, themes, keybinds, and custom commands, plus shareable session links for collaboration.' },
-                ] },
-                { kind: 'ul', items: [
-                  'Maintainer: SST / Anomaly Innovations (open-source project)',
-                  'Credential: your own model-provider API key(s) — BYOK, no vendor lock-in',
-                  'License: MIT, open source',
-                ] },
-              ],
-            },
-            {
-              id: 'why-design',
-              heading: 'Why an open, any-model agent fits design work',
-              blocks: [
-                { kind: 'p', text: 'OpenCode does not have a single “design model” the way a vendor agent does — and that is the point. Because it is model-agnostic and open, you can run the same design workflow on whichever model is currently best at frontend, swap it later, or fall back to a local model, all without changing your setup.' },
-                { kind: 'p', text: 'But model choice alone does not buy taste. Like every coding agent, OpenCode produces generic UI unless you give it constraints. Good design output comes from three inputs you provide.' },
-                { kind: 'steps', items: [
-                  { label: 'A design system', body: 'Real tokens, primitives, and conventions the agent reuses, so output matches a brand instead of defaulting to a generic look.' },
-                  { label: 'An aesthetic skill', body: 'A curated skill that enforces real taste — restrained motion, brand-first hierarchy, at most two typefaces and one accent color — and makes the agent commit to a direction before building.' },
-                  { label: 'Concrete references', body: 'Actual reference images and multiple states (desktop and mobile, hover, empty, loading), not a single hero shot.' },
-                ] },
-                { kind: 'image', src: '/agents/opencode-design/opencode-design-taste-triangle.webp', alt: 'Diagram showing design system, skill, and reference image converging into good design output', caption: 'Taste comes from three inputs you provide: a design system, a skill, and real reference images — independent of which model you run.' },
-                { kind: 'p', text: 'The lesson: OpenCode gives you model freedom, but taste still comes from a curated design context. Open Design packages exactly those inputs, which is why the two fit together — both are open-source and local-first (more below).' },
-              ],
-            },
-            {
-              id: 'setup',
-              heading: 'Set up OpenCode for design work, from zero',
-              blocks: [
-                { kind: 'p', text: 'Here is the full path from a clean machine to an OpenCode that can build and verify UI.' },
-                { kind: 'code', lang: 'bash', code: '# 1. Install OpenCode\ncurl -fsSL https://opencode.ai/install | bash\n# or: npm i -g opencode-ai@latest\n# or: brew install sst/tap/opencode\n\n# 2. Start the TUI in your project, then authenticate your provider\nopencode          # then run /login and pick your provider + paste your key\n\n# 3. Generate project context\nopencode          # inside your project, run /init to create AGENTS.md\n\n# 4. Pick your model (any provider, via models.dev)\n#    set "provider/model-id" in opencode.json or switch in the TUI\n\n# 5. Add an MCP server (optional, e.g. for design handoff)\n#    configure it under the "mcp" key in opencode.json' },
-                { kind: 'image', src: '/agents/opencode-design/opencode-design-setup-flow.webp', alt: 'Five-step setup flow: install, authenticate with your provider key, configure AGENTS.md, add a skill, verify', caption: 'The setup sequence: install → authenticate (your provider key) → configure AGENTS.md → add a skill → verify in a real browser.' },
-                { kind: 'steps', items: [
-                  { label: 'Encode your design rules', body: 'Put your tokens, primitives, and conventions in AGENTS.md (or a DESIGN.md referenced from it) so output matches a brand instead of defaulting to a generic look. The instructions option in opencode.json can point at additional rule files via globs.' },
-                  { label: 'Choose a capable model', body: 'Because OpenCode is model-agnostic, pick whichever provider/model is currently strongest at frontend for the design pass — and keep the rest of your workflow unchanged.' },
-                ] },
-              ],
-            },
-            {
-              id: 'screenshot-workflow',
-              heading: 'The screenshot-to-UI workflow',
-              blocks: [
-                { kind: 'p', text: 'The highest-leverage design loop with any agent is turning a reference image into working, responsive UI and iterating until it matches. The same five-step shape applies in OpenCode.' },
-                { kind: 'ol', items: [
-                  'Start from the clearest visual references you have — and include multiple states (desktop and mobile, hover, empty, loading), not just one hero shot.',
-                  'Be specific in the prompt; vague prompts produce generic UI.',
-                  'Prepare a design system and tell OpenCode where the tokens and canonical primitives live (in AGENTS.md).',
-                  'Run a dev server and have the agent render in a real browser, resizing to breakpoints to check the result.',
-                  'Iterate by having OpenCode compare its implementation back to the screenshots — not merely confirm it builds.',
-                ] },
-                { kind: 'p', text: 'Reference files with @ in the TUI for a fuzzy search of your working directory, run shell commands inline with a leading !, and drive actions with / commands. Then prompt with concrete constraints:' },
-                { kind: 'code', lang: 'bash', code: 'opencode\n# in the TUI:\n> @reference-desktop.png @reference-mobile.png\n  Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens from AGENTS.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Run the dev server, open it in a browser, and iterate until the\n  UI matches the references across breakpoints.' },
-                { kind: 'p', text: 'Keep prompts small and focused, commit good iterations and revert bad ones (telling OpenCode when you revert), so each pass builds on a clean base.' },
-              ],
-            },
-            {
-              id: 'extend',
-              heading: 'AGENTS.md, MCP, and shareable sessions',
-              blocks: [
-                { kind: 'p', text: 'Three extension points make OpenCode practical for sustained design work, and all three map cleanly onto an open design workflow.' },
-                { kind: 'steps', items: [
-                  { label: 'AGENTS.md rules', body: 'Project rules live in an AGENTS.md at the repo root (or global rules in ~/.config/opencode/AGENTS.md). It is the durable home for your design conventions, read on every run, and it is compatible with the CLAUDE.md files other agents use.' },
-                  { label: 'MCP servers', body: 'OpenCode supports both local (command) and remote (URL) MCP servers, configured under the mcp key — the portable way to bring in design context and external tools that work across agents, not just OpenCode.' },
-                  { label: 'Shareable sessions', body: 'The /share command creates a public link to a conversation for collaboration or review, and /unshare revokes it — useful for getting feedback on a design pass.' },
-                ] },
-                { kind: 'p', text: 'These are portable, multi-agent capabilities — exactly the kind of thing Open Design is built to orchestrate, rather than re-create per project.' },
-              ],
-            },
-            {
-              id: 'vs',
-              heading: 'OpenCode vs Codex vs Claude Code vs Cursor for design',
-              blocks: [
-                { kind: 'p', text: 'There is no single winner for design work — each agent has a different strength, and experienced teams stack them. A fair summary:' },
-                { kind: 'table', columns: ['Agent', 'Design strength', 'Best for'], rows: [
-                  ['OpenCode', 'Open-source and model-agnostic; run any provider behind one terminal workflow', 'BYOK freedom, model-switching, fully open and local-first setups'],
-                  ['Codex', 'Strong visual polish with a frontend skill; image understanding', 'Delegated async, sandboxed builds, portable AGENTS.md rules'],
-                  ['Claude Code', 'Specific design decisions (hex, spacing, type) and codebase-aware UX', 'Frontend reasoning and large-context refactors'],
-                  ['Cursor', 'Visual build-and-see loop with live preview and inline edits', 'Tight iterate-and-watch UI work inside an IDE'],
-                ] },
-                { kind: 'p', text: 'The recurring community verdict is that taste comes from humans: all of them default to a generic aesthetic without skills, references, and constraints. That is the real problem to solve — and it is design-tool-shaped, not model-shaped, which is precisely why an open agent like OpenCode pairs so well with an open design layer.' },
-              ],
-            },
-            {
-              id: 'pitfalls',
-              heading: 'Pitfalls, and how to avoid the “AI slop” look',
-              blocks: [
-                { kind: 'p', text: 'The most common complaint about AI-generated design is that it looks generic — soft gradients, floating panels, oversized rounded corners, dramatic shadows, an Inter-and-purple vibe that “screams an AI made this.” Other reported issues include broken mobile layouts and instructions leaking into UI copy. None of these are unique to OpenCode; they are what happens when any agent runs without a curated design context.' },
-                { kind: 'steps', items: [
-                  { label: 'Add an aesthetic skill', body: 'A curated design skill forces the agent to commit to a real direction instead of the default look.' },
-                  { label: 'Verify in a real browser', body: 'Render and self-check across breakpoints so layouts do not silently break on mobile.' },
-                  { label: 'Supply tokens and references', body: 'Real design tokens and reference screenshots are the single biggest lever on output quality.' },
-                  { label: 'Encode rules in AGENTS.md', body: 'Put “no hero cards, max two typefaces, brand-first hierarchy” style rules where the agent reads them every run.' },
-                ] },
-                { kind: 'p', text: 'Notice that every mitigation is about giving the agent a curated design context — regardless of which model you run. Maintaining that context by hand, per project, is the toil Open Design removes.' },
-              ],
-            },
-            {
-              id: 'open-design',
-              heading: 'Designing with OpenCode inside Open Design',
-              blocks: [
-                { kind: 'p', text: 'Open Design is the open-source design layer the workflow above keeps asking for. It treats OpenCode as a first-party adapter and wraps it in a curated skill and design-system library, a structured render pipeline, and a local desktop UI — so the design context that makes any agent good is there from the first run, not assembled by hand each time. Both projects are open-source and local-first, which makes the pairing a natural fit.' },
-                { kind: 'ol', items: [
-                  'Install Open Design and select OpenCode as your agent.',
-                  'Authenticate with your own model-provider API key (BYOK) — credentials stay on your machine and are never proxied through us.',
-                  'Pick any provider and model, plus a design system and a skill, then generate decks, prototypes, and landing pages with consistent taste.',
-                  'Every artifact and DESIGN.md file lives in your own repo, not a hosted cloud.',
-                ] },
-                { kind: 'p', text: 'Same OpenCode agent, same model freedom — plus a real, portable, open-source design workflow around it. It is local-first and Apache-2.0, so nothing about your work or your credentials leaves your machine.' },
-              ],
-            },
-          ],
-          faqTitle: 'Frequently asked questions',
-          faq: [
-            { name: 'Can OpenCode really do design work?', text: 'Yes — with an aesthetic skill, a design system, and real reference images in context, OpenCode produces production-quality, responsive UI and can verify it in a browser. Because it is model-agnostic, you run whichever model is currently best at frontend. Without that curated context it tends to default to a generic look, which is the gap Open Design fills.' },
-            { name: 'Which model should I use with OpenCode for design?', text: 'Whichever you like — OpenCode is provider-agnostic via models.dev, so you can run Anthropic, OpenAI, Google, OpenRouter, or local models behind the same workflow and switch at any time. The quality of the design output depends far more on your skill, design system, and references than on the model alone.' },
-            { name: 'Is Open Design made by the OpenCode (SST) team?', text: 'No. Open Design is an independent open-source project that integrates OpenCode as an agent. It complements OpenCode with a local-first, open skill and design-system library.' },
-            { name: 'Do I need a special subscription to design with OpenCode?', text: 'No — OpenCode is BYOK. You bring your own model-provider API key, and Open Design never proxies your credentials. There is no vendor lock-in.' },
-            { name: 'OpenCode or Codex or Claude Code for frontend design?', text: 'All are strong, and many teams stack them. OpenCode’s edge is being fully open-source and model-agnostic; Codex excels at delegated, sandboxed builds; Claude Code is known for specific, codebase-aware design decisions. Open Design lets you switch agents without changing your design workflow.' },
-            { name: 'How do I extend OpenCode for design context?', text: 'Encode rules in AGENTS.md, add MCP servers under the mcp key for portable tools and design context, and use shareable sessions for review. Open Design ships a curated skill and design-system library so you skip the per-project setup.' },
-            { name: 'Is Open Design affiliated with OpenCode or SST?', text: 'No. OpenCode is an open-source project maintained by SST (Anomaly Innovations); Open Design is an independent open-source project that supports it as a first-party adapter.' },
-            { name: 'Are my files and credentials safe?', text: 'Yes — Open Design is local-first. Your files, artifacts, and DESIGN.md stay in your own repo, and your model-provider credentials are used directly by your agent, never routed through Open Design servers.' },
-          ],
-          ctaTitle: 'Design with OpenCode, the open way.',
-          ctaBody: 'Bring your own model-provider key, keep every file local, and get a curated design library around the open agent you already use.',
-          ctaActions: [
-            { label: 'Use OpenCode inside Open Design', href: '/quickstart/', variant: 'primary' },
-            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-          ],
-          hubLinkLabel: 'See all supported agents',
-        },
-        aboutTitle: 'What is OpenCode',
-        aboutBody: [
-          'OpenCode is an open-source (MIT) terminal AI coding agent — a TUI plus desktop and IDE surfaces — maintained by Anomaly (the SST team) at github.com/anomalyco/opencode.',
-          'It is a coding agent, not a dedicated design tool. Design happens by adding skills, DESIGN.md system files, and Figma/visual-canvas MCPs to control its visual output.',
-          'Open Design treats OpenCode as a first-party adapter, turning those ad-hoc patterns into a structured, open design pipeline.',
-        ],
-        vendorLabel: 'Vendor',
-        vendor: 'Anomaly (open-source, MIT)',
-        credentialLabel: 'Credential',
-        credential: 'Provider keys via OpenCode config (BYOK)',
-        designTitle: 'Designing with OpenCode',
-        designLead:
-          'The OpenCode community designs by giving the agent taste through configuration and skills:',
-        designPoints: [
-          { label: 'design.md systems', body: 'Drop a brand DESIGN.md (Stripe/Linear/Airbnb-style rules) into the project so OpenCode generates a matching UI.' },
-          { label: 'UI/UX skills', body: 'Design-intelligence skills add dozens of UI styles and palettes, generating a design system before coding.' },
-          { label: 'Figma & visual canvas MCP', body: 'Connect Figma or a visual canvas via MCP for a design-to-code loop.' },
-          { label: 'Model taste', body: 'Because OpenCode is BYOK, you pick the model that designs best for your taste and budget.' },
-        ],
-        linksTitle: 'Real-world resources',
-        linksLead: 'Skills, design.md collections, and tutorials for designing with OpenCode:',
-        links: [
-          { label: 'OpenCode UI/UX skill: build better modern designs', href: 'https://www.youtube.com/watch?v=Pc27ThkuBPQ', source: 'YouTube · AI Stack Engineer' },
-          { label: 'OpenCode + design.md: stunning designs for free', href: 'https://www.youtube.com/watch?v=sCu34s8zb4o', source: 'YouTube · AI Stack Engineer' },
-          { label: 'VoltAgent/awesome-design-md', href: 'https://github.com/VoltAgent/awesome-design-md', source: 'GitHub · VoltAgent' },
-          { label: 'anomalyco/opencode (canonical repo)', href: 'https://github.com/anomalyco/opencode', source: 'GitHub · Anomaly' },
-          { label: 'OpenCode tutorial: setup, agents, skills & MCP', href: 'https://www.youtube.com/watch?v=uZGDO0L-Dr4', source: 'YouTube · Leon van Zyl' },
-        ],
-        withOdTitle: 'OpenCode + Open Design',
-        withOdLead:
-          'Open Design is the open-source design layer around OpenCode: a curated skill and design-system library, a structured render pipeline, and a local desktop UI — no more hand-assembling design.md files and skills.',
-        withOdSteps: [
-          'Install Open Design and select OpenCode as your agent.',
-          'OpenCode uses your provider keys via its own config (BYOK) — nothing is proxied.',
-          'Pick a design system and skill, then generate decks, prototypes, and landing pages with consistent taste.',
-          'Both projects are open-source and local-first — your files never leave your machine.',
-        ],
-        withOdClosing:
-          'Two open-source agents, one local-first design workflow.',
-        faqTitle: 'FAQ',
-        faq: [
-          { name: 'Which OpenCode is this?', text: 'The open-source terminal agent at github.com/anomalyco/opencode (formerly sst/opencode), maintained by Anomaly. Not to be confused with similarly named tools.' },
-          { name: 'Can OpenCode design UIs?', text: 'Yes, with design.md files and UI/UX skills in context. Open Design provides a curated library of both so you skip the manual setup.' },
-          { name: 'Is Open Design the same project as OpenCode?', text: 'No. Both are open-source, but they are separate projects. Open Design integrates OpenCode as a first-party agent adapter.' },
-        ],
-        ctaTitle: 'Design with OpenCode, the open way.',
-        ctaBody: 'Star the repo, download the desktop app, or join the community to request an adapter.',
-      },
-    },
+    agentGuides: EN_AGENT_GUIDES,
     download: {
       title: 'Download Open Design — desktop app for macOS, Windows & Linux',
       description:
@@ -3545,8 +2631,8 @@ INFO_PAGE_COPY.zh = {
   },
   agents: {
     ...INFO_PAGE_COPY.en!.agents,
-    title: 'Open Design Agent —— 17 个 BYOK 适配器',
-    description: 'Open Design 内置 17 个 BYOK 适配器。直接用你写代码时已经在用的 Agent 来驱动设计，无需额外厂商登录。',
+    title: 'Open Design Agent —— {count} 个 BYOK 适配器',
+    description: 'Open Design 内置 {count} 个 BYOK 适配器。直接用你写代码时已经在用的 Agent 来驱动设计，无需额外厂商登录。',
     breadcrumb: 'Agent',
     label: '适配器 · Nº 04',
     heading: (count) => `${count} 个 BYOK Agent，一套 Skill 协议。`,
@@ -3668,895 +2754,7 @@ INFO_PAGE_COPY.zh = {
     ctaTitle: '三条命令切换。',
     ctaBody: '给仓库点 Star、下载桌面版，或直接在终端安装。你的 DESIGN.md 系统从第一次渲染开始就留在自己的 repo。',
   },
-  agentGuides: {
-    'claude-code': {
-      ...INFO_PAGE_COPY.en!.agentGuides!['claude-code']!,
-      title: 'Claude Code 做设计 — Open Design',
-      description:
-        '设计师如何用 Claude Code 做 UI 和网页设计，以及 Open Design 如何把它变成真正的设计 Agent —— 本地优先、自带密钥（BYOK），配套精选 skill 与设计系统库。',
-      breadcrumb: 'Claude Code',
-      label: 'Agent · Claude Code',
-      heading: '用 Claude Code 做设计。',
-      lead: 'Claude Code 是 Anthropic 的终端编码 Agent。已经有很多人用它做 UI、设计系统和落地页。Open Design 把它接进真正的设计工作流 —— 用你自己的 Anthropic 密钥或 Claude 订阅，所有文件留在本地。',
-      tldrTitle: '一句话',
-      tldrBody:
-        '只要给 Claude Code「审美」—— 一套设计系统、一个风格 skill、一个截图迭代循环 —— 它就是个强力的设计生成器。Open Design 把这些做成本地优先的开源层。用你自己的密钥指向它，开始设计。',
-      toc: ['什么是 Claude Code', '用 Claude Code 做设计', '资源', '配合 Open Design', '常见问题'],
-      rich: {
-        heroCtaLead:
-          'Open Design 把 Claude Code 变成一个本地优先、开源的设计 agent —— 用你自己的 Anthropic key 或 Claude 订阅、你自己的文件，外面再包一层精选的 skill 与设计系统库。',
-        heroCtaActions: [
-          { label: '在 Open Design 里使用 Claude Code', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面应用', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        intro: [
-          'Claude Code 被普遍认为是前端品味最好的 coding agent —— 它对界面的推理格外具体，会给出确切的 hex 色值、间距与字号阶梯，并能在大型代码库里跨文件重构 UI 而不丢失主线。但开箱即用时，如果你不给它设计系统、skill 和真实参考，它仍会滑向一种泛泛的样子。这是一份关于如何把 Claude Code 用于 UI、前端与设计系统工作，并将它接入 Open Design 结构化工作流的端到端实战指南。',
-          '本文涵盖 Claude Code 到底是什么、它为何擅长前端、如何从零搭建、CLAUDE.md 与 Skills 工作流、官方的 Figma 往返、它与 Codex 和 Cursor 的对比、让 AI 产出显得套路化的那些坑，以及 Open Design 如何作为开源、本地优先的设计层来补上这道缺口。',
-        ],
-        heroImage: {
-          src: '/agents/claude-code-design/claude-code-design-hero.webp',
-          alt: 'Claude Code 设计反馈闭环：终端里做出具体设计决策的 agent、渲染 UI 的浏览器，以及一个工作区，由一条反馈箭头回环',
-          caption: '核心闭环：Claude Code 在终端里推理出具体的 UI 决策，在真实浏览器里渲染并验证，再对照参考不断收敛。',
-        },
-        tocLabel: '本页内容',
-        toc: [
-          { id: 'what-is-claude-code', label: 'Claude Code 究竟是什么' },
-          { id: 'why-design', label: 'Claude Code 为何擅长设计' },
-          { id: 'setup', label: '从零搭建用于设计的 Claude Code' },
-          { id: 'skills-workflow', label: 'CLAUDE.md 与 Skills 工作流' },
-          { id: 'figma', label: 'Claude Code + Figma 往返' },
-          { id: 'vs', label: 'Claude Code vs Codex vs Cursor' },
-          { id: 'pitfalls', label: '常见坑与“AI 套路感”' },
-          { id: 'open-design', label: '在 Open Design 里用 Claude Code 做设计' },
-          { id: 'faq', label: '常见问题' },
-        ],
-        sections: [
-          {
-            id: 'what-is-claude-code',
-            heading: 'Claude Code 究竟是什么',
-            blocks: [
-              { kind: 'p', text: 'Claude Code 是 Anthropic 的 agentic 编码工具。它读取你的代码库、编辑文件、运行命令、与你的开发工具集成 —— 从自然语言任务出发去规划、编写并验证，而不只是补全几行代码。' },
-              { kind: 'p', text: '它有多个共享同一引擎的形态：终端 CLI、面向 VS Code / Cursor / JetBrains 的 IDE 扩展、带可视化 diff 审阅的桌面应用，以及用于长时任务的网页端。你的 CLAUDE.md 文件、设置与 MCP server 在所有形态间通用。' },
-              { kind: 'steps', items: [
-                { label: '指令文件', body: 'Claude Code 在每次会话开始时读取项目根目录下的 CLAUDE.md —— 这正是写入你的设计规范、token 与审阅清单的天然位置。' },
-                { label: 'Skills', body: 'Agent Skills 把可复用的指令、脚本与资源打包，由 Claude 按需加载，其中就包括 Anthropic 官方的 Frontend Design skill 来注入品味。' },
-                { label: 'Plan 与 subagent', body: '它能先规划再动手，并可派生 subagent 并行处理任务的不同部分，从而让大型 UI 重构保持连贯。' },
-              ] },
-              { kind: 'ul', items: [
-                '厂商：Anthropic',
-                '凭证：Anthropic API key（BYOK，经 Console）或 Claude 订阅（Pro / Max）',
-                '形态：终端 CLI、VS Code / Cursor / JetBrains 扩展、桌面应用、网页端',
-              ] },
-            ],
-          },
-          {
-            id: 'why-design',
-            heading: 'Claude Code 为何擅长设计',
-            blocks: [
-              { kind: 'p', text: '在一众 coding agent 里，Claude Code 在前端工作上以“有品味”著称。原因有几点。' },
-              { kind: 'steps', items: [
-                { label: '决策具体，不含糊', body: 'Claude Code 倾向于落到确切的选择 —— 精确的 hex 色值、间距阶梯、字号 ramp 与组件层级，而不是泛泛而谈，而这正是真实界面与占位草稿的分水岭。' },
-                { label: '理解代码库的推理', body: '凭借较大的工作上下文，它能一次性跨多文件重构 UI，复用你已有的组件与 token，而不是另造一套一次性样式。' },
-                { label: '官方前端 skill', body: 'Anthropic 提供 Frontend Design skill，让 Claude 先写出设计方向，并刻意避开泛用系统字体与可预料的紫色渐变。' },
-              ] },
-              { kind: 'image', src: '/agents/claude-code-design/claude-code-design-taste-triangle.webp', alt: '展示设计系统、skill 与参考图三者汇聚成优质设计产出的示意图', caption: '品味来自你提供的三项输入：设计系统、skill，以及真实参考图。' },
-              { kind: 'p', text: '这和 Anthropic 对自家模型的说法一致：Claude 默认并没有品味 —— 放任不管，它会收敛到网页设计的统计中心（Inter、紫色渐变、柔和阴影）。给它约束，它才能产出好设计。Open Design 恰恰把这些输入打包好了，这也是两者天然契合之处（详见下文）。' },
-            ],
-          },
-          {
-            id: 'setup',
-            heading: '从零搭建用于设计工作的 Claude Code',
-            blocks: [
-              { kind: 'p', text: '下面是从一台干净机器到一个能构建并验证 UI 的 Claude Code 的完整路径。' },
-              { kind: 'code', lang: 'bash', code: '# 1. 安装 Claude Code（推荐原生安装）\ncurl -fsSL https://claude.ai/install.sh | bash\n# 或：brew install --cask claude-code\n# Windows PowerShell：irm https://claude.ai/install.ps1 | iex\n\n# 2. 在你的项目里启动，首次运行时登录\ncd your-project\nclaude            # 用 Claude 订阅或 API key 登录\n\n# 3. 生成项目上下文\n/init             # 为本项目创建 CLAUDE.md\n\n# 4. 添加官方 Frontend Design skill\nclaude plugin install frontend-design@claude-plugins-official\n\n# 5. 接入 Figma MCP server（可选，用于设计交付）\nclaude plugin install figma@claude-plugins-official' },
-              { kind: 'image', src: '/agents/claude-code-design/claude-code-design-setup-flow.webp', alt: '五步搭建流程：安装、认证、配置 CLAUDE.md、添加 skill、验证', caption: '搭建顺序：安装 → 认证 → 配置 CLAUDE.md → 添加 Frontend Design skill → 启用浏览器验证。' },
-              { kind: 'steps', items: [
-                { label: '把设计规则写进去', body: '把你的 token、基础原语与约定放进 CLAUDE.md 并让 Claude 指向它们，这样产出会贴合品牌，而不是退回到泛用样子。' },
-                { label: '加上浏览器验证', body: '接入 Playwright 或 Chrome MCP，让 Claude 在真实浏览器里渲染，并跨断点检查产出，而不仅仅确认构建通过。' },
-              ] },
-            ],
-          },
-          {
-            id: 'skills-workflow',
-            heading: 'CLAUDE.md 与 Skills 工作流',
-            blocks: [
-              { kind: 'p', text: '用 Claude Code 做设计、杠杆最高的闭环，是把真实参考连同你的设计上下文一起喂给它，再迭代到 UI 对得上 —— 由 CLAUDE.md 和 Skills 承载约束，免得你每次 prompt 都重新解释一遍。' },
-              { kind: 'ol', items: [
-                '从你手头最清晰的视觉参考出发 —— 而且要包含多种状态（桌面与移动、hover、空态、加载态），不要只给一张 hero 图。',
-                '在 prompt 里说具体；即便是强 agent，含糊的 prompt 也只会产出泛泛的 UI。',
-                '把你的设计系统与约定放进 CLAUDE.md，并告诉 Claude token 与标准原语在哪里。',
-                '添加 Frontend Design skill，让 Claude 在写代码前先确定一个真实的美学方向。',
-                '接好浏览器验证，让 Claude 渲染、调整到各断点，并对照参考做比对 —— 而不只是确认能构建通过。',
-              ] },
-              { kind: 'p', text: '把一张参考图丢进会话，并用具体约束去提示：' },
-              { kind: 'code', lang: 'bash', code: 'claude "把 reference-desktop.png 和 reference-mobile.png 用\n  React + Vite + Tailwind + TypeScript 实现。\n  复用 CLAUDE.md 里描述的设计系统组件与 token。\n  匹配间距、布局与层级；做成响应式。\n  在浏览器里渲染，跨断点验证它与参考一致，\n  并迭代到对得上为止。"' },
-              { kind: 'p', text: '同时跑一个 dev server，prompt 保持小而聚焦，好的迭代就 commit、坏的就 revert（revert 时告诉 Claude 一声），让每一轮都在干净的基础上推进。较大的重构用 plan 模式，这样动文件前你能先审一遍方案。' },
-            ],
-          },
-          {
-            id: 'figma',
-            heading: 'Claude Code + Figma：设计 ↔ 代码往返',
-            blocks: [
-              { kind: 'p', text: '2026 年 2 月，Anthropic 与 Figma 通过 Figma MCP server 推出了一流的双向集成。它在两个方向都能用。' },
-              { kind: 'steps', items: [
-                { label: '设计 → 代码', body: '在 Figma 里选中一个 frame，或把链接粘进 Claude Code，拉取设计上下文，让它用你已有的组件库来实现这份设计。Code Connect 会让产出与你真实的组件保持对齐。' },
-                { label: '代码 → 设计', body: '在浏览器里构建并预览一个功能，然后说一句“Send this to Figma”，把运行中的 UI 捕获为可编辑的 Figma 图层 —— 整屏或选中的某个元素皆可。' },
-              ] },
-              { kind: 'p', text: '用 claude plugin install figma@claude-plugins-official 安装一次即可（Dev Mode MCP 需要 Figma 付费方案）。同一个 Figma MCP 对 Claude Code、Codex、Cursor 与 VS Code 都可用 —— 正是 Open Design 所要编排的那类可移植、多 agent 能力。' },
-            ],
-          },
-          {
-            id: 'vs',
-            heading: 'Claude Code vs Codex vs Cursor 做设计',
-            blocks: [
-              { kind: 'p', text: '设计工作没有唯一赢家 —— 每个 agent 各有所长，有经验的团队会把它们叠着用。一个公允的概括：' },
-              { kind: 'table', columns: ['Agent', '设计强项', '最适合'], rows: [
-                ['Claude Code', '具体的设计决策（hex、间距、字号）与理解代码库的 UX 推理', '前端推理与大上下文重构'],
-                ['Codex', '强视觉打磨与图像理解；沙箱化异步构建', '委派式异步构建与可移植的 AGENTS.md 规则'],
-                ['Cursor', '带实时预览与内联编辑的“边做边看”闭环', 'IDE 内紧凑的“迭代-观察”式 UI 工作'],
-              ] },
-              { kind: 'p', text: '社区反复得出的结论是：品味来自人。三者在没有 skill、参考与约束时都会默认滑向泛用美学。这才是真正要解决的问题 —— 它是设计工具形状的，而非模型形状的。' },
-            ],
-          },
-          {
-            id: 'pitfalls',
-            heading: '常见坑，以及如何避开“AI 套路感”',
-            blocks: [
-              { kind: 'p', text: '即便 Claude Code 以有品味著称，对 AI 生成设计最常见的吐槽仍是它显得套路 —— Inter 字体、白底上的紫色渐变、柔和阴影、过大的圆角，一种“一看就是 AI 做的”的观感。Anthropic 自己把这归因于分布收敛：安全的选择在网页训练数据里占主导。其他被反映的问题还包括移动端布局错乱、以及指令文字漏进了 UI 文案。' },
-              { kind: 'steps', items: [
-                { label: '装上 Frontend Design skill', body: '它会逼 Claude 确定一个真实方向，并明确避开被 AI 滥用的字体与渐变。' },
-                { label: '启用浏览器验证', body: '让 Claude 渲染并跨断点自检，避免布局在移动端悄悄崩掉。' },
-                { label: '提供 token 与参考', body: '真实的设计 token 与参考截图，是对产出质量影响最大的单一杠杆。' },
-                { label: '把规则写进 CLAUDE.md', body: '把“不用 hero 卡片、最多两种字体、品牌优先的层级”这类规则，放在 agent 每次都会读到的地方。' },
-              ] },
-              { kind: 'p', text: '注意每一条缓解措施，本质都是在给 agent 一份精选的设计上下文。逐个项目手工维护这份上下文，正是 Open Design 替你省掉的苦差。' },
-            ],
-          },
-          {
-            id: 'open-design',
-            heading: '在 Open Design 里用 Claude Code 做设计',
-            blocks: [
-              { kind: 'p', text: 'Open Design 就是上面那套工作流一直在呼唤的开源设计层。它把 Claude Code 当作一等适配器，并在外面包上一层精选的 skill 与设计系统库、一条结构化渲染流水线，以及一个本地桌面 UI —— 让那份令 Claude Code 出彩的设计上下文，从第一次运行就在位，而不必每次手工拼装。' },
-              { kind: 'ol', items: [
-                '安装 Open Design，并选择 Claude Code 作为你的 agent。',
-                '用你的 Anthropic API key（BYOK）或 Claude 订阅认证 —— 凭证留在你自己机器上，绝不经我们中转。',
-                '挑一套设计系统与一个 skill，然后产出风格一致的 deck、原型与落地页。',
-                '每一件产物与 DESIGN.md 文件都存在你自己的仓库里，而非托管云端。',
-              ] },
-              { kind: 'p', text: '同一个 Claude Code agent、同一把 key —— 外加一套真实、可移植、开源的设计工作流。它本地优先、Apache-2.0，所以你的工作与凭证都不会离开你的机器。' },
-            ],
-          },
-        ],
-        faqTitle: '常见问题',
-        faq: [
-          { name: 'Claude Code 适合做设计吗？', text: '适合 —— 它被普遍认为是前端品味最好的 coding agent，会对 hex 色值、间距与字号阶梯做出具体且理解代码库的决策。配上 Frontend Design skill、一套设计系统与真实参考图，它能产出生产级、响应式的 UI 并在浏览器里验证。缺了这份上下文，它就容易退回泛用样子 —— 这正是 Open Design 要补的缺口。' },
-          { name: '用 Claude Code 做设计需要 Claude 订阅吗？', text: '你可以用 Anthropic API key（BYOK，经 Console）或 Claude 订阅（Pro / Max），两者皆可。无论哪种，Open Design 都不会中转你的凭证 —— 它们由你的 agent 在你机器上直接使用。' },
-          { name: '前端设计该用 Claude Code 还是 Codex？', text: '两者都很强。Claude Code 以具体、理解代码库的设计决策与前端推理著称；Codex 视觉打磨强，擅长委派式的沙箱构建。很多团队两者都用 —— Open Design 让你切换 agent 而无需改动设计工作流。' },
-          { name: '怎么把 Claude Code 接到 Figma？', text: '用 claude plugin install figma@claude-plugins-official 安装官方 Figma 插件。之后你就能借助设计上下文在代码里实现 Figma frame，并用“Send this to Figma”把运行中的 UI 推回成可编辑的 Figma 图层。Dev Mode MCP 需要 Figma 付费方案。' },
-          { name: 'Skills 和 CLAUDE.md 是什么？', text: 'CLAUDE.md 是你项目根目录里的一个 markdown 文件，Claude Code 在每次会话开始时都会读它 —— 这是写入设计规范的地方。Skills 把可复用的指令与资源打包，由 Claude 按需加载，其中包括 Anthropic 官方的 Frontend Design skill。Open Design 把两者都做成精选库，帮你免去逐项目搭建。' },
-          { name: '怎么避开泛用的“AI 套路感”？', text: '装上 Frontend Design skill，提供真实的设计 token 与参考截图，把品牌规则写进 CLAUDE.md，并启用浏览器验证。Open Design 把这些做成精选库，帮你免去逐项目搭建。' },
-          { name: 'Open Design 和 Anthropic 有从属关系吗？', text: '没有。Claude Code 是 Anthropic 的产品；Open Design 是一个独立的开源项目，把它作为一等适配器来支持。Claude 与 Claude Code 是 Anthropic 的商标。' },
-          { name: '我的文件和凭证安全吗？', text: '安全 —— Open Design 本地优先、Apache-2.0。你的文件、产物与 DESIGN.md 都留在你自己的仓库里，你的 Anthropic 凭证由你的 agent 直接使用，绝不经 Open Design 服务器中转。' },
-        ],
-        ctaTitle: '用开放的方式，和 Claude Code 一起做设计。',
-        ctaBody: '带上你自己的 Anthropic key 或 Claude 订阅，把每个文件都留在本地，再给你已在用的 agent 包上一层精选设计库。',
-        ctaActions: [
-          { label: '在 Open Design 里使用 Claude Code', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面应用', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        hubLinkLabel: 'See all supported agents',
-      },
-      aboutTitle: '什么是 Claude Code',
-      aboutBody: [
-        'Claude Code 是 Anthropic 的命令行 Agent：你用自然语言描述任务，它在你的项目里读写、运行代码，直到任务完成。',
-        '它是编码 Agent，不是设计工具 —— 但设计是它最强的衍生用途之一。给足 skill 和设计系统上下文后，它能生成生产级 HTML/CSS/React，按截图迭代，维护设计 token。',
-        'Open Design 把 Claude Code 作为一方适配器，让你写代码的同一个 Agent，成为结构化设计工作流背后的引擎。',
-      ],
-      vendorLabel: '厂商',
-      vendor: 'Anthropic',
-      credentialLabel: '凭据',
-      credential: 'Anthropic API key（BYOK）或 Claude 订阅',
-      designTitle: '用 Claude Code 做设计',
-      designLead:
-        '社区已经摸索出几种范式，让 Claude Code 从通用代码生成器变成有真正设计判断力的工具：',
-      designPoints: [
-        { label: '先给设计系统', body: '把 DESIGN.md / token / Tailwind 配置放进项目，让输出贴合品牌，而不是默认输出「AI 味」。' },
-        { label: '审美 skill', body: 'Anthropic 的 frontend-design 这类 skill 会让它在写任何代码前先锁定排版／配色／动效方向。' },
-        { label: 'Figma → 代码', body: '接入 Figma MCP，Claude Code 就能把 frame 转成带真实 token 的生产组件。' },
-        { label: '截图循环', body: '让它给自己的 UI 截图、对照参考图、反复迭代 —— Agent 式的设计反馈闭环。' },
-      ],
-      linksTitle: '实战资源',
-      linksLead: '大家真正在用来用 Claude Code 做设计的教程、skill 和实录：',
-      withOdTitle: 'Claude Code + Open Design',
-      withOdLead:
-        'Open Design 正是 Claude Code 缺的那层设计能力：精选的 skill 与设计系统库、结构化的渲染流水线、一个桌面 UI —— 全开源、本地优先。',
-      withOdSteps: [
-        '安装 Open Design，选 Claude Code 作为你的 Agent。',
-        '用你自己的 Anthropic API key（BYOK）或 Claude 订阅鉴权 —— 不经过我们中转。',
-        '选一套设计系统和一个 skill，生成审美一致的 deck、原型和落地页。',
-        '所有产物和 DESIGN.md 都留在你自己的 repo。',
-      ],
-      withOdClosing: '同一个 Agent、同一个密钥 —— 外加一套真正的设计工作流。',
-      faqTitle: '常见问题',
-      faq: [
-        { name: 'Claude Code 真能做设计吗？', text: '能。给它设计系统和审美 skill 上下文，它就能生成生产级 UI。Open Design 把这两样开箱即用地配好，省去你搭环境。' },
-        { name: '需要 Claude 订阅吗？', text: 'Anthropic API key（BYOK）或 Claude 订阅都行。Open Design 从不中转你的凭据。' },
-        { name: '这是 Anthropic 官方产品吗？', text: '不是。Open Design 是独立的开源项目。Claude Code 是 Anthropic 的商标，我们以一方适配器的方式集成它。' },
-      ],
-      ctaTitle: '用开源的方式，跟 Claude Code 一起设计。',
-      ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
-    },
-    codex: {
-      ...INFO_PAGE_COPY.en!.agentGuides!.codex!,
-      title: 'Codex 做设计 — Open Design',
-      description:
-        '大家如何用 OpenAI Codex 做 UI 和网页设计 —— Product Design 插件、Figma 集成、前端 skill —— 以及 Open Design 如何把 Codex 变成本地优先的开源设计 Agent。',
-      breadcrumb: 'Codex',
-      label: 'Agent · Codex',
-      heading: '用 Codex 做设计。',
-      lead: 'Codex 是 OpenAI 的编码 Agent。靠 Product Design 插件和 Figma 集成，它已经成了一个正经的设计工具。Open Design 把 Codex 接进开源设计工作流 —— 你自己的 OpenAI 密钥或 ChatGPT 订阅，你自己的文件，本地优先。',
-      tldrTitle: '一句话',
-      tldrBody:
-        'Codex 能把截图和用户故事变成响应式 UI，还能把设计往返同步到 Figma。Open Design 给它配上精选的设计系统与 skill 库，外加桌面工作流 —— 自带密钥，所有东西留在本地。',
-      toc: ['什么是 Codex', '用 Codex 做设计', '资源', '配合 Open Design', '常见问题'],
-      rich: {
-        heroCtaLead:
-          'Open Design 把 Codex 变成本地优先的开源设计 Agent —— 你自己的 OpenAI 密钥、你自己的文件，外加一套围绕它的精选 skill 与设计系统库。',
-        heroCtaActions: [
-          { label: '在 Open Design 里用 Codex', href: '/quickstart/', variant: 'primary' },
-          { label: '给 GitHub 点 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面客户端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        intro: [
-          'Codex 最初只是个代码生成器，但到 2026 年，只要你给对参考、skill 和验证回路，它已经能设计出真正可用的界面。这是一篇端到端的实操指南：怎么用 Codex 做 UI、前端和设计系统，以及怎么用 Open Design 把它接进结构化的设计工作流。',
-          '内容覆盖：Codex 现在到底是什么、为什么它突然擅长前端、怎么从零配好、截图转 UI 的回路、官方的 Figma 双向打通、它跟 Cursor 与 Claude Code 的差异、让 AI 输出显得千篇一律的那些坑，以及 Open Design 作为开源、本地优先的设计层怎么补上缺口。',
-        ],
-        heroImage: {
-          src: '/agents/codex-design/codex-design-workflow-loop.webp',
-          alt: 'Codex 设计反馈回路：终端 Agent、浏览器渲染 UI、工作区，带一条回流箭头',
-          caption: '核心回路：Codex 在终端里构建 UI，在真实浏览器里渲染并验证，再对着你的参考图迭代。',
-        },
-        tocLabel: '本页内容',
-        toc: [
-          { id: 'what-is-codex', label: 'Codex 到底是什么' },
-          { id: 'why-design', label: '为什么 Codex 现在能做设计' },
-          { id: 'setup', label: '从零配好 Codex 做设计' },
-          { id: 'screenshot-workflow', label: '截图转 UI 的工作流' },
-          { id: 'figma', label: 'Codex + Figma 双向打通' },
-          { id: 'vs', label: 'Codex vs Cursor vs Claude Code' },
-          { id: 'pitfalls', label: '常见坑与「AI 味」' },
-          { id: 'open-design', label: '在 Open Design 里用 Codex' },
-          { id: 'faq', label: '常见问题' },
-        ],
-        sections: [
-          {
-            id: 'what-is-codex',
-            heading: 'Codex 到底是什么（以及不是什么）',
-            blocks: [
-              { kind: 'p', text: '先消歧，几乎每个搜「Codex」的人都会被绊一下。最早的 OpenAI Codex 是 2021 年的代码补全模型，驱动过早期 GitHub Copilot，2023 年已弃用。本文讲的不是它。今天的 Codex 是 OpenAI 的 Agent 式编码工具 —— 从自然语言任务出发，规划、编写、运行并验证代码。' },
-              { kind: 'p', text: '现代 Codex 有四种形态：终端 CLI（用 Rust 重写、Apache-2.0 开源）、面向 VS Code / Cursor / Windsurf 的 IDE 扩展、用于异步委派任务的云端/网页版，以及带内置浏览器和 Computer Use 的桌面 App。' },
-              { kind: 'steps', items: [
-                { label: '默认模型', body: '截至 2026 年中，推荐模型是 gpt-5.5；而 gpt-5.4 是 OpenAI 明确为前端和 Computer Use 训练的那个模型。' },
-                { label: '指令文件', body: 'Codex 读取项目里的 AGENTS.md（跨工具通用标准）作为项目规则 —— 也就是写你设计约定最自然的地方。' },
-                { label: '沙箱', body: '它跑在内核级沙箱里（默认 workspace-write），改你 UI 的 Agent 不会跑到项目之外乱动。' },
-              ] },
-              { kind: 'ul', items: [
-                '厂商：OpenAI',
-                '凭据：OpenAI API key（BYOK）或 ChatGPT 订阅（Free / Go / Plus / Pro / Business / Enterprise）',
-                'CLI 许可：Apache-2.0，开源',
-              ] },
-            ],
-          },
-          {
-            id: 'why-design',
-            heading: '为什么 Codex 现在能做设计',
-            blocks: [
-              { kind: 'p', text: '2026 年初有三件事凑到一起，才让 Codex 从通用代码生成器变成真正的设计工具。' },
-              { kind: 'steps', items: [
-                { label: '一个为前端训练的模型', body: 'OpenAI 发布了 GPT-5.4 —— 它第一个主线版为前端和 Computer Use 训练的模型，对设计流程里的图像理解大幅提升，自我验证也更强，甚至能在定稿前先生成情绪板和多个视觉方案。' },
-                { label: '一个官方前端 skill', body: 'openai/skills 目录里有一个精选 frontend-skill，强制真审美：无卡片布局、整屏 hero、品牌优先的层级、克制的动效、最多两种字体加一个强调色 —— 还逼 Codex 先写「视觉论点」再动手。' },
-                { label: '浏览器验证', body: '配上 Playwright skill，Codex 会真开浏览器、按断点缩放，并把输出跟参考图比对，而不只是「构建通过」就完事。' },
-              ] },
-              { kind: 'image', src: '/agents/codex-design/codex-design-taste-triangle.webp', alt: '设计系统、skill、参考图三者汇聚成优质设计输出的示意图', caption: '审美来自你提供的三种输入：设计系统、skill 和真实参考图。' },
-              { kind: 'p', text: '三件事背后的道理是一样的：Codex 默认没有审美。只有当你给它约束 —— 设计系统、审美 skill、具体参考 —— 它才能产出好设计。Open Design 打包的正是这三种输入，这也是两者契合的原因（下文详述）。' },
-            ],
-          },
-          {
-            id: 'setup',
-            heading: '从零配好 Codex 做设计',
-            blocks: [
-              { kind: 'p', text: '从一台干净的机器，到一个能构建并验证 UI 的 Codex，完整路径如下。' },
-              { kind: 'code', lang: 'bash', code: '# 1. 安装 Codex CLI\nnpm install -g @openai/codex\n# 或：brew install --cask codex\n# 或：curl -fsSL https://chatgpt.com/codex/install.sh | sh\n\n# 2. 鉴权（推荐用 ChatGPT 登录，额度更高）\ncodex            # 然后选 “Sign in with ChatGPT”\n\n# 3. 生成项目上下文\ncodex            # 在项目里运行 /init 生成 AGENTS.md\n\n# 4. 装官方前端 skill，然后重启 Codex\n# （在 Codex App 里）$skill-installer frontend-skill\n\n# 5. 接 Figma MCP server（可选，做设计交付）\ncodex mcp add figma --url https://mcp.figma.com/mcp' },
-              { kind: 'image', src: '/agents/codex-design/codex-design-setup-flow.webp', alt: '五步配置流程：安装、鉴权、配置、装 skill、验证', caption: '配置顺序：安装 → 鉴权 → 配 AGENTS.md → 装前端 skill → 开浏览器验证。' },
-              { kind: 'steps', items: [
-                { label: '把设计规则写进去', body: '把 token、基础组件、约定写进 AGENTS.md 或 DESIGN.md 并让 Codex 指向它们，输出就会贴合品牌，而不是退回那套通用样子。' },
-                { label: '选对推理档位', body: 'OpenAI 提到：低到中等推理档位的前端效果，往往比最高档更好。' },
-              ] },
-            ],
-          },
-          {
-            id: 'screenshot-workflow',
-            heading: '截图转 UI 的工作流',
-            blocks: [
-              { kind: 'p', text: 'Codex 做设计最高杠杆的回路，是把参考图变成可用的响应式 UI，再迭代到对齐为止。OpenAI 官方指引归纳为五步。' },
-              { kind: 'ol', items: [
-                '从你手头最清晰的视觉参考出发 —— 而且要包含多个状态（桌面和移动、hover、空态、加载态），不只是一张 hero 图。',
-                'prompt 要具体；含糊的 prompt 只会产出通用 UI。',
-                '准备好设计系统，并告诉 Codex token 和基础组件在哪。',
-                '开启 Playwright 交互 skill，让 Codex 真在浏览器里渲染并按断点缩放。',
-                '迭代时让 Codex 把实现跟截图比对 —— 而不只是确认「能构建」。',
-              ] },
-              { kind: 'p', text: '喂图可以把截图拖进终端，或用 image 参数，然后用具体约束来 prompt：' },
-              { kind: 'code', lang: 'bash', code: 'codex -i reference-desktop.png -i reference-mobile.png \\\n  "用 React + Vite + Tailwind + TypeScript 实现这个设计。\n   尽量复用我现有的设计系统组件和 token。\n   对齐间距、布局和层级；做成响应式。\n   用 Playwright skill 验证 UI 跟参考图一致，\n   不一致就一直迭代。"' },
-              { kind: 'p', text: '在第二个终端里跑 dev server，prompt 保持小而聚焦，好的迭代就 commit、坏的就 revert（并告诉 Codex 你回退了），这样每一轮都在干净的基础上推进。' },
-            ],
-          },
-          {
-            id: 'figma',
-            heading: 'Codex + Figma：设计 ↔ 代码双向打通',
-            blocks: [
-              { kind: 'p', text: '2026 年 2 月 OpenAI 和 Figma 宣布官方合作，把早先的 Figma MCP beta 升级成一等公民级的双向集成。两个方向都能走。' },
-              { kind: 'steps', items: [
-                { label: '设计 → 代码', body: '在 Figma 里复制某个 frame 的「link to selection」，粘进 Codex 配合 get_design_context，让它用你现有的组件库实现这个设计。' },
-                { label: '代码 → 设计', body: 'generate_figma_design 工具（「Code to Canvas」）能把跑起来的 UI 变回可编辑的 Figma frame —— 整屏、选中元素或整个文件都行。' },
-              ] },
-              { kind: 'p', text: 'Figma MCP 以远程 server 形式运行且免限流。接一次，Codex、Claude Code、Cursor、VS Code 等都能用 —— 这种可移植的多 Agent 能力，正是 Open Design 要编排的东西。' },
-            ],
-          },
-          {
-            id: 'vs',
-            heading: 'Codex vs Cursor vs Claude Code 做设计',
-            blocks: [
-              { kind: 'p', text: '做设计没有唯一赢家 —— 每个 Agent 强在不同地方，老手会叠着用。公允的总结：' },
-              { kind: 'table', columns: ['Agent', '设计强项', '最适合'], rows: [
-                ['Codex', 'GPT-5.4 + 前端 skill 之后视觉打磨很强；图像理解好', '异步委派构建、沙箱化运行、可移植的 AGENTS.md 规则'],
-                ['Cursor', '边改边看的视觉回路，带实时预览和行内编辑', 'IDE 里贴身迭代、即时观察的 UI 工作'],
-                ['Claude Code', '具体的设计决策（hex、间距、字体）和懂代码库的 UX', '前端推理和大上下文重构'],
-              ] },
-              { kind: 'p', text: '社区反复得出的结论是：审美来自人。三者在没有 skill、参考和约束时，都会退回通用样子。这才是要解决的真问题 —— 而它是「设计工具」形状的，不是「模型」形状的。' },
-            ],
-          },
-          {
-            id: 'pitfalls',
-            heading: '常见坑，以及怎么避开「AI 味」',
-            blocks: [
-              { kind: 'p', text: '对 Codex 生成设计最常见的吐槽是「显得通用」—— 柔和渐变、漂浮面板、超大圆角、夸张阴影，那种 Inter 字体加紫色的味道，「一看就是 AI 做的」。其他常见问题还有移动端布局崩、指令文案泄漏进 UI、以及很快撞到用量上限。' },
-              { kind: 'steps', items: [
-                { label: '装一个前端 skill', body: '精选的审美 skill 逼 Codex 选定一个真方向，而不是默认那套样子。' },
-                { label: '开启 Playwright 验证', body: '让 Codex 跨断点渲染并自检，布局就不会在移动端悄悄崩。' },
-                { label: '喂 token 和参考', body: '真实的设计 token 和参考截图，是对输出质量影响最大的那个杠杆。' },
-                { label: '把规则写进 AGENTS.md', body: '把「不要 hero 卡片、最多两种字体、品牌优先层级」这类规则放在 Agent 每次都会读到的地方。' },
-              ] },
-              { kind: 'p', text: '注意：每条缓解措施，本质都是给 Agent 一套精选的设计上下文。而逐个项目手工维护这套上下文，正是 Open Design 帮你省掉的苦活。' },
-            ],
-          },
-          {
-            id: 'open-design',
-            heading: '在 Open Design 里用 Codex',
-            blocks: [
-              { kind: 'p', text: 'Open Design 就是上面这套工作流一直在呼唤的那个开源设计层。它把 Codex 当作一方适配器，外面包上精选的 skill 与设计系统库、结构化渲染流水线、本地桌面 UI —— 让那些让 Codex 变好的设计上下文从第一次运行就在，而不是每次手工拼。' },
-              { kind: 'ol', items: [
-                '安装 Open Design，选 Codex 作为你的 Agent。',
-                '用 OpenAI API key（BYOK）或 ChatGPT 订阅鉴权 —— 凭据留在你机器上，绝不经我们中转。',
-                '选一套设计系统和一个 skill，生成审美一致的 deck、原型和落地页。',
-                '每个产物和 DESIGN.md 都在你自己的 repo 里，不在托管云端。',
-              ] },
-              { kind: 'p', text: '同一个 Codex Agent、同一把密钥 —— 外加一套真正可移植的开源设计工作流。它本地优先、Apache-2.0，你的工作和凭据都不离开你的机器。' },
-            ],
-          },
-        ],
-        faqTitle: '常见问题',
-        faq: [
-          { name: 'OpenAI Codex 真的能做设计吗？', text: '能 —— 只要上下文里有前端 skill、设计系统和真实参考图，Codex（尤其在 GPT-5.4 上）能产出生产级、响应式的 UI，还能在浏览器里自检。没有这套上下文它就会退回通用样子，而这正是 Open Design 补的缺口。' },
-          { name: '这是 OpenAI 的 Codex Product Design 插件吗？', text: '不是。Open Design 是独立开源项目，把 Codex 作为 Agent 集成，用本地优先的开源 skill 与设计系统库补充官方工具。' },
-          { name: '用 Codex 做设计需要 ChatGPT 订阅吗？', text: 'OpenAI API key（BYOK）或 ChatGPT 订阅都行。ChatGPT 登录通常额度更高；无论哪种，Open Design 都不中转你的凭据。' },
-          { name: '前端设计该用 Codex 还是 Claude Code？', text: '两个都强。Claude Code 以具体、懂代码库的设计决策见长；Codex 在 GPT-5.4 之后视觉打磨很强，且擅长沙箱化的异步委派构建。很多团队两个都用 —— Open Design 让你换 Agent 时不用换设计工作流。' },
-          { name: '怎么把 Codex 接到 Figma？', text: '加上官方 Figma MCP server（codex mcp add figma --url https://mcp.figma.com/mcp）。之后用 get_design_context 把 Figma frame 实现成代码，用 generate_figma_design 把跑起来的 UI 推回可编辑的 Figma frame。' },
-          { name: '怎么避免那种通用的「AI 味」审美？', text: '装一个前端 skill、喂真实的设计 token 和参考截图、把品牌规则写进 AGENTS.md、并开启 Playwright 验证。Open Design 把这些做成精选库，你就省掉了逐项目的配置。' },
-          { name: 'Open Design 跟 OpenAI 有关联吗？', text: '没有。Codex 是 OpenAI 的产品；Open Design 是独立开源项目，以一方适配器的方式支持它。OpenAI 和 Codex 是 OpenAI 的商标。' },
-          { name: '我的文件和凭据安全吗？', text: '安全 —— Open Design 本地优先。你的文件、产物和 DESIGN.md 都留在自己的 repo，OpenAI 凭据由你的 Agent 直接使用，绝不经 Open Design 服务器中转。' },
-        ],
-        ctaTitle: '用开源的方式，跟 Codex 一起设计。',
-        ctaBody: '自带 OpenAI 密钥、所有文件留在本地，给你已经在用的 Agent 配上一套精选设计库。',
-        ctaActions: [
-          { label: '在 Open Design 里用 Codex', href: '/quickstart/', variant: 'primary' },
-          { label: '给 GitHub 点 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面客户端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        hubLinkLabel: '查看全部支持的 Agent',
-      },
-      aboutTitle: '什么是 Codex',
-      aboutBody: [
-        'Codex 是 OpenAI 的 Agent 式编码系统 —— 一个 CLI 加 ChatGPT 集成的 Agent，从自然语言任务规划、写、跑代码。',
-        'OpenAI 现在提供面向角色的 Product Design 插件和 Figma 集成，Codex 可以探索方向、审查用户流程、从在线 URL 出原型，并导出到 Figma 或 Canva。',
-        'Open Design 把 Codex 作为一方适配器，让它嵌入结构化的开源设计流水线。',
-      ],
-      vendorLabel: '厂商',
-      vendor: 'OpenAI',
-      credentialLabel: '凭据',
-      credential: 'OpenAI API key（BYOK）或 ChatGPT 订阅',
-      designTitle: '用 Codex 做设计',
-      designLead:
-        'Codex 的设计能力在 2026 年快速成型，主要围绕几项官方和社区能力：',
-      designPoints: [
-        { label: 'Product Design 插件', body: 'OpenAI 的角色插件：探索方向、审查用户流程、从在线 URL 出原型、把截图变可交互、导出 Figma/Canva。' },
-        { label: '截图 → 响应式 UI', body: 'Codex 把参考图变成响应式代码，并用 Playwright skill 在各断点上跟参考图做视觉比对。' },
-        { label: 'Codex ↔ Figma', body: 'Figma MCP 把设计上下文带进代码，再把运行中的 UI 变回可编辑的 Figma frame。' },
-        { label: '前端设计 skill', body: '社区和官方 skill 锁定审美方向，避免输出千篇一律的「紫色 AI 味」。' },
-      ],
-      linksTitle: '实战资源',
-      linksLead: '用 Codex 做设计的官方文档、Figma 集成和实录：',
-      withOdTitle: 'Codex + Open Design',
-      withOdLead:
-        'Open Design 是围绕 Codex 的开源设计层：精选 skill 与设计系统库、结构化渲染流水线、本地桌面 UI。',
-      withOdSteps: [
-        '安装 Open Design，选 Codex 作为你的 Agent。',
-        '用 OpenAI API key（BYOK）或 ChatGPT 订阅鉴权 —— 凭据留在你机器上。',
-        '选一套设计系统和 skill，生成审美一致的 deck、原型和落地页。',
-        '产物和 DESIGN.md 都在你自己的 repo，不在托管云端。',
-      ],
-      withOdClosing: '同一个 Codex Agent —— 外加一套真正可移植的设计工作流。',
-      faqTitle: '常见问题',
-      faq: [
-        { name: '这是 OpenAI 的 Codex Product Design 插件吗？', text: '不是。Open Design 是独立开源项目，把 Codex 作为 Agent 集成，用本地优先的开源库补充官方插件。' },
-        { name: '需要 ChatGPT 订阅吗？', text: 'OpenAI API key（BYOK）或 ChatGPT 订阅都行。Open Design 从不中转你的凭据。' },
-        { name: 'Open Design 跟 OpenAI 有关联吗？', text: '没有。Codex 是 OpenAI 的产品；Open Design 是独立开源项目，以一方适配器的方式支持它。' },
-      ],
-      ctaTitle: '用开源的方式，跟 Codex 一起设计。',
-      ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
-    },
-    cursor: {
-      ...INFO_PAGE_COPY.en!.agentGuides!.cursor!,
-      title: 'Cursor 做设计 — Open Design',
-      description:
-        '设计师如何用 Cursor 做 UI 和网页设计 —— Design Mode、Figma 转代码、Figma MCP —— 以及 Open Design 如何把 Cursor 变成本地优先的开源设计 Agent。',
-      breadcrumb: 'Cursor',
-      label: 'Agent · Cursor',
-      heading: 'Cursor 给设计师。',
-      lead: 'Cursor 是那个 AI 代码编辑器，现在带了可视化 Design Mode。设计师用它点选、勾画来改 UI，也用它把 Figma 转成代码。Open Design 把 Cursor Agent 接进开源设计工作流，文件全留本地。',
-      tldrTitle: '一句话',
-      tldrBody:
-        'Cursor 的 Design Mode 让你点击、勾画或用说话来改在线 UI；它的 Figma MCP 集成把真实设计上下文带进代码。Open Design 在上面叠一层精选 skill 与设计系统库 —— 你自己的模型密钥，你自己的 repo。',
-      toc: ['什么是 Cursor', '用 Cursor 做设计', '资源', '配合 Open Design', '常见问题'],
-      rich: {
-        heroCtaLead:
-          'Open Design 把 Cursor 变成一个本地优先、开源的设计 agent——用你自己的 Cursor 账号或模型密钥、你自己的文件，外面再裹一层精选的 skill 与 design-system 库。',
-        heroCtaActions: [
-          { label: '在 Open Design 里使用 Cursor', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        intro: [
-          'Cursor 是一款 AI 优先的代码编辑器，它让“边写边看渲染”成为做 UI 的默认方式。借助 Agent 模式、行内编辑、编辑器内置预览，以及通过 MCP 接入的 Figma，它已经成为一个真正能用的设计工具——前提是你给它对的参考、规则和一套验证回路。这是一份从头到尾、可落地的指南，讲如何用 Cursor 做 UI、前端和 design-system 工作，并把它接入 Open Design 的结构化设计工作流。',
-          '内容涵盖：Cursor 到底是什么、为什么它“边迭代边看”的紧凑回路适合做设计、如何从零搭起、从预览到 UI 的迭代回路、通过 MCP 与 Figma 的往返、它与 Codex 和 Claude Code 的对比、让 AI 产出显得平庸的那些坑，以及 Open Design 作为开源、本地优先的设计层如何补齐这道缺口。',
-        ],
-        heroImage: {
-          src: '/agents/cursor-design/cursor-design-hero.webp',
-          alt: 'Cursor 设计收敛示意：左侧是编辑器，中间是带 Cursor 标志的精选 skill 与 design-system hub，右侧是渲染出的 UI',
-          caption: '核心思路：Cursor 在编辑器里编辑并渲染 UI，而一个精选的设计 hub 为它喂入设计系统、skill 和参考，让产出显得是有意为之、而非随手生成。',
-        },
-        tocLabel: '本页目录',
-        toc: [
-          { id: 'what-is-cursor', label: 'Cursor 到底是什么' },
-          { id: 'why-design', label: '为什么 Cursor 擅长做设计' },
-          { id: 'setup', label: '从零配置 Cursor 做设计' },
-          { id: 'preview-workflow', label: '从预览到 UI 的工作流' },
-          { id: 'figma', label: 'Cursor + Figma（经 MCP）' },
-          { id: 'vs', label: 'Cursor vs Codex vs Claude Code' },
-          { id: 'pitfalls', label: '常见坑与“AI 味”观感' },
-          { id: 'open-design', label: '在 Open Design 里用 Cursor 做设计' },
-          { id: 'faq', label: '常见问题' },
-        ],
-        sections: [
-          {
-            id: 'what-is-cursor',
-            heading: 'Cursor 到底是什么',
-            blocks: [
-              { kind: 'p', text: 'Cursor 是 Anysphere 打造的 AI 优先代码编辑器。它是 VS Code 的一个 fork，所以保留了熟悉的编辑器、扩展和快捷键，但把整个工作流围绕一个 AI agent 重建——这个 agent 能读懂你的整个项目、跨多文件编辑、运行命令，并和你一起在回路里迭代。' },
-              { kind: 'p', text: '对设计工作而言，关键的几个能力是：Agent 模式（你描述想要的结果，Cursor 规划并跨文件编辑）、用于快速微调的行内编辑与 Tab 补全、让你不离开窗口就能看到运行中 UI 的编辑器内置预览，以及让它能拉入外部上下文（比如一个实时 Figma 文件）的 MCP 支持。' },
-              { kind: 'steps', items: [
-                { label: '项目规则', body: 'Cursor 会读取项目指令文件——`.cursor/rules` 下纳入版本管理的 `.mdc` 规则，以及一个纯文本 `AGENTS.md`——你可以把设计约定写在 agent 每次都会读到的地方。' },
-                { label: '模型', body: 'Cursor 在模型上很灵活：订阅自带前沿模型，也支持用你自己的模型密钥（BYOK），所以同一套编辑器工作流背后用哪台引擎由你定。' },
-                { label: 'MCP', body: '它支持 Model Context Protocol，外部 server——最相关的就是 Figma MCP server——可以成为 agent 的一等上下文。' },
-              ] },
-              { kind: 'ul', items: [
-                '厂商：Anysphere',
-                '凭证：Cursor 账号 / 订阅（Hobby / Pro / Business）或你自己的模型密钥（BYOK）',
-                '形态：AI 优先的代码编辑器（VS Code fork），内置 agent 与预览',
-              ] },
-            ],
-          },
-          {
-            id: 'why-design',
-            heading: '为什么 Cursor 擅长做设计',
-            blocks: [
-              { kind: 'p', text: 'Cursor 在设计上的优势不是某个单一功能，而是“边写边看”这条回路的紧凑度。有三点让它更像一个设计工具，而不是一个泛泛的代码生成器。' },
-              { kind: 'steps', items: [
-                { label: '紧凑的“边迭代边看”回路', body: '你给出提示，Cursor 跨文件编辑，编辑器内置预览立刻渲染出结果——于是你能在几秒内调整间距、层级和动效，而不必在另一个终端和浏览器之间来回切换。' },
-                { label: '直接的可视化编辑', body: '除了对话，Cursor 还允许你在预览里选中元素、直接微调样式，让小的视觉修正更像设计编辑、而非翻代码考古。' },
-                { label: '项目规则与 MCP 上下文', body: '有了 `.cursor/rules`（或 `AGENTS.md`）和 Figma MCP server，agent 是对着你的 tokens、组件和真实设计规格在工作，而不是靠猜。' },
-              ] },
-              { kind: 'image', src: '/agents/cursor-design/cursor-design-taste-triangle.webp', alt: '展示 design system、skill 与参考图三者收敛为优质设计产出的示意图', caption: '审美来自你提供的三个输入：一套设计系统、一个 skill，以及真实的参考图。' },
-              { kind: 'p', text: '结论和每个 agent 教给我们的一样：Cursor 默认并没有审美。只有当你给它约束——一套设计系统、一个审美 skill、具体的参考——它才能产出好设计。Open Design 打包的正是这些输入，这也是两者天然契合的原因（下文详述）。' },
-            ],
-          },
-          {
-            id: 'setup',
-            heading: '从零把 Cursor 配置成能做设计',
-            blocks: [
-              { kind: 'p', text: '下面是从一台干净机器，到一个能对着你的设计系统构建、预览并验证 UI 的 Cursor 的完整路径。' },
-              { kind: 'ol', items: [
-                '从 cursor.com 安装 Cursor，用 Cursor 账号登录，或在设置里配置你自己的模型密钥（BYOK）。',
-                '打开你的项目，在对话 / Agent 面板里选一个模型。',
-                '加项目规则：用 `.cursor/rules/*.mdc` 写结构化、按 glob 作用域生效的约定，或用一个纯文本 `AGENTS.md` 写简单可读的指令。',
-                '接入 Figma MCP server（可选），让 agent 能读取实时设计上下文。',
-                '启动你的 dev server，用编辑器内置预览边迭代边看、边验证 UI。',
-              ] },
-              { kind: 'image', src: '/agents/cursor-design/cursor-design-setup-flow.webp', alt: '五步配置流程：安装、认证、配置规则、添加 skill、验证', caption: '配置顺序：安装 → 认证 → 配置项目规则 → 添加 skill → 启用预览验证。' },
-              { kind: 'p', text: '一份最简的项目规则文件，就能让 agent 对着品牌做设计、而不是退回到一个泛泛的样子。把它放在 Cursor 每次都会读到的地方：' },
-              { kind: 'code', lang: 'markdown', code: '# .cursor/rules/design.mdc\n---\ndescription: Project design conventions\nalwaysApply: true\n---\n\n- 复用已有的 design-system tokens 和组件；不要写死 hex 或间距。\n- 最多两种字体、一个强调色。\n- 品牌优先的层级；克制的动效。不要 hero card，不要过大的圆角。\n- 默认做响应式；收尾前先在预览里验证桌面端和移动端。' },
-              { kind: 'steps', items: [
-                { label: '把设计规则写下来', body: '把你的 tokens、基础元件和约定放进 `.cursor/rules` 或 `AGENTS.md`，并让 Cursor 指向它们，这样产出会贴合品牌、而不是退回到泛泛的样子。' },
-                { label: '让提示保持小而聚焦', body: 'Cursor 的紧凑回路偏爱聚焦的请求——一次只迭代一个组件或一种状态，每一轮之间都盯着预览看。' },
-              ] },
-            ],
-          },
-          {
-            id: 'preview-workflow',
-            heading: '从预览到 UI 的工作流',
-            blocks: [
-              { kind: 'p', text: '用 Cursor 做设计，杠杆最高的回路就是把一张参考变成能跑、且响应式的 UI，并在编辑器里一直盯着实时预览迭代到匹配为止——而不是靠猜。' },
-              { kind: 'ol', items: [
-                '从你手上最清晰的视觉参考开始——并且要包含多种状态（桌面与移动、hover、空态、加载态），而不只是一张主视觉。',
-                '提示要具体；含糊的提示只会产出泛泛的 UI。',
-                '准备好设计系统，并告诉 Cursor tokens 和标准基础元件都在哪里。',
-                '让编辑器内置预览开着、dev server 跑着，这样每次编辑都能在你关心的断点上立刻渲染出来。',
-                '通过把渲染出的 UI 和参考反复比对来迭代——小的视觉修正就直接在预览里选中元素来调。',
-              ] },
-              { kind: 'p', text: '把图片附到对话里来喂参考，然后用具体约束给出提示：' },
-              { kind: 'code', lang: 'text', code: '用 React + Vite + Tailwind + TypeScript 实现这个设计。\n复用我已有的 design-system 组件和 tokens。\n匹配间距、布局和层级；做成响应式。\n预览一直开着——验证桌面端和移动端都和参考一致，\n迭代到一致为止。' },
-              { kind: 'p', text: '好的迭代就提交，坏的就回退（回退时告诉 Cursor 一声），让每一轮都建立在干净的基础上——这是让任何 agent 回路不跑偏的同一条纪律。' },
-            ],
-          },
-          {
-            id: 'figma',
-            heading: 'Cursor + Figma：经 MCP 的设计 ↔ 代码往返',
-            blocks: [
-              { kind: 'p', text: 'Cursor 通过官方的 Figma MCP server 连接 Figma，让 agent 对一个实时 Figma 文件有结构化访问，而不是只拿到一张扁平截图。这就把交接里的猜测成分去掉了。' },
-              { kind: 'steps', items: [
-                { label: '设计 → 代码', body: '在 Figma 里复制某个 frame 的链接，粘进 Cursor，让它去实现这个设计。MCP server 暴露的是真实的设计上下文——组件、变量、布局数据、tokens——所以生成的代码是贴合源文件的，而不是近似。' },
-                { label: '保持对齐', body: '只要在 Figma 里一致地使用设计 tokens、样式和组件（有 Code Connect 时用上），Cursor 的产出就会映射到你真实的设计系统，而不是重新发明一套基础元件。' },
-              ] },
-              { kind: 'p', text: '远程 Figma MCP server 配一次，就能作为一等上下文供 Cursor 使用。由于 MCP 是开放标准，同一个 server 可以在 Cursor、Claude Code、Codex 和 VS Code 之间复用——这正是 Open Design 生来要去编排的那种可移植、多 agent 能力。' },
-            ],
-          },
-          {
-            id: 'vs',
-            heading: 'Cursor vs Codex vs Claude Code：做设计怎么选',
-            blocks: [
-              { kind: 'p', text: '做设计没有唯一赢家——每个 agent 各有所长，有经验的团队会把它们叠着用。一个公允的总结：' },
-              { kind: 'table', columns: ['Agent', '设计强项', '最适合'], rows: [
-                ['Cursor', '“边写边看”的可视化回路，带编辑器内置实时预览与直接选中元素编辑', 'IDE 里“边迭代边看”的紧凑 UI 工作'],
-                ['Codex', '配上前端 skill 后视觉打磨强；图像理解 + 沙箱化运行', '托管式异步构建，以及可移植的 AGENTS.md 规则'],
-                ['Claude Code', '具体的设计决策（hex、间距、字体）和懂代码库的 UX', '前端推理与大上下文重构'],
-              ] },
-              { kind: 'p', text: '社区反复得出的结论是：审美来自人。三者在没有 skill、参考和约束时都会退回到一个泛泛的样子。那才是真正要解决的问题——而它是“设计工具”形状的，不是“模型”形状的。' },
-            ],
-          },
-          {
-            id: 'pitfalls',
-            heading: '常见坑，以及如何避开“AI 味”观感',
-            blocks: [
-              { kind: 'p', text: '对 Cursor 生成设计最常见的抱怨，是它看着很泛——柔和渐变、悬浮面板、过大的圆角、夸张阴影，一股“Inter 字体加紫色”的味道，“一看就是 AI 做的”。其他被反映的问题还包括移动端布局错乱、指令文字泄漏进 UI 文案里。' },
-              { kind: 'steps', items: [
-                { label: '加一个设计 skill', body: '一个精选的审美 skill 会逼 Cursor 选定一个真实方向，而不是用默认那套。' },
-                { label: '用预览来验证', body: '在编辑器内置预览里跨断点渲染并自检，这样布局就不会在移动端悄悄崩掉。' },
-                { label: '提供 tokens 和参考', body: '真实的设计 tokens 和参考截图，是对产出质量影响最大的那个杠杆。' },
-                { label: '把规则写进 `.cursor/rules`', body: '把“不要 hero card、最多两种字体、品牌优先层级”这类规则，放在 agent 每次都会读到的地方。' },
-              ] },
-              { kind: 'p', text: '注意到没有：每一条缓解措施都是在给 agent 一份精选的设计上下文。逐个项目、用手去维护这份上下文，正是 Open Design 帮你省掉的苦活。' },
-            ],
-          },
-          {
-            id: 'open-design',
-            heading: '在 Open Design 里用 Cursor 做设计',
-            blocks: [
-              { kind: 'p', text: 'Open Design 就是上面这套工作流一直在要的那一层开源设计层。它把 Cursor 当作一等适配器，外面裹上一个精选的 skill 与 design-system 库、一条结构化的渲染流水线，以及一个本地桌面端 UI——让那份让 Cursor 变好用的设计上下文，从第一次运行就在那儿，而不是每次都手工拼。' },
-              { kind: 'ol', items: [
-                '安装 Open Design，选 Cursor 作为你的 agent。',
-                '用你的 Cursor 账号或你自己的模型密钥（BYOK）认证——凭证留在你的机器上，绝不经我们代理。',
-                '挑一套设计系统和一个 skill，然后生成审美一致的演示稿、原型和落地页。',
-                '每一份产物和 DESIGN.md 都存在你自己的 repo 里，而不是某个托管云。',
-              ] },
-              { kind: 'p', text: '同一个 Cursor agent、同一把密钥——外面再加一套真实、可移植、开源的设计工作流。它本地优先、Apache-2.0 授权，所以你的工作和凭证没有任何东西会离开你的机器。' },
-            ],
-          },
-        ],
-        faqTitle: '常见问题',
-        faq: [
-          { name: 'Cursor 真的能做设计吗？', text: '能——只要上下文里有一个设计 skill、一套设计系统和真实参考图，Cursor 就能产出生产级、响应式的 UI，而它的编辑器内置预览让你能在视觉上验证并打磨。缺了这份上下文，它就容易退回到泛泛的样子，而这正是 Open Design 补齐的缺口。' },
-          { name: '这是 Cursor 官方产品吗？', text: '不是。Open Design 是一个独立的开源项目，把 Cursor 作为 agent 集成进来。它用一个本地优先、开源的 skill 与 design-system 库来补充 Cursor。' },
-          { name: '用 Cursor 做设计需要 Cursor 订阅吗？', text: '你可以用 Cursor 账号 / 订阅，也可以用自己的模型密钥（BYOK）。无论哪种方式，Open Design 都不会代理你的凭证——它们由你的 agent 直接使用。' },
-          { name: '前端设计选 Cursor 还是 Claude Code？', text: '两者都很强。Claude Code 以具体、懂代码库的设计决策著称；Cursor 的优势是编辑器里“边写边看”的紧凑回路加实时预览。很多团队两个都用——Open Design 让你切换 agent 时无需改动设计工作流。' },
-          { name: '怎么把 Cursor 连到 Figma？', text: '在 Cursor 里加上官方 Figma MCP server，然后把一个 Figma frame 链接粘进对话，让 Cursor 去实现它。该 server 暴露真实的组件、变量和布局数据，让生成的代码贴合源设计。' },
-          { name: '怎么避开泛泛的“AI 味”观感？', text: '加一个设计 skill、提供真实的设计 tokens 和参考截图、把品牌规则写进 `.cursor/rules` 或 `AGENTS.md`，并在预览里跨断点验证。Open Design 把这些做成一个精选库，让你省掉逐项目的搭建。' },
-          { name: 'Open Design 和 Cursor 或 Anysphere 有关联吗？', text: '没有。Cursor 是 Anysphere 的产品；Open Design 是一个独立的开源项目，把它作为一等适配器来支持。Cursor 和 Anysphere 是 Anysphere, Inc. 的商标。' },
-          { name: '我的文件和凭证安全吗？', text: '安全——Open Design 本地优先。你的文件、产物和 DESIGN.md 都留在你自己的 repo 里，你的 Cursor 或模型凭证由你的 agent 直接使用，绝不经 Open Design 的服务器中转。' },
-        ],
-        ctaTitle: '用开放的方式，和 Cursor 一起做设计。',
-        ctaBody: '带上你自己的 Cursor 账号或模型密钥，把每个文件都留在本地，并在你已经在用的 agent 外面，得到一个精选的设计库。',
-        ctaActions: [
-          { label: '在 Open Design 里使用 Cursor', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面端', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        hubLinkLabel: '查看所有支持的 agent',
-      },
-      aboutTitle: '什么是 Cursor',
-      aboutBody: [
-        'Cursor 是基于 VS Code 的 AI 优先代码编辑器，内置一个能在整个项目里改代码的 Agent。',
-        'Cursor 推出了 Design Mode —— 点选某个元素、勾画一处改动，或用一句话描述，Cursor 就改底层的 React/Vue/Svelte 源码。配合 Figma MCP，它成了一个可信的设计转代码界面。',
-        'Open Design 把 Cursor Agent 作为一方适配器，让它驱动结构化的开源设计流水线。',
-      ],
-      vendorLabel: '厂商',
-      vendor: 'Cursor（Anysphere）',
-      credentialLabel: '凭据',
-      credential: 'Cursor 账号，使用你自己的模型凭据',
-      designTitle: '用 Cursor 做设计',
-      designLead:
-        'Cursor 的设计生态围绕可视化编辑和 Figma 互通：',
-      designPoints: [
-        { label: 'Design Mode', body: '点选、勾画或说话来改 UI，Cursor 改源码 —— 由真实代码支撑的可视化编辑。' },
-        { label: 'Figma → 代码', body: 'Figma MCP 把真实布局和 token 喂给 Cursor，让它按设计而非截图来构建。' },
-        { label: '双向 Figma', body: '部分 MCP 让 Cursor 不只读取、还能用程序改 Figma 设计。' },
-        { label: '设计转代码闭环', body: '常见范式：先在可视化工具里出稿，导入 Cursor，再用 Agent 精修和扩展。' },
-      ],
-      linksTitle: '实战资源',
-      linksLead: '用 Cursor 做设计的发布、教程和工具：',
-      withOdTitle: 'Cursor + Open Design',
-      withOdLead:
-        'Open Design 是围绕 Cursor 的开源设计层：精选 skill 与设计系统库、结构化渲染流水线、本地桌面 UI。',
-      withOdSteps: [
-        '安装 Open Design，选 Cursor Agent。',
-        'Cursor 用你自己的模型密钥 —— 不经过 Open Design 中转。',
-        '选一套设计系统和 skill，生成审美一致的 deck、原型和落地页。',
-        '一切留在你的 repo，本地优先。',
-      ],
-      withOdClosing: 'Cursor 的 Agent，外加一套开放、可移植的设计工作流。',
-      faqTitle: '常见问题',
-      faq: [
-        { name: 'Cursor 适合做设计吗？', text: '配合 Design Mode 和 Figma MCP，它改、建 UI 都不错；从零开始则更需要一套设计系统。Open Design 开箱即提供。' },
-        { name: 'Open Design 会取代 Cursor 的 Design Mode 吗？', text: '不会，是互补。Open Design 在 Agent 之上加一层开放、精选的设计系统与 skill 库，以及结构化渲染流水线。' },
-        { name: 'Open Design 跟 Cursor 有关联吗？', text: '没有。Cursor 是 Anysphere 的产品；Open Design 是独立开源项目，以一方适配器集成它。' },
-      ],
-      ctaTitle: '用开源的方式，跟 Cursor 一起设计。',
-      ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
-    },
-    opencode: {
-      ...INFO_PAGE_COPY.en!.agentGuides!.opencode!,
-      title: 'OpenCode 做设计 — Open Design',
-      description:
-        '大家如何用 OpenCode 做 UI 和网页设计 —— design.md 文件、UI/UX skill、Figma MCP —— 以及 Open Design 如何把 OpenCode 变成本地优先的开源设计 Agent。',
-      breadcrumb: 'OpenCode',
-      label: 'Agent · OpenCode',
-      heading: '用 OpenCode 做设计。',
-      lead: 'OpenCode 是开源的终端 AI 编码 Agent。设计师给它挂上设计 skill 和 DESIGN.md 文件来生成真正的 UI。Open Design 把这套做成结构化的开源工作流 —— 用你自己的模型密钥，所有东西留本地。',
-      tldrTitle: '一句话',
-      tldrBody:
-        'OpenCode 是完全开源的编码 Agent；设计是靠 skill、design.md 文件和 Figma MCP 衍生出来的用法。Open Design 在它周围打包一套精选设计系统与 skill 库，外加桌面工作流 —— 你的密钥，你的 repo。',
-      toc: ['什么是 OpenCode', '用 OpenCode 做设计', '资源', '配合 Open Design', '常见问题'],
-      rich: {
-        heroCtaLead:
-          'Open Design 把 OpenCode 变成本地优先、开源的设计 agent——用你自己选的任意模型和 provider key，用你自己的文件，外加一套精选的 skill 与设计系统库。',
-        heroCtaActions: [
-          { label: '在 Open Design 中使用 OpenCode', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面应用', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        intro: [
-          'OpenCode 是一个开源、以终端为先的 AI 编码 agent，刻意做成与模型无关：你自带 provider key，在同一套工作流背后运行任意你想用的模型。这种开放性让它天然适合做设计——但和所有 agent 一样，只有当你给它正确的参考、skill 和一套验证回路时，它才能产出好的 UI。本文是一份从头到尾的实用指南，讲如何用 OpenCode 做 UI、前端和设计系统工作，以及如何把它接入 Open Design 的结构化设计工作流。',
-          '内容涵盖：OpenCode 到底是什么、为什么一个与模型无关的开源 agent 适合做设计、如何从零配置、截图转 UI 的回路、AGENTS.md 与 MCP 如何扩展它、它与 Codex / Claude Code / Cursor 的对比、让 AI 产出显得套路化的那些坑，以及 Open Design 如何作为一个开源、本地优先的设计层来补上这道缺口——这是个天然的搭配，因为两个项目都是开源、都跑在你自己的机器上。',
-        ],
-        heroImage: {
-          src: '/agents/opencode-design/opencode-design-hero.webp',
-          alt: 'OpenCode 设计反馈回路：终端 TUI agent、在浏览器中渲染 UI，以及一个工作区，带一条回环反馈箭头',
-          caption: '核心回路：OpenCode 在终端里构建 UI，在真实浏览器中渲染并验证，再对照你的参考反复迭代——用的是你自己选的任意模型。',
-        },
-        tocLabel: '本页目录',
-        toc: [
-          { id: 'what-is-opencode', label: 'OpenCode 究竟是什么' },
-          { id: 'why-design', label: '为什么开放、任意模型的 agent 适合做设计' },
-          { id: 'setup', label: '从零配置 OpenCode 做设计' },
-          { id: 'screenshot-workflow', label: '截图转 UI 的工作流' },
-          { id: 'extend', label: 'AGENTS.md、MCP 与可分享会话' },
-          { id: 'vs', label: 'OpenCode vs Codex vs Claude Code vs Cursor' },
-          { id: 'pitfalls', label: '坑，以及那种“AI 味”的观感' },
-          { id: 'open-design', label: '在 Open Design 中用 OpenCode 做设计' },
-          { id: 'faq', label: '常见问题' },
-        ],
-        sections: [
-          {
-            id: 'what-is-opencode',
-            heading: 'OpenCode 究竟是什么',
-            blocks: [
-              { kind: 'p', text: 'OpenCode 是一个为终端打造的开源 AI 编码 agent，由 SST 背后的团队（Anomaly Innovations）维护。它会读取你的代码仓库、运行命令、编辑文件，并与大语言模型对话——但和被厂商绑定的 agent 不同，它本身不自带模型。你把它指向任意你想用的 provider 和模型，并自带 key。' },
-              { kind: 'p', text: '它以终端界面（TUI）运行，并在同一引擎之上提供桌面应用和 IDE 扩展。底层采用客户端/服务端架构，所以真正干活的 agent 与你驱动它的界面是解耦的。它内置 build 和 plan 两个 agent，用 Tab 键切换。' },
-              { kind: 'steps', items: [
-                { label: '与模型无关', body: '模型和 provider 来自 models.dev 这个开放目录。你在 opencode.json 里用 provider/model-id 字符串配置，并可禁用不想加载的 provider——所以同一套设计工作流可以跑在 Anthropic、OpenAI、Google、OpenRouter、本地模型等之上。' },
-                { label: '指令文件', body: 'OpenCode 会读取项目里的 AGENTS.md 文件（跨工具的通用标准，也兼容 CLAUDE.md）作为项目规则——这正是编码你设计约定的天然位置。运行 /init 即可生成一个。' },
-                { label: '可扩展', body: '它支持 LSP 集成、MCP server、主题、快捷键和自定义命令，还有可分享的会话链接用于协作。' },
-              ] },
-              { kind: 'ul', items: [
-                '维护方：SST / Anomaly Innovations（开源项目）',
-                '凭证：你自己的模型 provider API key（BYOK，无厂商锁定）',
-                '许可：MIT，开源',
-              ] },
-            ],
-          },
-          {
-            id: 'why-design',
-            heading: '为什么开放、任意模型的 agent 适合做设计',
-            blocks: [
-              { kind: 'p', text: 'OpenCode 不像厂商 agent 那样有某一个“设计模型”——而这恰恰是它的优势。因为与模型无关且开源，你可以在同一套设计工作流上运行当下前端最强的那个模型，之后随时更换，或退回到本地模型，全程不用改配置。' },
-              { kind: 'p', text: '但光选对模型并不能买来审美。和所有编码 agent 一样，除非你给它约束，否则 OpenCode 也会产出套路化的 UI。好的设计产出来自你提供的三项输入。' },
-              { kind: 'steps', items: [
-                { label: '一套设计系统', body: '真实的 tokens、基础组件和约定，让 agent 复用，从而让产出贴合某个品牌，而不是退回到通用的观感。' },
-                { label: '一个审美 skill', body: '一个精选的 skill，强制真正的审美——克制的动效、品牌优先的层级、最多两种字体一种强调色——并让 agent 在动手前先定一个方向。' },
-                { label: '具体的参考图', body: '真实的参考图，以及多种状态（桌面和移动、hover、空态、加载态），而不是只有一张主视觉。' },
-              ] },
-              { kind: 'image', src: '/agents/opencode-design/opencode-design-taste-triangle.webp', alt: '展示设计系统、skill 与参考图三者汇聚成优质设计产出的示意图', caption: '审美来自你提供的三项输入：一套设计系统、一个 skill 和真实参考图——与你跑哪个模型无关。' },
-              { kind: 'p', text: '结论：OpenCode 给了你模型自由，但审美仍来自一套精选的设计上下文。Open Design 恰好把这些输入打包好，这也是两者契合的原因——它们都是开源、都本地优先（下文详述）。' },
-            ],
-          },
-          {
-            id: 'setup',
-            heading: '从零配置 OpenCode 做设计',
-            blocks: [
-              { kind: 'p', text: '下面是从一台干净的机器到一个能构建并验证 UI 的 OpenCode 的完整路径。' },
-              { kind: 'code', lang: 'bash', code: '# 1. 安装 OpenCode\ncurl -fsSL https://opencode.ai/install | bash\n# 或：npm i -g opencode-ai@latest\n# 或：brew install sst/tap/opencode\n\n# 2. 在项目里启动 TUI，然后认证你的 provider\nopencode          # 然后运行 /login，选择 provider 并粘贴你的 key\n\n# 3. 生成项目上下文\nopencode          # 在项目里运行 /init 生成 AGENTS.md\n\n# 4. 选择你的模型（任意 provider，经 models.dev）\n#    在 opencode.json 里设置 "provider/model-id"，或在 TUI 里切换\n\n# 5. 添加 MCP server（可选，比如用于设计交付）\n#    在 opencode.json 的 "mcp" 字段下配置' },
-              { kind: 'image', src: '/agents/opencode-design/opencode-design-setup-flow.webp', alt: '五步配置流程：安装、用你的 provider key 认证、配置 AGENTS.md、添加 skill、验证', caption: '配置顺序：安装 → 认证（你的 provider key）→ 配置 AGENTS.md → 添加 skill → 在真实浏览器中验证。' },
-              { kind: 'steps', items: [
-                { label: '编码你的设计规则', body: '把你的 tokens、基础组件和约定放进 AGENTS.md（或从中引用的 DESIGN.md），让产出贴合品牌而非退回通用观感。opencode.json 里的 instructions 选项可以用 glob 指向更多规则文件。' },
-                { label: '选一个有能力的模型', body: '因为 OpenCode 与模型无关，可以为设计这一遍挑选当下前端最强的 provider/模型——而工作流的其余部分保持不变。' },
-              ] },
-            ],
-          },
-          {
-            id: 'screenshot-workflow',
-            heading: '截图转 UI 的工作流',
-            blocks: [
-              { kind: 'p', text: '用任何 agent 做设计，杠杆最高的回路都是：把一张参考图变成可用、响应式的 UI，并反复迭代直到匹配。同样的五步在 OpenCode 里也适用。' },
-              { kind: 'ol', items: [
-                '从你手头最清晰的视觉参考开始——并包含多种状态（桌面和移动、hover、空态、加载态），而不只是一张主视觉。',
-                '提示词要具体；含糊的提示会产出套路化的 UI。',
-                '准备好一套设计系统，并告诉 OpenCode tokens 和规范基础组件在哪里（写在 AGENTS.md 里）。',
-                '跑一个 dev server，让 agent 在真实浏览器中渲染，并切换到各断点检查结果。',
-                '让 OpenCode 把它的实现对照截图来迭代——而不只是确认能构建通过。',
-              ] },
-              { kind: 'p', text: '在 TUI 里用 @ 引用文件会对工作目录做模糊搜索，用开头的 ! 内联运行 shell 命令，用 / 命令驱动各种操作。然后用具体约束来提示：' },
-              { kind: 'code', lang: 'bash', code: 'opencode\n# 在 TUI 里：\n> @reference-desktop.png @reference-mobile.png\n  用 React + Vite + Tailwind + TypeScript 实现这个设计。\n  复用 AGENTS.md 里我现有的设计系统组件和 tokens。\n  匹配间距、布局和层级；做到响应式。\n  运行 dev server，在浏览器中打开，并反复迭代\n  直到 UI 在各断点上都与参考图匹配。' },
-              { kind: 'p', text: '提示词保持小而聚焦，好的迭代就提交、坏的就回退（回退时告诉 OpenCode），让每一遍都建立在一个干净的基础上。' },
-            ],
-          },
-          {
-            id: 'extend',
-            heading: 'AGENTS.md、MCP 与可分享会话',
-            blocks: [
-              { kind: 'p', text: '三个扩展点让 OpenCode 在持续的设计工作中真正好用，而且它们都能干净地映射到一套开放的设计工作流上。' },
-              { kind: 'steps', items: [
-                { label: 'AGENTS.md 规则', body: '项目规则放在仓库根目录的 AGENTS.md（或全局规则放在 ~/.config/opencode/AGENTS.md）。它是你设计约定的长期归宿，每次运行都会读取，并兼容其他 agent 使用的 CLAUDE.md 文件。' },
-                { label: 'MCP server', body: 'OpenCode 同时支持本地（命令）和远程（URL）MCP server，在 mcp 字段下配置——这是把设计上下文和外部工具引入进来的可移植方式，跨 agent 通用，而不只服务于 OpenCode。' },
-                { label: '可分享会话', body: '/share 命令会为一段会话创建公开链接，用于协作或评审，/unshare 则收回它——很适合为一遍设计获取反馈。' },
-              ] },
-              { kind: 'p', text: '这些都是可移植、跨 agent 的能力——正是 Open Design 被设计来去编排的那类东西，而不是每个项目里重造一遍。' },
-            ],
-          },
-          {
-            id: 'vs',
-            heading: 'OpenCode vs Codex vs Claude Code vs Cursor 做设计',
-            blocks: [
-              { kind: 'p', text: '设计工作没有唯一赢家——每个 agent 各有所长，有经验的团队会叠着用。一个公允的总结：' },
-              { kind: 'table', columns: ['Agent', '设计强项', '最适合'], rows: [
-                ['OpenCode', '开源且与模型无关；在一套终端工作流背后运行任意 provider', 'BYOK 自由、切换模型、完全开放且本地优先的配置'],
-                ['Codex', '配合前端 skill 的视觉打磨能力强；图像理解', '委托式异步、沙箱化构建、可移植的 AGENTS.md 规则'],
-                ['Claude Code', '具体的设计决策（hex、间距、字体）和对代码库有感知的 UX', '前端推理和大上下文重构'],
-                ['Cursor', '带实时预览和内联编辑的所见即所得回路', 'IDE 内紧凑的边改边看 UI 工作'],
-              ] },
-              { kind: 'p', text: '社区反复得出的结论是：审美来自人——所有这些 agent 在没有 skill、参考和约束时都会退回到通用观感。这才是真正要解决的问题——它是设计工具形状的，不是模型形状的，而这恰恰说明了为什么像 OpenCode 这样的开放 agent 与一个开放的设计层配合得如此之好。' },
-            ],
-          },
-          {
-            id: 'pitfalls',
-            heading: '坑，以及如何避开那种“AI 味”观感',
-            blocks: [
-              { kind: 'p', text: '对 AI 生成设计最常见的吐槽是它看起来很套路——柔和渐变、悬浮面板、过大的圆角、夸张的阴影，一种 Inter 字体加紫色的味道，“一看就是 AI 做的”。其他被报告的问题还包括移动端布局错乱、指令文字漏进了 UI 文案。这些都不是 OpenCode 独有的；它们是任何 agent 在缺少精选设计上下文时都会发生的事。' },
-              { kind: 'steps', items: [
-                { label: '加一个审美 skill', body: '一个精选的设计 skill 会强制 agent 定下一个真正的方向，而不是默认观感。' },
-                { label: '在真实浏览器中验证', body: '让它跨断点渲染并自检，这样布局就不会在移动端悄悄崩掉。' },
-                { label: '提供 tokens 和参考', body: '真实的设计 tokens 和参考截图是对产出质量影响最大的单一杠杆。' },
-                { label: '把规则写进 AGENTS.md', body: '把“不要 hero 卡片、最多两种字体、品牌优先层级”这类规则放在 agent 每次都会读到的地方。' },
-              ] },
-              { kind: 'p', text: '注意到了吗：每一项缓解措施都是关于给 agent 一套精选的设计上下文——无论你跑哪个模型。靠手工逐项目维护这套上下文，正是 Open Design 帮你免除的苦活。' },
-            ],
-          },
-          {
-            id: 'open-design',
-            heading: '在 Open Design 中用 OpenCode 做设计',
-            blocks: [
-              { kind: 'p', text: 'Open Design 正是上面那套工作流一直在呼唤的开源设计层。它把 OpenCode 当作一等适配器，并为它套上一套精选的 skill 与设计系统库、一条结构化的渲染管线，以及一个本地桌面 UI——让那些让任何 agent 变好的设计上下文从第一次运行就在那里，而不是每次都手工拼凑。两个项目都是开源、都本地优先，这让它们的搭配水到渠成。' },
-              { kind: 'ol', items: [
-                '安装 Open Design，并选择 OpenCode 作为你的 agent。',
-                '用你自己的模型 provider API key（BYOK）认证——凭证留在你的机器上，绝不经我们代理。',
-                '选择任意 provider 和模型，再加上一套设计系统和一个 skill，然后生成审美一致的 deck、原型和落地页。',
-                '每个产物和 DESIGN.md 文件都存在你自己的仓库里，而不是托管云端。',
-              ] },
-              { kind: 'p', text: '同一个 OpenCode agent、同样的模型自由——外加一套真正可移植、开源的设计工作流。它本地优先、采用 Apache-2.0 许可，所以你的工作和凭证都不会离开你的机器。' },
-            ],
-          },
-        ],
-        faqTitle: '常见问题',
-        faq: [
-          { name: 'OpenCode 真的能做设计吗？', text: '能——当上下文里有审美 skill、设计系统和真实参考图时，OpenCode 能产出生产级、响应式的 UI，并能在浏览器中验证。因为它与模型无关，你可以运行当下前端最强的那个模型。缺少这套精选上下文时，它会倾向于退回到通用观感，而这正是 Open Design 补上的缺口。' },
-          { name: '用 OpenCode 做设计该选哪个模型？', text: '你喜欢哪个都行——OpenCode 经 models.dev 与 provider 无关，所以你可以在同一套工作流背后运行 Anthropic、OpenAI、Google、OpenRouter 或本地模型，并随时切换。设计产出的质量更多取决于你的 skill、设计系统和参考，而非单看模型。' },
-          { name: 'Open Design 是 OpenCode（SST）团队做的吗？', text: '不是。Open Design 是一个独立的开源项目，把 OpenCode 集成为一个 agent。它用一套本地优先、开源的 skill 与设计系统库来补足 OpenCode。' },
-          { name: '用 OpenCode 做设计需要什么特殊订阅吗？', text: '不需要——OpenCode 是 BYOK。你自带模型 provider 的 API key，Open Design 绝不代理你的凭证，也没有厂商锁定。' },
-          { name: '前端设计选 OpenCode、Codex 还是 Claude Code？', text: '都很强，很多团队会叠着用。OpenCode 的优势在于完全开源且与模型无关；Codex 擅长委托式、沙箱化构建；Claude Code 以具体、对代码库有感知的设计决策著称。Open Design 让你切换 agent 而不改变你的设计工作流。' },
-          { name: '如何为设计上下文扩展 OpenCode？', text: '把规则写进 AGENTS.md，在 mcp 字段下添加 MCP server 以引入可移植工具和设计上下文，并用可分享会话来做评审。Open Design 直接提供一套精选的 skill 与设计系统库，让你省去逐项目的配置。' },
-          { name: 'Open Design 与 OpenCode 或 SST 有关联吗？', text: '没有。OpenCode 是由 SST（Anomaly Innovations）维护的开源项目；Open Design 是一个独立的开源项目，把它作为一等适配器来支持。' },
-          { name: '我的文件和凭证安全吗？', text: '安全——Open Design 本地优先。你的文件、产物和 DESIGN.md 都留在你自己的仓库里，你的模型 provider 凭证由你的 agent 直接使用，绝不经 Open Design 服务器中转。' },
-        ],
-        ctaTitle: '用开放的方式，借 OpenCode 做设计。',
-        ctaBody: '自带你的模型 provider key，把每个文件留在本地，并为你已经在用的这个开放 agent 套上一套精选的设计库。',
-        ctaActions: [
-          { label: '在 Open Design 中使用 OpenCode', href: '/quickstart/', variant: 'primary' },
-          { label: '在 GitHub 上 Star', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-          { label: '下载桌面应用', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
-        ],
-        hubLinkLabel: '查看所有支持的 agent',
-      },
-      aboutTitle: '什么是 OpenCode',
-      aboutBody: [
-        'OpenCode 是开源（MIT）的终端 AI 编码 Agent —— 一个 TUI 加桌面、IDE 界面 —— 由 Anomaly（SST 团队）维护，仓库在 github.com/anomalyco/opencode。',
-        '它是编码 Agent，不是专门的设计工具。设计是靠给它加 skill、DESIGN.md 系统文件，以及 Figma／可视画布 MCP 来控制视觉输出实现的。',
-        'Open Design 把 OpenCode 作为一方适配器，把这些零散范式变成结构化的开放设计流水线。',
-      ],
-      vendorLabel: '厂商',
-      vendor: 'Anomaly（开源，MIT）',
-      credentialLabel: '凭据',
-      credential: '通过 OpenCode 配置接入模型凭据（BYOK）',
-      designTitle: '用 OpenCode 做设计',
-      designLead:
-        'OpenCode 社区靠配置和 skill 给 Agent 喂「审美」：',
-      designPoints: [
-        { label: 'design.md 系统', body: '把品牌 DESIGN.md（Stripe/Linear/Airbnb 风格规则）放进项目，让 OpenCode 生成匹配的 UI。' },
-        { label: 'UI/UX skill', body: '设计智能 skill 带来几十种 UI 风格和配色，在写代码前先生成一套设计系统。' },
-        { label: 'Figma 与可视画布 MCP', body: '通过 MCP 接 Figma 或可视画布，形成设计转代码闭环。' },
-        { label: '模型审美', body: '因为 OpenCode 是 BYOK，你可以挑最对你审美和预算的模型。' },
-      ],
-      linksTitle: '实战资源',
-      linksLead: '用 OpenCode 做设计的 skill、design.md 合集和教程：',
-      withOdTitle: 'OpenCode + Open Design',
-      withOdLead:
-        'Open Design 是围绕 OpenCode 的开源设计层：精选 skill 与设计系统库、结构化渲染流水线、本地桌面 UI —— 不用再手工拼 design.md 和 skill。',
-      withOdSteps: [
-        '安装 Open Design，选 OpenCode 作为你的 Agent。',
-        'OpenCode 通过它自己的配置用你的模型密钥（BYOK）—— 不经过中转。',
-        '选一套设计系统和 skill，生成审美一致的 deck、原型和落地页。',
-        '两个项目都开源、本地优先 —— 你的文件永不离开你的机器。',
-      ],
-      withOdClosing: '两个开源 Agent，一套本地优先的设计工作流。',
-      faqTitle: '常见问题',
-      faq: [
-        { name: '是哪个 OpenCode？', text: '是 github.com/anomalyco/opencode 这个开源终端 Agent（原 sst/opencode），由 Anomaly 维护。别跟同名工具混淆。' },
-        { name: 'OpenCode 能做 UI 设计吗？', text: '能，给它 design.md 文件和 UI/UX skill 上下文即可。Open Design 提供精选的两者库，省去手工搭建。' },
-        { name: 'Open Design 跟 OpenCode 是同一个项目吗？', text: '不是。两者都开源，但是独立项目。Open Design 把 OpenCode 作为一方 Agent 适配器集成。' },
-      ],
-      ctaTitle: '用开源的方式，跟 OpenCode 一起设计。',
-      ctaBody: '给仓库点 Star、下载桌面版，或加入社区申请新适配器。',
-    },
-  },
+  agentGuides: ZH_AGENT_GUIDES,
   download: {
     ...INFO_PAGE_COPY.en!.download,
     title: '下载 Open Design —— macOS / Windows / Linux 桌面客户端',
@@ -4596,6 +2794,218 @@ INFO_PAGE_COPY.zh = {
 
 INFO_PAGE_COPY['zh-tw'] = {
   ...INFO_PAGE_COPY.zh!,
+  agentGuides: {
+    'claude-code': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['claude-code']!,
+      title: "Claude Code 做設計 — Open Design",
+      description: "設計師如何用 Claude Code 做 UI 和網頁設計，以及 Open Design 如何把它變成真正的設計 Agent —— 本地優先、自帶金鑰（BYOK），配套精選 skill 與設計系統庫。",
+      breadcrumb: "Claude Code",
+      label: "Agent · Claude Code",
+      heading: "用 Claude Code 做設計。",
+      lead: "Claude Code 是 Anthropic 的終端編碼 Agent。已經有很多人用它做 UI、設計系統和落地頁。Open Design 把它接進真正的設計工作流 —— 用你自己的 Anthropic 金鑰或 Claude 訂閱，所有檔案留在本地。",
+      rich: {"heroCtaLead": "Open Design 把 Claude Code 變成一個本地優先、開源的設計 agent —— 用你自己的 Anthropic key 或 Claude 訂閱、你自己的檔案，外面再包一層精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 裡使用 Claude Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Claude Code 被普遍認為是前端品味最好的 coding agent —— 它對介面的推理格外具體，會給出確切的 hex 色值、間距與字號階梯，並能在大型程式碼庫裡跨檔案重構 UI 而不丟失主線。但開箱即用時，如果你不給它設計系統、skill 和真實參考，它仍會滑向一種泛泛的樣子。這是一份關於如何把 Claude Code 用於 UI、前端與設計系統工作，並將它接入 Open Design 結構化工作流的端到端實戰指南。", "本文涵蓋 Claude Code 到底是什麼、它為何擅長前端、如何從零搭建、CLAUDE.md 與 Skills 工作流、官方的 Figma 往返、它與 Codex 和 Cursor 的對比、讓 AI 產出顯得套路化的那些坑，以及 Open Design 如何作為開源、本地優先的設計層來補上這道缺口。"], "heroImage": {"src": "/agents/claude-code-design/claude-code-design-hero.webp", "alt": "Claude Code 設計反饋閉環：終端裡做出具體設計決策的 agent、渲染 UI 的瀏覽器，以及一個工作區，由一條反饋箭頭回環", "caption": "核心閉環：Claude Code 在終端裡推理出具體的 UI 決策，在真實瀏覽器裡渲染並驗證，再對照參考不斷收斂。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-claude-code", "label": "Claude Code 究竟是什麼"}, {"id": "why-design", "label": "Claude Code 為何擅長設計"}, {"id": "setup", "label": "從零搭建用於設計的 Claude Code"}, {"id": "skills-workflow", "label": "CLAUDE.md 與 Skills 工作流"}, {"id": "figma", "label": "Claude Code + Figma 往返"}, {"id": "vs", "label": "Claude Code vs Codex vs Cursor"}, {"id": "pitfalls", "label": "常見坑與“AI 套路感”"}, {"id": "open-design", "label": "在 Open Design 裡用 Claude Code 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-claude-code", "heading": "Claude Code 究竟是什麼", "blocks": [{"kind": "p", "text": "Claude Code 是 Anthropic 的 agentic 編碼工具。它讀取你的程式碼庫、編輯檔案、執行命令、與你的開發工具整合 —— 從自然語言任務出發去規劃、編寫並驗證，而不只是補全幾行程式碼。"}, {"kind": "p", "text": "它有多個共享同一引擎的形態：終端 CLI、面向 VS Code / Cursor / JetBrains 的 IDE 擴充套件、帶視覺化 diff 審閱的桌面應用，以及用於長時任務的網頁端。你的 CLAUDE.md 檔案、設定與 MCP server 在所有形態間通用。"}, {"kind": "steps", "items": [{"label": "指令檔案", "body": "Claude Code 在每次會話開始時讀取專案根目錄下的 CLAUDE.md —— 這正是寫入你的設計規範、token 與審閱清單的天然位置。"}, {"label": "Skills", "body": "Agent Skills 把可複用的指令、指令碼與資源打包，由 Claude 按需載入，其中就包括 Anthropic 官方的 Frontend Design skill 來注入品味。"}, {"label": "Plan 與 subagent", "body": "它能先規劃再動手，並可派生 subagent 並行處理任務的不同部分，從而讓大型 UI 重構保持連貫。"}]}, {"kind": "ul", "items": ["廠商：Anthropic", "憑證：Anthropic API key（BYOK，經 Console）或 Claude 訂閱（Pro / Max）", "形態：終端 CLI、VS Code / Cursor / JetBrains 擴充套件、桌面應用、網頁端"]}]}, {"id": "why-design", "heading": "Claude Code 為何擅長設計", "blocks": [{"kind": "p", "text": "在一眾 coding agent 裡，Claude Code 在前端工作上以“有品味”著稱。原因有幾點。"}, {"kind": "steps", "items": [{"label": "決策具體，不含糊", "body": "Claude Code 傾向於落到確切的選擇 —— 精確的 hex 色值、間距階梯、字號 ramp 與元件層級，而不是泛泛而談，而這正是真實介面與佔位草稿的分水嶺。"}, {"label": "理解程式碼庫的推理", "body": "憑藉較大的工作上下文，它能一次性跨多檔案重構 UI，複用你已有的元件與 token，而不是另造一套一次性樣式。"}, {"label": "官方前端 skill", "body": "Anthropic 提供 Frontend Design skill，讓 Claude 先寫出設計方向，並刻意避開泛用系統字型與可預料的紫色漸變。"}]}, {"kind": "image", "src": "/agents/claude-code-design/claude-code-design-taste-triangle.webp", "alt": "展示設計系統、skill 與參考圖三者匯聚成優質設計產出的示意圖", "caption": "品味來自你提供的三項輸入：設計系統、skill，以及真實參考圖。"}, {"kind": "p", "text": "這和 Anthropic 對自家模型的說法一致：Claude 預設並沒有品味 —— 放任不管，它會收斂到網頁設計的統計中心（Inter、紫色漸變、柔和陰影）。給它約束，它才能產出好設計。Open Design 恰恰把這些輸入打包好了，這也是兩者天然契合之處（詳見下文）。"}]}, {"id": "setup", "heading": "從零搭建用於設計工作的 Claude Code", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨機器到一個能構建並驗證 UI 的 Claude Code 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Claude Code（推薦原生安裝）\ncurl -fsSL https://claude.ai/install.sh | bash\n# 或：brew install --cask claude-code\n# Windows PowerShell：irm https://claude.ai/install.ps1 | iex\n\n# 2. 在你的專案裡啟動，首次執行時登入\ncd your-project\nclaude            # 用 Claude 訂閱或 API key 登入\n\n# 3. 生成專案上下文\n/init             # 為本專案建立 CLAUDE.md\n\n# 4. 新增官方 Frontend Design skill\nclaude plugin install frontend-design@claude-plugins-official\n\n# 5. 接入 Figma MCP server（可選，用於設計交付）\nclaude plugin install figma@claude-plugins-official"}, {"kind": "image", "src": "/agents/claude-code-design/claude-code-design-setup-flow.webp", "alt": "五步搭建流程：安裝、認證、配置 CLAUDE.md、新增 skill、驗證", "caption": "搭建順序：安裝 → 認證 → 配置 CLAUDE.md → 新增 Frontend Design skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把設計規則寫進去", "body": "把你的 token、基礎原語與約定放進 CLAUDE.md 並讓 Claude 指向它們，這樣產出會貼合品牌，而不是退回到泛用樣子。"}, {"label": "加上瀏覽器驗證", "body": "接入 Playwright 或 Chrome MCP，讓 Claude 在真實瀏覽器裡渲染，並跨斷點檢查產出，而不僅僅確認構建透過。"}]}]}, {"id": "skills-workflow", "heading": "CLAUDE.md 與 Skills 工作流", "blocks": [{"kind": "p", "text": "用 Claude Code 做設計、槓桿最高的閉環，是把真實參考連同你的設計上下文一起餵給它，再迭代到 UI 對得上 —— 由 CLAUDE.md 和 Skills 承載約束，免得你每次 prompt 都重新解釋一遍。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發 —— 而且要包含多種狀態（桌面與移動、hover、空態、載入態），不要只給一張 hero 圖。", "在 prompt 裡說具體；即便是強 agent，含糊的 prompt 也只會產出泛泛的 UI。", "把你的設計系統與約定放進 CLAUDE.md，並告訴 Claude token 與標準原語在哪裡。", "新增 Frontend Design skill，讓 Claude 在寫程式碼前先確定一個真實的美學方向。", "接好瀏覽器驗證，讓 Claude 渲染、調整到各斷點，並對照參考做比對 —— 而不只是確認能構建透過。"]}, {"kind": "p", "text": "把一張參考圖丟進會話，並用具體約束去提示："}, {"kind": "code", "lang": "bash", "code": "claude \"把 reference-desktop.png 和 reference-mobile.png 用\n  React + Vite + Tailwind + TypeScript 實現。\n  複用 CLAUDE.md 裡描述的設計系統元件與 token。\n  匹配間距、佈局與層級；做成響應式。\n  在瀏覽器裡渲染，跨斷點驗證它與參考一致，\n  並迭代到對得上為止。\""}, {"kind": "p", "text": "同時跑一個 dev server，prompt 保持小而聚焦，好的迭代就 commit、壞的就 revert（revert 時告訴 Claude 一聲），讓每一輪都在乾淨的基礎上推進。較大的重構用 plan 模式，這樣動檔案前你能先審一遍方案。"}]}, {"id": "figma", "heading": "Claude Code + Figma：設計 ↔ 程式碼往返", "blocks": [{"kind": "p", "text": "2026 年 2 月，Anthropic 與 Figma 透過 Figma MCP server 推出了一流的雙向整合。它在兩個方向都能用。"}, {"kind": "steps", "items": [{"label": "設計 → 程式碼", "body": "在 Figma 裡選中一個 frame，或把連結粘進 Claude Code，拉取設計上下文，讓它用你已有的元件庫來實現這份設計。Code Connect 會讓產出與你真實的元件保持對齊。"}, {"label": "程式碼 → 設計", "body": "在瀏覽器裡構建並預覽一個功能，然後說一句“Send this to Figma”，把執行中的 UI 捕獲為可編輯的 Figma 圖層 —— 整屏或選中的某個元素皆可。"}]}, {"kind": "p", "text": "用 claude plugin install figma@claude-plugins-official 安裝一次即可（Dev Mode MCP 需要 Figma 付費方案）。同一個 Figma MCP 對 Claude Code、Codex、Cursor 與 VS Code 都可用 —— 正是 Open Design 所要編排的那類可移植、多 agent 能力。"}]}, {"id": "vs", "heading": "Claude Code vs Codex vs Cursor 做設計", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家 —— 每個 agent 各有所長，有經驗的團隊會把它們疊著用。一個公允的概括："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Claude Code", "具體的設計決策（hex、間距、字號）與理解程式碼庫的 UX 推理", "前端推理與大上下文重構"], ["Codex", "強視覺打磨與影象理解；沙箱化非同步構建", "委派式非同步構建與可移植的 AGENTS.md 規則"], ["Cursor", "帶實時預覽與內聯編輯的“邊做邊看”閉環", "IDE 內緊湊的“迭代-觀察”式 UI 工作"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人。三者在沒有 skill、參考與約束時都會預設滑向泛用美學。這才是真正要解決的問題 —— 它是設計工具形狀的，而非模型形狀的。"}]}, {"id": "pitfalls", "heading": "常見坑，以及如何避開“AI 套路感”", "blocks": [{"kind": "p", "text": "即便 Claude Code 以有品味著稱，對 AI 生成設計最常見的吐槽仍是它顯得套路 —— Inter 字型、白底上的紫色漸變、柔和陰影、過大的圓角，一種“一看就是 AI 做的”的觀感。Anthropic 自己把這歸因於分佈收斂：安全的選擇在網頁訓練資料裡佔主導。其他被反映的問題還包括移動端佈局錯亂、以及指令文字漏進了 UI 文案。"}, {"kind": "steps", "items": [{"label": "裝上 Frontend Design skill", "body": "它會逼 Claude 確定一個真實方向，並明確避開被 AI 濫用的字型與漸變。"}, {"label": "啟用瀏覽器驗證", "body": "讓 Claude 渲染並跨斷點自檢，避免佈局在移動端悄悄崩掉。"}, {"label": "提供 token 與參考", "body": "真實的設計 token 與參考截圖，是對產出質量影響最大的單一槓杆。"}, {"label": "把規則寫進 CLAUDE.md", "body": "把“不用 hero 卡片、最多兩種字型、品牌優先的層級”這類規則，放在 agent 每次都會讀到的地方。"}]}, {"kind": "p", "text": "注意每一條緩解措施，本質都是在給 agent 一份精選的設計上下文。逐個專案手工維護這份上下文，正是 Open Design 替你省掉的苦差。"}]}, {"id": "open-design", "heading": "在 Open Design 裡用 Claude Code 做設計", "blocks": [{"kind": "p", "text": "Open Design 就是上面那套工作流一直在呼喚的開源設計層。它把 Claude Code 當作一等介面卡，並在外面包上一層精選的 skill 與設計系統庫、一條結構化渲染流水線，以及一個本地桌面 UI —— 讓那份令 Claude Code 出彩的設計上下文，從第一次執行就在位，而不必每次手工拼裝。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Claude Code 作為你的 agent。", "用你的 Anthropic API key（BYOK）或 Claude 訂閱認證 —— 憑證留在你自己機器上，絕不經我們中轉。", "挑一套設計系統與一個 skill，然後產出風格一致的 deck、原型與落地頁。", "每一件產物與 DESIGN.md 檔案都存在你自己的倉庫裡，而非託管雲端。"]}, {"kind": "p", "text": "同一個 Claude Code agent、同一把 key —— 外加一套真實、可移植、開源的設計工作流。它本地優先、Apache-2.0，所以你的工作與憑證都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Claude Code 適合做設計嗎？", "text": "適合 —— 它被普遍認為是前端品味最好的 coding agent，會對 hex 色值、間距與字號階梯做出具體且理解程式碼庫的決策。配上 Frontend Design skill、一套設計系統與真實參考圖，它能產出生產級、響應式的 UI 並在瀏覽器裡驗證。缺了這份上下文，它就容易退回泛用樣子 —— 這正是 Open Design 要補的缺口。"}, {"name": "用 Claude Code 做設計需要 Claude 訂閱嗎？", "text": "你可以用 Anthropic API key（BYOK，經 Console）或 Claude 訂閱（Pro / Max），兩者皆可。無論哪種，Open Design 都不會中轉你的憑證 —— 它們由你的 agent 在你機器上直接使用。"}, {"name": "前端設計該用 Claude Code 還是 Codex？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策與前端推理著稱；Codex 視覺打磨強，擅長委派式的沙箱構建。很多團隊兩者都用 —— Open Design 讓你切換 agent 而無需改動設計工作流。"}, {"name": "怎麼把 Claude Code 接到 Figma？", "text": "用 claude plugin install figma@claude-plugins-official 安裝官方 Figma 外掛。之後你就能借助設計上下文在程式碼裡實現 Figma frame，並用“Send this to Figma”把執行中的 UI 推回成可編輯的 Figma 圖層。Dev Mode MCP 需要 Figma 付費方案。"}, {"name": "Skills 和 CLAUDE.md 是什麼？", "text": "CLAUDE.md 是你專案根目錄裡的一個 markdown 檔案，Claude Code 在每次會話開始時都會讀它 —— 這是寫入設計規範的地方。Skills 把可複用的指令與資源打包，由 Claude 按需載入，其中包括 Anthropic 官方的 Frontend Design skill。Open Design 把兩者都做成精選庫，幫你免去逐專案搭建。"}, {"name": "怎麼避開泛用的“AI 套路感”？", "text": "裝上 Frontend Design skill，提供真實的設計 token 與參考截圖，把品牌規則寫進 CLAUDE.md，並啟用瀏覽器驗證。Open Design 把這些做成精選庫，幫你免去逐專案搭建。"}, {"name": "Open Design 和 Anthropic 有從屬關係嗎？", "text": "沒有。Claude Code 是 Anthropic 的產品；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。Claude 與 Claude Code 是 Anthropic 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全 —— Open Design 本地優先、Apache-2.0。你的檔案、產物與 DESIGN.md 都留在你自己的倉庫裡，你的 Anthropic 憑證由你的 agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，和 Claude Code 一起做設計。", "ctaBody": "帶上你自己的 Anthropic key 或 Claude 訂閱，把每個檔案都留在本地，再給你已在用的 agent 包上一層精選設計庫。", "ctaActions": [{"label": "在 Open Design 裡使用 Claude Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "See all supported agents"},
+    },
+    'codex': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['codex']!,
+      title: "Codex 做設計 — Open Design",
+      description: "大家如何用 OpenAI Codex 做 UI 和網頁設計 —— Product Design 外掛、Figma 整合、前端 skill —— 以及 Open Design 如何把 Codex 變成本地優先的開源設計 Agent。",
+      breadcrumb: "Codex",
+      label: "Agent · Codex",
+      heading: "用 Codex 做設計。",
+      lead: "Codex 是 OpenAI 的編碼 Agent。靠 Product Design 外掛和 Figma 整合，它已經成了一個正經的設計工具。Open Design 把 Codex 接進開源設計工作流 —— 你自己的 OpenAI 金鑰或 ChatGPT 訂閱，你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Codex 變成本地優先的開源設計 Agent —— 你自己的 OpenAI 金鑰、你自己的檔案，外加一套圍繞它的精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 裡用 Codex", "href": "/quickstart/", "variant": "primary"}, {"label": "給 GitHub 點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面客戶端", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Codex 最初只是個程式碼生成器，但到 2026 年，只要你給對參考、skill 和驗證迴路，它已經能設計出真正可用的介面。這是一篇端到端的實操指南：怎麼用 Codex 做 UI、前端和設計系統，以及怎麼用 Open Design 把它接進結構化的設計工作流。", "內容覆蓋：Codex 現在到底是什麼、為什麼它突然擅長前端、怎麼從零配好、截圖轉 UI 的迴路、官方的 Figma 雙向打通、它跟 Cursor 與 Claude Code 的差異、讓 AI 輸出顯得千篇一律的那些坑，以及 Open Design 作為開源、本地優先的設計層怎麼補上缺口。"], "heroImage": {"src": "/agents/codex-design/codex-design-workflow-loop.webp", "alt": "Codex 設計反饋迴路：終端 Agent、瀏覽器渲染 UI、工作區，帶一條迴流箭頭", "caption": "核心迴路：Codex 在終端裡構建 UI，在真實瀏覽器裡渲染並驗證，再對著你的參考圖迭代。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-codex", "label": "Codex 到底是什麼"}, {"id": "why-design", "label": "為什麼 Codex 現在能做設計"}, {"id": "setup", "label": "從零配好 Codex 做設計"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "figma", "label": "Codex + Figma 雙向打通"}, {"id": "vs", "label": "Codex vs Cursor vs Claude Code"}, {"id": "pitfalls", "label": "常見坑與「AI 味」"}, {"id": "open-design", "label": "在 Open Design 裡用 Codex"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-codex", "heading": "Codex 到底是什麼（以及不是什麼）", "blocks": [{"kind": "p", "text": "先消歧，幾乎每個搜「Codex」的人都會被絆一下。最早的 OpenAI Codex 是 2021 年的程式碼補全模型，驅動過早期 GitHub Copilot，2023 年已棄用。本文講的不是它。今天的 Codex 是 OpenAI 的 Agent 式編碼工具 —— 從自然語言任務出發，規劃、編寫、執行並驗證程式碼。"}, {"kind": "p", "text": "現代 Codex 有四種形態：終端 CLI（用 Rust 重寫、Apache-2.0 開源）、面向 VS Code / Cursor / Windsurf 的 IDE 擴充套件、用於非同步委派任務的雲端/網頁版，以及帶內建瀏覽器和 Computer Use 的桌面 App。"}, {"kind": "steps", "items": [{"label": "預設模型", "body": "截至 2026 年中，推薦模型是 gpt-5.5；而 gpt-5.4 是 OpenAI 明確為前端和 Computer Use 訓練的那個模型。"}, {"label": "指令檔案", "body": "Codex 讀取專案裡的 AGENTS.md（跨工具通用標準）作為專案規則 —— 也就是寫你設計約定最自然的地方。"}, {"label": "沙箱", "body": "它跑在核心級沙箱裡（預設 workspace-write），改你 UI 的 Agent 不會跑到專案之外亂動。"}]}, {"kind": "ul", "items": ["廠商：OpenAI", "憑據：OpenAI API key（BYOK）或 ChatGPT 訂閱（Free / Go / Plus / Pro / Business / Enterprise）", "CLI 許可：Apache-2.0，開源"]}]}, {"id": "why-design", "heading": "為什麼 Codex 現在能做設計", "blocks": [{"kind": "p", "text": "2026 年初有三件事湊到一起，才讓 Codex 從通用程式碼生成器變成真正的設計工具。"}, {"kind": "steps", "items": [{"label": "一個為前端訓練的模型", "body": "OpenAI 釋出了 GPT-5.4 —— 它第一個主線版為前端和 Computer Use 訓練的模型，對設計流程裡的影象理解大幅提升，自我驗證也更強，甚至能在定稿前先生成情緒板和多個視覺方案。"}, {"label": "一個官方前端 skill", "body": "openai/skills 目錄裡有一個精選 frontend-skill，強制真審美：無卡片佈局、整屏 hero、品牌優先的層級、剋制的動效、最多兩種字型加一個強調色 —— 還逼 Codex 先寫「視覺論點」再動手。"}, {"label": "瀏覽器驗證", "body": "配上 Playwright skill，Codex 會真開瀏覽器、按斷點縮放，並把輸出跟參考圖比對，而不只是「構建透過」就完事。"}]}, {"kind": "image", "src": "/agents/codex-design/codex-design-taste-triangle.webp", "alt": "設計系統、skill、參考圖三者匯聚成優質設計輸出的示意圖", "caption": "審美來自你提供的三種輸入：設計系統、skill 和真實參考圖。"}, {"kind": "p", "text": "三件事背後的道理是一樣的：Codex 預設沒有審美。只有當你給它約束 —— 設計系統、審美 skill、具體參考 —— 它才能產出好設計。Open Design 打包的正是這三種輸入，這也是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零配好 Codex 做設計", "blocks": [{"kind": "p", "text": "從一臺乾淨的機器，到一個能構建並驗證 UI 的 Codex，完整路徑如下。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Codex CLI\nnpm install -g @openai/codex\n# 或：brew install --cask codex\n# 或：curl -fsSL https://chatgpt.com/codex/install.sh | sh\n\n# 2. 鑑權（推薦用 ChatGPT 登入，額度更高）\ncodex            # 然後選 “Sign in with ChatGPT”\n\n# 3. 生成專案上下文\ncodex            # 在專案裡執行 /init 生成 AGENTS.md\n\n# 4. 裝官方前端 skill，然後重啟 Codex\n# （在 Codex App 裡）$skill-installer frontend-skill\n\n# 5. 接 Figma MCP server（可選，做設計交付）\ncodex mcp add figma --url https://mcp.figma.com/mcp"}, {"kind": "image", "src": "/agents/codex-design/codex-design-setup-flow.webp", "alt": "五步配置流程：安裝、鑑權、配置、裝 skill、驗證", "caption": "配置順序：安裝 → 鑑權 → 配 AGENTS.md → 裝前端 skill → 開瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把設計規則寫進去", "body": "把 token、基礎元件、約定寫進 AGENTS.md 或 DESIGN.md 並讓 Codex 指向它們，輸出就會貼合品牌，而不是退回那套通用樣子。"}, {"label": "選對推理檔位", "body": "OpenAI 提到：低到中等推理檔位的前端效果，往往比最高檔更好。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "Codex 做設計最高槓杆的迴路，是把參考圖變成可用的響應式 UI，再迭代到對齊為止。OpenAI 官方指引歸納為五步。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發 —— 而且要包含多個狀態（桌面和移動、hover、空態、載入態），不只是一張 hero 圖。", "prompt 要具體；含糊的 prompt 只會產出通用 UI。", "準備好設計系統，並告訴 Codex token 和基礎元件在哪。", "開啟 Playwright 互動 skill，讓 Codex 真在瀏覽器裡渲染並按斷點縮放。", "迭代時讓 Codex 把實現跟截圖比對 —— 而不只是確認「能構建」。"]}, {"kind": "p", "text": "喂圖可以把截圖拖進終端，或用 image 引數，然後用具體約束來 prompt："}, {"kind": "code", "lang": "bash", "code": "codex -i reference-desktop.png -i reference-mobile.png \\\n  \"用 React + Vite + Tailwind + TypeScript 實現這個設計。\n   儘量複用我現有的設計系統元件和 token。\n   對齊間距、佈局和層級；做成響應式。\n   用 Playwright skill 驗證 UI 跟參考圖一致，\n   不一致就一直迭代。\""}, {"kind": "p", "text": "在第二個終端裡跑 dev server，prompt 保持小而聚焦，好的迭代就 commit、壞的就 revert（並告訴 Codex 你回退了），這樣每一輪都在乾淨的基礎上推進。"}]}, {"id": "figma", "heading": "Codex + Figma：設計 ↔ 程式碼雙向打通", "blocks": [{"kind": "p", "text": "2026 年 2 月 OpenAI 和 Figma 宣佈官方合作，把早先的 Figma MCP beta 升級成一等公民級的雙向整合。兩個方向都能走。"}, {"kind": "steps", "items": [{"label": "設計 → 程式碼", "body": "在 Figma 裡複製某個 frame 的「link to selection」，粘進 Codex 配合 get_design_context，讓它用你現有的元件庫實現這個設計。"}, {"label": "程式碼 → 設計", "body": "generate_figma_design 工具（「Code to Canvas」）能把跑起來的 UI 變回可編輯的 Figma frame —— 整屏、選中元素或整個檔案都行。"}]}, {"kind": "p", "text": "Figma MCP 以遠端 server 形式執行且免限流。接一次，Codex、Claude Code、Cursor、VS Code 等都能用 —— 這種可移植的多 Agent 能力，正是 Open Design 要編排的東西。"}]}, {"id": "vs", "heading": "Codex vs Cursor vs Claude Code 做設計", "blocks": [{"kind": "p", "text": "做設計沒有唯一贏家 —— 每個 Agent 強在不同地方，老手會疊著用。公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Codex", "GPT-5.4 + 前端 skill 之後視覺打磨很強；影象理解好", "非同步委派構建、沙箱化執行、可移植的 AGENTS.md 規則"], ["Cursor", "邊改邊看的視覺迴路，帶實時預覽和行內編輯", "IDE 裡貼身迭代、即時觀察的 UI 工作"], ["Claude Code", "具體的設計決策（hex、間距、字型）和懂程式碼庫的 UX", "前端推理和大上下文重構"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人。三者在沒有 skill、參考和約束時，都會退回通用樣子。這才是要解決的真問題 —— 而它是「設計工具」形狀的，不是「模型」形狀的。"}]}, {"id": "pitfalls", "heading": "常見坑，以及怎麼避開「AI 味」", "blocks": [{"kind": "p", "text": "對 Codex 生成設計最常見的吐槽是「顯得通用」—— 柔和漸變、漂浮面板、超大圓角、誇張陰影，那種 Inter 字型加紫色的味道，「一看就是 AI 做的」。其他常見問題還有移動端佈局崩、指令文案洩漏進 UI、以及很快撞到用量上限。"}, {"kind": "steps", "items": [{"label": "裝一個前端 skill", "body": "精選的審美 skill 逼 Codex 選定一個真方向，而不是預設那套樣子。"}, {"label": "開啟 Playwright 驗證", "body": "讓 Codex 跨斷點渲染並自檢，佈局就不會在移動端悄悄崩。"}, {"label": "喂 token 和參考", "body": "真實的設計 token 和參考截圖，是對輸出質量影響最大的那個槓桿。"}, {"label": "把規則寫進 AGENTS.md", "body": "把「不要 hero 卡片、最多兩種字型、品牌優先層級」這類規則放在 Agent 每次都會讀到的地方。"}]}, {"kind": "p", "text": "注意：每條緩解措施，本質都是給 Agent 一套精選的設計上下文。而逐個專案手工維護這套上下文，正是 Open Design 幫你省掉的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 裡用 Codex", "blocks": [{"kind": "p", "text": "Open Design 就是上面這套工作流一直在呼喚的那個開源設計層。它把 Codex 當作一方介面卡，外面包上精選的 skill 與設計系統庫、結構化渲染流水線、本地桌面 UI —— 讓那些讓 Codex 變好的設計上下文從第一次執行就在，而不是每次手工拼。"}, {"kind": "ol", "items": ["安裝 Open Design，選 Codex 作為你的 Agent。", "用 OpenAI API key（BYOK）或 ChatGPT 訂閱鑑權 —— 憑據留在你機器上，絕不經我們中轉。", "選一套設計系統和一個 skill，生成審美一致的 deck、原型和落地頁。", "每個產物和 DESIGN.md 都在你自己的 repo 裡，不在託管雲端。"]}, {"kind": "p", "text": "同一個 Codex Agent、同一把金鑰 —— 外加一套真正可移植的開源設計工作流。它本地優先、Apache-2.0，你的工作和憑據都不離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "OpenAI Codex 真的能做設計嗎？", "text": "能 —— 只要上下文裡有前端 skill、設計系統和真實參考圖，Codex（尤其在 GPT-5.4 上）能產出生產級、響應式的 UI，還能在瀏覽器裡自檢。沒有這套上下文它就會退回通用樣子，而這正是 Open Design 補的缺口。"}, {"name": "這是 OpenAI 的 Codex Product Design 外掛嗎？", "text": "不是。Open Design 是獨立開源專案，把 Codex 作為 Agent 整合，用本地優先的開源 skill 與設計系統庫補充官方工具。"}, {"name": "用 Codex 做設計需要 ChatGPT 訂閱嗎？", "text": "OpenAI API key（BYOK）或 ChatGPT 訂閱都行。ChatGPT 登入通常額度更高；無論哪種，Open Design 都不中轉你的憑據。"}, {"name": "前端設計該用 Codex 還是 Claude Code？", "text": "兩個都強。Claude Code 以具體、懂程式碼庫的設計決策見長；Codex 在 GPT-5.4 之後視覺打磨很強，且擅長沙箱化的非同步委派構建。很多團隊兩個都用 —— Open Design 讓你換 Agent 時不用換設計工作流。"}, {"name": "怎麼把 Codex 接到 Figma？", "text": "加上官方 Figma MCP server（codex mcp add figma --url https://mcp.figma.com/mcp）。之後用 get_design_context 把 Figma frame 實現成程式碼，用 generate_figma_design 把跑起來的 UI 推回可編輯的 Figma frame。"}, {"name": "怎麼避免那種通用的「AI 味」審美？", "text": "裝一個前端 skill、喂真實的設計 token 和參考截圖、把品牌規則寫進 AGENTS.md、並開啟 Playwright 驗證。Open Design 把這些做成精選庫，你就省掉了逐專案的配置。"}, {"name": "Open Design 跟 OpenAI 有關聯嗎？", "text": "沒有。Codex 是 OpenAI 的產品；Open Design 是獨立開源專案，以一方介面卡的方式支援它。OpenAI 和 Codex 是 OpenAI 的商標。"}, {"name": "我的檔案和憑據安全嗎？", "text": "安全 —— Open Design 本地優先。你的檔案、產物和 DESIGN.md 都留在自己的 repo，OpenAI 憑據由你的 Agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開源的方式，跟 Codex 一起設計。", "ctaBody": "自帶 OpenAI 金鑰、所有檔案留在本地，給你已經在用的 Agent 配上一套精選設計庫。", "ctaActions": [{"label": "在 Open Design 裡用 Codex", "href": "/quickstart/", "variant": "primary"}, {"label": "給 GitHub 點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面客戶端", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視全部支援的 Agent"},
+    },
+    'cursor': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['cursor']!,
+      title: "Cursor 做設計 — Open Design",
+      description: "設計師如何用 Cursor 做 UI 和網頁設計 —— Design Mode、Figma 轉程式碼、Figma MCP —— 以及 Open Design 如何把 Cursor 變成本地優先的開源設計 Agent。",
+      breadcrumb: "Cursor Agent",
+      label: "Agent · Cursor",
+      heading: "Cursor 給設計師。",
+      lead: "Cursor 是那個 AI 程式碼編輯器，現在帶了視覺化 Design Mode。設計師用它點選、勾畫來改 UI，也用它把 Figma 轉成程式碼。Open Design 把 Cursor Agent 接進開源設計工作流，檔案全留本地。",
+      rich: {"heroCtaLead": "Open Design 把 Cursor 變成一個本地優先、開源的設計 agent——用你自己的 Cursor 賬號或模型金鑰、你自己的檔案，外面再裹一層精選的 skill 與 design-system 庫。", "heroCtaActions": [{"label": "在 Open Design 裡使用 Cursor", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面端", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Cursor 是一款 AI 優先的程式碼編輯器，它讓“邊寫邊看渲染”成為做 UI 的預設方式。藉助 Agent 模式、行內編輯、編輯器內建預覽，以及透過 MCP 接入的 Figma，它已經成為一個真正能用的設計工具——前提是你給它對的參考、規則和一套驗證迴路。這是一份從頭到尾、可落地的指南，講如何用 Cursor 做 UI、前端和 design-system 工作，並把它接入 Open Design 的結構化設計工作流。", "內容涵蓋：Cursor 到底是什麼、為什麼它“邊迭代邊看”的緊湊迴路適合做設計、如何從零搭起、從預覽到 UI 的迭代迴路、透過 MCP 與 Figma 的往返、它與 Codex 和 Claude Code 的對比、讓 AI 產出顯得平庸的那些坑，以及 Open Design 作為開源、本地優先的設計層如何補齊這道缺口。"], "heroImage": {"src": "/agents/cursor-design/cursor-design-hero.webp", "alt": "Cursor 設計收斂示意：左側是編輯器，中間是帶 Cursor 標誌的精選 skill 與 design-system hub，右側是渲染出的 UI", "caption": "核心思路：Cursor 在編輯器裡編輯並渲染 UI，而一個精選的設計 hub 為它喂入設計系統、skill 和參考，讓產出顯得是有意為之、而非隨手生成。"}, "tocLabel": "本頁目錄", "toc": [{"id": "what-is-cursor", "label": "Cursor 到底是什麼"}, {"id": "why-design", "label": "為什麼 Cursor 擅長做設計"}, {"id": "setup", "label": "從零配置 Cursor 做設計"}, {"id": "preview-workflow", "label": "從預覽到 UI 的工作流"}, {"id": "figma", "label": "Cursor + Figma（經 MCP）"}, {"id": "vs", "label": "Cursor vs Codex vs Claude Code"}, {"id": "pitfalls", "label": "常見坑與“AI 味”觀感"}, {"id": "open-design", "label": "在 Open Design 裡用 Cursor 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-cursor", "heading": "Cursor 到底是什麼", "blocks": [{"kind": "p", "text": "Cursor 是 Anysphere 打造的 AI 優先程式碼編輯器。它是 VS Code 的一個 fork，所以保留了熟悉的編輯器、擴充套件和快捷鍵，但把整個工作流圍繞一個 AI agent 重建——這個 agent 能讀懂你的整個專案、跨多檔案編輯、執行命令，並和你一起在迴路裡迭代。"}, {"kind": "p", "text": "對設計工作而言，關鍵的幾個能力是：Agent 模式（你描述想要的結果，Cursor 規劃並跨檔案編輯）、用於快速微調的行內編輯與 Tab 補全、讓你不離開視窗就能看到執行中 UI 的編輯器內建預覽，以及讓它能拉入外部上下文（比如一個實時 Figma 檔案）的 MCP 支援。"}, {"kind": "steps", "items": [{"label": "專案規則", "body": "Cursor 會讀取專案指令檔案——`.cursor/rules` 下納入版本管理的 `.mdc` 規則，以及一個純文字 `AGENTS.md`——你可以把設計約定寫在 agent 每次都會讀到的地方。"}, {"label": "模型", "body": "Cursor 在模型上很靈活：訂閱自帶前沿模型，也支援用你自己的模型金鑰（BYOK），所以同一套編輯器工作流背後用哪臺引擎由你定。"}, {"label": "MCP", "body": "它支援 Model Context Protocol，外部 server——最相關的就是 Figma MCP server——可以成為 agent 的一等上下文。"}]}, {"kind": "ul", "items": ["廠商：Anysphere", "憑證：Cursor 賬號 / 訂閱（Hobby / Pro / Business）或你自己的模型金鑰（BYOK）", "形態：AI 優先的程式碼編輯器（VS Code fork），內建 agent 與預覽"]}]}, {"id": "why-design", "heading": "為什麼 Cursor 擅長做設計", "blocks": [{"kind": "p", "text": "Cursor 在設計上的優勢不是某個單一功能，而是“邊寫邊看”這條迴路的緊湊度。有三點讓它更像一個設計工具，而不是一個泛泛的程式碼生成器。"}, {"kind": "steps", "items": [{"label": "緊湊的“邊迭代邊看”迴路", "body": "你給出提示，Cursor 跨檔案編輯，編輯器內建預覽立刻渲染出結果——於是你能在幾秒內調整間距、層級和動效，而不必在另一個終端和瀏覽器之間來回切換。"}, {"label": "直接的視覺化編輯", "body": "除了對話，Cursor 還允許你在預覽裡選中元素、直接微調樣式，讓小的視覺修正更像設計編輯、而非翻程式碼考古。"}, {"label": "專案規則與 MCP 上下文", "body": "有了 `.cursor/rules`（或 `AGENTS.md`）和 Figma MCP server，agent 是對著你的 tokens、元件和真實設計規格在工作，而不是靠猜。"}]}, {"kind": "image", "src": "/agents/cursor-design/cursor-design-taste-triangle.webp", "alt": "展示 design system、skill 與參考圖三者收斂為優質設計產出的示意圖", "caption": "審美來自你提供的三個輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "結論和每個 agent 教給我們的一樣：Cursor 預設並沒有審美。只有當你給它約束——一套設計系統、一個審美 skill、具體的參考——它才能產出好設計。Open Design 打包的正是這些輸入，這也是兩者天然契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零把 Cursor 配置成能做設計", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨機器，到一個能對著你的設計系統構建、預覽並驗證 UI 的 Cursor 的完整路徑。"}, {"kind": "ol", "items": ["從 cursor.com 安裝 Cursor，用 Cursor 賬號登入，或在設定裡配置你自己的模型金鑰（BYOK）。", "開啟你的專案，在對話 / Agent 面板裡選一個模型。", "加專案規則：用 `.cursor/rules/*.mdc` 寫結構化、按 glob 作用域生效的約定，或用一個純文字 `AGENTS.md` 寫簡單可讀的指令。", "接入 Figma MCP server（可選），讓 agent 能讀取實時設計上下文。", "啟動你的 dev server，用編輯器內建預覽邊迭代邊看、邊驗證 UI。"]}, {"kind": "image", "src": "/agents/cursor-design/cursor-design-setup-flow.webp", "alt": "五步配置流程：安裝、認證、配置規則、新增 skill、驗證", "caption": "配置順序：安裝 → 認證 → 配置專案規則 → 新增 skill → 啟用預覽驗證。"}, {"kind": "p", "text": "一份最簡的專案規則檔案，就能讓 agent 對著品牌做設計、而不是退回到一個泛泛的樣子。把它放在 Cursor 每次都會讀到的地方："}, {"kind": "code", "lang": "markdown", "code": "# .cursor/rules/design.mdc\n---\ndescription: Project design conventions\nalwaysApply: true\n---\n\n- 複用已有的 design-system tokens 和元件；不要寫死 hex 或間距。\n- 最多兩種字型、一個強調色。\n- 品牌優先的層級；剋制的動效。不要 hero card，不要過大的圓角。\n- 預設做響應式；收尾前先在預覽裡驗證桌面端和移動端。"}, {"kind": "steps", "items": [{"label": "把設計規則寫下來", "body": "把你的 tokens、基礎元件和約定放進 `.cursor/rules` 或 `AGENTS.md`，並讓 Cursor 指向它們，這樣產出會貼合品牌、而不是退回到泛泛的樣子。"}, {"label": "讓提示保持小而聚焦", "body": "Cursor 的緊湊迴路偏愛聚焦的請求——一次只迭代一個元件或一種狀態，每一輪之間都盯著預覽看。"}]}]}, {"id": "preview-workflow", "heading": "從預覽到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Cursor 做設計，槓桿最高的迴路就是把一張參考變成能跑、且響應式的 UI，並在編輯器裡一直盯著實時預覽迭代到匹配為止——而不是靠猜。"}, {"kind": "ol", "items": ["從你手上最清晰的視覺參考開始——並且要包含多種狀態（桌面與移動、hover、空態、載入態），而不只是一張主視覺。", "提示要具體；含糊的提示只會產出泛泛的 UI。", "準備好設計系統，並告訴 Cursor tokens 和標準基礎元件都在哪裡。", "讓編輯器內建預覽開著、dev server 跑著，這樣每次編輯都能在你關心的斷點上立刻渲染出來。", "透過把渲染出的 UI 和參考反覆比對來迭代——小的視覺修正就直接在預覽裡選中元素來調。"]}, {"kind": "p", "text": "把圖片附到對話裡來喂參考，然後用具體約束給出提示："}, {"kind": "code", "lang": "text", "code": "用 React + Vite + Tailwind + TypeScript 實現這個設計。\n複用我已有的 design-system 元件和 tokens。\n匹配間距、佈局和層級；做成響應式。\n預覽一直開著——驗證桌面端和移動端都和參考一致，\n迭代到一致為止。"}, {"kind": "p", "text": "好的迭代就提交，壞的就回退（回退時告訴 Cursor 一聲），讓每一輪都建立在乾淨的基礎上——這是讓任何 agent 迴路不跑偏的同一條紀律。"}]}, {"id": "figma", "heading": "Cursor + Figma：經 MCP 的設計 ↔ 程式碼往返", "blocks": [{"kind": "p", "text": "Cursor 透過官方的 Figma MCP server 連線 Figma，讓 agent 對一個實時 Figma 檔案有結構化訪問，而不是隻拿到一張扁平截圖。這就把交接裡的猜測成分去掉了。"}, {"kind": "steps", "items": [{"label": "設計 → 程式碼", "body": "在 Figma 裡複製某個 frame 的連結，粘進 Cursor，讓它去實現這個設計。MCP server 暴露的是真實的設計上下文——元件、變數、佈局資料、tokens——所以生成的程式碼是貼合原始檔的，而不是近似。"}, {"label": "保持對齊", "body": "只要在 Figma 裡一致地使用設計 tokens、樣式和元件（有 Code Connect 時用上），Cursor 的產出就會對映到你真實的設計系統，而不是重新發明一套基礎元件。"}]}, {"kind": "p", "text": "遠端 Figma MCP server 配一次，就能作為一等上下文供 Cursor 使用。由於 MCP 是開放標準，同一個 server 可以在 Cursor、Claude Code、Codex 和 VS Code 之間複用——這正是 Open Design 生來要去編排的那種可移植、多 agent 能力。"}]}, {"id": "vs", "heading": "Cursor vs Codex vs Claude Code：做設計怎麼選", "blocks": [{"kind": "p", "text": "做設計沒有唯一贏家——每個 agent 各有所長，有經驗的團隊會把它們疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Cursor", "“邊寫邊看”的視覺化迴路，帶編輯器內建實時預覽與直接選中元素編輯", "IDE 裡“邊迭代邊看”的緊湊 UI 工作"], ["Codex", "配上前端 skill 後視覺打磨強；影象理解 + 沙箱化執行", "託管式非同步構建，以及可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和懂程式碼庫的 UX", "前端推理與大上下文重構"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人。三者在沒有 skill、參考和約束時都會退回到一個泛泛的樣子。那才是真正要解決的問題——而它是“設計工具”形狀的，不是“模型”形狀的。"}]}, {"id": "pitfalls", "heading": "常見坑，以及如何避開“AI 味”觀感", "blocks": [{"kind": "p", "text": "對 Cursor 生成設計最常見的抱怨，是它看著很泛——柔和漸變、懸浮面板、過大的圓角、誇張陰影，一股“Inter 字型加紫色”的味道，“一看就是 AI 做的”。其他被反映的問題還包括移動端佈局錯亂、指令文字洩漏進 UI 文案裡。"}, {"kind": "steps", "items": [{"label": "加一個設計 skill", "body": "一個精選的審美 skill 會逼 Cursor 選定一個真實方向，而不是用預設那套。"}, {"label": "用預覽來驗證", "body": "在編輯器內建預覽裡跨斷點渲染並自檢，這樣佈局就不會在移動端悄悄崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖，是對產出質量影響最大的那個槓桿。"}, {"label": "把規則寫進 `.cursor/rules`", "body": "把“不要 hero card、最多兩種字型、品牌優先層級”這類規則，放在 agent 每次都會讀到的地方。"}]}, {"kind": "p", "text": "注意到沒有：每一條緩解措施都是在給 agent 一份精選的設計上下文。逐個專案、用手去維護這份上下文，正是 Open Design 幫你省掉的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 裡用 Cursor 做設計", "blocks": [{"kind": "p", "text": "Open Design 就是上面這套工作流一直在要的那一層開源設計層。它把 Cursor 當作一等介面卡，外面裹上一個精選的 skill 與 design-system 庫、一條結構化的渲染流水線，以及一個本地桌面端 UI——讓那份讓 Cursor 變好用的設計上下文，從第一次執行就在那兒，而不是每次都手工拼。"}, {"kind": "ol", "items": ["安裝 Open Design，選 Cursor 作為你的 agent。", "用你的 Cursor 賬號或你自己的模型金鑰（BYOK）認證——憑證留在你的機器上，絕不經我們代理。", "挑一套設計系統和一個 skill，然後生成審美一致的演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 都存在你自己的 repo 裡，而不是某個託管雲。"]}, {"kind": "p", "text": "同一個 Cursor agent、同一把金鑰——外面再加一套真實、可移植、開源的設計工作流。它本地優先、Apache-2.0 授權，所以你的工作和憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Cursor 真的能做設計嗎？", "text": "能——只要上下文裡有一個設計 skill、一套設計系統和真實參考圖，Cursor 就能產出生產級、響應式的 UI，而它的編輯器內建預覽讓你能在視覺上驗證並打磨。缺了這份上下文，它就容易退回到泛泛的樣子，而這正是 Open Design 補齊的缺口。"}, {"name": "這是 Cursor 官方產品嗎？", "text": "不是。Open Design 是一個獨立的開源專案，把 Cursor 作為 agent 整合進來。它用一個本地優先、開源的 skill 與 design-system 庫來補充 Cursor。"}, {"name": "用 Cursor 做設計需要 Cursor 訂閱嗎？", "text": "你可以用 Cursor 賬號 / 訂閱，也可以用自己的模型金鑰（BYOK）。無論哪種方式，Open Design 都不會代理你的憑證——它們由你的 agent 直接使用。"}, {"name": "前端設計選 Cursor 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、懂程式碼庫的設計決策著稱；Cursor 的優勢是編輯器裡“邊寫邊看”的緊湊迴路加實時預覽。很多團隊兩個都用——Open Design 讓你切換 agent 時無需改動設計工作流。"}, {"name": "怎麼把 Cursor 連到 Figma？", "text": "在 Cursor 里加上官方 Figma MCP server，然後把一個 Figma frame 連結粘進對話，讓 Cursor 去實現它。該 server 暴露真實的元件、變數和佈局資料，讓生成的程式碼貼合源設計。"}, {"name": "怎麼避開泛泛的“AI 味”觀感？", "text": "加一個設計 skill、提供真實的設計 tokens 和參考截圖、把品牌規則寫進 `.cursor/rules` 或 `AGENTS.md`，並在預覽裡跨斷點驗證。Open Design 把這些做成一個精選庫，讓你省掉逐專案的搭建。"}, {"name": "Open Design 和 Cursor 或 Anysphere 有關聯嗎？", "text": "沒有。Cursor 是 Anysphere 的產品；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。Cursor 和 Anysphere 是 Anysphere, Inc. 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先。你的檔案、產物和 DESIGN.md 都留在你自己的 repo 裡，你的 Cursor 或模型憑證由你的 agent 直接使用，絕不經 Open Design 的伺服器中轉。"}], "ctaTitle": "用開放的方式，和 Cursor 一起做設計。", "ctaBody": "帶上你自己的 Cursor 賬號或模型金鑰，把每個檔案都留在本地，並在你已經在用的 agent 外面，得到一個精選的設計庫。", "ctaActions": [{"label": "在 Open Design 裡使用 Cursor", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面端", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有支援的 agent"},
+    },
+    'opencode': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['opencode']!,
+      title: "OpenCode 做設計 — Open Design",
+      description: "大家如何用 OpenCode 做 UI 和網頁設計 —— design.md 檔案、UI/UX skill、Figma MCP —— 以及 Open Design 如何把 OpenCode 變成本地優先的開源設計 Agent。",
+      breadcrumb: "OpenCode",
+      label: "Agent · OpenCode",
+      heading: "用 OpenCode 做設計。",
+      lead: "OpenCode 是開源的終端 AI 編碼 Agent。設計師給它掛上設計 skill 和 DESIGN.md 檔案來生成真正的 UI。Open Design 把這套做成結構化的開源工作流 —— 用你自己的模型金鑰，所有東西留本地。",
+      rich: {"heroCtaLead": "Open Design 把 OpenCode 變成本地優先、開源的設計 agent——用你自己選的任意模型和 provider key，用你自己的檔案，外加一套精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 OpenCode", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["OpenCode 是一個開源、以終端為先的 AI 編碼 agent，刻意做成與模型無關：你自帶 provider key，在同一套工作流背後執行任意你想用的模型。這種開放性讓它天然適合做設計——但和所有 agent 一樣，只有當你給它正確的參考、skill 和一套驗證迴路時，它才能產出好的 UI。本文是一份從頭到尾的實用指南，講如何用 OpenCode 做 UI、前端和設計系統工作，以及如何把它接入 Open Design 的結構化設計工作流。", "內容涵蓋：OpenCode 到底是什麼、為什麼一個與模型無關的開源 agent 適合做設計、如何從零配置、截圖轉 UI 的迴路、AGENTS.md 與 MCP 如何擴充套件它、它與 Codex / Claude Code / Cursor 的對比、讓 AI 產出顯得套路化的那些坑，以及 Open Design 如何作為一個開源、本地優先的設計層來補上這道缺口——這是個天然的搭配，因為兩個專案都是開源、都跑在你自己的機器上。"], "heroImage": {"src": "/agents/opencode-design/opencode-design-hero.webp", "alt": "OpenCode 設計反饋迴路：終端 TUI agent、在瀏覽器中渲染 UI，以及一個工作區，帶一條迴環反饋箭頭", "caption": "核心迴路：OpenCode 在終端裡構建 UI，在真實瀏覽器中渲染並驗證，再對照你的參考反覆迭代——用的是你自己選的任意模型。"}, "tocLabel": "本頁目錄", "toc": [{"id": "what-is-opencode", "label": "OpenCode 究竟是什麼"}, {"id": "why-design", "label": "為什麼開放、任意模型的 agent 適合做設計"}, {"id": "setup", "label": "從零配置 OpenCode 做設計"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "extend", "label": "AGENTS.md、MCP 與可分享會話"}, {"id": "vs", "label": "OpenCode vs Codex vs Claude Code vs Cursor"}, {"id": "pitfalls", "label": "坑，以及那種“AI 味”的觀感"}, {"id": "open-design", "label": "在 Open Design 中用 OpenCode 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-opencode", "heading": "OpenCode 究竟是什麼", "blocks": [{"kind": "p", "text": "OpenCode 是一個為終端打造的開源 AI 編碼 agent，由 SST 背後的團隊（Anomaly Innovations）維護。它會讀取你的程式碼倉庫、執行命令、編輯檔案，並與大語言模型對話——但和被廠商繫結的 agent 不同，它本身不自帶模型。你把它指向任意你想用的 provider 和模型，並自帶 key。"}, {"kind": "p", "text": "它以終端介面（TUI）執行，並在同一引擎之上提供桌面應用和 IDE 擴充套件。底層採用客戶端/服務端架構，所以真正幹活的 agent 與你驅動它的介面是解耦的。它內建 build 和 plan 兩個 agent，用 Tab 鍵切換。"}, {"kind": "steps", "items": [{"label": "與模型無關", "body": "模型和 provider 來自 models.dev 這個開放目錄。你在 opencode.json 裡用 provider/model-id 字串配置，並可禁用不想載入的 provider——所以同一套設計工作流可以跑在 Anthropic、OpenAI、Google、OpenRouter、本地模型等之上。"}, {"label": "指令檔案", "body": "OpenCode 會讀取專案裡的 AGENTS.md 檔案（跨工具的通用標準，也相容 CLAUDE.md）作為專案規則——這正是編碼你設計約定的天然位置。執行 /init 即可生成一個。"}, {"label": "可擴充套件", "body": "它支援 LSP 整合、MCP server、主題、快捷鍵和自定義命令，還有可分享的會話連結用於協作。"}]}, {"kind": "ul", "items": ["維護方：SST / Anomaly Innovations（開源專案）", "憑證：你自己的模型 provider API key（BYOK，無廠商鎖定）", "許可：MIT，開源"]}]}, {"id": "why-design", "heading": "為什麼開放、任意模型的 agent 適合做設計", "blocks": [{"kind": "p", "text": "OpenCode 不像廠商 agent 那樣有某一個“設計模型”——而這恰恰是它的優勢。因為與模型無關且開源，你可以在同一套設計工作流上執行當下前端最強的那個模型，之後隨時更換，或退回到本地模型，全程不用改配置。"}, {"kind": "p", "text": "但光選對模型並不能買來審美。和所有編碼 agent 一樣，除非你給它約束，否則 OpenCode 也會產出套路化的 UI。好的設計產出來自你提供的三項輸入。"}, {"kind": "steps", "items": [{"label": "一套設計系統", "body": "真實的 tokens、基礎元件和約定，讓 agent 複用，從而讓產出貼合某個品牌，而不是退回到通用的觀感。"}, {"label": "一個審美 skill", "body": "一個精選的 skill，強制真正的審美——剋制的動效、品牌優先的層級、最多兩種字型一種強調色——並讓 agent 在動手前先定一個方向。"}, {"label": "具體的參考圖", "body": "真實的參考圖，以及多種狀態（桌面和移動、hover、空態、載入態），而不是隻有一張主視覺。"}]}, {"kind": "image", "src": "/agents/opencode-design/opencode-design-taste-triangle.webp", "alt": "展示設計系統、skill 與參考圖三者匯聚成優質設計產出的示意圖", "caption": "審美來自你提供的三項輸入：一套設計系統、一個 skill 和真實參考圖——與你跑哪個模型無關。"}, {"kind": "p", "text": "結論：OpenCode 給了你模型自由，但審美仍來自一套精選的設計上下文。Open Design 恰好把這些輸入打包好，這也是兩者契合的原因——它們都是開源、都本地優先（下文詳述）。"}]}, {"id": "setup", "heading": "從零配置 OpenCode 做設計", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 OpenCode 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 OpenCode\ncurl -fsSL https://opencode.ai/install | bash\n# 或：npm i -g opencode-ai@latest\n# 或：brew install sst/tap/opencode\n\n# 2. 在專案裡啟動 TUI，然後認證你的 provider\nopencode          # 然後執行 /login，選擇 provider 並貼上你的 key\n\n# 3. 生成專案上下文\nopencode          # 在專案裡執行 /init 生成 AGENTS.md\n\n# 4. 選擇你的模型（任意 provider，經 models.dev）\n#    在 opencode.json 裡設定 \"provider/model-id\"，或在 TUI 裡切換\n\n# 5. 新增 MCP server（可選，比如用於設計交付）\n#    在 opencode.json 的 \"mcp\" 欄位下配置"}, {"kind": "image", "src": "/agents/opencode-design/opencode-design-setup-flow.webp", "alt": "五步配置流程：安裝、用你的 provider key 認證、配置 AGENTS.md、新增 skill、驗證", "caption": "配置順序：安裝 → 認證（你的 provider key）→ 配置 AGENTS.md → 新增 skill → 在真實瀏覽器中驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元件和約定放進 AGENTS.md（或從中引用的 DESIGN.md），讓產出貼合品牌而非退回通用觀感。opencode.json 裡的 instructions 選項可以用 glob 指向更多規則檔案。"}, {"label": "選一個有能力的模型", "body": "因為 OpenCode 與模型無關，可以為設計這一遍挑選當下前端最強的 provider/模型——而工作流的其餘部分保持不變。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "用任何 agent 做設計，槓桿最高的迴路都是：把一張參考圖變成可用、響應式的 UI，並反覆迭代直到匹配。同樣的五步在 OpenCode 裡也適用。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考開始——幷包含多種狀態（桌面和移動、hover、空態、載入態），而不只是一張主視覺。", "提示詞要具體；含糊的提示會產出套路化的 UI。", "準備好一套設計系統，並告訴 OpenCode tokens 和規範基礎元件在哪裡（寫在 AGENTS.md 裡）。", "跑一個 dev server，讓 agent 在真實瀏覽器中渲染，並切換到各斷點檢查結果。", "讓 OpenCode 把它的實現對照截圖來迭代——而不只是確認能構建透過。"]}, {"kind": "p", "text": "在 TUI 裡用 @ 引用檔案會對工作目錄做模糊搜尋，用開頭的 ! 內聯執行 shell 命令，用 / 命令驅動各種操作。然後用具體約束來提示："}, {"kind": "code", "lang": "bash", "code": "opencode\n# 在 TUI 裡：\n> @reference-desktop.png @reference-mobile.png\n  用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  複用 AGENTS.md 裡我現有的設計系統元件和 tokens。\n  匹配間距、佈局和層級；做到響應式。\n  執行 dev server，在瀏覽器中開啟，並反覆迭代\n  直到 UI 在各斷點上都與參考圖匹配。"}, {"kind": "p", "text": "提示詞保持小而聚焦，好的迭代就提交、壞的就回退（回退時告訴 OpenCode），讓每一遍都建立在一個乾淨的基礎上。"}]}, {"id": "extend", "heading": "AGENTS.md、MCP 與可分享會話", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 OpenCode 在持續的設計工作中真正好用，而且它們都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "AGENTS.md 規則", "body": "專案規則放在倉庫根目錄的 AGENTS.md（或全域性規則放在 ~/.config/opencode/AGENTS.md）。它是你設計約定的長期歸宿，每次執行都會讀取，併相容其他 agent 使用的 CLAUDE.md 檔案。"}, {"label": "MCP server", "body": "OpenCode 同時支援本地（命令）和遠端（URL）MCP server，在 mcp 欄位下配置——這是把設計上下文和外部工具引入進來的可移植方式，跨 agent 通用，而不只服務於 OpenCode。"}, {"label": "可分享會話", "body": "/share 命令會為一段會話建立公開連結，用於協作或評審，/unshare 則收回它——很適合為一遍設計獲取反饋。"}]}, {"kind": "p", "text": "這些都是可移植、跨 agent 的能力——正是 Open Design 被設計來去編排的那類東西，而不是每個專案裡重造一遍。"}]}, {"id": "vs", "heading": "OpenCode vs Codex vs Claude Code vs Cursor 做設計", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，有經驗的團隊會疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["OpenCode", "開源且與模型無關；在一套終端工作流背後執行任意 provider", "BYOK 自由、切換模型、完全開放且本地優先的配置"], ["Codex", "配合前端 skill 的視覺打磨能力強；影象理解", "委託式非同步、沙箱化構建、可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和對程式碼庫有感知的 UX", "前端推理和大上下文重構"], ["Cursor", "帶實時預覽和內聯編輯的所見即所得迴路", "IDE 內緊湊的邊改邊看 UI 工作"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人——所有這些 agent 在沒有 skill、參考和約束時都會退回到通用觀感。這才是真正要解決的問題——它是設計工具形狀的，不是模型形狀的，而這恰恰說明了為什麼像 OpenCode 這樣的開放 agent 與一個開放的設計層配合得如此之好。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避開那種“AI 味”觀感", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的吐槽是它看起來很套路——柔和漸變、懸浮面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的味道，“一看就是 AI 做的”。其他被報告的問題還包括移動端佈局錯亂、指令文字漏進了 UI 文案。這些都不是 OpenCode 獨有的；它們是任何 agent 在缺少精選設計上下文時都會發生的事。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會強制 agent 定下一個真正的方向，而不是預設觀感。"}, {"label": "在真實瀏覽器中驗證", "body": "讓它跨斷點渲染並自檢，這樣佈局就不會在移動端悄悄崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是對產出質量影響最大的單一槓杆。"}, {"label": "把規則寫進 AGENTS.md", "body": "把“不要 hero 卡片、最多兩種字型、品牌優先層級”這類規則放在 agent 每次都會讀到的地方。"}]}, {"kind": "p", "text": "注意到了嗎：每一項緩解措施都是關於給 agent 一套精選的設計上下文——無論你跑哪個模型。靠手工逐專案維護這套上下文，正是 Open Design 幫你免除的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 OpenCode 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一直在呼喚的開源設計層。它把 OpenCode 當作一等介面卡，併為它套上一套精選的 skill 與設計系統庫、一條結構化的渲染管線，以及一個本地桌面 UI——讓那些讓任何 agent 變好的設計上下文從第一次執行就在那裡，而不是每次都手工拼湊。兩個專案都是開源、都本地優先，這讓它們的搭配水到渠成。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 OpenCode 作為你的 agent。", "用你自己的模型 provider API key（BYOK）認證——憑證留在你的機器上，絕不經我們代理。", "選擇任意 provider 和模型，再加上一套設計系統和一個 skill，然後生成審美一致的 deck、原型和落地頁。", "每個產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管雲端。"]}, {"kind": "p", "text": "同一個 OpenCode agent、同樣的模型自由——外加一套真正可移植、開源的設計工作流。它本地優先、採用 Apache-2.0 許可，所以你的工作和憑證都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "OpenCode 真的能做設計嗎？", "text": "能——當上下文裡有審美 skill、設計系統和真實參考圖時，OpenCode 能產出生產級、響應式的 UI，並能在瀏覽器中驗證。因為它與模型無關，你可以執行當下前端最強的那個模型。缺少這套精選上下文時，它會傾向於退回到通用觀感，而這正是 Open Design 補上的缺口。"}, {"name": "用 OpenCode 做設計該選哪個模型？", "text": "你喜歡哪個都行——OpenCode 經 models.dev 與 provider 無關，所以你可以在同一套工作流背後執行 Anthropic、OpenAI、Google、OpenRouter 或本地模型，並隨時切換。設計產出的質量更多取決於你的 skill、設計系統和參考，而非單看模型。"}, {"name": "Open Design 是 OpenCode（SST）團隊做的嗎？", "text": "不是。Open Design 是一個獨立的開源專案，把 OpenCode 整合為一個 agent。它用一套本地優先、開源的 skill 與設計系統庫來補足 OpenCode。"}, {"name": "用 OpenCode 做設計需要什麼特殊訂閱嗎？", "text": "不需要——OpenCode 是 BYOK。你自帶模型 provider 的 API key，Open Design 絕不代理你的憑證，也沒有廠商鎖定。"}, {"name": "前端設計選 OpenCode、Codex 還是 Claude Code？", "text": "都很強，很多團隊會疊著用。OpenCode 的優勢在於完全開源且與模型無關；Codex 擅長委託式、沙箱化構建；Claude Code 以具體、對程式碼庫有感知的設計決策著稱。Open Design 讓你切換 agent 而不改變你的設計工作流。"}, {"name": "如何為設計上下文擴充套件 OpenCode？", "text": "把規則寫進 AGENTS.md，在 mcp 欄位下新增 MCP server 以引入可移植工具和設計上下文，並用可分享會話來做評審。Open Design 直接提供一套精選的 skill 與設計系統庫，讓你省去逐專案的配置。"}, {"name": "Open Design 與 OpenCode 或 SST 有關聯嗎？", "text": "沒有。OpenCode 是由 SST（Anomaly Innovations）維護的開源專案；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的模型 provider 憑證由你的 agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，借 OpenCode 做設計。", "ctaBody": "自帶你的模型 provider key，把每個檔案留在本地，併為你已經在用的這個開放 agent 套上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 OpenCode", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有支援的 agent"},
+    },
+    'gemini': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['gemini']!,
+      title: "用於設計的 Gemini CLI — Open Design",
+      description: "人們如何運用 Google 的 Gemini CLI 進行 UI 與網頁設計——它的多模態圖像理解能力、1M token 的上下文、GEMINI.md 與 MCP——以及 Open Design 如何將 Gemini CLI 化為一個 local-first、開源的設計代理。",
+      breadcrumb: "Gemini CLI",
+      label: "Agent · Gemini CLI",
+      heading: "用於設計的 Gemini CLI。",
+      lead: "Gemini CLI 是 Google 的開源終端機代理。它的多模態模型能讀懂螢幕截圖，1M token 的上下文足以容納整套設計系統，這讓它成為真正的設計工具——只要你給它參考、慣例與一套驗證迴圈。Open Design 將它接入開源的設計工作流：你的 Google 帳號或 API key、你的檔案，皆為 local-first。",
+      rich: {"heroCtaLead": "Open Design 將 Gemini CLI 化為一個 local-first、開源的設計代理——你的 Google 帳號或 Gemini API key、你的檔案，外加一套精選的 skill 與設計系統函式庫環繞其上。", "heroCtaActions": [{"label": "在 Open Design 中使用 Gemini CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上加星", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用程式", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Gemini CLI 是 Google 推出的開源終端機 AI 代理。有兩點讓它在設計領域特別值得關注：它的模型具備強大的多模態能力，能讀懂一張螢幕截圖並推理出版面、間距與層級；而它 1M token 的上下文視窗能一次容納整套設計系統與程式碼庫。搭配適切的參考、慣例與一套驗證迴圈，它就能建構出真正可用的響應式 UI——而且只要有 Google 帳號就能免費上手。這是一份實務導向、端到端的指南，教你如何運用 Gemini CLI 處理 UI、前端與設計系統的工作，並將它接入 Open Design 這套結構化的設計工作流。", "本文涵蓋 Gemini CLI 究竟是什麼、為何它的多模態模型與龐大上下文契合設計、如何從零開始設定、螢幕截圖轉 UI 的迴圈、GEMINI.md 與 MCP 如何延伸它的能力、它與 Codex、Claude Code 和 Cursor 的比較、那些讓 AI 產出看起來千篇一律的陷阱，以及 Open Design 如何以一個開放、local-first 的設計層補上這道落差——兩者的搭配渾然天成，因為它們都是開源且在你自己的機器上執行。"], "heroImage": {"src": "/agents/gemini-design/gemini-design-hero.webp", "alt": "Gemini CLI 設計回饋迴圈：一個終端機代理讀取參考圖、一個瀏覽器渲染 UI、一個工作區，並有一道回饋箭頭循環回流", "caption": "核心迴圈：Gemini CLI 在終端機中讀取你的參考，在真實瀏覽器中建構並驗證 UI，並對照參考反覆迭代——同時將整套設計系統納入上下文。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-gemini-cli", "label": "Gemini CLI 究竟是什麼"}, {"id": "why-design", "label": "為何多模態 + 龐大上下文契合設計"}, {"id": "setup", "label": "為設計設定 Gemini CLI（從零開始）"}, {"id": "screenshot-workflow", "label": "螢幕截圖轉 UI 的工作流"}, {"id": "extend", "label": "GEMINI.md、MCP 與擴充功能"}, {"id": "vs", "label": "Gemini CLI vs Codex vs Claude Code vs Cursor"}, {"id": "pitfalls", "label": "陷阱與「AI 廉價感」的外觀"}, {"id": "open-design", "label": "在 Open Design 中以 Gemini CLI 設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-gemini-cli", "heading": "Gemini CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Gemini CLI 是 Google 為終端機推出的開源（Apache-2.0）AI 代理。它能讀取你的儲存庫、編輯檔案、執行 shell 指令、抓取網頁，並能以 Google 搜尋為答案提供佐證——它從自然語言任務出發來規劃並驗證工作，而不只是補全程式碼行。同一套引擎也驅動著 VS Code 內的 Gemini Code Assist 代理。"}, {"kind": "p", "text": "對設計工作而言，有兩項特性格外突出。它的模型原生支援多模態，因此你可以遞給它一張螢幕截圖，它便能就實際版面進行推理。而它的上下文視窗最高可達 1M token，大到足以一次容納你的整套設計系統、元件庫與參考集，而不必把它們摘要省略掉。"}, {"kind": "steps", "items": [{"label": "上下文檔案", "body": "Gemini CLI 會讀取一個 GEMINI.md 檔案來取得持久的專案上下文——這正是用來編入設計慣例、tokens 與審查檢查清單的天然之處。個人與團隊設定則疊加於其上。"}, {"label": "內建工具 + MCP", "body": "它開箱即附帶檔案、shell、web-fetch 與 Google 搜尋工具，並支援 MCP 伺服器（在 ~/.gemini/settings.json 中設定），以加入像即時 Figma 檔案這類的外部上下文。"}, {"label": "免費上手", "body": "以個人 Google 帳號登入即可獲得相當慷慨的 Gemini 請求免費額度；你也可以自備 Gemini API key 或使用 Vertex AI。"}]}, {"kind": "ul", "items": ["供應商：Google", "憑證：Google 帳號（免費額度），或來自 AI Studio 的 Gemini API key（BYOK），或 Vertex AI", "授權：Apache-2.0，開源"]}]}, {"id": "why-design", "heading": "為何多模態模型與龐大上下文契合設計", "blocks": [{"kind": "p", "text": "Gemini CLI 的設計優勢來自兩項模型特性——但一如每個代理，品味仍得由你來供給。"}, {"kind": "steps", "items": [{"label": "強大的多模態理解", "body": "因為 Gemini 模型原生支援多模態，代理能很好地讀懂參考螢幕截圖——把它渲染的成果與圖像對照比較，而不是從一段文字描述去揣測。"}, {"label": "1M token 的上下文視窗", "body": "龐大的上下文意味著整套設計系統、tokens 與眾多參考狀態能一次塞進去，於是代理會重用你真正的基本元素，而不是憑空發明一次性的樣式。"}, {"label": "GEMINI.md 中的慣例", "body": "一份 GEMINI.md（再加上 Figma MCP 伺服器）會把代理導向你的 tokens、元件與真實規格，讓它針對一個品牌工作，而不是套用預設外觀。"}]}, {"kind": "image", "src": "/agents/gemini-design/gemini-design-taste-triangle.webp", "alt": "圖示展示設計系統、skill 與參考圖三者匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個道理和每個代理教給我們的一樣：Gemini CLI 預設並不具備品味。當你給它約束時，它才能產出優秀的設計——一套設計系統、一個美學 skill，以及具體的參考。Open Design 正是把這些輸入打包起來，這也是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始為設計工作設定 Gemini CLI", "blocks": [{"kind": "p", "text": "以下是從一台乾淨的機器，到一個能建構並驗證 UI 的 Gemini CLI，完整的設定路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. Install Gemini CLI (Node 20+)\nnpm install -g @google/gemini-cli\n# or run without installing: npx https://github.com/google-gemini/gemini-cli\n\n# 2. Start it in your project and authenticate on first run\ncd your-project\ngemini            # sign in with your Google account, or set GEMINI_API_KEY\n\n# 3. Generate project context\n/init             # scaffolds a GEMINI.md for this project\n\n# 4. Wire the Figma MCP server (optional, for design handoff)\n#    add it under \"mcpServers\" in ~/.gemini/settings.json"}, {"kind": "image", "src": "/agents/gemini-design/gemini-design-setup-flow.webp", "alt": "五步驟設定流程：安裝、驗證、設定 GEMINI.md、加入 skill、驗證", "caption": "設定順序：安裝 → 驗證 → 設定 GEMINI.md → 加入 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編入你的設計規則", "body": "把你的 tokens、基本元素與慣例放進 GEMINI.md，並讓 Gemini 指向它們，使產出符合一個品牌，而不是退回到千篇一律的外觀。"}, {"label": "加入瀏覽器驗證", "body": "接上一個 Playwright 或瀏覽器 MCP，讓 Gemini 在真實瀏覽器中渲染，並跨各種斷點檢查其產出，而不只是確認建構通過。"}]}]}, {"id": "screenshot-workflow", "heading": "螢幕截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "Gemini CLI 槓桿效益最高的設計迴圈，是把一張參考圖轉成可運作的響應式 UI，並反覆迭代直到吻合——借助多模態模型把產出與參考對照比較。"}, {"kind": "ol", "items": ["從你手上最清晰的視覺參考出發——並納入多種狀態（桌面與行動裝置、hover、空狀態、載入中），而不只是一張主視覺。", "在提示中要具體；即使有強大的模型，含糊的提示仍會產出千篇一律的 UI。", "把你的設計系統與慣例保存在 GEMINI.md 中，並告訴 Gemini tokens 與權威基本元素位於何處。", "啟動一個 dev server，讓 Gemini 在真實瀏覽器中渲染，並調整尺寸至各斷點來檢查結果。", "讓 Gemini 把它的實作與螢幕截圖對照比較來迭代——而不只是確認它能建構成功。"]}, {"kind": "p", "text": "用 @ 引用一張圖把它附加到提示中，接著給出具體的約束："}, {"kind": "code", "lang": "bash", "code": "gemini\n# in the prompt:\n> @reference-desktop.png @reference-mobile.png\n  Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens from GEMINI.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the references\n  across breakpoints."}, {"kind": "p", "text": "讓提示保持小而聚焦，提交好的迭代並還原壞的迭代（還原時告知 Gemini），如此每一輪都建立在乾淨的基礎之上。"}]}, {"id": "extend", "heading": "GEMINI.md、MCP 與擴充功能", "blocks": [{"kind": "p", "text": "三個擴充點讓 Gemini CLI 足以勝任持續性的設計工作，而這三者都能乾淨俐落地對應到一套開放的設計工作流。"}, {"kind": "steps", "items": [{"label": "GEMINI.md 上下文", "body": "專案規則存放於儲存庫根目錄的 GEMINI.md 中（並有全域與團隊層級）。它是你設計慣例的長久歸宿，每次執行都會被讀取。"}, {"label": "MCP 伺服器", "body": "在 ~/.gemini/settings.json 下設定 MCP 伺服器——這是引入設計上下文與外部工具的可攜方式，其中最切題的便是 Figma MCP 伺服器，且這些能力可跨代理通用，不限於 Gemini。"}, {"label": "擴充功能與內建工具", "body": "Gemini CLI 的擴充功能，以及它內建的 Google 搜尋、檔案、shell 與 web-fetch 工具，讓它無需離開終端機就能蒐集參考並執行驗證迴圈。"}]}, {"kind": "p", "text": "這些都是可攜、跨代理的能力——正是 Open Design 生來要去編排的那類東西，而非在每個專案中重新打造。"}]}, {"id": "vs", "heading": "用於設計時的 Gemini CLI vs Codex vs Claude Code vs Cursor", "blocks": [{"kind": "p", "text": "設計工作沒有唯一的贏家——每個代理各有不同的強項，而資深團隊會把它們疊起來用。一份公允的總結："}, {"kind": "table", "columns": ["代理", "設計強項", "最適合"], "rows": [["Gemini CLI", "強大的多模態圖像理解與 1M token 上下文；開源且附帶免費額度", "大量依賴螢幕截圖的工作，以及把整套設計系統納入上下文"], ["Codex", "搭配前端 skill 帶來出色的視覺精緻度；沙箱化的非同步建構", "委派式的非同步建構與可攜的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）與理解程式碼庫的 UX", "前端推理與大上下文的重構"], ["Cursor", "搭配即時預覽與行內編輯的視覺式「建構即所見」迴圈", "在 IDE 中緊湊的「邊迭代邊觀察」UI 工作"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——少了 skills、參考與約束，它們全都會退回千篇一律的美學。那才是真正要解決的問題——而它的形狀屬於設計工具，而非模型。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開「AI 廉價感」的外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨，就是它看起來千篇一律——柔和的漸層、漂浮的面板、過大的圓角、戲劇化的陰影，那種 Inter 字型加紫色的調調，「一看就知道是 AI 做的」。其他被回報的問題還包括行動裝置版面破版，以及指示文字外洩到 UI 文案裡。這些都不是 Gemini CLI 獨有的；它們是任何代理在缺乏精選設計上下文下執行時必然發生的結果。"}, {"kind": "steps", "items": [{"label": "加入一個美學 skill", "body": "一個精選的設計 skill 會迫使代理選定一個真實的方向，而不是套用預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "運用多模態模型跨各斷點渲染並自我檢查，讓版面不會在行動裝置上悄悄破版。"}, {"label": "提供 tokens 與參考", "body": "真實的設計 tokens 與參考螢幕截圖，是對產出品質影響最大的單一槓桿。"}, {"label": "把規則編入 GEMINI.md", "body": "把「不要主視覺卡片、最多兩種字型、品牌優先的層級」這類風格規則，放在代理每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "請留意，每一項對策都在於給代理一套精選的設計上下文。逐專案手工維護那份上下文，正是 Open Design 替你免去的苦工。"}]}, {"id": "open-design", "heading": "在 Open Design 中以 Gemini CLI 設計", "blocks": [{"kind": "p", "text": "Open Design 正是上述工作流一再呼喚的那個開源設計層。它把 Gemini CLI 當作一級的轉接器，並以一套精選的 skill 與設計系統函式庫、一條結構化的渲染管線，以及一個本機桌面 UI 將它包裹起來——於是讓 Gemini 變強的那份設計上下文，從第一次執行起就已就位，無需每次手工拼湊。兩者皆為開源且 local-first，這讓這場搭配渾然天成。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Gemini CLI 作為你的代理。", "以你的 Google 帳號或 Gemini API key（BYOK）驗證——憑證留在你的機器上，絕不經由我們代理轉送。", "挑一套設計系統與一個 skill，接著以一致的品味產出簡報、原型與著陸頁。", "每一份產物與 DESIGN.md 檔案都存在你自己的儲存庫裡，而非託管的雲端。"]}, {"kind": "p", "text": "同一個 Gemini CLI 代理、同一把 key——外加一套真正可攜、開源的設計工作流環繞其上。它是 local-first 且 Apache-2.0 的，因此關於你的工作或你的憑證，沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Gemini CLI 真的能做設計工作嗎？", "text": "可以——只要上下文中有一個美學 skill、一套設計系統與真實的參考圖，Gemini CLI 就能產出可上線品質的響應式 UI，而它強大的多模態模型會對照參考來驗證產出。缺了那份上下文，它往往會退回千篇一律的外觀，這正是 Open Design 補上的落差。"}, {"name": "用 Gemini CLI 做設計需要付費嗎？", "text": "不需要——以 Google 帳號登入即可獲得相當慷慨的免費額度，你也可以自備 Gemini API key（BYOK）或使用 Vertex AI。無論哪種方式，Open Design 都不會代理轉送你的憑證。"}, {"name": "Gemini CLI 在設計上具體好在哪？", "text": "兩點：它的模型具備強大的多模態能力，因此能很好地讀懂參考螢幕截圖；而它 1M token 的上下文能一次容納整套設計系統與參考集。兩者都有幫助——但品味仍然來自你供給的設計系統、skill 與參考。"}, {"name": "前端設計該用 Gemini CLI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策著稱；Gemini CLI 的優勢則在於多模態理解，外加龐大的上下文與免費額度。許多團隊兩者並用——Open Design 讓你切換代理而無需改動你的設計工作流。"}, {"name": "我要如何把 Gemini CLI 連到 Figma？", "text": "在 ~/.gemini/settings.json 的 mcpServers 下加入 Figma MCP 伺服器。Gemini 接著便能拉取真實的設計上下文——元件、變數、版面資料——讓生成的程式碼吻合來源，而非近似地揣摩。"}, {"name": "Open Design 與 Google 有從屬關係嗎？", "text": "沒有。Gemini CLI 是 Google 的產品；Open Design 是一個獨立的開源專案，以一級轉接器的形式支援它。Gemini 是 Google 的商標。"}, {"name": "我的檔案與憑證安全嗎？", "text": "安全——Open Design 是 local-first 且 Apache-2.0 的。你的檔案、產物與 DESIGN.md 都留在你自己的儲存庫裡，而你的 Google 憑證由你的代理直接使用，絕不經由 Open Design 的伺服器轉送。"}], "ctaTitle": "以開放的方式，用 Gemini CLI 設計。", "ctaBody": "自備你的 Google 帳號或 Gemini API key，讓每一份檔案都留在本機，並在你早已使用的代理周圍獲得一套精選的設計函式庫。", "ctaActions": [{"label": "在 Open Design 中使用 Gemini CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上加星", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用程式", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "查看所有支援的代理"},
+    },
+    'copilot': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['copilot']!,
+      title: "用 GitHub Copilot CLI 做設計 — Open Design",
+      description: "人們如何用 GitHub Copilot CLI 做 UI 和網頁設計——它原生於終端的編碼 agent、自定義指令檔案、MCP 支援以及多模型選擇——以及 Open Design 如何把 Copilot CLI 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "GitHub Copilot CLI",
+      label: "Agent · GitHub Copilot CLI",
+      heading: "用 GitHub Copilot CLI 做設計。",
+      lead: "GitHub Copilot CLI 是 GitHub 原生於終端的編碼 agent。它能在整個倉庫範圍內規劃與編輯，從 Claude、GPT 等前沿模型中任選其一，並讀取你的倉庫指令——這讓它在你提供了參考、規範和驗證閉環之後，成為一個真正的設計工具。Open Design 把它接入開源的設計工作流：用你的 GitHub Copilot 訂閱、你的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 GitHub Copilot CLI 變成一個本地優先、開源的設計 agent——你的 GitHub Copilot 訂閱、你的檔案，外加圍繞它的一套精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Copilot CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["GitHub Copilot CLI 是 GitHub 原生於終端的編碼 agent——與驅動 Copilot 編碼 agent 的同一套 agentic 框架，被搬到了你的命令列。有兩點讓它對設計尤其有意思：它會讀取你的倉庫指令和 AGENTS.md，因此你的設計規範每次執行都會隨 agent 一起生效；同時它允許你按任務在 Anthropic、OpenAI 和 Google 的前沿模型之間任選其一，從而挑出對某個 UI 推理最佳的那個。配上恰當的參考、規範和驗證閉環，它能構建真正可用的響應式 UI——而且它跑在你可能已經擁有的 Copilot 訂閱上。這是一份關於如何用 Copilot CLI 做 UI、前端和設計系統工作，並把它接入 Open Design 結構化設計工作流的實用端到端指南。", "本文涵蓋：Copilot CLI 究竟是什麼、為什麼倉庫指令和模型選擇契合設計、如何從零開始配置它、截圖轉 UI 的閉環、自定義指令和 MCP 如何擴充套件它、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 輸出顯得千篇一律的陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合差距——你的訂閱和憑證留在你自己的機器上，你的產物留在你自己的倉庫裡。"], "heroImage": {"src": "/agents/copilot-design/copilot-design-hero.webp", "alt": "GitHub Copilot CLI 設計反饋閉環：一個終端 agent 讀取參考圖，一個瀏覽器渲染 UI，加上一個工作區，還有一條反饋箭頭回環", "caption": "核心閉環：Copilot CLI 在終端裡讀取你的參考，在真實瀏覽器中構建並驗證 UI，然後對照參考迭代——你的設計規範則放在倉庫指令裡。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-copilot", "label": "GitHub Copilot CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼指令 + 模型選擇契合設計"}, {"id": "setup", "label": "從零開始為設計配置 Copilot CLI"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "extend", "label": "自定義指令、MCP 與擴充套件"}, {"id": "vs", "label": "Copilot CLI 對比 Codex、Claude Code、Cursor、Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與“AI 流水線感”的觀感"}, {"id": "open-design", "label": "在 Open Design 中用 Copilot CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-copilot", "heading": "GitHub Copilot CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "GitHub Copilot CLI 是 GitHub 原生於終端的編碼 agent。它讀取你的倉庫、編輯檔案、執行 shell 命令，並直接結合你的 GitHub 上下文——issue、pull request 和倉庫——用你現有的 GitHub 賬號鑑權。它由與 GitHub Copilot 編碼 agent 同一套 agentic 框架驅動，因此能規劃複雜任務並迭代，而不只是補全程式碼行。它在 2025 年 9 月開啟公開預覽後，於 2026 年 2 月正式全面上線。"}, {"kind": "p", "text": "對設計工作而言，有兩點尤為突出。它會讀取自定義指令檔案——位於 .github/copilot-instructions.md 的倉庫級規則以及 AGENTS.md——因此你的設計規範每次執行都會被自動納入。它還支援多家基礎模型提供方，因此你可以用 /model 命令按任務切換到對某個 UI 推理最佳的那個模型。"}, {"kind": "steps", "items": [{"label": "指令檔案", "body": "Copilot CLI 會讀取 .github/copilot-instructions.md 中的倉庫指令、.github/instructions 下的路徑專屬檔案，以及 AGENTS.md——這是為你的設計規範、tokens 和評審清單編碼的天然之處。"}, {"label": "內建工具 + MCP", "body": "它內建了 GitHub 的 MCP server，並執行檔案和 shell 工具，你還可以用 /mcp add 新增自定義 MCP server（配置存於 ~/.copilot 下的 mcp-config.json），以引入諸如即時 Figma 檔案這樣的外部上下文。"}, {"label": "模型選擇", "body": "用 /model 命令在 Anthropic、OpenAI 和 Google 的前沿模型之間任選其一——按任務切換，全部跑在你現有的 Copilot 訂閱上。"}]}, {"kind": "ul", "items": ["廠商：GitHub", "憑證：一個有效的 GitHub Copilot 訂閱（Pro、Pro+、Business 或 Enterprise）", "安裝：npm install -g @github/copilot，然後執行 copilot"]}]}, {"id": "why-design", "heading": "為什麼倉庫指令和模型選擇契合設計", "blocks": [{"kind": "p", "text": "Copilot CLI 的設計優勢來自兩點——但和每個 agent 一樣，審美仍需由你提供。"}, {"kind": "steps", "items": [{"label": "隨倉庫一起流轉的規範", "body": "因為 Copilot CLI 會自動讀取 .github/copilot-instructions.md 和 AGENTS.md，你的 tokens、基礎元件和評審規則每次執行都在上下文裡——agent 是面向一個品牌而非預設觀感來工作。"}, {"label": "按任務挑對模型", "body": "在 Anthropic、OpenAI 和 Google 之間做模型選擇，意味著你可以為某個佈局選用推理最佳的模型，再為下一個任務切換——而無需改變你的工作流。"}, {"label": "通過 MCP 接入真實規格", "body": "內建的 GitHub MCP server 加上 Figma MCP server，把 agent 指向你的 tokens、元件和真實規格，於是它從源頭構建，而不是近似猜測。"}]}, {"kind": "image", "src": "/agents/copilot-design/copilot-design-taste-triangle.webp", "alt": "示意圖：設計系統、skill 和參考圖匯聚成優秀的設計輸出", "caption": "審美來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個教訓和每個 agent 給我們的一樣：Copilot CLI 預設並沒有審美。當你給它約束時——一套設計系統、一個審美 skill 和具體參考——它才能產出好設計。Open Design 正是把這些輸入打包好，這也是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始為設計工作配置 Copilot CLI", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨機器到一個能構建並驗證 UI 的 Copilot CLI 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Copilot CLI（需要 Node.js）\nnpm install -g @github/copilot\n\n# 2. 在你的專案中啟動它，並在首次執行時鑑權\ncd your-project\ncopilot           # 執行 /login 並按提示登入\n\n# 3. 為任務選擇一個模型\n#    在會話中：\n/model            # 從 Anthropic、OpenAI 或 Google 中挑一個前沿模型\n\n# 4. 新增自定義指令和 Figma MCP server（可選）\n#    編寫 .github/copilot-instructions.md 或 AGENTS.md\n/mcp add          # 新增 Figma MCP server 用於設計交付"}, {"kind": "image", "src": "/agents/copilot-design/copilot-design-setup-flow.webp", "alt": "五步配置流程：安裝、鑑權、選擇模型、配置指令、驗證", "caption": "配置順序：安裝 → 鑑權 → 選擇模型 → 編寫指令 → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "為你的設計規則編碼", "body": "把你的 tokens、基礎元件和規範放進 .github/copilot-instructions.md 或 AGENTS.md，讓輸出貼合一個品牌，而非退回到千篇一律的觀感。"}, {"label": "加入瀏覽器驗證", "body": "接入 Playwright 或瀏覽器 MCP，讓 Copilot 在真實瀏覽器中渲染，並跨斷點檢查輸出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Copilot CLI 做設計、槓桿最高的閉環，是把一張參考圖變成可用的響應式 UI，並不斷迭代直到匹配——藉助一個強大的多模態模型把輸出對照參考來比較。"}, {"kind": "ol", "items": ["從你手上最清晰的視覺參考出發——幷包含多種狀態（桌面與移動、懸停、空態、載入態），而不只是一張主視覺。", "在 prompt 裡寫具體；即便用了強模型，含糊的 prompt 也會產出千篇一律的 UI。", "把你的設計系統和規範放進 .github/copilot-instructions.md 或 AGENTS.md，並告訴 Copilot tokens 和標準基礎元件在哪裡。", "執行一個 dev server，讓 Copilot 在真實瀏覽器中渲染，調整到各斷點來檢查結果。", "讓 Copilot 把它的實現對照截圖來比較以進行迭代——而不只是確認能構建通過。"]}, {"kind": "p", "text": "把 Copilot 指向你的參考圖並給出具體約束；它在執行前會預覽每一次檔案編輯或命令，等你批准："}, {"kind": "code", "lang": "bash", "code": "copilot\n# 在 prompt 中：\n> Implement the design in reference-desktop.png and reference-mobile.png\n  in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens described in\n  .github/copilot-instructions.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the references\n  across breakpoints."}, {"kind": "p", "text": "保持 prompt 小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Copilot），這樣每一輪都建立在乾淨的基礎之上。"}]}, {"id": "extend", "heading": "自定義指令、MCP 與擴充套件", "blocks": [{"kind": "p", "text": "有三個擴充套件點讓 Copilot CLI 適合持續的設計工作，而且這三者都能幹淨地對映到開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "自定義指令", "body": "倉庫規則存於 .github/copilot-instructions.md（連同 .github/instructions 下的路徑專屬檔案和 AGENTS.md）。它們是你設計規範的長期歸宿，每次執行都會被自動納入。"}, {"label": "MCP server", "body": "Copilot CLI 內建了 GitHub 的 MCP server，並允許你通過 /mcp add 新增自定義 server（配置存於 ~/.copilot 下的 mcp-config.json）——這是引入設計上下文（最相關的就是 Figma MCP server）的可移植方式，可跨多個 agent 通用，而不止 Copilot。"}, {"label": "專用 agent 與內建工具", "body": "Copilot CLI 的專用模式——用於程式碼庫探索、執行構建與測試、變更評審和規劃——加上它的檔案和 shell 工具，讓它無需離開終端就能收集參考並跑完驗證閉環。"}]}, {"kind": "p", "text": "這些都是可移植的、多 agent 通用的能力——正是 Open Design 旨在編排、而非在每個專案裡重複造的那類東西。"}]}, {"id": "vs", "heading": "做設計時 Copilot CLI 對比 Codex、Claude Code、Cursor、Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，有經驗的團隊會把它們疊加使用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Copilot CLI", "多模型選擇（Anthropic、OpenAI、Google）以及在你的 Copilot 訂閱上深度的 GitHub 整合", "按任務挑選最佳模型，以及與你的 GitHub 倉庫繫結的指令驅動型工作"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委託式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和理解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的“邊構建邊看”視覺閉環", "在 IDE 內緊湊的“邊迭代邊觀察”UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 100 萬 token 上下文；開源且帶免費額度", "大量依賴截圖的工作，以及在上下文中容納整套設計系統"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人——沒有 skill、參考和約束，它們都會預設退回到千篇一律的觀感。這才是真正要解決的問題——而且它是設計工具的形狀，不是模型的形狀。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避免“AI 流水線感”的觀感", "blocks": [{"kind": "p", "text": "關於 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和漸變、懸浮面板、過大的圓角、誇張的陰影，以及一種 Inter 字型配紫色、“一眼就是 AI 做的”的氣質。其他被反映的問題還包括移動端佈局錯亂、指令文字漏進 UI 文案。這些都不是 Copilot CLI 獨有的；任何 agent 在缺少精選設計上下文時執行，都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 投入到一個真正的方向上，而非預設觀感。"}, {"label": "在真實瀏覽器中驗證", "body": "用瀏覽器 MCP 跨斷點渲染並自檢，這樣佈局就不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖，是對輸出質量影響最大的單一槓杆。"}, {"label": "把規則寫進自定義指令", "body": "把諸如“不用 hero 卡片、最多兩種字型、品牌優先的層級”這類風格規則放進 .github/copilot-instructions.md 或 AGENTS.md，agent 每次執行都會讀到。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是在給 agent 提供精選的設計上下文。手工地、逐專案地維護這份上下文，正是 Open Design 要消除的苦工。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Copilot CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一直在呼喚的開源設計層。它把 GitHub Copilot CLI 當作一等介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染流水線和一個本地桌面 UI 把它包裹起來——這樣讓 Copilot 變好的那份設計上下文，從第一次執行就已就位，而不必每次手工拼裝。Open Design 獨立、開源（Apache-2.0）且本地優先，這正是兩者契合的原因：agent 幹活，你的檔案和憑證仍歸你所有。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 GitHub Copilot CLI 作為你的 agent。", "用你的 GitHub Copilot 訂閱鑑權——憑證留在你的機器上，絕不經我們代理。", "選一套設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一個產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而非託管的雲端。"]}, {"kind": "p", "text": "同一個 Copilot CLI agent、同一份訂閱——外加圍繞它的一套真實、可移植、開源的設計工作流。Open Design 本地優先且採用 Apache-2.0，所以關於你的工作或憑證的一切都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "GitHub Copilot CLI 真的能做設計工作嗎？", "text": "能——只要在上下文裡有一個審美 skill、一套設計系統和真實參考圖，Copilot CLI 就能產出生產級、響應式的 UI，而且你可以挑選最能對照參考驗證輸出的那個模型。缺少這份上下文時，它往往會預設退回到千篇一律的觀感，而這正是 Open Design 要填補的差距。"}, {"name": "用 Copilot CLI 做設計需要訂閱嗎？", "text": "需要——Copilot CLI 跑在一個有效的 GitHub Copilot 訂閱上（Pro、Pro+、Business 或 Enterprise）；它不是 BYOK。你用 GitHub 賬號鑑權。Open Design 絕不代理你的憑證——你的訂閱由你的 agent 直接使用。"}, {"name": "Copilot CLI 具體好在哪、為什麼適合設計？", "text": "兩點：它會自動讀取倉庫指令和 AGENTS.md，於是你的設計規範隨倉庫流轉；它還讓你按任務在 Anthropic、OpenAI 和 Google 的前沿模型之間切換。兩者都有幫助——但審美仍來自你提供的設計系統、skill 和參考。"}, {"name": "前端設計該用 Copilot CLI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策著稱；Copilot CLI 的優勢在於跨提供方的模型選擇，以及在你可能已經擁有的訂閱上深度的 GitHub 整合。許多團隊兩者並用——Open Design 讓你切換 agent 而無需改變設計工作流。"}, {"name": "怎麼把 Copilot CLI 連線到 Figma？", "text": "用 /mcp add 命令新增 Figma MCP server；設定存於 ~/.copilot 下的 mcp-config.json。之後 Copilot 就能拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼貼合源頭，而非近似猜測。"}, {"name": "Open Design 與 GitHub 或 Microsoft 有關聯嗎？", "text": "沒有。GitHub Copilot CLI 是 GitHub 的產品；Open Design 是一個獨立的開源專案，以一等介面卡的方式支援它。GitHub Copilot 是 GitHub, Inc. 和 Microsoft 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 GitHub Copilot 憑證由你的 agent 直接使用，絕不經 Open Design 伺服器路由。"}], "ctaTitle": "用 GitHub Copilot CLI 做設計，以開放的方式。", "ctaBody": "帶上你的 GitHub Copilot 訂閱，把每個檔案都留在本地，圍繞你已經在用的 agent 獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Copilot CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'qwen': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['qwen']!,
+      title: "用 Qwen Code 做設計 — Open Design",
+      description: "人們如何用阿里巴巴開源的 Qwen Code CLI 做 UI 和網頁設計——它的 Qwen3-Coder 模型、超大上下文視窗、QWEN.md 和 MCP——以及 Open Design 如何把 Qwen Code 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Qwen Code",
+      label: "Agent · Qwen Code",
+      heading: "用 Qwen Code 做設計。",
+      lead: "Qwen Code 是阿里巴巴開源的終端 agent，由 Gemini CLI 改造而來，並針對 Qwen3-Coder 模型做了調優。它超大的上下文視窗能一次性裝下整套設計系統，這讓它成為一個真正可用的設計工具——前提是你給它參考、規範和一套驗證閉環。Open Design 把它接入開源設計工作流：用你自己的 DashScope 或 Qwen API key、你自己的檔案，全程本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Qwen Code 變成一個本地優先、開源的設計 agent——用你自己的 DashScope 或 Qwen API key、你自己的檔案，外加圍繞它的一套精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Qwen Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Qwen Code 是阿里巴巴開源的終端 AI agent。它由 Google 的 Gemini CLI 改造而來，在解析器層面和提示詞上做了適配，讓它能充分發揮 Qwen3-Coder 模型的能力。有兩點讓它在設計場景中尤其值得關注：它是一個強大的 agent 化編碼模型，能從一個自然語言任務出發，自己規劃、編輯檔案、跑構建和驗證閉環；它的超大上下文視窗能一次性裝下整套設計系統和程式碼庫。配上恰當的參考、規範和一套驗證閉環，它能構建出真實、響應式的 UI——而且它是開源、BYOK 的，你自帶 key 就能用。這是一份實用的端到端指南，講如何用 Qwen Code 做 UI、前端和設計系統的工作，以及如何用 Open Design 把它接入一套結構化的設計工作流。", "本文涵蓋：Qwen Code 究竟是什麼，為什麼一個強編碼模型加超大上下文契合設計，如何從零搭好它，參考到 UI 的閉環，QWEN.md 和 MCP 如何擴充套件它，它與 Codex、Claude Code、Cursor、Gemini CLI 相比如何，那些讓 AI 產出顯得平庸的坑，以及 Open Design 如何作為一個開放、本地優先的設計層補上缺口——這是一對天然組合，因為兩者都開源、都跑在你自己的機器上。"], "heroImage": {"src": "/agents/qwen-design/qwen-design-hero.webp", "alt": "Qwen Code 設計反饋閉環：終端 agent 讀取一張參考圖、瀏覽器渲染 UI、一個工作區，外加一條迴環的反饋箭頭", "caption": "核心閉環：Qwen Code 在終端裡讀取你的參考，在真實瀏覽器裡構建並驗證 UI，並對照參考反覆迭代——整套設計系統始終在上下文裡。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-qwen", "label": "Qwen Code 究竟是什麼"}, {"id": "why-design", "label": "為什麼強編碼模型 + 超大上下文契合設計"}, {"id": "setup", "label": "從零搭好用於設計的 Qwen Code"}, {"id": "screenshot-workflow", "label": "參考到 UI 的工作流"}, {"id": "extend", "label": "QWEN.md、MCP 和擴充套件"}, {"id": "vs", "label": "Qwen Code vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "坑，以及那種「AI 味」外觀"}, {"id": "open-design", "label": "在 Open Design 中用 Qwen Code 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-qwen", "heading": "Qwen Code 究竟是什麼", "blocks": [{"kind": "p", "text": "Qwen Code 是阿里巴巴為終端釋出的開源（Apache-2.0）AI agent。它讀取你的倉庫、編輯檔案、執行 shell 命令、上網檢索——從自然語言任務出發去規劃和驗證工作，而不只是補全幾行程式碼。它由 Google 的 Gemini CLI 改造而來，在解析器層面和提示詞上做了調優，以釋放 Qwen3-Coder 模型在 agent 化編碼任務上的能力。"}, {"kind": "p", "text": "對設計工作來說，有兩個特性格外突出。它是一個強大的 agent 化編碼器，能拿著一份參考和一份清晰的需求去構建、執行並自我糾正出響應式 UI。而 Qwen3-Coder 模型自帶超大上下文視窗，大到足以一次性裝下你整套設計系統、元件庫和參考集，而不必把它們壓縮概括掉。"}, {"kind": "steps", "items": [{"label": "上下文檔案", "body": "Qwen Code 會讀取一個 QWEN.md 檔案作為持久的專案上下文——這正是編寫你的設計規範、tokens 和評審清單的天然位置。個人和專案級設定會層層疊加在其上。"}, {"label": "內建工具 + MCP", "body": "它開箱即帶檔案、shell 和 web 工具，並支援 MCP server（在 ~/.qwen/settings.json 的 mcpServers 下配置），以接入像即時 Figma 檔案這樣的外部上下文。"}, {"label": "從 BYOK 起步", "body": "你自帶 key——一個 DashScope（阿里雲百鍊）API key，或任意 OpenAI 相容端點，或 ModelScope——並在 settings.json 中配置。"}]}, {"kind": "ul", "items": ["廠商：Alibaba", "憑證：DashScope / Qwen API key（BYOK），或 OpenAI 相容端點 / ModelScope", "許可：Apache-2.0，開源（由 Gemini CLI 改造而來）"]}]}, {"id": "why-design", "heading": "為什麼強編碼模型和超大上下文契合設計", "blocks": [{"kind": "p", "text": "Qwen Code 的設計優勢來自兩個特性——但和每個 agent 一樣，審美仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "強大的 agent 化編碼", "body": "Qwen3-Coder 模型針對 agent 化任務做了調優，因此這個 agent 會規劃、編輯、跑構建並自我糾正——把一份清晰的參考和需求變成響應式標記，而不是一錘子的瞎猜。"}, {"label": "超大上下文視窗", "body": "Qwen3-Coder 的超大上下文意味著整套設計系統、tokens 和許多參考狀態能一次性裝下，於是 agent 會複用你真實的基礎原語，而不是憑空造出一次性的樣式。"}, {"label": "QWEN.md 裡的規範", "body": "一份 QWEN.md（加上 Figma MCP server）把 agent 指向你的 tokens、元件和真實規格，於是它是對著一個品牌幹活，而不是套用一套預設外觀。"}]}, {"kind": "image", "src": "/agents/qwen-design/qwen-design-taste-triangle.webp", "alt": "圖示：設計系統、skill 和參考圖匯聚成優質的設計產出", "caption": "審美來自你提供的三個輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個教訓和每個 agent 教給我們的一樣：Qwen Code 預設並不具備審美。當你給它約束時——一套設計系統、一個審美 skill 和具體的參考——它才能產出好設計。Open Design 恰恰把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零搭好用於設計工作的 Qwen Code", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Qwen Code 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Qwen Code（Node 22+）\nnpm install -g @qwen-code/qwen-code@latest\n# 或：brew install qwen-code\n\n# 2. 在你的專案裡啟動它，首次執行時完成認證\ncd your-project\nqwen              # 執行 /auth，或在 ~/.qwen/settings.json 裡設定一個 key\n\n# 3. 在 settings.json 裡配置一個 DashScope（OpenAI 相容）key\n#    baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1\n#    model:   qwen3-coder-plus   （設定 DASHSCOPE_API_KEY）\n\n# 4. 新增一個 QWEN.md 並接好 Figma MCP server（可選）\n#    在 ~/.qwen/settings.json 的 \"mcpServers\" 下新增 MCP"}, {"kind": "image", "src": "/agents/qwen-design/qwen-design-setup-flow.webp", "alt": "五步搭建流程：安裝、認證、配置 QWEN.md、新增 skill、驗證", "caption": "搭建順序：安裝 → 認證 → 配置 QWEN.md → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "寫下你的設計規則", "body": "把你的 tokens、基礎原語和規範放進 QWEN.md，並讓 Qwen Code 指向它們，這樣產出會貼合一個品牌，而不是退回到一套通用外觀。"}, {"label": "加入瀏覽器驗證", "body": "接好一個 Playwright 或瀏覽器 MCP，讓 Qwen Code 在真實瀏覽器裡渲染，並跨斷點檢查產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "參考到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Qwen Code 收益最高的設計閉環，是把一份參考變成可用的響應式 UI，並反覆迭代直到匹配——依靠 agent 去構建、渲染，並把產出對照參考做比較。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考開始——並描述多個狀態（桌面與移動、懸停、空態、載入中），而不只是一張主視覺。", "提示詞要具體；含糊的提示詞即便用強模型也只會產出通用 UI。", "把你的設計系統和規範放在 QWEN.md 裡，並告訴 Qwen Code tokens 和標準基礎原語在哪裡。", "跑一個 dev server，讓 Qwen Code 在真實瀏覽器裡渲染，調整到各個斷點尺寸來檢查結果。", "通過讓 Qwen Code 把它的實現對照參考做比較來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "用 @ 引用一個檔案把它附到提示詞裡，然後給出具體約束："}, {"kind": "code", "lang": "bash", "code": "qwen\n# 在提示詞裡：\n> @reference-desktop.png @reference-mobile.png\n  Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens from QWEN.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the references\n  across breakpoints."}, {"kind": "p", "text": "把提示詞保持小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Qwen Code），這樣每一輪都在一個乾淨的基礎上推進。"}]}, {"id": "extend", "heading": "QWEN.md、MCP 和擴充套件", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Qwen Code 能勝任持續的設計工作，而這三者都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "QWEN.md 上下文", "body": "專案規則放在倉庫根目錄的 QWEN.md 裡（帶全域性層和專案層）。它是你設計規範的長久歸宿，每次執行都會被讀取。"}, {"label": "MCP server", "body": "在 ~/.qwen/settings.json 的 mcpServers 下配置 MCP server——這是引入設計上下文和外部工具的可移植方式，其中最相關的是 Figma MCP server，它們能跨 agent 通用，而不只服務於 Qwen Code。"}, {"label": "skill 與內建工具", "body": "Qwen Code 的 skill 以及它內建的檔案、shell 和 web 工具，讓它無需離開終端就能收集參考並執行驗證閉環。"}]}, {"kind": "p", "text": "這些都是可移植、跨 agent 的能力——正是 Open Design 旨在編排的那類東西，而不是在每個專案裡重新造一遍。"}]}, {"id": "vs", "heading": "做設計時 Qwen Code vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，老練的團隊會把它們疊著用。一個公允的概括："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Qwen Code", "在開放的 Qwen3-Coder 模型上具備強大的 agent 化編碼能力，外加超大上下文；開源且 BYOK", "開源、key 靈活、且能把整套設計系統裝進上下文的構建"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委託式非同步構建與可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和理解程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和行內編輯的視覺化「構建即所見」閉環", "在 IDE 內緊湊的「邊改邊看」UI 工作"], ["Gemini CLI", "強大的多模態影像理解與 1M-token 上下文；Qwen Code 正是由它改造而來", "大量截圖的工作與超大上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人類——它們在沒有 skill、參考和約束時，都會預設退回一套通用審美。這才是真正要解決的問題——而它是設計工具形狀的，不是模型形狀的。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避開那種「AI 味」外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來很通用——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一股「Inter 字型加紫色」的味道，「一看就是 AI 做的」。其他被反映的問題還包括移動端佈局崩壞、以及指令洩漏進 UI 文案裡。這些都不是 Qwen Code 獨有的；任何 agent 在缺少精選設計上下文時執行，都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會逼著 agent 篤定一個真實的方向，而不是套用預設外觀。"}, {"label": "在真實瀏覽器裡驗證", "body": "讓 agent 跨斷點渲染並自檢，這樣佈局就不會在移動端悄悄崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖，是對產出質量最大的單一槓杆。"}, {"label": "把規則寫進 QWEN.md", "body": "把諸如「不要 hero 卡片、最多兩種字型、品牌優先的層級」這類風格規則，放在 agent 每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "注意到了嗎，每一項緩解措施都是在給 agent 一份精選的設計上下文。逐個專案手工維護這份上下文，正是 Open Design 替你免去的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Qwen Code 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一再呼喚的那個開源設計層。它把 Qwen Code 當作一等公民介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染管線，以及一個本地桌面 UI 把它包起來——於是讓 Qwen Code 好用的那份設計上下文，從第一次執行就在那裡，而不必每次手工拼湊。兩者都開源、都本地優先，這讓這對組合天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Qwen Code 作為你的 agent。", "用你的 DashScope 或 Qwen API key 認證（BYOK）——憑證留在你自己的機器上，絕不經我們中轉。", "選一套設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都留在你自己的倉庫裡，而非託管雲端。"]}, {"kind": "p", "text": "同一個 Qwen Code agent、同一個 key——外加圍繞它的一套真實、可移植、開源的設計工作流。它本地優先、Apache-2.0，所以你的工作和憑證都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Qwen Code 真能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Qwen Code 就能產出生產級的響應式 UI，並且它的 agent 化閉環會構建、渲染，並對照參考驗證產出。缺了這份上下文，它往往會退回一套通用外觀，而這正是 Open Design 填補的缺口。"}, {"name": "用 Qwen Code 做設計需要付費嗎？", "text": "Qwen Code 免費且開源，但它是 BYOK——你自帶一個 DashScope（阿里雲百鍊）API key、一個 OpenAI 相容端點，或 ModelScope。阿里巴巴也提供一個固定費用的編碼套餐。無論哪種方式，Open Design 都絕不中轉你的憑證。"}, {"name": "Qwen Code 具體好在哪裡適合做設計？", "text": "兩點：Qwen3-Coder 模型針對 agent 化編碼做了調優，於是 agent 會構建並自我糾正出響應式 UI；它們的超大上下文能一次性裝下整套設計系統和參考集。兩者都有幫助——但審美仍然來自你提供的設計系統、skill 和參考。"}, {"name": "Qwen Code 和 Gemini CLI 是一回事嗎？", "text": "不是。Qwen Code 由 Google 的 Gemini CLI 改造而來——同源的開源血統——在解析器層面和提示詞上做了適配，以針對 Qwen3-Coder 模型調優。Open Design 兩者都支援，所以你能在不改設計工作流的前提下切換 agent。"}, {"name": "我怎麼把 Qwen Code 連到 Figma？", "text": "在 ~/.qwen/settings.json 的 mcpServers 下新增 Figma MCP server。然後 Qwen Code 就能拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼貼合原始檔，而不是近似猜測。"}, {"name": "Open Design 和 Alibaba 或 Qwen 有關聯嗎？", "text": "沒有。Qwen Code 是 Alibaba 的產品；Open Design 是一個獨立的開源專案，把它作為一等公民介面卡來支援。Qwen 是 Alibaba 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先、Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 DashScope 或 Qwen 憑證由你的 agent 直接使用，絕不經 Open Design 的伺服器路由。"}], "ctaTitle": "用開放的方式，跟 Qwen Code 一起做設計。", "ctaBody": "自帶你的 DashScope 或 Qwen API key，把每個檔案都留在本地，並圍繞你已經在用的 agent 獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Qwen Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'grok': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['grok']!,
+      title: "用於設計的 Grok Build — Open Design",
+      description: "人們如何使用 xAI 的 Grok Build（Grok Build）做 UI 與網頁設計——它的計劃模式、AGENTS.md 和 MCP、能識別影像的 Grok 模型以及超大上下文——以及 Open Design 如何把 Grok Build 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Grok Build",
+      label: "Agent · Grok Build",
+      heading: "用於設計的 Grok Build。",
+      lead: "Grok Build 是 xAI 的終端編碼 agent。它在動你的檔案之前先規劃好多步工作，把影像和程式碼一起讀取，並在你的倉庫裡跑構建並驗證的迴圈——只要你給它參考、規範和一個驗證環節，它就能成為一個真正的設計工具。Open Design 把它接入開源設計工作流：用你的 SuperGrok 登入或 xAI API key，操作你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Grok Build 變成一個本地優先、開源的設計 agent——用你的 SuperGrok 登入或 xAI API key，操作你自己的檔案，並在外圍配上一套精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Grok Build", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Grok Build——xAI 的終端編碼 agent，以 Grok Build 之名釋出——是一個駐留在你終端裡的 agentic 工具。有兩點讓它對設計尤其有意思：它在動手之前會先規劃有風險的工作，所以你可以在任何檔案改動之前審查它提出的方案；而且它的 Grok 模型支援影像輸入，因此它能在編寫程式碼的同時對一張參考截圖進行推理。配上恰當的參考、規範和一個驗證迴圈，它能構建出真實、響應式的 UI——直接通過你的 SuperGrok 或 X Premium+ 賬戶進行身份驗證，無需折騰 API key。這是一份實用的端到端指南，教你如何用 Grok Build 做 UI、前端和設計系統工作，並把它接入 Open Design 提供的結構化設計工作流。", "本文涵蓋：Grok Build 究竟是什麼，為什麼計劃模式和能識別影像的模型契合設計，如何從零開始搭建它，截圖到 UI 的迴圈，AGENTS.md 和 MCP 如何擴充套件它，它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比，讓 AI 產出顯得千篇一律的那些陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合差距——你的憑證和產物從不離開你的機器。"], "heroImage": {"src": "/agents/grok-design/grok-design-hero.webp", "alt": "Grok Build 設計反饋迴圈：一個終端 agent 依據參考圖進行規劃，一個瀏覽器渲染 UI，以及一個工作區，反饋箭頭回流形成閉環", "caption": "核心迴圈：Grok Build 在終端裡依據你的參考進行規劃，在真實瀏覽器中構建並驗證 UI，並對照參考反覆迭代——你的規範則寫在 AGENTS.md 裡。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-grok", "label": "Grok Build 究竟是什麼"}, {"id": "why-design", "label": "為什麼計劃模式 + 影像輸入契合設計"}, {"id": "setup", "label": "從零搭建用於設計的 Grok Build"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "AGENTS.md、MCP 與子 agent"}, {"id": "vs", "label": "Grok Build vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與“AI 味”觀感"}, {"id": "open-design", "label": "在 Open Design 中用 Grok Build 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-grok", "heading": "Grok Build 究竟是什麼", "blocks": [{"kind": "p", "text": "Grok Build 是 xAI 的終端編碼 agent，以 Grok Build 之名釋出。它讀取你的倉庫、編輯檔案、執行 shell 命令，並依據自然語言任務規劃多步工程工作，而不只是補全程式碼行。它圍繞 xAI 的 Grok 模型構建——在 xAI API 上以 grok-build 模型家族的形式暴露——並通過你的 xAI 賬戶進行身份驗證，因此 agent 和模型都出自同一家廠商。"}, {"kind": "p", "text": "對設計工作來說，有兩個特性尤為突出。它有一個計劃模式，會先草擬一份結構化方案，供你在任何改動落地之前批准、評論或重寫——當你在迭代 UI 時，這是個很有用的關卡。而它的 Grok 模型支援影像輸入，所以你可以把一張參考截圖交給它，它會對實際佈局進行推理，而不是從一段文字描述裡瞎猜。"}, {"kind": "steps", "items": [{"label": "上下文檔案", "body": "Grok Build 會讀取 AGENTS.md 檔案來獲取持久的專案上下文——這正是用來編碼你的設計規範、tokens 和審查清單的自然位置。它遵循 Codex 和其他 agent 同樣使用的開放 AGENTS.md 約定。"}, {"label": "工具、MCP + 子 agent", "body": "它能編輯檔案、執行 shell 命令，並支援 MCP 伺服器來引入外部上下文，比如一個即時的 Figma 檔案；對於較大的任務，它可以委派給並行的子 agent，讓它們同時進行調研、構建和審查。"}, {"label": "用你的賬戶登入", "body": "你通過瀏覽器以 SuperGrok 或 X Premium+ 訂閱登入來完成身份驗證；你也可以帶上自己的 xAI API key 用於無頭執行和 CI 場景。"}]}, {"kind": "ul", "items": ["廠商：xAI", "憑證：xAI SuperGrok OAuth（`grok login`），或用於無頭場景的 xAI API key（BYOK）", "模型：xAI Grok 模型（xAI API 上的 grok-build 家族），支援影像輸入"]}]}, {"id": "why-design", "heading": "為什麼計劃模式和能識別影像的模型契合設計", "blocks": [{"kind": "p", "text": "Grok Build 的設計優勢來自兩個特性——但和所有 agent 一樣，品味仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "能識別影像的推理", "body": "因為 Grok 模型支援影像輸入，agent 能讀取參考截圖——把自己渲染出的產出與影像對照，而不是從一段文字描述裡瞎猜。"}, {"label": "改動落地前的計劃模式", "body": "計劃模式會草擬一份結構化方案，供你在檔案改動前批准，於是設計意圖在一開始就被審查，而不是等差異出來之後才發現。"}, {"label": "寫在 AGENTS.md 裡的規範", "body": "一份 AGENTS.md（再加上 Figma MCP 伺服器）會把 agent 指向你的 tokens、元件和真實規格，讓它針對一個品牌來工作，而不是套用預設觀感。"}]}, {"kind": "image", "src": "/agents/grok-design/grok-design-taste-triangle.webp", "alt": "示意圖展示設計系統、skill 和參考圖匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一個設計系統、一個 skill 和真實的參考圖。"}, {"kind": "p", "text": "這條教訓和每個 agent 教給我們的一樣：Grok Build 預設並不具備品味。當你給它約束時——一個設計系統、一個審美 skill 和具體的參考——它才會產出好的設計。Open Design 恰恰把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始搭建用於設計工作的 Grok Build", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Grok Build 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 在 macOS/Linux 上安裝 Grok Build（Grok Build）\ncurl -fsSL https://x.ai/cli/install.sh | bash\n\n# 2. 在你的專案裡啟動它，並在首次執行時進行身份驗證\ncd your-project\ngrok login   # 開啟瀏覽器；用 SuperGrok / X Premium+ 登入\n#   或者，對於無頭 / CI 場景，設定 xAI API key：\n#   export XAI_API_KEY=xai-...\n\n# 3. 新增專案上下文\n#    在倉庫根目錄建立一個 AGENTS.md，寫入你的設計規範\n\n# 4. 接入 Figma MCP 伺服器（可選，用於設計交付）\n#    把它加到你的 MCP 伺服器配置裡"}, {"kind": "image", "src": "/agents/grok-design/grok-design-setup-flow.webp", "alt": "五步搭建流程：安裝、身份驗證、配置 AGENTS.md、新增 skill、驗證", "caption": "搭建順序：安裝 → 身份驗證 → 配置 AGENTS.md → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元素和規範寫進 AGENTS.md 並讓 Grok 指向它們，這樣產出就會貼合一個品牌，而不是退回到千篇一律的預設觀感。"}, {"label": "加入瀏覽器驗證", "body": "接入 Playwright 或瀏覽器 MCP，讓 Grok 在真實瀏覽器中渲染，並跨斷點檢查它的產出，而不僅僅是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Grok Build 時槓桿最高的設計迴圈，就是把一張參考圖變成可用的響應式 UI 並不斷迭代直到吻合——靠計劃模式就方案達成一致，靠能識別影像的模型把產出與參考對照。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發——幷包含多種狀態（桌面端和移動端、hover、空態、載入態），而不只是一張主視覺。", "在提示裡寫具體；含糊的提示即使配上強模型也只會產出千篇一律的 UI。", "把你的設計系統和規範放進 AGENTS.md，並告訴 Grok tokens 和規範基礎元素在哪裡。", "用計劃模式審查方案，然後啟動一個 dev server，讓 Grok 在真實瀏覽器中渲染，調整到各個斷點來檢查結果。", "通過讓 Grok 把自己的實現與截圖對照來迭代——而不僅僅是確認它能構建。"]}, {"kind": "p", "text": "附上你的參考圖，並給出具體約束："}, {"kind": "code", "lang": "bash", "code": "grok\n# 在提示裡（附上 reference-desktop.png 和 reference-mobile.png）：\n> 用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  複用我已有的設計系統元件和 AGENTS.md 裡的 tokens。\n  匹配間距、佈局和層級；做成響應式。\n  先把方案給我看，然後在瀏覽器裡渲染並迭代，\n  直到它在各個斷點上都與參考吻合。"}, {"kind": "p", "text": "讓提示保持小而聚焦，提交好的迭代、回退差的迭代（回退時告訴 Grok），這樣每一輪都能在一個乾淨的基礎上推進。"}]}, {"id": "extend", "heading": "AGENTS.md、MCP 與子 agent", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Grok Build 適合持續的設計工作，而這三者都能幹淨地對映到一個開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "AGENTS.md 上下文", "body": "專案規則寫在倉庫根目錄的 AGENTS.md 裡。它是你設計規範的持久歸宿，每次執行都會被讀取——而且它是其他 agent 也能理解的同一種開放格式，所以這些規則會隨你一起遷移。"}, {"label": "MCP 伺服器", "body": "配置 MCP 伺服器來引入設計上下文和外部工具，其中最相關的是 Figma MCP 伺服器——它是把真實規格喂進程式碼的可移植方式，跨 agent 通用，不只限於 Grok。"}, {"label": "子 agent 與內建工具", "body": "Grok Build 能派生出並行的子 agent 來同時進行調研、構建和審查，而它的檔案、shell 和搜尋工具讓它無需離開終端就能收集參考並跑完驗證迴圈。"}]}, {"kind": "p", "text": "這些都是可移植的多 agent 能力——正是 Open Design 旨在編排、而非在每個專案裡重造的那類東西。"}]}, {"id": "vs", "heading": "做設計時 Grok Build vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，經驗豐富的團隊會把它們疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Grok Build", "改動落地前的計劃模式審查、能識別影像的 Grok 模型，以及並行子 agent；用你的 SuperGrok 賬戶登入", "在迴圈中帶著 xAI 模型、經過審查、計劃優先的 UI 構建"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委派式非同步構建與可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）以及理解程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的視覺化構建即所見迴圈", "在 IDE 內進行緊湊的迭代即觀察 UI 工作"], ["Gemini CLI", "強大的多模態影像理解和超大上下文；開源且帶免費額度", "截圖密集的工作，以及把整個設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——沒有 skill、參考和約束，它們全都會退回到千篇一律的審美。這才是真正要解決的問題——而它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開“AI 味”觀感", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一股 Inter 字型加紫色的味道，“一看就是 AI 做的”。其他被反映的問題還包括移動端佈局崩壞，以及指令文字洩漏進 UI 文案。這些都不是 Grok Build 獨有的；任何 agent 在沒有精選設計上下文的情況下執行都會這樣。"}, {"kind": "steps", "items": [{"label": "加入一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 承諾一個真實的方向，而不是套用預設觀感。"}, {"label": "在真實瀏覽器中驗證", "body": "跨斷點渲染並自檢，讓佈局不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是對產出質量影響最大的那個槓桿。"}, {"label": "把規則編碼進 AGENTS.md", "body": "把“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類規則放到 agent 每次執行都會讀取的地方。"}]}, {"kind": "p", "text": "注意，每一種緩解辦法都是在給 agent 一份精選的設計上下文。手工地、按專案維護這份上下文，正是 Open Design 替你免去的苦差事。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Grok Build 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一直在呼喚的開源設計層。它把 Grok Build 當作一等介面卡，並在外圍包上一套精選的 skill 與設計系統庫、一條結構化的渲染管線，以及一個本地桌面 UI——於是讓 Grok 表現出色的那份設計上下文從第一次執行起就已就位，而不必每次都手工拼湊。Open Design 是獨立的、採用 Apache-2.0 協議，並執行在你自己的機器上，這讓二者天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Grok Build 作為你的 agent。", "用你的 SuperGrok 賬戶或 xAI API key（BYOK）進行身份驗證——憑證留在你的機器上，從不經我們中轉。", "挑一個設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管雲端。"]}, {"kind": "p", "text": "同一個 Grok Build agent、同一套憑證——外加在外圍包裹的一套真實、可移植、開源的設計工作流。它本地優先、採用 Apache-2.0，所以你的工作和憑證全都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Grok Build 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一個設計系統和真實的參考圖，Grok Build 就能產出生產級、響應式的 UI，而它能識別影像的 Grok 模型還能幫你把產出與參考對照驗證。沒有這份上下文，它往往會退回到千篇一律的觀感，而這正是 Open Design 要填補的缺口。"}, {"name": "我該如何對 Grok Build 進行身份驗證？", "text": "你通過瀏覽器以 SuperGrok 或 X Premium+ 訂閱登入（`grok login`），所以無需管理 API key。對於無頭或 CI 場景，你可以改用 xAI API key。無論哪種方式，Open Design 都不會中轉你的憑證。"}, {"name": "Grok Build 具體好在哪裡、適合設計？", "text": "兩點：它的計劃模式讓你在任何改動落地前審查方案，而它的 Grok 模型支援影像輸入，所以它能很好地讀取參考截圖。兩者都有幫助——但品味仍然來自你提供的設計系統、skill 和參考。"}, {"name": "前端設計該選 Grok Build 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體的、理解程式碼庫的設計決策著稱；Grok Build 的優勢在於計劃模式審查和能識別影像的 xAI 模型。很多團隊兩者都用——Open Design 讓你在不改變設計工作流的前提下切換 agent。"}, {"name": "我該如何把 Grok Build 連線到 Figma？", "text": "把 Figma MCP 伺服器加到你的 MCP 配置裡。這樣 Grok 就能拉取真實的設計上下文——元件、變數、佈局資料——於是生成的程式碼會匹配原始檔，而不是近似模仿。"}, {"name": "Open Design 隸屬於 xAI 嗎？", "text": "不是。Grok Build 是 xAI 的產品；Open Design 是一個獨立的開源專案，以一等介面卡的方式支援它。Grok 是 xAI 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，而你的 xAI 憑證由你的 agent 直接使用，絕不會經過 Open Design 的伺服器路由。"}], "ctaTitle": "用 Grok Build 做設計，以開放的方式。", "ctaBody": "帶上你自己的 SuperGrok 賬戶或 xAI API key，讓每一個檔案都留在本地，並在你已經在用的 agent 外圍獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Grok Build", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'kimi': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['kimi']!,
+      title: "用於設計的 Kimi CLI — Open Design",
+      description: "人們如何使用 Moonshot AI 的 Kimi CLI 進行 UI 和網頁設計——藉助其 Kimi K2 智慧體模型、超大上下文、AGENTS.md 與 MCP——以及 Open Design 如何把 Kimi CLI 變成一個本地優先、開源的設計智慧體。",
+      breadcrumb: "Kimi CLI",
+      label: "智慧體 · Kimi CLI",
+      heading: "用於設計的 Kimi CLI。",
+      lead: "Kimi CLI 是 Moonshot AI 推出的開源終端智慧體，由 Kimi K2 系列模型驅動。它強大的智慧體式編碼能力和超大上下文視窗，讓它能夠裝下整套設計系統並對照參考稿反覆迭代——只要你給它約定和一套驗證閉環，它就會成為真正的設計工具。Open Design 把它接入了一套開源的設計工作流：用你自己的 Moonshot API 金鑰、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Kimi CLI 變成一個本地優先、開源的設計智慧體——用你自己的 Moonshot API 金鑰、你自己的檔案，外加一套環繞它的精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Kimi CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Kimi CLI 是 Moonshot AI 面向終端推出的開源 AI 智慧體。有兩點讓它在設計場景中格外值得關注：它由 Kimi K2 系列驅動——這是一個萬億引數的混合專家模型，專為智慧體式編碼與工具呼叫精心最佳化；而這個模型還帶有超大上下文視窗（近期 K2 版本可達 256k tokens），足以一次性裝下整套設計系統和程式碼庫。配合恰當的參考稿、約定和一套驗證閉環，它能構建出真正可用的響應式 UI——你可以從 OAuth 登入起步，也可以用自己的 Moonshot API 金鑰。本文是一份實用的端到端指南，講述如何用 Kimi CLI 做 UI、前端和設計系統方面的工作，並把它接入由 Open Design 支撐的結構化設計工作流。", "內容涵蓋：Kimi CLI 究竟是什麼，為什麼它智慧體式的 Kimi K2 模型和超大上下文適合做設計，如何從零開始把它配置起來，從參考稿到 UI 的閉環，AGENTS.md、MCP 與子智慧體如何擴充套件它，它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比，哪些坑會讓 AI 產物看起來千篇一律，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合落差——這是一對天然的搭配，因為兩者都是開源的、都執行在你自己的機器上。"], "heroImage": {"src": "/agents/kimi-design/kimi-design-hero.webp", "alt": "Kimi CLI 設計反饋閉環：一個終端智慧體讀取參考圖、一個瀏覽器渲染 UI、一個工作區，外加一條迴流的反饋箭頭", "caption": "核心閉環：Kimi CLI 在終端裡讀取你的參考稿，在真實瀏覽器中構建並驗證 UI，對照參考不斷迭代——而整套設計系統都在上下文之中。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-kimi", "label": "Kimi CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼智慧體式 K2 + 超大上下文適合做設計"}, {"id": "setup", "label": "為設計配置 Kimi CLI（從零開始）"}, {"id": "screenshot-workflow", "label": "從參考稿到 UI 的工作流"}, {"id": "extend", "label": "AGENTS.md、MCP 與子智慧體"}, {"id": "vs", "label": "Kimi CLI 對比 Codex、Claude Code、Cursor 與 Gemini CLI"}, {"id": "pitfalls", "label": "常見坑與“AI 味”外觀"}, {"id": "open-design", "label": "在 Open Design 中用 Kimi CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-kimi", "heading": "Kimi CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Kimi CLI 是 Moonshot AI 面向終端釋出的一款開源（Apache-2.0）AI 智慧體。它會讀取你的倉庫、編輯檔案、執行 shell 命令、搜尋檔案、抓取網頁，並根據得到的反饋決定下一步——它從自然語言任務出發去規劃和驗證工作，而不僅僅是補全程式碼行。它是一個 Python 工具，用 uv 安裝，背後驅動著 Kimi K2 模型家族。"}, {"kind": "p", "text": "在設計工作中，有兩個特性尤為突出。Kimi K2 模型明確針對智慧體式、長鏈路的編碼與工具呼叫做了調優，因此智慧體能把一項多步驟的構建任務一直推進到可用的結果。而上下文視窗在近期 K2 版本中可達 256k tokens，足以一次性裝下你的整套設計系統、元件庫和參考集，而不必把它們壓縮概括掉。"}, {"kind": "steps", "items": [{"label": "上下文檔案", "body": "Kimi CLI 會讀取一個 AGENTS.md 檔案作為持久的專案上下文——這正是編寫你的設計約定、tokens 和評審清單的天然之處。對於尚未配置的專案，執行 /init 即可為其生成一個。"}, {"label": "MCP、ACP + 子智慧體", "body": "它通過 /mcp-config 以對話方式管理 MCP 伺服器，通過 Agent Client Protocol（kimi acp）把會話暴露給 Zed 和 JetBrains，並能在隔離的上下文中排程內建的 coder、explore 和 plan 子智慧體。"}, {"label": "登入或 BYOK", "body": "首次啟動時，/login 讓你通過 OAuth（Kimi Code）授權，或輸入你自己的 Moonshot API 金鑰；Kimi 的平臺還提供 OpenAI 相容和 Anthropic 相容的端點。"}]}, {"kind": "ul", "items": ["廠商：Moonshot AI", "憑證：Moonshot API 金鑰（BYOK），或通過 Kimi Code 進行 OAuth 登入", "許可證：Apache-2.0，開源"]}]}, {"id": "why-design", "heading": "為什麼智慧體式 K2 模型和超大上下文適合做設計", "blocks": [{"kind": "p", "text": "Kimi CLI 的設計優勢來自兩項模型特性——但和所有智慧體一樣，審美品味仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "智慧體式、長鏈路編碼", "body": "Kimi K2 模型針對工具呼叫和多步驟工作做了最佳化，因此智慧體能拿著參考稿和需求說明，真正去構建、執行並打磨 UI，而不是止步於初稿。"}, {"label": "超大上下文視窗", "body": "近期 K2 版本可達 256k tokens，意味著整套設計系統、tokens 和大量參考狀態能一次性裝下，於是智慧體會複用你真實的基礎元素，而不是憑空造出一次性的樣式。"}, {"label": "把約定寫進 AGENTS.md", "body": "一份 AGENTS.md（外加一個像 Figma 這樣的 MCP 伺服器）把智慧體指向你的 tokens、元件和真實規範，於是它是在對照某個品牌工作，而不是套用預設外觀。"}]}, {"kind": "image", "src": "/agents/kimi-design/kimi-design-taste-triangle.webp", "alt": "示意圖，展示設計系統、skill 和參考圖匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這條教訓和每個智慧體教會我們的都一樣：Kimi CLI 預設並不具備品味。當你給它約束——一套設計系統、一個審美 skill 和具體的參考稿——它就能產出優秀的設計。Open Design 恰恰把這些輸入打包好了，這也是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始為設計工作配置 Kimi CLI", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Kimi CLI 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Kimi CLI（使用 uv；Python 3.12–3.14，推薦 3.13）\ncurl -LsSf https://code.kimi.com/install.sh | bash\n# 或者，如果你已經裝了 uv：\nuv tool install --python 3.13 kimi-cli\n\n# 2. 在你的專案中啟動它，並在首次執行時完成認證\ncd your-project\nkimi              # 然後執行 /login：通過 Kimi Code 進行 OAuth，或貼上一個 Moonshot API 金鑰\n\n# 3. 生成專案上下文\n/init             # 為該專案生成一個 AGENTS.md\n\n# 4. 接入一個 MCP 伺服器（可選，例如用 Figma 做設計交付）\n/mcp-config       # 以對話方式新增、編輯和認證 MCP 伺服器"}, {"kind": "image", "src": "/agents/kimi-design/kimi-design-setup-flow.webp", "alt": "五步配置流程：安裝、認證、配置 AGENTS.md、新增 skill、驗證", "caption": "配置順序：安裝 → 認證 → 配置 AGENTS.md → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則寫下來", "body": "把你的 tokens、基礎元素和約定寫進 AGENTS.md 並讓 Kimi 指向它們，這樣產出就會貼合某個品牌，而不是退回到千篇一律的外觀。"}, {"label": "加上瀏覽器驗證", "body": "接入一個 Playwright 或瀏覽器 MCP，讓 Kimi 在真實瀏覽器中渲染，並在各個斷點上檢查產出，而不只是確認構建能通過。"}]}]}, {"id": "screenshot-workflow", "heading": "從參考稿到 UI 的工作流", "blocks": [{"kind": "p", "text": "在 Kimi CLI 上收益最高的設計閉環，就是把參考素材轉化為可用的響應式 UI，並不斷迭代直到匹配——把參考稿餵給智慧體，讓它在真實瀏覽器中把渲染產出與參考稿對照回看。"}, {"kind": "ol", "items": ["從你手頭最清晰的參考稿出發——並且包含多種狀態（桌面端和移動端、懸停態、空狀態、載入態），而不只是一張主視覺圖。", "在提示詞裡說清楚；含糊的提示詞即便配上強大的智慧體，也會產出千篇一律的 UI。", "把你的設計系統和約定放進 AGENTS.md，並告訴 Kimi tokens 和規範性基礎元素位於何處。", "執行一個開發伺服器，讓 Kimi 在真實瀏覽器中渲染，並調整到各個斷點來檢查結果。", "讓 Kimi 把自己的實現與參考稿對照回看來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "把 Kimi 指向你的參考稿和開發伺服器，然後給出具體的約束："}, {"kind": "code", "lang": "bash", "code": "kimi\n# 在提示詞中：\n> 使用 React + Vite + Tailwind + TypeScript 實現 ./references 中的設計\n  （reference-desktop.png、reference-mobile.png）。\n  複用我已有的設計系統元件，以及 AGENTS.md 中的 tokens。\n  匹配間距、佈局和層級；做成響應式。\n  執行開發伺服器，在瀏覽器中渲染，並不斷迭代，\n  直到它在各個斷點上都與參考稿匹配。"}, {"kind": "p", "text": "讓提示詞保持小而聚焦，提交好的迭代、回退差的迭代（回退時告訴 Kimi），這樣每一輪都建立在一個乾淨的基礎之上。當某個流程難以用文字描述時，Kimi CLI 也可以接收一段簡短的螢幕錄製或演示片段。"}]}, {"id": "extend", "heading": "AGENTS.md、MCP 與子智慧體", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Kimi CLI 能夠勝任持續的設計工作，而且這三者都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "AGENTS.md 上下文", "body": "專案規則存放在倉庫根目錄的 AGENTS.md 中。它是你設計約定的持久歸宿，每次執行都會被讀取——而且它是其他智慧體也在用的同一種可移植格式。"}, {"label": "MCP 伺服器", "body": "用 /mcp-config 以對話方式新增 MCP 伺服器——這是引入設計上下文和外部工具的可移植方式，其中最相關的是 Figma MCP 伺服器，它們能跨智慧體通用，而不只對 Kimi 有效。"}, {"label": "子智慧體與外掛市場", "body": "在隔離的上下文中排程內建的 coder、explore 和 plan 子智慧體，並從市場或任意 GitHub 倉庫安裝 skill、MCP 伺服器和資料來源，用來收集參考稿並跑通驗證閉環。"}]}, {"kind": "p", "text": "這些都是可移植的、跨智慧體的能力——而這恰恰是 Open Design 生來要去編排的東西，而不是每個專案都重造一遍。"}]}, {"id": "vs", "heading": "做設計時 Kimi CLI 對比 Codex、Claude Code、Cursor 與 Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上沒有唯一的贏家——每個智慧體各有所長，有經驗的團隊會把它們疊在一起用。一箇中肯的總結："}, {"kind": "table", "columns": ["智慧體", "設計優勢", "最適合"], "rows": [["Kimi CLI", "針對長鏈路編碼和工具呼叫調優的智慧體式 Kimi K2 模型，搭配超大上下文；開源且 BYOK", "多步驟構建，以及以低成本把整套設計系統裝進上下文"], ["Codex", "憑藉前端 skill 實現出色的視覺打磨；沙箱化的非同步構建", "委派式非同步構建，以及可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（色值、間距、字型）以及理解程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和行內編輯的“邊構建邊看”視覺閉環", "在 IDE 內緊密的“迭代即看”UI 工作"], ["Gemini CLI", "強大的多模態影像理解能力和 1M-token 上下文；免費檔", "大量依賴截圖的工作以及超大上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——它們在沒有 skill、參考稿和約束的情況下，都會退回到一種千篇一律的審美。這才是真正要解決的問題——而它是設計工具形態的問題，不是模型形態的問題。"}]}, {"id": "pitfalls", "heading": "常見坑，以及如何避免“AI 味”外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨就是它看起來千篇一律——柔和漸變、漂浮面板、超大圓角、誇張陰影，一股“一眼就是 AI 做的”的 Inter 加紫色的氣味。其他被反映的問題還包括移動端佈局崩壞，以及指令文字洩漏進 UI 文案。這些都不是 Kimi CLI 獨有的；只要任何智慧體在缺乏精選設計上下文的情況下執行，就會出現這些情況。"}, {"kind": "steps", "items": [{"label": "加上一個審美 skill", "body": "一個精選的設計 skill 會逼著智慧體確立一個真實的方向，而不是套用預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "讓 Kimi 渲染並在各個斷點上自檢，這樣佈局就不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和參考稿", "body": "真實的設計 tokens 和參考截圖是對產出質量影響最大的那個槓桿。"}, {"label": "把規則寫進 AGENTS.md", "body": "把“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類風格規則，放在智慧體每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是關於給智慧體一份精選的設計上下文。逐個專案地用手維護這份上下文，正是 Open Design 幫你免去的苦差事。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Kimi CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面這套工作流一直在呼喚的那個開源設計層。它把 Kimi CLI 當作一等介面卡，並用精選的 skill 與設計系統庫、一條結構化的渲染流水線，以及一個本地桌面 UI 把它包裹起來——於是讓 Kimi 表現出色的那份設計上下文從第一次執行就已就位，無需每次手動拼湊。兩者都是開源、本地優先的，這讓這對組合成為天然的契合。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Kimi CLI 作為你的智慧體。", "用你的 Moonshot API 金鑰認證（BYOK）——憑證留在你的機器上，絕不經我們代理。", "選定一套設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存放在你自己的倉庫裡，而不是託管的雲端。"]}, {"kind": "p", "text": "同一個 Kimi CLI 智慧體、同一把金鑰——外加一套環繞它的、真實可移植的開源設計工作流。它本地優先、採用 Apache-2.0，所以你的工作內容和憑證都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Kimi CLI 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Kimi CLI 就能產出生產級、響應式的 UI，而它智慧體式的 Kimi K2 模型還能渲染產出並對照參考稿做驗證。缺了這份上下文，它往往會退回到千篇一律的外觀，而這正是 Open Design 要填補的落差。"}, {"name": "用 Kimi CLI 做設計需要付費嗎？", "text": "你自帶憑證：通過 Kimi Code 的 OAuth 登入授權，或貼上一個 Moonshot API 金鑰（BYOK），由 Moonshot 平臺計費。無論哪種方式，Open Design 都絕不代理你的憑證。"}, {"name": "Kimi CLI 具體好在哪、為什麼適合設計？", "text": "兩點：Kimi K2 模型針對智慧體式、長鏈路的編碼與工具呼叫做了調優，因此智慧體能一路構建和打磨直到拿出可用的結果；而上下文視窗可達 256k tokens，足以一次性裝下整套設計系統和參考集。兩者都有幫助——但品味仍來自你提供的設計系統、skill 和參考稿。"}, {"name": "前端設計該用 Kimi CLI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體的、理解程式碼庫的設計決策著稱；Kimi CLI 的優勢在於它智慧體式的 Kimi K2 模型，以及帶 BYOK 經濟性的超大上下文。許多團隊兩者都用——Open Design 讓你在不改變設計工作流的前提下切換智慧體。"}, {"name": "我該如何把 Kimi CLI 連線到 Figma？", "text": "在 Kimi CLI 內執行 /mcp-config，來新增並認證 Figma MCP 伺服器。隨後 Kimi 就能拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼貼合源頭，而不是近似還原。"}, {"name": "Open Design 隸屬於 Moonshot AI 嗎？", "text": "不。Kimi CLI 是 Moonshot AI 的產品；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。Kimi 是 Moonshot AI 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先、採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，而你的 Moonshot 憑證由你的智慧體直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，與 Kimi CLI 一起做設計。", "ctaBody": "自帶你的 Moonshot API 金鑰，讓每個檔案都留在本地，併為你已經在用的智慧體配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Kimi CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的智慧體"},
+    },
+    'deepseek': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['deepseek']!,
+      title: "用於設計的 DeepSeek TUI —— Open Design",
+      description: "人們如何用一個由 DeepSeek 驅動的終端編碼 agent 進行 UI 與網頁設計——它強大的編碼模型、100 萬 token 上下文、成本效率、上下文檔案與 MCP——以及 Open Design 如何把 DeepSeek TUI 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "DeepSeek TUI",
+      label: "Agent · DeepSeek TUI",
+      heading: "用於設計的 DeepSeek TUI。",
+      lead: "DeepSeek TUI 是一個由 DeepSeek 模型驅動的終端編碼 agent。它強大且具成本效率的編碼模型，加上 100 萬 token 的上下文，可以一次性容納整套設計系統和程式碼庫，這讓它成為一款真正的設計工具——前提是你給它參考、規範以及一套驗證迴圈。Open Design 把它接入開源設計工作流：用你自己的 DeepSeek API 金鑰、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 DeepSeek TUI 變成一個本地優先、開源的設計 agent——用你自己的 DeepSeek API 金鑰、你自己的檔案，並在它周圍配上一套精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 內使用 DeepSeek TUI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["DeepSeek TUI 是一個由 DeepSeek 模型驅動、基於終端的 AI 編碼 agent。它在設計上之所以值得關注，有兩點：它的編碼模型既強大又異常具成本效率，因此你可以放開手腳地反覆迭代而無需盯著計費表；它的上下文視窗最高可達 100 萬 token，大到足以一次性容納整套設計系統和程式碼庫，而不必把它們壓縮省略掉。配上恰當的參考、規範以及一套驗證迴圈，它就能構建出真正的、響應式的 UI。這是一份實用的端到端指南，講解如何用一個由 DeepSeek 驅動的終端 agent 來做 UI、前端與設計系統相關的工作，並把它接入 Open Design 的結構化設計工作流。", "本文涵蓋：DeepSeek TUI 究竟是什麼，為什麼強大的編碼模型、巨大的上下文和低成本恰好契合設計，如何從零開始把它配置好，從參考到 UI 的迴圈，上下文檔案與 MCP 如何擴充套件它，它與 Codex、Claude Code、Cursor 和 Gemini CLI 相比如何，讓 AI 產出顯得平庸的那些陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這道鴻溝——這是天然的搭配，因為兩者都開源、都跑在你自己的機器上。"], "heroImage": {"src": "/agents/deepseek-design/deepseek-design-hero.webp", "alt": "DeepSeek TUI 設計反饋迴圈：一個終端 agent 讀取參考與規範，一個瀏覽器渲染 UI，以及一個工作區，還有一條反饋箭頭回環", "caption": "核心迴圈：DeepSeek TUI 在終端裡讀取你的參考和規範，在真實瀏覽器中構建並驗證 UI，然後對照它們迭代——而整套設計系統都在上下文裡。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-deepseek", "label": "DeepSeek TUI 究竟是什麼"}, {"id": "why-design", "label": "為什麼強大的編碼模型 + 巨大上下文契合設計"}, {"id": "setup", "label": "為設計配置 DeepSeek TUI（從零開始）"}, {"id": "screenshot-workflow", "label": "從參考到 UI 的工作流"}, {"id": "extend", "label": "上下文檔案、MCP 與工具"}, {"id": "vs", "label": "DeepSeek TUI vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與“AI 味”外觀"}, {"id": "open-design", "label": "在 Open Design 中用 DeepSeek TUI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-deepseek", "heading": "DeepSeek TUI 究竟是什麼", "blocks": [{"kind": "p", "text": "DeepSeek TUI 是一個以鍵盤操作為主、執行 DeepSeek 模型的終端 AI agent。它讀取你的程式碼倉庫、編輯檔案、執行 shell 命令、管理 git，還能搜尋網路——它根據自然語言任務來規劃並驗證工作，而不只是補全程式碼行。DeepSeek 本身是模型提供方：一個與 OpenAI 相容的 API（它還暴露了一個 Anthropic 格式的端點），因此只要設定一個 base URL 和金鑰，就能把大量社群終端 agent 指向 DeepSeek。好幾個開源 TUI 都把 DeepSeek 作為一等公民般的提供方內建支援。"}, {"kind": "p", "text": "對設計工作而言，有三個特性尤為突出。DeepSeek 的編碼模型很強，因此 agent 能根據清晰的描述對佈局、結構和元件層級進行推理。它的上下文視窗最高可達 100 萬 token，大到足以一次性容納你整套設計系統和元件庫。而它的單 token 價格很低，再疊加字首上下文快取——所以圍繞一個設計反覆迭代成本很低。"}, {"kind": "steps", "items": [{"label": "上下文檔案", "body": "終端 agent 會讀取一個專案上下文檔案（AGENTS.md 風格的檔案，或該 agent 自己的約定）以獲取持久規則——這是編碼你的設計規範、tokens 和評審清單的天然位置。"}, {"label": "工具 + MCP", "body": "大多數 DeepSeek TUI 都內建檔案、shell、git 和網路工具，並支援 MCP 伺服器以接入外部上下文，比如一個即時的 Figma 檔案——DeepSeek 的 API 支援工具呼叫，而這些 agent 正依賴於此。"}, {"label": "自帶金鑰", "body": "你用一個來自 DeepSeek 平臺的 DeepSeek API 金鑰進行鑑權。由於該 API 與 OpenAI 相容，把一個 agent 指向 DeepSeek 通常只需兩行：base URL 和金鑰。"}]}, {"kind": "ul", "items": ["廠商：DeepSeek（模型與 API 提供方）", "憑證：來自 DeepSeek 平臺的 DeepSeek API 金鑰（BYOK）", "模型：deepseek-v4-flash 和 deepseek-v4-pro（純文本；無原生影像輸入）"]}]}, {"id": "why-design", "heading": "為什麼強大的編碼模型和巨大上下文契合設計", "blocks": [{"kind": "p", "text": "DeepSeek TUI 的設計優勢來自模型本身及其經濟性——但和每一個 agent 一樣，品味仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "強大且具成本效率的編碼", "body": "DeepSeek 的編碼模型能力強且價格低廉，因此 agent 能很好地推理佈局與結構，而你可以一遍又一遍地迭代，成本不再是約束。"}, {"label": "100 萬 token 的上下文視窗", "body": "大上下文意味著整套設計系統、tokens 以及許多參考狀態都能一次性放進去，於是 agent 會複用你真實的基礎元件，而不是臨時發明一次性的樣式——而上下文快取讓重複的提示保持低成本。"}, {"label": "把規範寫進上下文檔案", "body": "一個專案上下文檔案（再加上 Figma MCP 伺服器）把 agent 指向你的 tokens、元件和真實規格，於是它是面向一個品牌工作，而不是一套預設外觀。"}]}, {"kind": "image", "src": "/agents/deepseek-design/deepseek-design-taste-triangle.webp", "alt": "圖示：設計系統、skill 和參考匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考。"}, {"kind": "p", "text": "這個教訓和每個 agent 教給我們的一樣：DeepSeek TUI 預設並不具備品味。當你給它約束時，它才能產出優秀的設計——一套設計系統、一個審美 skill，以及具體的參考。Open Design 恰好把這些輸入打包好，這正是兩者契合的原因（下文還有更多）。"}]}, {"id": "setup", "heading": "從零開始，為設計工作配置 DeepSeek TUI", "blocks": [{"kind": "p", "text": "這是從一臺乾淨的機器到一個能構建並驗證 UI 的 DeepSeek TUI 的完整路徑。具體的安裝和命令名稱會因你選用哪個終端 agent 而異，所以下面的步驟停留在對各個 agent 都成立的層面上。"}, {"kind": "code", "lang": "bash", "code": "# 1. 從 DeepSeek 平臺獲取一個 DeepSeek API 金鑰\n#    https://platform.deepseek.com\nexport DEEPSEEK_API_KEY=sk-...\n\n# 2. 安裝一個支援 DeepSeek 的終端 agent（按其 README 操作），\n#    然後把它指向 DeepSeek。該 API 與 OpenAI 相容：\n#      base URL: https://api.deepseek.com\n#      model:    deepseek-v4-flash（或 deepseek-v4-pro）\n#    （/anthropic 處還有一個 Anthropic 格式的端點）\n\n# 3. 在你的專案裡啟動它並生成專案上下文\ncd your-project\n#   建立/搭建一個寫有你設計規則的專案上下文檔案\n\n# 4. 接入 Figma MCP 伺服器（可選，用於設計交付）\n#    把它加入該 agent 的 MCP 伺服器配置"}, {"kind": "image", "src": "/agents/deepseek-design/deepseek-design-setup-flow.webp", "alt": "五步配置流程：獲取金鑰、安裝 agent、配置上下文檔案、新增 skill、驗證", "caption": "配置順序：獲取金鑰 → 把 agent 指向 DeepSeek → 配置上下文檔案 → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元件和規範放進 agent 的上下文檔案並把它指向這些內容，讓產出貼合一個品牌，而不是退回到一套平庸的預設外觀。"}, {"label": "加入瀏覽器驗證", "body": "接入一個 Playwright 或瀏覽器 MCP，讓 agent 在真實瀏覽器中渲染，並跨斷點檢查其產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "從參考到 UI 的工作流", "blocks": [{"kind": "p", "text": "DeepSeek 的模型是純文本的——它們不原生讀取影像——所以收益最高的設計迴圈，是把清晰的參考和描述出來的佈局轉化為可工作的、響應式的 UI，然後在真實瀏覽器中驗證結果，而不是讓模型去“看”一張截圖。"}, {"kind": "ol", "items": ["從你手頭最清晰的參考出發——並描述出多種狀態（桌面端和移動端、懸停、空態、載入中），而不只是一張主視覺。", "在提示裡要具體；即便用強大的模型，含糊的提示也會產出平庸的 UI。把間距、層級以及要複用的元件講清楚。", "把你的設計系統和規範放在上下文檔案裡，並告訴 agent tokens 和規範化的基礎元件位於何處。", "執行一個 dev server，讓 agent 在真實瀏覽器中渲染，並調整到各個斷點來檢查結果——驗證就發生在這裡，因為模型本身看不到影像。", "通過讓 agent 把渲染出的 DOM 和計算樣式與你描述的規格相對照來迭代——而不僅僅是確認它能構建通過。"]}, {"kind": "p", "text": "精確地描述目標，並給出具體約束："}, {"kind": "code", "lang": "bash", "code": "# 在 agent 的提示裡：\n> 用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  佈局：兩欄式儀表盤，240px 側邊欄，24px 間距，\n  卡片網格在 桌面/平板/移動 下分別為 3/2/1 列。\n  複用上下文檔案裡我已有的設計系統元件和 tokens。\n  在間距、佈局和層級上保持一致；做成響應式。\n  執行 dev server，在瀏覽器中渲染，並跨斷點對照\n  規格迭代，直到匹配為止。"}, {"kind": "p", "text": "讓提示保持小而聚焦，把好的迭代提交、把壞的回退（回退時告訴 agent），這樣每一輪都建立在一個乾淨的基礎上。"}]}, {"id": "extend", "heading": "上下文檔案、MCP 與工具", "blocks": [{"kind": "p", "text": "有三個擴充套件點能讓 DeepSeek TUI 適用於持續的設計工作，而這三者都能幹淨地對應到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "專案上下文檔案", "body": "專案規則存放在倉庫根目錄的一個上下文檔案裡（帶有全域性層和團隊層）。它是你設計規範的持久歸宿，每次執行都會被讀取。"}, {"label": "MCP 伺服器", "body": "在 agent 裡配置 MCP 伺服器——這是引入設計上下文和外部工具的可移植方式，其中最相關的就是 Figma MCP 伺服器，它們能跨多個 agent 通用，而不只在某一個裡有效。DeepSeek 的 API 支援這些伺服器所依賴的工具呼叫。"}, {"label": "內建工具", "body": "DeepSeek TUI 內建檔案、shell、git 和網路工具，讓 agent 無需離開終端就能收集參考並跑完驗證迴圈。"}]}, {"kind": "p", "text": "這些都是可移植的、多 agent 通用的能力——正是 Open Design 生來要去編排的那類東西，而不是在每個專案裡重新造一遍。"}]}, {"id": "vs", "heading": "在設計上，DeepSeek TUI vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上並沒有唯一的贏家——每個 agent 都有不同的強項，有經驗的團隊會把它們疊加使用。一個公允的概括："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["DeepSeek TUI", "強大、極具成本效率的編碼模型，開放權重，100 萬 token 上下文；純文本（無原生視覺）", "在預算之內做高頻迭代，並把整套設計系統持有在上下文中"], ["Codex", "出色的視覺打磨配上前端 skill；沙箱化的非同步構建", "委派式非同步構建以及可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex 色值、間距、字型）以及理解程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和行內編輯的視覺化“邊構建邊看”迴圈", "在 IDE 內進行緊湊的“迭代-觀察”式 UI 工作"], ["Gemini CLI", "原生多模態影像理解以及 100 萬 token 上下文；開源且有免費額度", "大量依賴截圖、需要 agent 直接讀取參考的工作"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——在沒有 skills、參考和約束的情況下，它們全都會退回到一套平庸的審美。這才是真正要解決的問題——而它的形態像是個設計工具問題，而非模型問題。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避免“AI 味”外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來很平庸——柔和的漸變、漂浮的面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的調調，“一看就是 AI 做的”。其他被反映的問題還包括移動端佈局錯亂，以及指令文字洩漏進 UI 文案裡。這些都不是 DeepSeek TUI 獨有的；任何 agent 在缺少精選設計上下文的情況下執行都會這樣。由於 DeepSeek 是純文本的，在真實瀏覽器中驗證就尤為重要，而不是指望模型去“看”結果。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 承諾一個真實的方向，而不是預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "用一個瀏覽器工具跨斷點渲染並自檢——這在這裡至關重要，因為模型自己讀不了截圖——這樣佈局就不會在移動端悄無聲息地崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和具體的、描述清楚的參考，是對產出質量影響最大的單一槓杆。"}, {"label": "把規則編碼進上下文檔案", "body": "把諸如“不要主視覺大卡片、最多兩種字型、品牌優先的層級”這類規則，放到 agent 每次執行都會讀取的地方。"}]}, {"kind": "p", "text": "請注意，每一項緩解措施都是在給 agent 一套精選的設計上下文。逐個專案手工維護這套上下文，正是 Open Design 替你免去的繁瑣勞作。"}]}, {"id": "open-design", "heading": "在 Open Design 內用 DeepSeek TUI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一再呼喚的開源設計層。它把 DeepSeek agent 當作一等介面卡，並在其外包上一套精選的 skill 與設計系統庫、一條結構化的渲染流水線，以及一個本地桌面 UI——於是讓 DeepSeek 變好用的那套設計上下文，從第一次執行起就在那裡，而不是每次都手工拼湊。兩者都開源、都本地優先，這讓這對搭配水到渠成。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 DeepSeek TUI 作為你的 agent。", "用你自己的 DeepSeek API 金鑰進行鑑權（BYOK）——憑證留在你的機器上，絕不經我們代理。", "選一套設計系統和一個 skill，然後以一致的品味生成簡報、原型和落地頁。", "每一個產物和 DESIGN.md 檔案都存放在你自己的倉庫裡，而不是託管的雲端。"]}, {"kind": "p", "text": "同一個 DeepSeek agent、同一個金鑰——再加上一套圍繞它的真實、可移植、開源的設計工作流。它本地優先且採用 Apache-2.0 協議，所以你的工作內容和憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "DeepSeek TUI 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和具體的參考，一個由 DeepSeek 驅動的終端 agent 就能產出生產級的響應式 UI，然後你在真實瀏覽器中驗證產出。DeepSeek 的模型是純文本的，所以這套驗證迴圈替代了原生的影像讀取。缺了那套上下文，它就傾向於退回到一套平庸的外觀，而這正是 Open Design 所填補的缺口。"}, {"name": "用 DeepSeek TUI 做設計要花多少錢？", "text": "很少——DeepSeek 的 API 單 token 價格屬於最便宜之列，而字首上下文快取又進一步削減了重複提示的成本，所以你可以放開手腳地迭代。你自帶 DeepSeek API 金鑰（BYOK）；Open Design 絕不代理你的憑證。"}, {"name": "DeepSeek 具體好在哪裡，適合做設計？", "text": "強大且具成本效率的編碼模型、開放權重，以及一個能一次性容納整套設計系統和參考集合的 100 萬 token 上下文。DeepSeek 是純文本的——它不原生讀取影像——所以品味仍然來自你提供的設計系統、skill 和描述出來的參考，並在瀏覽器中驗證。"}, {"name": "前端設計該選 DeepSeek TUI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體的、理解程式碼庫的設計決策著稱；DeepSeek TUI 的優勢在於開放權重、極低成本，以及適合高頻迭代的巨大上下文。許多團隊兩者都用——Open Design 讓你在不改變設計工作流的前提下切換 agent。"}, {"name": "我該如何把 DeepSeek TUI 連線到 Figma？", "text": "在你終端 agent 的 MCP 配置里加入 Figma MCP 伺服器。這樣 agent 就能拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼與原始檔一致，而不是近似還原。DeepSeek 的 API 支援 MCP 所依賴的工具呼叫。"}, {"name": "Open Design 與 DeepSeek 有關聯嗎？", "text": "沒有。DeepSeek 是模型與 API 提供方；Open Design 是一個獨立的開源專案，把由 DeepSeek 驅動的終端 agent 作為一等介面卡來支援。DeepSeek 是 DeepSeek 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0 協議。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，而你的 DeepSeek API 金鑰由你的 agent 直接使用，絕不經過 Open Design 的伺服器路由。"}], "ctaTitle": "以開放的方式，用 DeepSeek TUI 做設計。", "ctaBody": "自帶你自己的 DeepSeek API 金鑰，把每個檔案都留在本地，並在你已經在用的 agent 周圍獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 內使用 DeepSeek TUI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'trae-cli': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['trae-cli']!,
+      title: "用 Trae CLI 做設計 — Open Design",
+      description: "人們如何用字節跳動的 Trae CLI（trae-agent）做 UI 和網頁設計——它是一個開源、模型無關的命令列 CLI agent，可自帶 LLM 提供商，並採用配置驅動的工作流——以及 Open Design 如何通過 ACP 把 Trae CLI 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Trae CLI",
+      label: "Agent · Trae CLI",
+      heading: "用 Trae CLI 做設計。",
+      lead: "Trae CLI 是字節跳動的開源終端 agent（trae-agent）。它模型無關——你把它指向你信任的 LLM 提供商即可——它會讀取你的倉庫、編輯檔案，並根據自然語言任務執行命令；一旦你給它參考、規範和一套驗證迴圈，它就成了真正的設計工具。Open Design 通過 ACP 把它接入一套開源的設計工作流：用你自己的提供商金鑰、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Trae CLI 變成一個本地優先、開源的設計 agent——用你自己的 LLM 提供商金鑰、你自己的檔案，外加一套精選的 skill 與設計系統庫，通過 ACP 驅動。", "heroCtaActions": [{"label": "在 Open Design 中使用 Trae CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Trae CLI 是字節跳動面向終端的開源 AI agent，以 trae-agent 專案的形式釋出。有兩點讓它對設計尤其有意思：它模型無關，因此你可以自帶任何你信任的 LLM 提供商，而不被某一家廠商鎖定；同時它是一個透明、採用 MIT 許可的 agent，能根據自然語言任務讀取你的程式碼庫、編輯檔案並執行 shell 命令。配上恰當的參考、規範和一套驗證迴圈，它就能構建出真正的響應式 UI——而且起步免費、開放，你只需提供一個提供商金鑰。這是一份實用的端到端指南，講如何用 Trae CLI 做 UI、前端和設計系統的工作，以及如何用 Open Design 把它接入一套結構化的設計工作流。", "本文涵蓋：Trae CLI 究竟是什麼、為什麼一個開放、模型無關的 agent 適合做設計、如何從零開始配置它、截圖到 UI 的迴圈、它的配置檔案和工具如何對它進行擴充套件、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 產物顯得千篇一律的陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這道鴻溝——這是天然的搭配，因為兩者都是開源、都跑在你自己的機器上，而 Open Design 通過 Agent Client Protocol（ACP）驅動 Trae CLI。"], "heroImage": {"src": "/agents/trae-cli-design/trae-cli-design-hero.webp", "alt": "Trae CLI 設計反饋迴圈：一個終端 agent 讀取參考圖、一個瀏覽器渲染 UI、一個工作區，反饋箭頭回環", "caption": "核心迴圈：Trae CLI 在終端裡讀取你的參考和規範，在真實瀏覽器中構建並驗證 UI，並據此反覆迭代。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-trae-cli", "label": "Trae CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼開放、模型無關的 agent 適合做設計"}, {"id": "setup", "label": "從零配置 Trae CLI 來做設計"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "配置、工具與提供商"}, {"id": "vs", "label": "Trae CLI 對比 Codex、Claude Code、Cursor、Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與「AI 廉價感」的外觀"}, {"id": "open-design", "label": "在 Open Design 中用 Trae CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-trae-cli", "heading": "Trae CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Trae CLI 是字節跳動開源 trae-agent 專案中的命令列 agent。它會讀取你的倉庫，檢視、建立和編輯檔案，並在一個持久化的環境中執行 shell 命令——根據自然語言任務進行規劃和驗證，而不只是補全幾行程式碼。它採用 MIT 許可，圍繞透明、模組化的架構構建，因此易於審視和擴充套件。它與另一款獨立的 Trae IDE（字節跳動基於 VS Code 的 AI 編輯器）不同，儘管兩者出自同一廠商。"}, {"kind": "p", "text": "對設計工作來說，有兩個特性尤為突出。它模型無關——你選擇 LLM 提供商，所以永遠不會被某個模型的長處或侷限所束縛。它也完全開放、配置驅動，因此它的行為、工具和提供商都可以和你的專案一起固定在版本控制裡，而不是藏在某個託管服務背後。"}, {"kind": "steps", "items": [{"label": "執行模式與互動模式", "body": "Trae CLI 用 `trae-cli run \"...\"` 執行單個任務，或用 `trae-cli interactive` 保持一個持續會話——這正是對照你的設計規範來迭代 UI 的好地方。"}, {"label": "內建工具", "body": "它開箱即帶檔案編輯、bash/shell 執行和結構化推理工具，因此能構建、跑起開發伺服器並檢查執行時錯誤，全程不用離開終端。"}, {"label": "自帶你的提供商", "body": "你為信任的提供商提供一個 API 金鑰——OpenAI、Anthropic、Google、OpenRouter、Doubao、Azure，或本地的 Ollama 模型——通過環境變數或配置檔案設定。"}]}, {"kind": "ul", "items": ["廠商：字節跳動（開源 trae-agent 專案）", "憑證：一個 LLM 提供商 API 金鑰（BYOK）——例如 OpenAI、Anthropic、Google、OpenRouter、Doubao、Azure，或本地的 Ollama 模型", "許可：MIT，開源"]}]}, {"id": "why-design", "heading": "為什麼開放、模型無關的 agent 適合做設計", "blocks": [{"kind": "p", "text": "Trae CLI 在設計上的優勢來自它的開放和提供商靈活性——但和每一個 agent 一樣，品味仍然得由人來提供。"}, {"kind": "steps", "items": [{"label": "天生模型無關", "body": "因為提供商由你選擇，你可以把設計工作交給當下在佈局和前端程式碼上推理最好的模型，日後再換掉它也不必改動工作流。"}, {"label": "開放且配置驅動", "body": "agent、它的工具及其提供商都固定在一個你可以提交的配置檔案裡，於是團隊在每臺機器上都得到相同的 agent 行為，而不是因開發者而異地漂移。"}, {"label": "規範留在你的倉庫裡", "body": "把 agent 指向你的 tokens、元件和真實規格——它們都儲存在你的專案裡——這樣它就是在針對一個品牌工作，而不是退回到千篇一律的外觀。"}]}, {"kind": "image", "src": "/agents/trae-cli-design/trae-cli-design-taste-triangle.webp", "alt": "圖示：設計系統、skill 和參考圖匯聚成優質的設計產出", "caption": "品味來自你提供的三項輸入：一個設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這條教訓和每個 agent 教給我們的一樣：Trae CLI 預設並不具備品味。當你給它約束——一個設計系統、一個審美 skill 以及具體的參考——它才會產出好的設計。Open Design 恰好把這些輸入打包好，並通過 ACP 餵給 Trae CLI，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始配置 Trae CLI 來做設計", "blocks": [{"kind": "p", "text": "這是從一臺乾淨的機器到一個能構建並驗證 UI 的 Trae CLI 的完整路徑。Trae CLI 用 uv 從原始碼安裝，然後配置上你想用的 LLM 提供商。"}, {"kind": "code", "lang": "bash", "code": "# 1. 從原始碼獲取 Trae CLI（trae-agent）——需要 uv\ngit clone https://github.com/bytedance/trae-agent.git\ncd trae-agent\nuv sync --all-extras\nsource .venv/bin/activate\n\n# 2. 通過把它指向你的 LLM 提供商金鑰來完成認證\n#    在環境變數裡設定（或寫進 trae_config.yaml 檔案）\nexport OPENAI_API_KEY=...        # 或 ANTHROPIC_API_KEY、GOOGLE_API_KEY 等\n\n# 3. 在你的專案中執行一個任務\ntrae-cli run \"Create a hello world page\"\n#    或保持一個會話：\ntrae-cli interactive\n\n# 4. 檢視解析後的配置（金鑰會被打碼）\ntrae-cli show-config"}, {"kind": "image", "src": "/agents/trae-cli-design/trae-cli-design-setup-flow.webp", "alt": "五步配置流程：安裝、認證、配置規範、新增 skill、驗證", "caption": "配置順序：安裝 → 用提供商金鑰認證 → 配置你的設計規範 → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則編碼進去", "body": "把你的 tokens、原語和規範放在倉庫裡並把 Trae CLI 指向它們，這樣產出就會匹配一個品牌，而不是退回到千篇一律的外觀。"}, {"label": "加入瀏覽器驗證", "body": "讓 Trae CLI 跑起開發伺服器並在真實瀏覽器中渲染，這樣它就會跨斷點檢查自己的產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Trae CLI 做設計時，槓桿最高的迴圈是把一張參考圖變成可用的響應式 UI，並不斷迭代直到匹配。因為 Trae CLI 模型無關，把它指向一個其模型能很好處理參考圖的提供商，並依靠真實瀏覽器來檢查結果。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發——並描述多種狀態（桌面端和移動端、懸停、空態、載入中），而不只是一張主視覺。", "提示詞要具體；含糊的提示即便配上強模型也會產出千篇一律的 UI。", "把你的設計系統和規範留在倉庫裡，並告訴 Trae CLI tokens 和標準原語在哪裡。", "跑起開發伺服器，讓 Trae CLI 在真實瀏覽器中渲染，調整到各個斷點來檢查結果。", "讓 Trae CLI 把它的實現拿回去和參考對比來迭代——而不只是確認它能構建。"]}, {"kind": "p", "text": "執行一個互動式會話，給出具體的約束，而不是一句話的請求："}, {"kind": "code", "lang": "bash", "code": "trae-cli interactive\n# in the session:\n> Implement the attached reference design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Run the dev server, render it in the browser, and iterate until it\n  matches the references across breakpoints."}, {"kind": "p", "text": "保持提示詞小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Trae CLI），這樣每一輪都建立在乾淨的基礎之上。"}]}, {"id": "extend", "heading": "配置、工具與提供商", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Trae CLI 適合長期的設計工作，而且三者都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "配置檔案", "body": "Trae CLI 讀取一個 trae_config.yaml，它固定了你的提供商、模型和各項設定——這是 agent 在專案上如何執行的持久、可版本控制的歸宿。"}, {"label": "提供商選擇", "body": "由於它支援眾多提供商（OpenAI、Anthropic、Google、OpenRouter、Doubao、Azure、Ollama），你可以把設計工作交給你信任的模型，並在不重接工作流的情況下換掉它。"}, {"label": "內建工具", "body": "它的檔案編輯、shell 和結構化推理工具讓它能收集上下文、構建、跑起開發伺服器並執行驗證迴圈，全程不用離開終端。"}]}, {"kind": "p", "text": "這些都是可移植的、agent 級別的能力——恰恰是 Open Design 被設計用來通過 ACP 編排的那類東西，而不必每個專案都重新搭一遍。"}]}, {"id": "vs", "heading": "做設計時 Trae CLI 對比 Codex、Claude Code、Cursor、Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一的贏家——每個 agent 各有不同的強項，有經驗的團隊會把它們疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Trae CLI", "開源（MIT）且模型無關；自帶提供商金鑰，配置驅動且透明", "想要一個免費、可審視的 agent，並自由選擇或更換 LLM 提供商的團隊"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委託式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（十六進位制色值、間距、字型）和程式碼庫感知的 UX", "前端推理和大上下文重構"], ["Cursor", "視覺化的「邊構建邊看」迴圈，帶即時預覽和行內編輯", "在 IDE 內緊湊的「迭代-觀察」UI 工作"], ["Gemini CLI", "出色的多模態影像理解和 100 萬 token 的上下文；開源且有免費額度", "大量截圖的工作，以及把整個設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人——沒有 skill、參考和約束時，它們全都會退回到千篇一律的審美。這才是真正要解決的問題——而它是設計工具形狀的，不是模型形狀的。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開「AI 廉價感」的外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的調調，「一看就是 AI 做的」。其他被反映的問題還包括移動端佈局錯亂，以及指令洩漏進 UI 文案。這些都不是 Trae CLI 獨有的；任何 agent 在缺乏精選的設計上下文下執行時都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 選定一個真正的方向，而不是預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "讓 Trae CLI 跨斷點渲染並自檢，這樣佈局就不會在移動端悄悄崩壞。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是撬動產出質量的最大單一槓桿。"}, {"label": "把規則編碼進你的倉庫", "body": "把「不用主視覺卡片、最多兩種字型、品牌優先的層級」這類風格規則放在 agent 每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "注意到了嗎，每一項緩解措施都在於給 agent 一份精選的設計上下文。逐個專案手工維護這份上下文，正是 Open Design 替你省掉的苦力活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Trae CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一再呼喚的那個開源設計層。它把 Trae CLI 當作一等介面卡——通過其 trae-cli 二進位制檔案、用 Agent Client Protocol（ACP）來驅動它——並把它包進一套精選的 skill 與設計系統庫、一條結構化的渲染流水線和一個本地桌面 UI，於是讓 Trae CLI 出彩的那份設計上下文從第一次執行起就在那裡，不必每次手工拼湊。兩者都是開源、本地優先，這讓它們的搭配成了天然之選。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Trae CLI 作為你的 agent。", "用你自己的 LLM 提供商金鑰（BYOK）認證——憑證留在你的機器上，絕不經我們代理。", "挑一個設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一個產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是某個託管雲上。"]}, {"kind": "p", "text": "同一個 Trae CLI agent、同一個提供商金鑰——外加一套真正可移植、開源的設計工作流圍著它運轉。它本地優先、開源，所以關於你的工作或你的憑證，沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Trae CLI 真的能做設計工作嗎？", "text": "能——配上一個審美 skill、一個設計系統和真實的參考上下文，Trae CLI 能產出生產級、響應式的 UI；而且因為它模型無關，你可以把工作交給在你的前端上推理最好的提供商。沒有這份上下文時，它往往會退回到千篇一律的外觀，這正是 Open Design 填補的鴻溝。"}, {"name": "用 Trae CLI 做設計需要付費嗎？", "text": "Trae CLI 本身免費且開源（MIT）。你自帶 LLM 提供商金鑰，所以你唯一的成本是那家提供商收的費用——或者如果你通過 Ollama 跑本地模型，則分文不花。無論哪種方式，Open Design 都不會代理你的憑證。"}, {"name": "Trae CLI 具體好在哪裡、適合做設計？", "text": "兩點：它模型無關，所以你可以選擇最適合前端工作的 LLM 提供商；它完全開放、配置驅動，所以它的行為對一個團隊來說透明且可復現。但品味仍然來自你提供的設計系統、skill 和參考。"}, {"name": "前端設計該用 Trae CLI 還是 Claude Code？", "text": "兩者都很能幹。Claude Code 以具體、程式碼庫感知的設計決策著稱；Trae CLI 的優勢是開源且提供商靈活，所以你永遠不會被鎖定在某一個模型上。許多團隊兩個都用——Open Design 讓你在不改動設計工作流的情況下切換 agent。"}, {"name": "Open Design 執行 Trae CLI 需要什麼？", "text": "Open Design 通過 Agent Client Protocol（ACP）驅動 Trae CLI 的 trae-cli 二進位制檔案，並使用你配置的 LLM 提供商金鑰。你選擇 Trae CLI 作為你的 agent，把它指向一個提供商，Open Design 就在它周圍提供那份精選的設計上下文。"}, {"name": "Open Design 和字節跳動或 Trae 有關聯嗎？", "text": "沒有。Trae CLI（trae-agent）是字節跳動的產品；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。Trae 是字節跳動的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且開源。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 LLM 提供商憑證由你的 agent 直接使用，絕不經 Open Design 的伺服器中轉。"}], "ctaTitle": "用開放的方式，借 Trae CLI 做設計。", "ctaBody": "自帶你的 LLM 提供商金鑰，把每個檔案都留在本地，並在你已經在用的 agent 周圍獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Trae CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有支援的 agent"},
+    },
+    'aider': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['aider']!,
+      title: "用 Aider 做設計 — Open Design",
+      description: "人們如何用 Aider —— 執行在終端裡的開源、模型無關的 AI 結對程式設計師 —— 來做 UI 與網頁設計：基於 git 的原生改動、CONVENTIONS.md 檔案、影像支援以及 BYOK；以及 Open Design 如何把 Aider 變成本地優先、開源的設計 agent。",
+      breadcrumb: "Aider",
+      label: "Agent · Aider",
+      heading: "用 Aider 做設計。",
+      lead: "Aider 是執行在你終端裡、直接操作你 git 倉庫的開源 AI 結對程式設計師。它是模型無關的 —— 用你自己的 key 把它接到 Claude、GPT-4o、DeepSeek 或 Gemini 上 —— 它會編輯檔案、自動提交，並在支援視覺的模型上讀取影像。一旦你給它參考圖、規範和一套驗證迴圈，它就成了一個真正的設計工具。Open Design 把它接入一套開源的設計工作流：你的供應商 key、你的檔案、本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Aider 變成一個本地優先、開源的設計 agent —— 用你自己的供應商 API key、你的檔案，外加一套圍繞它的精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 裡使用 Aider", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Aider 是一個開源的 AI 結對程式設計工具，執行在你的終端裡，操作你 git 倉庫中的程式碼。有兩點讓它對設計尤其有意思：它是模型無關的，所以你可以自帶 key 接入幾乎任何 LLM —— Claude、GPT-4o、DeepSeek、Gemini 或本地模型 —— 而且它是 git 原生的，會就地編輯檔案，併為每次改動配上一條合理的提交資訊，於是每一輪迭代都可審閱、可回退。在支援視覺的模型上，它還能讀取影像，於是一張截圖就成了提示詞的一部分。配上合適的參考圖、規範和一套驗證迴圈，它就能搭出真正、響應式的 UI。這是一份實用、端到端的指南，講如何用 Aider 做 UI、前端和設計系統的工作，以及如何把它接入 Open Design 的結構化設計工作流。", "它涵蓋：Aider 究竟是什麼、為什麼一個模型無關、git 原生的工具適合做設計、如何從零搭起、截圖到 UI 的迴圈、CONVENTIONS.md 和 Aider 的命令如何擴充套件它、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 產物顯得千篇一律的陷阱，以及 Open Design 如何作為一層開放、本地優先的設計層來彌合差距 —— 二者天然契合，因為它們都是開源的、都跑在你自己的機器上。"], "heroImage": {"src": "/agents/aider-design/aider-design-hero.webp", "alt": "Aider 設計反饋迴圈：一個終端 agent 讀取參考圖、一個帶提交記錄的 git 倉庫、一個渲染 UI 的瀏覽器，以及一條迴環的反饋箭頭", "caption": "核心迴圈：Aider 在終端裡讀取你的參考圖，在你的 git 倉庫裡編輯並提交 UI，再對照參考圖反覆迭代 —— 用你自帶的任何模型。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-aider", "label": "Aider 究竟是什麼"}, {"id": "why-design", "label": "為什麼模型無關 + git 原生適合做設計"}, {"id": "setup", "label": "從零搭建用於設計的 Aider"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "CONVENTIONS.md、影像與命令"}, {"id": "vs", "label": "Aider vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與那股“AI 流水貨”味"}, {"id": "open-design", "label": "在 Open Design 裡用 Aider 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-aider", "heading": "Aider 究竟是什麼", "blocks": [{"kind": "p", "text": "Aider 是一個開源（Apache-2.0）的 AI 結對程式設計工具，執行在你的終端裡。它讀取你已有的程式碼庫，為上下文對映整個倉庫，就地編輯檔案，並自動為每次改動配上一條合理的提交資訊 —— 於是你可以用早已熟悉的 git 工具來 diff、管理和撤銷 AI 的工作。它支援 100 多種程式語言，既能開新專案，也能在已有專案上繼續構建。"}, {"kind": "p", "text": "對設計工作而言，有兩個特性格外突出。Aider 是模型無關的：你自帶 key，把它接到幾乎任何 LLM —— Claude、GPT-4o、DeepSeek、Gemini 或本地模型 —— 所以你永遠不會被鎖死在某一家供應商上。而在 GPT-4o、Claude 這類支援視覺的模型上，它能讀取影像檔案，把一張參考截圖變成提示詞的一部分。"}, {"kind": "steps", "items": [{"label": "規範檔案", "body": "Aider 會讀取一個 CONVENTIONS.md 檔案，你用 /read CONVENTIONS.md（或 aider --read CONVENTIONS.md）載入它 —— 這是把你的設計規範、tokens 和評審清單編碼為只讀上下文的天然之處。"}, {"label": "git 原生的改動", "body": "每次改動都會應用到你倉庫裡的檔案上並自動提交，於是每一輪設計迭代都能用熟悉的 git 工具來審閱和回退。"}, {"label": "自帶你的模型", "body": "用你自己的 API key 接入 OpenAI、Anthropic、DeepSeek、Gemini 或本地模型；Aider 不繫結單一廠商，也不繫結某個託管後端。"}]}, {"kind": "ul", "items": ["供應商：Aider（Aider-AI，開源）—— 模型無關", "憑證：你自己的供應商 API key —— BYOK（OpenAI、Anthropic、DeepSeek、Gemini 或本地模型）", "許可證：Apache-2.0，開源"]}]}, {"id": "why-design", "heading": "為什麼一個模型無關、git 原生的工具適合做設計", "blocks": [{"kind": "p", "text": "Aider 在設計上的優勢，來自它與你的倉庫以及你所選模型協作的方式 —— 但與所有 agent 一樣，品味仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "模型無關，BYOK", "body": "挑一個最適合你任務和預算的、設計表現最好的模型 —— Claude、GPT-4o、DeepSeek、Gemini —— 並隨意切換而不必改動你的工作流，全程用你自己的 key。"}, {"label": "git 原生的迭代", "body": "自動提交讓每一輪設計都成為一段可回退、可審閱的 diff，於是你總是在一個乾淨的基線上迭代，而不是面對一堆未追蹤的散亂改動。"}, {"label": "把規範放進 CONVENTIONS.md", "body": "一個 CONVENTIONS.md（以只讀方式載入）把 agent 指向你的 tokens、元件和規則，於是它對照的是一套品牌，而不是某種預設觀感。"}]}, {"kind": "image", "src": "/agents/aider-design/aider-design-taste-triangle.webp", "alt": "示意圖：設計系統、skill 和參考圖匯聚成優質的設計產出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill 和真實的參考圖。"}, {"kind": "p", "text": "這個教訓和每個 agent 教給我們的一樣：Aider 預設並沒有品味。只有當你給它約束 —— 一套設計系統、一個審美 skill 和具體的參考 —— 它才會產出好設計。Open Design 恰恰把這些輸入打包了起來，這正是二者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零搭建用於設計的 Aider", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器，到一個能構建並驗證 UI 的 Aider 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Aider（推薦的安裝器；Python 3.8–3.13）\npython -m pip install aider-install\naider-install\n# 或用 pipx：pipx install aider-chat\n\n# 2. 在你的 git 專案裡啟動它，並自帶你的 key\ncd your-project\naider --model sonnet --api-key anthropic=<your-key>\n# 或：aider --api-key openai=<your-key>   （也支援 deepseek=、gemini=）\n\n# 3. 把你的設計規範作為只讀上下文載入進來\naider --read CONVENTIONS.md\n\n# 4. 新增一張參考圖（在支援視覺的模型上）\n#    在對話裡：/add reference-desktop.png"}, {"kind": "image", "src": "/agents/aider-design/aider-design-setup-flow.webp", "alt": "五步搭建流程：安裝、自帶 key、載入 CONVENTIONS.md、新增參考圖、驗證", "caption": "搭建順序：安裝 → 自帶你的 key → 載入 CONVENTIONS.md → 新增一張參考圖 → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則編碼下來", "body": "把你的 tokens、基礎元件和規範放進 CONVENTIONS.md 並以只讀方式載入，於是產出貼合一套品牌，而不是退回某種千篇一律的觀感。"}, {"label": "加上瀏覽器驗證", "body": "跑一個開發伺服器，讓 Aider 在真實瀏覽器裡渲染，並跨斷點檢查它的產出，而不是隻確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Aider 做設計，槓桿最高的迴圈就是把一張參考圖變成可用、響應式的 UI，並反覆迭代直到匹配 —— 用一個支援視覺的模型把產出與參考圖對比，每一輪都提交到 git。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發 —— 並且包含多種狀態（桌面和移動端、懸停、空狀態、載入中），而不只是一張大圖。", "提示詞要具體；含糊的提示詞即便配上強模型也只會產出千篇一律的 UI。", "把你的設計系統和規範放進 CONVENTIONS.md，並告訴 Aider tokens 和標準基礎元件在哪裡。", "跑一個開發伺服器，在真實瀏覽器裡檢查渲染結果，並縮放到各個斷點。", "迭代的方式是讓 Aider 把它的實現與截圖對比 —— 而不只是確認它能構建通過。"]}, {"kind": "p", "text": "在支援視覺的模型上，用 /add 新增一張圖（或用 /paste 從剪貼簿貼上），然後給出具體的約束："}, {"kind": "code", "lang": "bash", "code": "aider --model gpt-4o --read CONVENTIONS.md\n# 在對話裡：\n> /add reference-desktop.png\n> /add reference-mobile.png\n> Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens from CONVENTIONS.md.\n  Match spacing, layout, and hierarchy; make it responsive.\n  I'll render it in the browser and tell you what to fix until it matches\n  the references across breakpoints."}, {"kind": "p", "text": "讓提示詞保持小而聚焦。因為 Aider 會為每次改動提交一次，你就能留住好的迭代，並用 git（或 /undo）回退糟糕的那些 —— 於是每一輪都建立在一個乾淨的基線上。"}]}, {"id": "extend", "heading": "CONVENTIONS.md、影像與命令", "blocks": [{"kind": "p", "text": "有三項能力讓 Aider 在持續的設計工作中切實可用，而這三項都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "CONVENTIONS.md 上下文", "body": "用 /read CONVENTIONS.md 或 aider --read CONVENTIONS.md 載入編碼與設計規範，或在 .aider.conf.yml 裡設定 read: CONVENTIONS.md 讓它每次執行都載入。這是安放你 tokens、基礎元件和規則的長久之所。"}, {"label": "影像與網頁", "body": "在支援視覺的模型上，用 /add 新增一個影像檔案，或用 /paste 從剪貼簿貼上，給 Aider 一張真實的參考；/web <url> 會把一個頁面的文本抓進對話作為額外上下文。"}, {"label": "對話內命令", "body": "諸如 /add 把檔案納入上下文、/read 引入只讀參考、/undo 回退上一次提交之類的命令，讓它無需離開終端就能收集參考並跑完驗證迴圈。"}]}, {"kind": "p", "text": "這些都是可移植、倉庫原生的能力 —— 正是 Open Design 旨在去編排、而非每個專案重造一遍的那類東西。"}]}, {"id": "vs", "heading": "做設計：Aider vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上沒有唯一的贏家 —— 每個 agent 各有所長，有經驗的團隊會把它們疊著用。一份公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Aider", "開源、模型無關（BYOK）、git 原生；自動提交讓每一輪迭代都可審閱、可回退", "在你已有程式碼庫上、用最擅長設計的模型做倉庫原生的迭代"], ["Codex", "配合前端 skill，視覺精緻度強；沙箱化的非同步構建", "委託式的非同步構建，以及可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和理解程式碼庫的 UX", "前端推理與大上下文的重構"], ["Cursor", "帶即時預覽和內聯編輯的“邊改邊看”視覺迴圈", "在 IDE 內做緊湊的“迭代即看”UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 100 萬 token 的上下文；開源且有免費檔位", "截圖密集的工作，以及把一整套設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆給出的結論是：品味來自人類 —— 在沒有 skill、參考和約束的情況下，它們全都會退回到一種千篇一律的審美。這才是真正要解決的問題 —— 而它是設計工具形狀的，不是模型形狀的。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開那股“AI 流水貨”味", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來千篇一律 —— 柔和的漸變、漂浮的面板、過大的圓角、誇張的陰影，一股“Inter 字型加紫色”的味道，“一眼就看出是 AI 做的”。其他被反映的問題還包括移動端佈局錯亂，以及指令洩露進 UI 文案。這些都不是 Aider 獨有的；任何 agent 在缺少精選設計上下文時執行，都會出這些問題。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 錨定一個真正的方向，而不是那種預設觀感。"}, {"label": "在真實瀏覽器裡驗證", "body": "跨斷點渲染並自檢，讓佈局不會在移動端悄悄崩掉 —— 在支援視覺的模型上，把截圖再喂回去。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖，是撬動產出質量的最大單一槓桿。"}, {"label": "把規則編碼進 CONVENTIONS.md", "body": "把“不要大圖卡片、最多兩種字型、品牌優先的層級”這類風格規則，放在 agent 每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "請注意，每一項對策的核心都是給 agent 一份精選的設計上下文。而手工、逐專案地維護這份上下文，正是 Open Design 替你免去的苦差。"}]}, {"id": "open-design", "heading": "在 Open Design 裡用 Aider 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一直在呼喚的那層開源設計層。它把 Aider 當作一等介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染管線和一個本地桌面 UI 把它包裹起來 —— 於是讓 Aider 變好的那份設計上下文從第一次執行起就已就位，而不是每次都手工拼湊。二者都是開源、本地優先的，這讓它們的搭配天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Aider 作為你的 agent。", "用你自己的供應商 API key 認證（BYOK）—— OpenAI、Anthropic、DeepSeek 或 Gemini；憑證留在你的機器上，絕不經我們中轉。", "挑一套設計系統和一個 skill，然後以一致的品味生成幻燈片、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存活在你自己的 git 倉庫裡，而不是某個託管雲端。"]}, {"kind": "p", "text": "同一個 Aider agent、同一把 key —— 外加一套圍繞它的、真實、可移植、開源的設計工作流。它本地優先且開源，所以你的工作和憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Aider 真能做設計工作嗎？", "text": "能 —— 只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Aider 就能產出生產級、響應式的 UI；在支援視覺的模型上，它會讀取截圖來把產出與參考對照驗證。缺了這份上下文，它就容易退回到一種千篇一律的觀感，而這正是 Open Design 填補的缺口。"}, {"name": "做設計時我能用哪些模型搭配 Aider？", "text": "Aider 是模型無關的。你自帶 API key，接入幾乎任何 LLM —— Claude、GPT-4o、DeepSeek、Gemini 或本地模型。做基於影像的設計工作時，請用 GPT-4o 或 Claude 這類支援視覺的模型。Open Design 絕不會中轉你的憑證。"}, {"name": "Aider 究竟好在哪裡、特別適合做設計？", "text": "兩點：它是模型無關的，所以你能挑出最擅長你這項任務設計的模型；它是 git 原生的，會提交每一次改動，於是每一輪設計迭代都可審閱、可回退。兩點都有幫助 —— 但品味仍然來自你提供的設計系統、skill 和參考。"}, {"name": "Aider 會編輯我的檔案並提交到 git 嗎？", "text": "會。Aider 直接在你的倉庫裡編輯檔案，並自動為每次改動配上一條合理的提交資訊，於是你可以用早已熟悉的 git 工具來 diff、管理和撤銷 AI 的工作。"}, {"name": "我該如何把我的設計規範交給 Aider？", "text": "建立一個寫有你 tokens、基礎元件和規則的 CONVENTIONS.md，然後用 /read CONVENTIONS.md 或 aider --read CONVENTIONS.md 以只讀方式載入它（或在 .aider.conf.yml 裡設定 read: CONVENTIONS.md 讓它每次執行都載入）。這樣 Aider 對照的就是你的品牌，而不是某種預設觀感。"}, {"name": "Open Design 和 Aider 有關聯嗎？", "text": "沒有。Aider 是一個獨立的開源專案（Aider-AI）；Open Design 是另一個獨立的開源專案，把 Aider 作為一等介面卡來支援。二者並無關聯。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全 —— Open Design 本地優先且開源。你的檔案、產物和 DESIGN.md 都留在你自己的 git 倉庫裡，而你的供應商 API key 由你的 agent 直接使用，絕不經 Open Design 的伺服器轉發。"}], "ctaTitle": "用開放的方式，與 Aider 一起做設計。", "ctaBody": "自帶你的供應商 API key，讓每一個檔案都留在你的 git 倉庫本地，併為你早已在用的 agent 配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 裡使用 Aider", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'antigravity': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['antigravity']!,
+      title: "用 Antigravity 做設計 — Open Design",
+      description: "人們如何使用 Google Antigravity——Google 推出的、由多模態 Gemini 3.x 模型驅動的 agent 優先開發平臺，配備編輯器檢視、管理面板、整合瀏覽器控制與 Artifacts——來做 UI 和網頁設計，以及 Open Design 如何把 Antigravity 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Antigravity",
+      label: "Agent · Antigravity",
+      heading: "用 Antigravity 做設計。",
+      lead: "Antigravity 是 Google 的 agent 優先開發平臺。它的 Gemini 3.x 模型能讀取截圖並對佈局進行推理，它的整合瀏覽器讓 agent 能驗證自己構建的成果，它的 Artifacts 把 agent 的工作變成可審閱的交付物——只要你給它參考圖、規範和一套驗證閉環，它就是一個真正的設計工具。Open Design 把它接入一套開源設計工作流：用你自己的 Google 賬號、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Antigravity 變成一個本地優先、開源的設計 agent——用你自己的 Google 賬號、你自己的檔案，圍繞它構建一套精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Antigravity", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Antigravity 是 Google 的 agent 優先開發平臺，與 Gemini 3 同時釋出。有三點讓它在設計領域格外值得關注：它的 agent 執行在原生多模態的 Gemini 3.x 模型上，因此能讀懂一張截圖，並對佈局、間距和層級進行推理；它內建了一個 agent 可以操控的整合瀏覽器，因此會渲染並檢查自己做出的 UI，而不是憑空猜測；它還會產出 Artifacts——任務清單、實現方案、截圖和瀏覽器錄製——把 agent 的工作變成你真正可以審閱的東西。配上合適的參考圖、規範和一套驗證閉環，它就能構建出真正的響應式 UI——而且用一個 Google 賬號就能免費上手。這是一份關於如何用 Antigravity 做 UI、前端和設計系統工作，並把它接入一套結構化設計工作流（搭配 Open Design）的、務實的端到端指南。", "本文涵蓋：Antigravity 究竟是什麼，為什麼多模態 Gemini 加整合瀏覽器很適合設計，如何從零搭建，截圖到 UI 的閉環，它的 agent 上下文與工具如何擴充套件它，它與 Codex、Claude Code、Cursor、Gemini CLI 相比如何，哪些坑會讓 AI 產出看起來千篇一律，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這道鴻溝——這是一對天然的搭檔，因為 Open Design 本身就是開源的，並執行在你自己的機器上。"], "heroImage": {"src": "/agents/antigravity-design/antigravity-design-hero.webp", "alt": "Antigravity 設計反饋閉環：一個 agent 優先的 IDE 讀取參考圖、一個整合瀏覽器渲染 UI、一個管理面板，以及一條迴環的反饋箭頭", "caption": "核心閉環：Antigravity agent 讀取你的參考圖，在整合瀏覽器中構建並驗證 UI，再對照參考圖迭代——並把工作以可審閱的 Artifacts 形式呈現出來。"}, "tocLabel": "本頁目錄", "toc": [{"id": "what-is-antigravity", "label": "Antigravity 究竟是什麼"}, {"id": "why-design", "label": "為什麼多模態 Gemini + 內建瀏覽器適合設計"}, {"id": "setup", "label": "為設計搭建 Antigravity（從零開始）"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "Agent 上下文、工具與 Artifacts"}, {"id": "vs", "label": "Antigravity vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "常見坑與“AI 味”觀感"}, {"id": "open-design", "label": "在 Open Design 中用 Antigravity 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-antigravity", "heading": "Antigravity 究竟是什麼", "blocks": [{"kind": "p", "text": "Antigravity 是 Google 的 agent 優先開發平臺——一個為自主 agent（而非側邊欄聊天機器人）幹活而打造的 AI 驅動 IDE。它於 2025 年 11 月 18 日與 Gemini 3 一同釋出，並在公開預覽階段面向個人免費開放，讓你能把複雜的、跨多種工具的軟體任務委託給一個跨編輯器、終端和整合瀏覽器運作的 agent。它的 agent 主要執行在 Google 的多模態 Gemini 3.x 模型上。"}, {"kind": "p", "text": "對於設計工作來說，有三點尤為突出。它的 agent 能讀取截圖並對真實佈局進行推理，因為 Gemini 3.x 是原生多模態的。它能操控一個真實的瀏覽器，因此會渲染並驗證自己構建的成果。它還會呈現 Artifacts——任務清單、方案、截圖和瀏覽器錄製——讓你審閱的是看得見摸得著的產出，而非原始的工具日誌。"}, {"kind": "steps", "items": [{"label": "編輯器檢視 + 管理面板", "body": "編輯器檢視是一個熟悉的 AI IDE，帶有 Tab 補全和內聯命令；管理面板讓你能跨工作區生成、編排並觀察多個非同步工作的 agent——是跑一個長時設計任務的理想之處。"}, {"label": "整合瀏覽器 + Artifacts", "body": "Agent 可以在內建瀏覽器中操作，併產出你可以留下反饋的 Artifacts（截圖、瀏覽器錄製、任務清單、方案）——一套內建於平臺、而非事後拼接上去的驗證閉環。"}, {"label": "免費上手", "body": "用個人 Google 賬號登入即可獲得 Gemini 3.x 的寬鬆速率限額；該平臺可在 macOS、Windows 和 Linux 上執行。"}]}, {"kind": "ul", "items": ["廠商：Google", "憑證：Google 賬號（個人 Gmail），公開預覽期間免費", "執行檔：用 agy 啟動；可在 macOS、Windows 和 Linux 上執行"]}]}, {"id": "why-design", "heading": "為什麼多模態 Gemini 和內建瀏覽器適合設計", "blocks": [{"kind": "p", "text": "Antigravity 的設計優勢來自模型與平臺的合力——但和每一個 agent 一樣，品味仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "強大的多模態理解", "body": "由於 Gemini 3.x 是原生多模態的，agent 能很好地讀懂參考截圖——把自己渲染出的成果與一張圖片對照，而不是從一段文字描述裡猜。"}, {"label": "用整合瀏覽器來驗證", "body": "Agent 操控一個真實的瀏覽器，因此會渲染 UI、跨各種狀態檢查它、揪出錯亂的佈局——並把結果捕獲為一段你可以審閱的瀏覽器錄製 Artifact。"}, {"label": "agent 會讀取的規範", "body": "把你的 tokens、元件和審閱規則寫進 agent 的專案上下文，讓它對照你的品牌來工作，而不是套用一套預設觀感。"}]}, {"kind": "image", "src": "/agents/antigravity-design/antigravity-design-taste-triangle.webp", "alt": "示意圖，展示設計系統、skill 和參考圖三者匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這條經驗和每一個 agent 教給我們的一樣：Antigravity 預設並不具備品味。當你給它約束——一套設計系統、一個審美 skill 和具體的參考圖——它就能產出優秀的設計。Open Design 恰恰把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始為設計工作搭建 Antigravity", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Antigravity agent 的完整路徑。預覽期間應用內的具體選單可能會變動，所以這裡只講你能放心依賴的層面。"}, {"kind": "code", "lang": "bash", "code": "# 1. 從官方下載頁 antigravity.google/download\n#    為你的作業系統（macOS、Windows、Linux）下載 Antigravity\n\n# 2. 啟動它並登入\nagy               # 開啟 Antigravity；用你的 Google 賬號登入\n\n# 3. 接受資料使用政策、選一個主題，並開啟你的專案資料夾\n\n# 4. 在編輯器檢視或管理面板中啟動一個 agent 任務，\n#    選擇一個 Gemini 3.x 模型（例如 Gemini 3.1 Pro）"}, {"kind": "image", "src": "/agents/antigravity-design/antigravity-design-setup-flow.webp", "alt": "五步搭建流程：下載、用 Google 登入、開啟專案、新增設計規則和一個 skill、啟用瀏覽器驗證", "caption": "搭建順序：下載 → 用 Google 登入 → 開啟你的專案 → 新增設計規則和一個 skill → 用整合瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編入你的設計規則", "body": "把你的 tokens、基礎元件和規範放進 agent 的專案上下文，讓產出貼合一個品牌，而不是退回到一套千篇一律的觀感。"}, {"label": "使用整合瀏覽器", "body": "讓 agent 在 Antigravity 的內建瀏覽器中渲染，並跨各種斷點檢查產出——驗證的是 UI 看起來是否正確，而不僅僅是構建有沒有通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Antigravity 時最高槓桿的設計閉環，就是把一張參考圖轉化為可用的響應式 UI，並不斷迭代直到吻合——靠多模態模型把產出與參考圖對照，靠整合瀏覽器來驗證它。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發——並納入多種狀態（桌面端和移動端、懸停、空態、載入態），而不只是一張大圖。", "提示詞要具體；含糊的提示詞即便配上強力模型也只會產出千篇一律的 UI。", "把你的設計系統和規範留在 agent 的專案上下文裡，並告訴它 tokens 和規範的基礎元件在哪裡。", "讓 agent 在 Antigravity 的整合瀏覽器中渲染，並調整到各個斷點來檢查結果。", "通過讓 agent 把自己的實現與截圖對照來迭代——而不只是確認它能構建——並審閱它產出的瀏覽器錄製和截圖 Artifacts。"]}, {"kind": "p", "text": "附上你的參考圖、給出具體約束，然後讓 agent 在瀏覽器裡驗證："}, {"kind": "code", "lang": "text", "code": "# 在一個 Antigravity agent 任務中，附上 reference-desktop.png 和\n# reference-mobile.png，然後輸入提示詞：\n\n用 React + Vite + Tailwind + TypeScript 實現這個設計。\n複用我已有的設計系統元件和 tokens。\n匹配間距、佈局和層級；做成響應式。\n在整合瀏覽器中渲染並迭代，直到它跨各個斷點都與\n參考圖吻合，並把截圖展示給我。"}, {"kind": "p", "text": "保持提示詞小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 agent），這樣每一輪都能在乾淨的基底上推進。"}]}, {"id": "extend", "heading": "Agent 上下文、工具與 Artifacts", "blocks": [{"kind": "p", "text": "有三個擴充套件點讓 Antigravity 適合持續的設計工作，而這三者都能幹淨利落地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "專案上下文", "body": "持久化的專案規則是你設計規範的長久歸宿——agent 在每個任務中都會讀取的 tokens、基礎元件和審閱清單，讓產出始終貼合品牌。"}, {"label": "整合瀏覽器 + 終端", "body": "Agent 跨編輯器、終端和內建瀏覽器操作，因此能收集參考、跑一個開發伺服器，並驗證渲染出的 UI，全程不必離開平臺。"}, {"label": "你來審閱的 Artifacts", "body": "任務清單、實現方案、截圖和瀏覽器錄製讓 agent 的工作清晰可讀；你在 Artifact 上留下反饋，agent 據此吸收修正。"}]}, {"kind": "p", "text": "這些正是一套嚴肅的設計閉環所需的能力——也恰恰是 Open Design 被設計來編排（而非每個專案重新造一遍）的那類東西。"}]}, {"id": "vs", "heading": "做設計時 Antigravity vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，有經驗的團隊會把它們疊加使用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Antigravity", "agent 優先的 IDE，搭配多模態 Gemini 3.x、用於自我驗證的整合瀏覽器，以及可審閱的 Artifacts；預覽期免費", "帶內建瀏覽器 UI 驗證的非同步多 agent 構建"], ["Codex", "帶前端 skill 的出色視覺打磨；沙箱化的非同步構建", "委託式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（色值、間距、字型）以及理解程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的“邊構建邊看”視覺閉環", "在 IDE 內緊湊的“邊迭代邊看”UI 工作"], ["Gemini CLI", "執行在多模態 Gemini 上的開源終端 agent，帶 1M tokens 上下文和免費檔", "大量依賴截圖的終端工作，以及把整套設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人——它們在沒有 skill、參考和約束時都會退回到一套千篇一律的審美。這才是真正要解決的問題——而它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "常見坑，以及如何避免“AI 味”觀感", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的吐槽是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一股 Inter 字型配紫色、“一看就是 AI 做的”的味道。其他被反映的問題還包括移動端佈局錯亂，以及指令洩漏進 UI 文案。這些都不是 Antigravity 獨有的；它們是任何 agent 在缺乏精選設計上下文時執行的必然結果。"}, {"kind": "steps", "items": [{"label": "加上一個審美 skill", "body": "一個精選的設計 skill 會逼著 agent 確定一個真實的方向，而不是套用預設觀感。"}, {"label": "在整合瀏覽器中驗證", "body": "用多模態模型和 Antigravity 的內建瀏覽器跨各個斷點渲染並自檢，讓佈局不會在移動端悄無聲息地崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是撬動產出質量的最大單一槓桿。"}, {"label": "把規則編入專案上下文", "body": "把“不用大圖卡片、最多兩種字型、品牌優先的層級”這類風格規則，放在 agent 每個任務都會讀到的地方。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是在給 agent 一份精選的設計上下文。逐個專案手工維護那份上下文，正是 Open Design 替你免去的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Antigravity 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一再呼喚的開源設計層。它把 Antigravity 當作一等公民介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染流水線，以及一個本地桌面 UI 把它包起來——這樣，讓 Antigravity 變好的那份設計上下文從第一次執行起就在那兒，而不必每次都手工拼裝。Open Design 是開源且本地優先的，這讓這對搭檔天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Antigravity 作為你的 agent。", "用你的 Google 賬號認證——憑證留在你的機器上，絕不經我們中轉。", "挑一套設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一個 artifact 和 DESIGN.md 檔案都存在你自己的倉庫裡，而非託管雲端。"]}, {"kind": "p", "text": "還是同一個 Antigravity agent、同一個 Google 賬號——只是外面多了一套真實、可移植、開源的設計工作流。Open Design 本地優先且採用 Apache-2.0，因此你的工作或憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Antigravity 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Antigravity 就能產出生產級的響應式 UI，而它多模態的 Gemini 3.x agent 會在整合瀏覽器中驗證產出。缺了這份上下文，它就容易退回到一套千篇一律的觀感，而這正是 Open Design 來填補的缺口。"}, {"name": "用 Antigravity 做設計需要付費嗎？", "text": "Antigravity 在公開預覽階段面向個人免費開放，用個人 Google 賬號登入時可享 Gemini 3.x 的寬鬆速率限額。無論如何，Open Design 都絕不會中轉你的憑證。"}, {"name": "Antigravity 具體為什麼適合做設計？", "text": "三點：它的 agent 執行在原生多模態、能很好讀懂參考截圖的 Gemini 3.x 模型上；它內建了一個 agent 可操控、用來驗證 UI 的整合瀏覽器；它還會呈現 Artifacts——截圖和瀏覽器錄製——供你審閱。品味仍然來自你提供的設計系統、skill 和參考。"}, {"name": "前端設計該用 Antigravity 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策見長；Antigravity 的優勢在於它 agent 優先的平臺——多模態 Gemini 3.x、用於驗證的整合瀏覽器，以及可審閱的 Artifacts。許多團隊兩者並用——Open Design 讓你能切換 agent 而無需改變你的設計工作流。"}, {"name": "我該如何驗證 Antigravity 構建的成果？", "text": "Antigravity 內建了一個 agent 可操控的整合瀏覽器，因此它們會渲染 UI、跨各個斷點檢查它，並把截圖和瀏覽器錄製捕獲為 Artifacts。審閱這些 Artifacts——並讓 agent 把自己的產出與你的參考對照——就是你讓結果不偏離規範的方式。"}, {"name": "Open Design 與 Google 有關聯嗎？", "text": "沒有。Antigravity 是 Google 的產品；Open Design 是一個獨立的開源專案，以一等公民介面卡的形式支援它。Antigravity 和 Gemini 是 Google 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0。你的檔案、artifact 和 DESIGN.md 都留在你自己的倉庫裡，而你的 Google 憑證由你的 agent 直接使用，絕不經由 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，用 Antigravity 做設計。", "ctaBody": "帶上你自己的 Google 賬號，讓每個檔案都留在本地，並圍繞你已在用的 agent 獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Antigravity", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'reasonix': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['reasonix']!,
+      title: "DeepSeek Reasonix 用於設計 — Open Design",
+      description: "人們如何使用 DeepSeek Reasonix——這個由社群構建、DeepSeek 原生的終端編碼代理——來做 UI 和網頁設計，以及 Open Design 如何把它變成一個本地優先、開源的設計代理。BYOK，使用你自己的 DeepSeek API key。",
+      breadcrumb: "DeepSeek Reasonix",
+      label: "代理 · DeepSeek Reasonix",
+      heading: "DeepSeek Reasonix 用於設計。",
+      lead: "DeepSeek Reasonix 是一個開源、由社群構建、基於 DeepSeek 模型的終端編碼代理。它能讀取你的倉庫、編輯檔案並低成本地執行你的驗證迴圈——它的整個設計都圍繞 DeepSeek 的字首快取構建，從而讓長會話保持經濟實惠。配上參考素材、規範和瀏覽器校驗，它就成了一個真正的設計工具。Open Design 把它接入一套開源的設計工作流：用你自己的 DeepSeek API key、你自己的檔案、本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 DeepSeek Reasonix 變成一個本地優先、開源的設計代理——用你自己的 DeepSeek API key、你自己的檔案，外加圍繞它的一套精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 DeepSeek Reasonix", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["DeepSeek Reasonix 是一個面向終端、開源、由社群構建的 AI 編碼代理，基於 DeepSeek 的模型。它不是 DeepSeek 的官方產品——它由 esengine 這位 GitHub 作者和社群維護，並且專門圍繞 DeepSeek 的字首快取機制構建，從而讓長時間、迭代式的會話保持低成本。它能讀取你的倉庫、編輯檔案、執行命令，並從自然語言任務出發工作，而不只是補全程式碼行。你自帶 DeepSeek API key（BYOK），代理執行在 deepseek-v4-pro 和 deepseek-v4-flash 等 DeepSeek 模型上。這是一份實用、端到端的指南，介紹如何用 DeepSeek Reasonix 來做 UI、前端和設計系統工作，以及如何用 Open Design 把它接入一套結構化的設計工作流。", "本文涵蓋：DeepSeek Reasonix 究竟是什麼，為什麼一個成本高效、由 DeepSeek 驅動的代理適合迭代式設計，如何用你自己的 key 從零開始搭建它，從參考到 UI 的迴圈，skill 和 MCP 如何擴充套件它，它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比，那些讓 AI 產出顯得千篇一律的陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這一差距——這是天然的搭配，因為兩者都是開源的，且都執行在你自己的機器上。"], "heroImage": {"src": "/agents/reasonix-design/reasonix-design-hero.webp", "alt": "DeepSeek Reasonix 設計反饋迴圈：一個終端代理讀取設計參考、一個瀏覽器渲染 UI、一個工作區，以及一個迴環的反饋箭頭", "caption": "核心迴圈：DeepSeek Reasonix 在終端中依據你的參考素材和規範工作，你在真實瀏覽器中校驗 UI，它再迭代——而且很便宜，這要歸功於 DeepSeek 的字首快取。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-reasonix", "label": "DeepSeek Reasonix 究竟是什麼"}, {"id": "why-design", "label": "為什麼成本高效的 DeepSeek 代理適合做設計"}, {"id": "setup", "label": "從零搭建用於設計的 DeepSeek Reasonix"}, {"id": "screenshot-workflow", "label": "從參考到 UI 的工作流"}, {"id": "extend", "label": "Skill、MCP 與配置"}, {"id": "vs", "label": "DeepSeek Reasonix 對比 Codex、Claude Code、Cursor 與 Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與“AI 味”觀感"}, {"id": "open-design", "label": "在 Open Design 中用 DeepSeek Reasonix 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-reasonix", "heading": "DeepSeek Reasonix 究竟是什麼", "blocks": [{"kind": "p", "text": "DeepSeek Reasonix 是一個面向終端、開源（MIT）的 AI 編碼代理，由 esengine 這位 GitHub 作者和社群構建。它是 DeepSeek 原生的：圍繞 DeepSeek 的字首快取機制設計，從而讓長時間、迭代式的會話保持低成本。它能讀取你的倉庫，用一個帶審查門控的 SEARCH/REPLACE 編輯器編輯檔案，執行 shell 命令，並從自然語言任務出發工作——會規劃和驗證，而不只是補全程式碼行。需要明確的是，這是一個社群專案，而非 DeepSeek 公司的官方產品。"}, {"kind": "p", "text": "對設計工作而言，關鍵在於它是一個有能力、瞭解倉庫的編碼代理，以低成本執行在強大的 DeepSeek 模型上。它所用的 DeepSeek 模型是純文本的——它們並不原生讀取影像——所以實際的設計迴圈是參考驅動的，並在真實瀏覽器中校驗，而不是讓代理直接“看”一張截圖。成本高效是與設計相關的真正優勢：你可以多次迭代 UI，而不必擔心那筆通常會讓人放棄緊湊迴圈的賬單。"}, {"kind": "steps", "items": [{"label": "DeepSeek 原生，BYOK", "body": "Reasonix 執行在 deepseek-v4-pro 和 deepseek-v4-flash 等 DeepSeek 模型上。你自帶 DeepSeek API key——憑證存放在你的環境中，而不在代理的配置裡。"}, {"label": "瞭解倉庫的編輯", "body": "它用一個帶審查門控的編輯器讀取並編輯你專案中的檔案，並執行 shell 命令，因此可以在你自己的倉庫中構建和迭代真實的 UI 程式碼。"}, {"label": "Skill + MCP", "body": "它支援用 Markdown 編寫的 skill 和 MCP 伺服器，因此你可以為它提供持久的規範，並接入像設計源這樣的外部上下文。"}]}, {"kind": "ul", "items": ["供應方：社群 / esengine 這位 GitHub 作者（不是 DeepSeek 公司）", "憑證：你自己的 DeepSeek API key（BYOK），通過環境變數提供", "許可：MIT，開源"]}]}, {"id": "why-design", "heading": "為什麼成本高效的 DeepSeek 代理適合做設計", "blocks": [{"kind": "p", "text": "DeepSeek Reasonix 的設計優勢不在於某項炫目的單一能力，而更在於讓迭代式 UI 工作變得便宜且可重複——但和每個代理一樣，審美仍需由人來提供。"}, {"kind": "steps", "items": [{"label": "便宜、緊湊的迭代", "body": "因為它圍繞 DeepSeek 的字首快取設計，長時間的設計會話保持實惠——所以你可以多次執行“構建-校驗-精修”迴圈，而不必精打細算地省著用。"}, {"label": "瞭解倉庫的複用", "body": "它直接在你的倉庫中編輯檔案，因此當你把它指向現有元件和 tokens 時，它能複用它們，而不是臨時發明一次性的樣式。"}, {"label": "規範寫入 skill", "body": "Markdown skill 和專案配置讓你能把 tokens、元件和審查規則編碼進去，從而讓代理依據你的品牌工作，而不是套用預設觀感。"}]}, {"kind": "image", "src": "/agents/reasonix-design/reasonix-design-taste-triangle.webp", "alt": "圖示展示設計系統、skill 和參考影像匯聚成優秀的設計產出", "caption": "審美來自你提供的三項輸入：一個設計系統、一個 skill，以及真實的參考影像。"}, {"kind": "p", "text": "這個教訓和每個代理給出的是同一個：DeepSeek Reasonix 預設並不具備審美。當你給它約束時，它才會產出好的設計——一個設計系統、一個審美 skill，以及向它描述清楚的具體參考——再加上一個用來校驗的瀏覽器。Open Design 恰好打包了這些輸入，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零搭建用於設計工作的 DeepSeek Reasonix", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器，到一個能夠構建並校驗 UI 的 DeepSeek Reasonix 的路徑。因為它是一個社群專案，請始終遵循倉庫 README 中的安裝說明；下面的提綱只是大致的形態。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 DeepSeek Reasonix（Node 22+）—— 參見倉庫 README\nnpm install -g reasonix\n\n# 2. 自帶你的 DeepSeek API key（BYOK）\n#    Reasonix 從你的環境讀取它，而不是從配置檔案讀取。\nexport DEEPSEEK_API_KEY=sk-...    # 你的 DeepSeek key\n\n# 3. 在你的專案中啟動它\ncd your-project\nreasonix                         # 確切的子命令見 README\n\n# 4. 通過 MCP 新增一個設計源（可選）\n#    例如一個 Figma MCP 伺服器，按倉庫文件配置"}, {"kind": "image", "src": "/agents/reasonix-design/reasonix-design-setup-flow.webp", "alt": "五步搭建流程：安裝、新增你的 DeepSeek key、配置規範、新增 skill、在瀏覽器中校驗", "caption": "搭建順序：安裝 → 新增你的 DeepSeek API key → 編碼規範 → 新增 skill → 啟用瀏覽器校驗。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元素和規範放進一個 skill 或專案配置，並把 Reasonix 指向它們，從而讓產出貼合某個品牌，而不是退回到千篇一律的觀感。"}, {"label": "加入瀏覽器校驗", "body": "由於 DeepSeek 模型是純文本的，接入一個 Playwright 或瀏覽器 MCP，讓代理在真實瀏覽器中渲染並跨斷點檢查其產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "從參考到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 DeepSeek Reasonix 做設計時，槓桿最高的迴圈是把清晰的參考轉化為可用、響應式的 UI，並迭代到匹配為止。因為 DeepSeek 模型是純文本的，參考是以詳細的描述和規格餵給它的——而不是被原生地當作影像讀取——匹配則通過在真實瀏覽器中渲染來確認。"}, {"kind": "ol", "items": ["把你的參考翻譯成具體的規格——用文字描述佈局、間距、層級和各種狀態（桌面和移動端、懸停、空狀態、載入中），因為模型讀的是文字，不是畫素。", "在提示詞中要具體；即便用上強模型，含糊的提示詞也只會產出千篇一律的 UI。", "把你的設計系統和規範放進一個 skill 或專案配置，並告訴 Reasonix tokens 和規範化基礎元素的位置。", "執行一個開發伺服器，在真實瀏覽器中校驗結果，並縮放到各個斷點——接入一個瀏覽器 MCP，讓代理可以自檢。", "通過在瀏覽器中把渲染出的 UI 與你的參考相互比對來迭代——而不只是確認它能構建。"]}, {"kind": "p", "text": "在提示詞中給代理具體的約束，而不是一份含糊的簡報："}, {"kind": "code", "lang": "bash", "code": "reasonix\n# 在提示詞中：\n> 用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  參考：兩欄式 hero、48px 垂直節奏、品牌青綠色\n  強調色、system-ui 字型——桌面和移動端見 DESIGN.md 中的描述。\n  複用我現有的設計系統元件和 tokens。\n  匹配間距、佈局和層級；做成響應式。\n  在瀏覽器中渲染它，並迭代到跨斷點都與規格匹配為止。"}, {"kind": "p", "text": "保持提示詞小而聚焦，提交好的迭代、回退壞的迭代（在你回退時告訴 Reasonix），這樣每一輪都建立在一個乾淨的基礎上——也讓那個便宜、對快取友好的迴圈保持高效。"}]}, {"id": "extend", "heading": "Skill、MCP 與配置", "blocks": [{"kind": "p", "text": "有幾個擴充套件點讓 DeepSeek Reasonix 在持續的設計工作中變得實用，而且它們與一套開放的設計工作流能幹淨地對應起來。"}, {"kind": "steps", "items": [{"label": "Markdown skill", "body": "Reasonix 支援用 Markdown 編寫的 skill——這是承載你設計規範、tokens 和審查清單的持久之所，每次執行都會被應用。"}, {"label": "MCP 伺服器", "body": "它整合 MCP 伺服器，這是引入設計上下文和外部工具的可移植方式——其中最相關的是像 Figma MCP 伺服器這樣的設計源——並且它們能跨代理通用，而不只限於 Reasonix。"}, {"label": "專案配置與內建工具", "body": "按專案劃分的配置，加上內建的檔案、shell 和網頁工具，讓它無需離開終端就能收集上下文並執行驗證迴圈。確切的配置路徑請查閱倉庫 README。"}]}, {"kind": "p", "text": "這些都是可移植、跨代理的能力——正是 Open Design 旨在編排的那類東西，而不是在每個專案裡重新造一遍。"}]}, {"id": "vs", "heading": "DeepSeek Reasonix 對比 Codex、Claude Code、Cursor 與 Gemini CLI 做設計", "blocks": [{"kind": "p", "text": "做設計工作並沒有唯一的贏家——每個代理各有不同的強項，經驗豐富的團隊會把它們疊加使用。一個公允的小結："}, {"kind": "table", "columns": ["代理", "設計強項", "最適合"], "rows": [["DeepSeek Reasonix", "開源且由 DeepSeek 驅動；通過字首快取做到成本高效，BYOK 使用你自己的 DeepSeek key（社群構建，純文本模型）", "在你自己的倉庫裡做便宜、高頻的 UI 迭代"], ["Codex", "配合前端 skill 有出色的視覺打磨；沙箱化的非同步構建", "委派式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex 值、間距、字型）以及瞭解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的視覺化“邊構建邊看”迴圈", "在 IDE 內做緊湊的“邊迭代邊觀察”UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 1M-token 上下文；開源且帶免費額度", "截圖密集型工作，以及把整個設計系統保持在上下文裡"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人類——沒有 skill、參考和約束，它們全都會預設退回到一種千篇一律的觀感。這才是真正要解決的問題——而且它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避免“AI 味”觀感", "blocks": [{"kind": "p", "text": "關於 AI 生成設計最常見的抱怨，就是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一股 Inter 加紫色的味道，“一眼就知道是 AI 做的”。其他被報告的問題還包括移動端佈局錯亂，以及指令洩漏進 UI 文案裡。這些都不是 DeepSeek Reasonix 獨有的；當任何代理在沒有精選設計上下文的情況下執行時，都會出現這些情況——而且因為它的模型是純文本的，精確地描述參考就更加重要。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使代理拿出一個真正的方向，而不是套用預設觀感。"}, {"label": "在真實瀏覽器中校驗", "body": "由於模型看不見，要在真實瀏覽器中跨斷點渲染並自檢，這樣佈局就不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和描述清楚的參考", "body": "真實的設計 tokens 和被精確描述的參考狀態，是對純文本代理產出質量影響最大的單一槓桿。"}, {"label": "把規則編碼進 skill 或配置", "body": "把“不用 hero 卡片、最多兩種字型、品牌優先的層級”這類風格規則放在代理每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "請注意，每一項緩解措施都是在給代理提供一份精選的設計上下文。逐個專案手工維護那份上下文，正是 Open Design 幫你省去的苦差事。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 DeepSeek Reasonix 做設計", "blocks": [{"kind": "p", "text": "Open Design 就是上述工作流一再呼喚的那個開源設計層。它把 DeepSeek Reasonix 當作一等介面卡，併為它包裹上一套精選的 skill 與設計系統庫、一條結構化的渲染流水線，以及一個本地桌面 UI——這樣，讓 Reasonix 變好的那份設計上下文從第一次執行起就在那裡，而不必每次手工拼湊。兩者都是開源、本地優先的，這讓這對組合成為天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 DeepSeek Reasonix 作為你的代理。", "用你自己的 DeepSeek API key 進行認證（BYOK）——憑證留在你的機器上，絕不經我們代理轉發。", "挑選一個設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一個產物和 DESIGN.md 檔案都存放在你自己的倉庫裡，而不是託管的雲端。"]}, {"kind": "p", "text": "還是同一個 DeepSeek Reasonix 代理、同一把 key——只是圍繞它多了一套真實、可移植、開源的設計工作流。它本地優先且開源，所以關於你的工作或憑證的一切都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "DeepSeek Reasonix 真的能做設計工作嗎？", "text": "能——配上一個審美 skill、一個設計系統，以及上下文中被精確描述的參考，DeepSeek Reasonix 能在你自己的倉庫裡產出生產級、響應式的 UI，而你則在真實瀏覽器中校驗產出。它的 DeepSeek 模型是純文本的，所以這個迴圈是“描述參考並校驗”，而不是“讀取影像”。沒有那份上下文，它往往會退回到一種千篇一律的觀感，而這正是 Open Design 所填補的空白。"}, {"name": "用 DeepSeek Reasonix 做設計需要付費嗎？", "text": "你自帶 DeepSeek API key，所以你為用量向 DeepSeek 付費（BYOK）——但代理圍繞 DeepSeek 的字首快取構建，從而在長會話中把這筆成本壓低。Reasonix 本身是免費的，採用 MIT 許可。Open Design 絕不會代理轉發你的憑證。"}, {"name": "DeepSeek Reasonix 是 DeepSeek 的官方產品嗎？", "text": "不是。DeepSeek Reasonix 是 esengine 這位 GitHub 作者打造的、由社群構建的開源專案——它執行在 DeepSeek 的模型上並使用 DeepSeek API key，但它並非由 DeepSeek 公司製作或背書。DeepSeek 是其各自所有者的商標。"}, {"name": "做前端設計，選 DeepSeek Reasonix 還是 Claude Code？", "text": "兩者都能做真正的設計工作。Claude Code 以具體、瞭解程式碼庫的設計決策著稱；DeepSeek Reasonix 的優勢在於開源且成本高效，用你自己的 key 在 DeepSeek 模型上做便宜、高頻的迭代。許多團隊會同時用不止一個——Open Design 讓你在不改變設計工作流的前提下切換代理。"}, {"name": "我如何把 DeepSeek Reasonix 連線到像 Figma 這樣的設計源？", "text": "Reasonix 支援 MCP 伺服器，所以你可以按倉庫文件新增一個設計源 MCP（例如一個 Figma MCP 伺服器）。代理隨後就能把真實的設計上下文——元件、變數、佈局資料——作為它可以處理的文本拉取進來，從而讓生成的程式碼與設計源相匹配，而不是近似還原。"}, {"name": "Open Design 與 DeepSeek 有從屬關係嗎？", "text": "沒有。DeepSeek Reasonix 是一個執行在 DeepSeek 模型上的社群專案；Open Design 是一個獨立的開源專案，把它作為一等介面卡來支援。它與 DeepSeek 公司和 Reasonix 維護者都沒有從屬關係。DeepSeek 是其各自所有者的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且開源。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 DeepSeek API key 由你的代理直接使用，絕不會經 Open Design 伺服器轉發。"}], "ctaTitle": "以開放的方式，用 DeepSeek Reasonix 做設計。", "ctaBody": "自帶你的 DeepSeek API key，讓每一個檔案都留在本地，併為你已經在用的那個開源代理配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 DeepSeek Reasonix", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的代理"},
+    },
+    'hermes': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['hermes']!,
+      title: "用 Hermes 做設計 — Open Design",
+      description: "人們如何用 Nous Research 的 Hermes（這款自主、多供應商的終端編碼 agent）做 UI 和網頁設計，以及 Open Design 如何把它變成一個本地優先、開源的設計 agent——使用你自己的 xAI、OpenAI 或 Anthropic 金鑰。",
+      breadcrumb: "Hermes",
+      label: "Agent · Hermes",
+      heading: "用 Hermes 做設計。",
+      lead: "Hermes 是 Nous Research 推出的開源自主終端 agent。它在自己的機器上自主規劃、執行並委派工作——而且不繫結供應商，所以你可以自帶 xAI、OpenAI 或 Anthropic 金鑰。一旦你給它參考素材、規範和一套驗證閉環，這份自主性就讓它成為真正的設計工具。Open Design 把它接入一套開源設計工作流：你的金鑰、你的檔案、本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Hermes 變成一個本地優先、開源的設計 agent——你自己的 xAI、OpenAI 或 Anthropic 金鑰、你的檔案，外加圍繞它的一套精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Hermes", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Hermes 是 Nous Research 推出的開源自主 AI agent。有兩點讓它對設計而言格外有意思：它是真正意義上的 agentic（自主代理），會規劃任務、執行任務，並把區域性工作委派給隔離的子 agent，而不只是逐行補全；它還不繫結供應商，所以你可以把它指向你信任的任意模型——預設是 xAI Grok，也可通過自帶金鑰用 OpenAI 和 Anthropic。配上合適的參考素材、規範和一套驗證閉環，它就能在你自己的機器上構建真實、響應式的 UI。這是一份實用的端到端指南，教你如何用 Hermes 做 UI、前端和設計系統工作，並把它接入 Open Design 的結構化設計工作流。", "本文涵蓋 Hermes 究竟是什麼、為什麼一個自主、多供應商的 agent 適合做設計、如何從零搭起、截圖轉 UI 的閉環、skill 與子 agent 如何擴充套件它、它與 Codex、Claude Code、Cursor、Gemini CLI 的對比、那些讓 AI 產物顯得千篇一律的坑，以及 Open Design 如何作為一個開放、本地優先的設計層填補落差——這是一種天然搭配，因為兩者都開源、都跑在你自己的機器上。"], "heroImage": {"src": "/agents/hermes-design/hermes-design-hero.webp", "alt": "Hermes 設計反饋閉環：一個自主終端 agent 讀取參考圖、委派給子 agent、一個瀏覽器渲染 UI 以及一個工作區，反饋箭頭回環往復", "caption": "核心閉環：Hermes 在終端裡讀取你的參考素材，規劃並委派構建，在真實瀏覽器中驗證 UI，並對照參考反覆迭代——在你自帶的任意模型上執行。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-hermes", "label": "Hermes 究竟是什麼"}, {"id": "why-design", "label": "為什麼自主、多供應商的 agent 適合做設計"}, {"id": "setup", "label": "為設計搭起 Hermes（從零開始）"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "extend", "label": "Skill、子 agent 與供應商"}, {"id": "vs", "label": "Hermes vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "坑，以及“AI 流水貨”觀感"}, {"id": "open-design", "label": "在 Open Design 中用 Hermes 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-hermes", "heading": "Hermes 究竟是什麼", "blocks": [{"kind": "p", "text": "Hermes 是 Nous Research 推出的開源（MIT）自主 AI agent。它持續執行在你自己的機器或伺服器上，讀取你的倉庫、編輯檔案、執行 shell 命令、搜尋網路，並且——這是關鍵——自主規劃並執行多步驟工作，把區域性委派給隔離的子 agent。它是一個自主 agent，而不是綁死在 IDE 裡的副駕。"}, {"kind": "p", "text": "對設計工作來說，有兩個特性格外突出。它是真正 agentic 的，所以你可以交給它一個目標，它會規劃、構建並驗證，而不是等你逐行指揮。它還不繫結供應商：你自帶金鑰，預設用 xAI Grok，但也可自由指向 OpenAI、Anthropic 或任何其他受支援的端點——由你掌控讓哪個模型來推理你的設計。"}, {"kind": "steps", "items": [{"label": "Skill", "body": "Hermes 會構建並複用 skill——它從經驗中創造出的過程性記憶——這正是沉澱你的設計規範、tokens 和評審清單的天然之處，讓它們在多次執行間持續生效。"}, {"label": "子 agent + 工具", "body": "它會派生隔離的子 agent 來並行處理多條工作流，並自帶檔案、shell、網路和瀏覽器工具，因此無需離開終端就能收集參考素材、跑一套構建並驗證的閉環。"}, {"label": "自帶金鑰", "body": "Hermes 預設用 xAI Grok，並通過 BYOK 支援 OpenAI、Anthropic、OpenRouter 及許多其他供應商——設定一個金鑰或走一遍 OAuth 流程，再挑選你的模型。"}]}, {"kind": "ul", "items": ["供應商：Nous Research", "憑證：通過 BYOK 自帶的供應商金鑰——xAI（Grok，預設）、OpenAI 或 Anthropic——用 hermes auth add 新增", "許可證：MIT，開源"]}]}, {"id": "why-design", "heading": "為什麼自主、多供應商的 agent 適合做設計", "blocks": [{"kind": "p", "text": "Hermes 的設計優勢來自兩個特性——但和每一個 agent 一樣，審美仍然得由你來供給。"}, {"kind": "steps", "items": [{"label": "自主規劃並執行", "body": "因為 Hermes 會自主規劃、執行並委派，所以它能接過一個設計目標——還原這張參考、把它做成響應式——並朝它迭代，而不需要把每一步都講清楚。"}, {"label": "帶上你信任的模型", "body": "不繫結供應商的 BYOK 意味著你為手頭的活兒挑選推理模型：預設是 xAI Grok，想用 OpenAI 和 Anthropic 模型的長處時也能切——不被任何一家供應商的審美鎖死。"}, {"label": "規範沉澱進 skill", "body": "Skill（再加上像 Figma 這樣的 MCP 伺服器）把 agent 指向你的 tokens、元件和真實規範，於是它針對一套品牌而非預設觀感來工作。"}]}, {"kind": "image", "src": "/agents/hermes-design/hermes-design-taste-triangle.webp", "alt": "示意圖展示設計系統、skill 和參考圖匯聚成優質設計產出", "caption": "審美來自你提供的三項輸入：一套設計系統、一個 skill 和真實的參考圖。"}, {"kind": "p", "text": "這是每一個 agent 都在教的同一課：Hermes 預設並沒有審美。當你給它約束時——一套設計系統、一個審美 skill 和具體的參考——它才產出好設計。Open Design 恰恰把這些輸入打包好了，這也是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零為設計工作搭起 Hermes", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨機器到一個能構建並驗證 UI 的 Hermes 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Hermes（Nous Research 提供的一行安裝指令碼）\ncurl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash\n\n# 2. 執行設定嚮導\nhermes setup\n\n# 3. 新增供應商並完成認證（BYOK）\n#    預設是 xAI Grok；同樣支援 OpenAI / Anthropic\nhermes auth add        # 新增供應商金鑰或走它的 OAuth 流程\nhermes model           # 挑選供應商和模型（預設 grok-4.3）\n\n# 4. 接入 Figma MCP 伺服器（可選，用於設計交付）\n#    在 Hermes 的 MCP / 工具設定中配置它"}, {"kind": "image", "src": "/agents/hermes-design/hermes-design-setup-flow.webp", "alt": "五步設定流程：安裝、認證、配置 skill、新增設計系統、驗證", "caption": "設定順序：安裝 → 新增供應商金鑰 → 把設計規則收進一個 skill → 新增設計系統 → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元素和規範收進一個 Hermes skill 並把 agent 指向它們，讓產出貼合一套品牌，而不是退回千篇一律的觀感。"}, {"label": "加上瀏覽器驗證", "body": "接入 Playwright 或瀏覽器 MCP，讓 Hermes 在真實瀏覽器中渲染並跨斷點檢查其產出，而不僅僅是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Hermes 做設計槓桿最大的閉環，是把一張參考圖變成可用、響應式的 UI，並迭代到匹配為止——讓這個自主 agent 規劃構建，並把自己的產出對照參考來比對。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考起步——並納入多種狀態（桌面和移動、懸停、空態、載入），而不只是一張主視覺。", "在提示裡說具體；提示含糊，哪怕模型再強也只會產出千篇一律的 UI。", "把你的設計系統和規範放進一個 skill，並告訴 Hermes tokens 和標準基礎元素在哪裡。", "跑一個 dev server，讓 Hermes 在真實瀏覽器中渲染，調整到各斷點尺寸來檢查結果。", "讓 Hermes 把自己的實現對照截圖比對來迭代——而不只是確認它能構建。"]}, {"kind": "p", "text": "把 Hermes 指向你的參考素材，並給出具體約束："}, {"kind": "code", "lang": "bash", "code": "hermes\n# 在提示裡：\n> 使用本資料夾裡的 reference-desktop.png 和 reference-mobile.png。\n  用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  複用我 skill 裡現有的設計系統元件和 tokens。\n  匹配間距、佈局和層級；做成響應式。\n  在瀏覽器裡渲染它，並迭代到跨斷點都與參考匹配為止。"}, {"kind": "p", "text": "把提示保持小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Hermes），這樣每一輪都建立在乾淨的基礎上。"}]}, {"id": "extend", "heading": "Skill、子 agent 與供應商", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Hermes 適合持續的設計工作，而且這三者都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "Skill", "body": "Hermes 會構建並複用 skill——從經驗中創造出的過程性記憶。它們是你設計規範的持久歸宿，在後續執行中被直接應用，而不必每次重新解釋。"}, {"label": "子 agent 與 MCP", "body": "它把工作委派給隔離的子 agent，並支援 MCP 伺服器——這是引入設計上下文與外部工具的可移植方式，其中最相關的是 Figma MCP 伺服器，它們跨 agent 通用，而不只服務於 Hermes。"}, {"label": "供應商選擇", "body": "因為 Hermes 不繫結供應商（預設 xAI Grok，通過 BYOK 用 OpenAI 和 Anthropic），你可以為任務匹配模型，而無需重建你的工作流。"}]}, {"kind": "p", "text": "這些是可移植、多 agent 的能力——恰恰是 Open Design 生來要去編排的那類東西，而不是每個專案重造一遍。"}]}, {"id": "vs", "heading": "做設計時 Hermes vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "做設計沒有唯一贏家——每個 agent 各有不同長處，經驗豐富的團隊會把它們疊著用。一份公允的小結："}, {"kind": "table", "columns": ["Agent", "設計長處", "最適合"], "rows": [["Hermes", "自主的規劃-執行-委派 agent；不繫結供應商的 BYOK（預設 xAI Grok，也支援 OpenAI/Anthropic）；開源且可自託管", "在你信任的任意模型上撒手交付的自主構建，且保留在本地"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委派式的非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（hex、間距、字型）和懂程式碼庫的 UX", "前端推理和大上下文的重構"], ["Cursor", "帶即時預覽和內聯編輯的視覺化“邊構建邊看”閉環", "在 IDE 內緊湊的“迭代-觀察”UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 1M tokens 上下文；有免費檔", "截圖密集的工作，以及把整套設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆給出的結論是：審美來自人——沒有 skill、參考和約束，它們全都會退回千篇一律的觀感。那才是真正要解決的問題——它是設計工具形態的，而非模型形態的。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避開“AI 流水貨”觀感", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨，是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一股 Inter 加紫色的味道，“一眼就看出是 AI 做的”。其他被反映的問題還包括移動端佈局崩壞，以及指令文字滲進了 UI 文案。這些都不是 Hermes 獨有的；任何 agent 在沒有精選設計上下文的情況下執行，都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會逼 agent 認定一個真實的方向，而不是預設觀感。"}, {"label": "在真實瀏覽器中驗證", "body": "讓 Hermes 跨斷點渲染並自檢，使佈局不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖，是撬動產出質量最大的那根槓桿。"}, {"label": "把規則編碼進 skill", "body": "把諸如“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類規則放進一個 agent 每次執行都會應用的 skill。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是在給 agent 一套精選的設計上下文。手工地、逐專案地維護這套上下文，正是 Open Design 替你省掉的苦力活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Hermes 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面那套工作流一直在呼喚的開源設計層。它把 Hermes 當作一等介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染流水線和一個本地桌面 UI 把它包起來——於是讓 Hermes 變好的那套設計上下文，從第一次執行起就在那兒，而不是每次手工拼湊。兩者都開源、都本地優先，這讓它們的搭配水到渠成。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Hermes 作為你的 agent。", "用你自己的供應商金鑰（BYOK）認證——預設 xAI Grok，或 OpenAI 或 Anthropic——憑證留在你的機器上，絕不經我們代理。", "挑一套設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管雲端。"]}, {"kind": "p", "text": "同一個 Hermes agent、同一個金鑰——再加上圍繞它的一套真實、可移植、開源的設計工作流。它本地優先、採用 Apache-2.0，所以你的工作和憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Hermes 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Hermes 就能產出生產級、響應式的 UI；作為一個自主 agent，它還能自行渲染並對照參考驗證產出。沒有那套上下文，它往往會退回千篇一律的觀感，而這正是 Open Design 填補的落差。"}, {"name": "Hermes 用哪些模型和金鑰？", "text": "Hermes 不繫結供應商，且自帶金鑰。它預設用 xAI Grok（例如 grok-4.3），同時支援 OpenAI、Anthropic、OpenRouter 及許多其他供應商——你用 hermes auth add 新增供應商金鑰（或走它的 OAuth 流程），用 hermes model 挑選模型。Open Design 從不代理你的憑證。"}, {"name": "Hermes 具體好在哪，讓它適合做設計？", "text": "兩點：它是真正自主的，所以會規劃、構建並驗證 UI，而不是等你逐行指揮；它還不繫結供應商，所以你能跑你信任的推理模型。兩點都有幫助——但審美仍然來自你提供的設計系統、skill 和參考。"}, {"name": "做前端設計，選 Hermes 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、懂程式碼庫的設計決策著稱；Hermes 的優勢是自主規劃並執行加上供應商選擇——你甚至可以讓 Hermes 指向一個 Anthropic 金鑰。很多團隊兩者都用——Open Design 讓你切換 agent 而無需改動你的設計工作流。"}, {"name": "我怎麼把 Hermes 連到 Figma？", "text": "在 Hermes 的工具配置裡新增一個 Figma MCP 伺服器。Hermes 隨後就能拉取真實的設計上下文——元件、變數、佈局資料——使生成的程式碼與源頭匹配，而不是近似還原。"}, {"name": "Open Design 隸屬於 Nous Research 嗎？", "text": "不。Hermes 是 Nous Research 的產品；Open Design 是一個獨立的開源專案，以一等介面卡的方式支援它。Hermes 和 Nous Research 是其各自所有者的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先，採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的供應商憑證由你的 agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，和 Hermes 一起做設計。", "ctaBody": "自帶你自己的 xAI、OpenAI 或 Anthropic 金鑰，把每個檔案留在本地，併為你已經在用的 agent 配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Hermes", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'devin': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['devin']!,
+      title: "用於設計的 Devin for Terminal — Open Design",
+      description: "人們如何把 Devin for Terminal——Cognition 在命令列中的自主式 AI 軟體工程師——用於 UI 與網頁設計，以及 Open Design 如何藉助精選的 skill 與設計系統庫，把它變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Devin for Terminal",
+      label: "Agent · Devin",
+      heading: "用於設計的 Devin for Terminal。",
+      lead: "Devin for Terminal 是 Cognition 的自主式 AI 軟體工程師，執行在你的終端裡。它能自行規劃並執行多步驟任務，還能把會話移交給一個沙箱化的雲端 agent——只要你給它參考素材、規範約定和一套驗證迴圈，它就能成為真正交付前端工作的方式。Open Design 把它接入開源的設計工作流：用你自己的 Devin 賬號、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Devin for Terminal 變成一個本地優先、開源的設計 agent——用你自己的 Devin 賬號、你自己的檔案，圍繞它配上精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 裡使用 Devin", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Devin for Terminal 是 Cognition 的自主式 AI 軟體工程師，被帶進了本地命令列。有兩點讓它在設計這件事上格外有意思：它是真正具備自主性的，能夠規劃並端到端地執行一個多步驟任務，而不只是補全程式碼行；它還能把會話移交給一個擁有自己計算機的沙箱化雲端 agent，於是較長的構建任務在你合上筆記本之後仍能繼續執行。配上合適的參考素材、規範約定和一套驗證迴圈，它能構建出真正可用的響應式 UI。這是一份實用的、端到端的指南，講如何把 Devin for Terminal 用於 UI、前端和設計系統工作，以及如何藉助 Open Design 把它接入一套結構化的設計工作流。", "本文涵蓋：Devin for Terminal 究竟是什麼、為什麼一個自主式軟體工程師適合設計工作、如何從零開始把它配置好、截圖轉 UI 的迴圈、專案規則與外部工具如何擴充套件它、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 產出看起來很「通用」的坑，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這道鴻溝——對任何能規劃並交付前端工作的 agent 來說，這都是天然的搭配。"], "heroImage": {"src": "/agents/devin-design/devin-design-hero.webp", "alt": "Devin for Terminal 的設計反饋迴圈：一個自主式終端 agent 讀取參考圖、一個瀏覽器渲染 UI、一個工作區，以及一條迴環的反饋箭頭", "caption": "核心迴圈：Devin 在終端裡讀取你的參考素材，規劃並構建 UI，在真實瀏覽器中驗證，並對照參考不斷迭代——必要時把較長的執行任務移交給雲端。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-devin", "label": "Devin for Terminal 究竟是什麼"}, {"id": "why-design", "label": "為什麼自主式軟體工程師適合設計"}, {"id": "setup", "label": "從零配置用於設計的 Devin"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "extend", "label": "專案規則、工具與雲端移交"}, {"id": "vs", "label": "Devin vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "坑，以及那股「AI 味」"}, {"id": "open-design", "label": "在 Open Design 裡用 Devin 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-devin", "heading": "Devin for Terminal 究竟是什麼", "blocks": [{"kind": "p", "text": "Devin for Terminal 是 Devin——Cognition 的自主式 AI 軟體工程師——的命令列版本。它作為一個本地編碼 agent 執行，能訪問你的程式碼庫、工具和環境——讀取你的倉庫、編輯檔案、執行 shell 命令，並從一條自然語言任務出發去規劃和驗證工作，而不只是補全程式碼行。Cognition 用 Rust 自研了一套終端渲染庫，讓介面保持快速、流暢。"}, {"kind": "p", "text": "對設計工作來說，有兩個特性格外突出。它是真正自主的，所以你可以描述一個目標結果，它會執行通往該結果的多步驟路徑。而當一個構建任務超出你筆記本的承載時，你可以把會話移交給一個執行在自己沙箱環境中的雲端 agent，讓它非同步地繼續工作——於是你回來時迎接你的是一個已完成的 pull request。"}, {"kind": "steps", "items": [{"label": "自主的、具備 agent 能力的執行", "body": "Devin 自行規劃並執行一個多步驟任務——實現一項功能、構建 UI、執行並測試它——由帶明確完成標準的清晰提示詞來引導。"}, {"label": "本地 agent，雲端移交", "body": "它在你的終端裡本地執行，並且能把會話升級移交給一個擁有自己計算機的沙箱化雲端 agent，在你離開後繼續工作。"}, {"label": "基於賬號，可選模型", "body": "你用 Devin（Cognition）賬號登入；Devin 執行在前沿模型上——你可以在多個選項之間選擇，比如 Cognition 自家的 SWE-1.6 以及其他前沿模型。"}]}, {"kind": "ul", "items": ["廠商：Cognition", "憑證：Devin（Cognition）賬號——基於訂閱/賬號的登入，而非自帶金鑰（BYOK）", "形態：本地終端 agent，可選沙箱化雲端移交"]}]}, {"id": "why-design", "heading": "為什麼自主式軟體工程師適合設計", "blocks": [{"kind": "p", "text": "Devin 的設計優勢來自它的工作方式——自主的、端到端的執行——但和每個 agent 一樣，審美仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "端到端、多步驟的構建", "body": "因為 Devin 會規劃並執行整個任務，它可以一氣呵成地搭好一個頁面、接好元件、跑起開發伺服器並測試結果，而不是停在一段程式碼片段上。"}, {"label": "沙箱化的雲端執行", "body": "較長的前端工作——一整個落地頁、一條多屏流程——可以移交給一個沙箱化的雲端 agent 繼續構建，於是迭代不會被你的筆記本卡住。"}, {"label": "把約定寫進專案規則", "body": "通過專案的規則和文件，把 agent 指向你的 tokens、元件和真實規範，讓它對著一個品牌工作，而不是一套預設外觀。"}]}, {"kind": "image", "src": "/agents/devin-design/devin-design-taste-triangle.webp", "alt": "示意圖：設計系統、skill 和參考圖匯聚成優秀的設計產出", "caption": "審美來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這條道理和每個 agent 教給我們的一樣：Devin 預設並不具備審美。當你給它約束時，它才能產出好設計——一套設計系統、一個審美 skill，以及具體的參考素材。Open Design 恰好把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零配置用於設計工作的 Devin", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Devin for Terminal 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Devin for Terminal\ncurl -fsSL https://cli.devin.ai/install.sh | bash\n\n# 2. 在你的專案裡啟動它，首次執行時登入\ncd your-project\ndevin             # 用你的 Devin（Cognition）賬號登入\n\n# 3. 用自然語言描述任務，給出清晰的\n#    完成標準，讓 Devin 自行規劃並執行。\n\n# 4. 當一個構建任務超出你筆記本的承載時，把會話\n#    移交給一個沙箱化的雲端 agent 繼續工作。"}, {"kind": "image", "src": "/agents/devin-design/devin-design-setup-flow.webp", "alt": "五步配置流程：安裝、登入、編碼設計規則、新增參考素材、在瀏覽器中驗證", "caption": "配置順序：安裝 → 登入 → 編碼你的設計規則 → 提供參考素材 → 在真實瀏覽器中驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元件和約定放到 agent 會讀取的地方——你專案的規則和文件裡——讓產出對齊一個品牌，而不是退回到一套通用外觀。"}, {"label": "加入瀏覽器驗證", "body": "讓 Devin 在真實瀏覽器中渲染，並跨斷點檢查它的產出，這樣它就會對照設計進行驗證，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Devin 做設計時，槓桿率最高的迴圈是把一張參考圖變成可用的響應式 UI，並反覆迭代直到匹配——讓這個自主式 agent 去構建、執行，並把自己的產出對照參考進行比對。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發——並且包含多種狀態（桌面端和移動端、懸停、空態、載入），而不只是一張主視覺。", "提示詞要具體，並給出明確的完成標準；即使 agent 很強，含糊的提示詞也會產出通用的 UI。", "把你的設計系統和約定放在專案規則裡，並告訴 Devin tokens 和規範基礎元件都在哪裡。", "跑起一個開發伺服器，讓 Devin 在真實瀏覽器中渲染，並調整到各個斷點來檢查結果。", "通過讓 Devin 把自己的實現對照參考進行比對來迭代——而不只是確認它能構建通過——並把較長的迭代移交給雲端。"]}, {"kind": "p", "text": "把參考素材和具體約束交給 Devin，並給出清晰的「完成」定義："}, {"kind": "code", "lang": "bash", "code": "devin\n# 在提示詞裡：\n> Implement the attached reference (desktop + mobile) in\n  React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the\n  references across breakpoints. Done = pixel-close on both\n  desktop and mobile with no console errors."}, {"kind": "p", "text": "保持提示詞聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Devin），這樣每一輪都建立在一個乾淨的基礎之上。"}]}, {"id": "extend", "heading": "專案規則、工具與雲端移交", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Devin for Terminal 適合持續的設計工作，而且這三點都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "專案規則與上下文", "body": "把你的設計約定、tokens 和評審清單放在專案的規則和文件裡，讓 agent 每次執行都讀取它們，並對著你的品牌工作。"}, {"label": "程式碼庫、工具與環境", "body": "Devin 作為一個本地 agent 執行，能訪問你的程式碼庫、工具和環境——它可以跑開發伺服器、執行構建並驗證產出，全程不用離開終端。"}, {"label": "沙箱化雲端移交", "body": "把會話移交給一個執行在自己沙箱裡的雲端 agent，非同步地跑更長的構建、測試和 PR 建立，然後你回來迎接一個已完成的 pull request。"}]}, {"kind": "p", "text": "這些正是 Open Design 被設計來去編排、而非在每個專案裡重新造一遍的那類可移植的、agent 形態的能力。"}]}, {"id": "vs", "heading": "用於設計時 Devin vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上沒有唯一的贏家——每個 agent 各有所長，有經驗的團隊會把它們疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Devin", "完全自主的軟體工程師；規劃並執行多步驟構建，並移交給一個沙箱化的雲端 agent", "把端到端的前端構建委派出去，讓它在你離開後繼續執行"], ["Codex", "憑藉 frontend skill 帶來強視覺打磨；沙箱化非同步構建", "委派式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（十六進位制色值、間距、字型）以及理解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和行內編輯的「邊構建邊看」迴圈", "在 IDE 內緊湊地「迭代並觀察」的 UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 1M token 的上下文；開源且帶免費額度", "大量依賴截圖的工作，以及在上下文裡裝下整套設計系統"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人類——沒有 skill、參考素材和約束，它們都會預設退回一套通用審美。那才是真正要解決的問題——而它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避開那股「AI 味」", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來很通用——柔和的漸變、漂浮的面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的調調，「一眼就知道是 AI 做的」。其他被反映的問題還包括移動端佈局錯亂，以及提示語洩漏進 UI 文案裡。這些都不是 Devin 獨有的；任何 agent 在缺少精選設計上下文的情況下執行，都會出現這些問題。"}, {"kind": "steps", "items": [{"label": "加入一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 投向一個真實的方向，而不是那套預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "讓 Devin 渲染並跨斷點自檢，這樣佈局就不會在移動端悄悄崩掉。"}, {"label": "提供 tokens 和參考素材", "body": "真實的設計 tokens 和參考截圖，是對產出質量影響最大的那個槓桿。"}, {"label": "把規則編碼進專案上下文", "body": "把「不用主視覺卡片、最多兩種字型、品牌優先的層級」這類風格規則放在 agent 每次執行都會讀到的地方，並給出明確的完成標準。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是在給 agent 一份精選的設計上下文。靠手工、按專案去維護這份上下文，正是 Open Design 替你省掉的那份苦差。"}]}, {"id": "open-design", "heading": "在 Open Design 裡用 Devin 做設計", "blocks": [{"kind": "p", "text": "Open Design 就是上面那套工作流一直在呼喚的開源設計層。它把 Devin for Terminal 當作一等公民介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染管線和一個本地桌面 UI 把它包裹起來——於是讓 Devin 變好的那份設計上下文從第一次執行起就在那裡，而不必每次都手工拼裝。Open Design 是開源且本地優先的，這讓它與一個你本就在終端裡執行的 agent 天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Devin for Terminal 作為你的 agent。", "用你的 Devin（Cognition）賬號進行認證——憑證由你的 agent 直接使用，絕不經我們代理。", "選一套設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一份產出物和 DESIGN.md 檔案都留在你自己的倉庫裡，而不是託管的雲端。"]}, {"kind": "p", "text": "同一個 Devin agent、同一個賬號——外加圍繞它的一套真實、可移植、開源的設計工作流。Open Design 是本地優先且採用 Apache-2.0 許可的，所以你的工作和憑證都不會經由我們離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Devin for Terminal 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Devin 就能產出生產級的響應式 UI，而且作為一個自主式 agent，它能構建、執行並對照你的參考驗證結果。缺少這份上下文時，它往往會預設退回一套通用外觀，而這正是 Open Design 填補的鴻溝。"}, {"name": "我該如何登入 Devin？", "text": "Devin 是基於賬號的：你用一個 Devin（Cognition）賬號登入，而不是自帶模型金鑰。安裝 Devin for Terminal，在你的專案裡執行它，並在首次執行時認證。Open Design 絕不代理你的憑證——你的 agent 會直接使用它們。"}, {"name": "Devin 在設計上具體好在哪裡？", "text": "它是一個完全自主的軟體工程師：它端到端地規劃並執行多步驟的前端構建，還能把會話移交給一個沙箱化的雲端 agent，讓它在你離開後繼續工作。審美仍然來自你提供的設計系統、skill 和參考素材。"}, {"name": "做前端設計該選 Devin 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策見長；Devin 的優勢在於完全自主、端到端的執行，外加沙箱化的雲端移交。許多團隊兩者都用——Open Design 讓你在不改變設計工作流的情況下切換 agent。"}, {"name": "Devin 在沙箱裡執行嗎？", "text": "Devin for Terminal 在本地執行，能訪問你的程式碼庫和環境，並且它可以把會話移交給一個執行在自己沙箱環境中的雲端 agent——這對那些需要非同步繼續的較長構建、測試和 PR 建立很有用。"}, {"name": "Open Design 與 Cognition 有關聯嗎？", "text": "沒有。Devin for Terminal 是 Cognition 的產品；Open Design 是一個獨立的開源專案，以一等公民介面卡的形式支援它。Devin 是 Cognition 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0 許可。你的檔案、產出物和 DESIGN.md 都留在你自己的倉庫裡，你的 Devin 憑證由你的 agent 直接使用，絕不經由 Open Design 伺服器中轉。"}], "ctaTitle": "以開放的方式，和 Devin 一起做設計。", "ctaBody": "用你的 Devin 賬號登入，讓每個檔案都留在本地，並圍繞你已經在用的那個自主式 agent 配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 裡使用 Devin", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'pi': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['pi']!,
+      title: "用 Pi 做設計 — Open Design",
+      description: "人們如何用 Pi（開源的多供應商終端編碼 agent）做 UI 與網頁設計——它的任意模型路由、BYOK 供應商金鑰、Skills 與 Extensions——以及 Open Design 如何把 Pi 變成本地優先的開源設計 agent。",
+      breadcrumb: "Pi",
+      label: "Agent · Pi",
+      heading: "用 Pi 做設計。",
+      lead: "Pi 是一個開源的終端編碼 agent，可路由到任意模型——Anthropic、OpenAI、Google 及 20 多家供應商——全部用你自己的 API 金鑰。這個與供應商無關的核心讓它成為一款靈活的設計工具：選今天讀截圖最強的模型，明天再換，工作流不變。Open Design 把它接入一套開源設計工作流：你的供應商金鑰、你的檔案、本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Pi 變成一個本地優先的開源設計 agent——用你自己的供應商 API 金鑰、你的檔案，外加圍繞它的一套精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Pi", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Pi 是一個面向終端的開源（MIT）AI 編碼 agent。對設計而言它的有趣之處在於：它與供應商無關——在一個統一介面背後把 Anthropic、OpenAI、Google 及另外 20 多家供應商規範成一致形態，所以你用自己的 API 金鑰（BYOK）做認證、按任務挑模型——而且可以在一次會話中途切換模型，不必重新學習這套工具。再配上合適的參考、規範和一個驗證迴路，它能構建出真實、響應式的 UI。這是一份實用的端到端指南，講如何用 Pi 做 UI、前端和設計系統工作，並把它接入 Open Design 的結構化設計工作流。", "它涵蓋：Pi 到底是什麼，為什麼一個多供應商 BYOK agent 適合設計，如何從零搭建，截圖轉 UI 的迴路，Skills 和 Extensions 如何擴充套件它，它與 Codex、Claude Code、Cursor、Gemini CLI 的對比，讓 AI 產出看起來千篇一律的那些坑，以及 Open Design 如何作為一個開放、本地優先的設計層補上這道缺口——這是一種天然的搭配，因為兩者都是開源、都在你自己的機器上執行。"], "heroImage": {"src": "/agents/pi-design/pi-design-hero.webp", "alt": "Pi 設計反饋迴路：一個終端 agent 在讀取參考圖、一個瀏覽器在渲染 UI、一個工作區，還有一條迴環的反饋箭頭", "caption": "核心迴路：Pi 在終端裡讀取你的參考，在真實瀏覽器中構建並驗證 UI，再對照它們迭代——無論你把它指向哪家供應商。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-pi", "label": "Pi 到底是什麼"}, {"id": "why-design", "label": "為什麼多供應商 BYOK agent 適合設計"}, {"id": "setup", "label": "從零搭建用於設計的 Pi"}, {"id": "screenshot-workflow", "label": "截圖轉 UI 的工作流"}, {"id": "extend", "label": "Skills、Extensions 與主題"}, {"id": "vs", "label": "Pi 對比 Codex、Claude Code、Cursor、Gemini CLI"}, {"id": "pitfalls", "label": "坑，以及“AI 流水線感”的樣子"}, {"id": "open-design", "label": "在 Open Design 中用 Pi 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-pi", "heading": "Pi 到底是什麼", "blocks": [{"kind": "p", "text": "Pi 是一個面向終端的開源（MIT）AI 編碼 agent，屬於 earendil-works pi 工具集的一部分。它讀取你的倉庫、編輯檔案、執行 shell 命令——從自然語言任務出發去規劃並驗證工作，而不只是補全幾行程式碼。它的核心刻意精簡：四個預設工具——read、write、edit 和 bash——外加內建的 grep、find 和 ls。"}, {"kind": "p", "text": "對設計工作來說，最突出的特性是 Pi 與供應商無關。它在一個統一 API 背後把 Anthropic、OpenAI、Google 及眾多其他供應商規範成一致形態，所以你自帶金鑰、按任務挑模型——比如挑一個擅長讀參考截圖的多模態強模型——並在會話中途用 /model 或 Ctrl+L 切換，工作流照舊不變。"}, {"kind": "steps", "items": [{"label": "任意模型，你的金鑰", "body": "Pi 可路由到 20 多家供應商，包括 Anthropic 和 OpenAI。你用自己的 API 金鑰（BYOK）做認證，或用 /login 登入 Claude Pro/Max、ChatGPT Plus/Pro 或 GitHub Copilot 訂閱。"}, {"label": "Skills + Extensions", "body": "Pi 載入 Skills（遵循 Agent Skills 標準的 Markdown 能力包）和 TypeScript Extensions——這正是編碼你的設計規範、新增自定義工具的天然位置。"}, {"label": "可分支的會話", "body": "會話以 JSONL 樹形式儲存，所以你可以為一次探索拉出分支、在單個檔案裡瀏覽歷史，而不會丟掉之前的嘗試。"}]}, {"kind": "ul", "items": ["供應商：earendil-works（開源社群專案）", "憑證：你自己的供應商 API 金鑰（BYOK——Anthropic、OpenAI、Google 等）或通過 /login 的訂閱登入；本地儲存在 ~/.pi/agent/auth.json（0600）", "許可證：MIT，開源"]}]}, {"id": "why-design", "heading": "為什麼多供應商、BYOK 的 agent 適合設計", "blocks": [{"kind": "p", "text": "Pi 的設計優勢在於靈活，而不在某個內建模型——但和每一個 agent 一樣，品味仍然得由你提供。"}, {"kind": "steps", "items": [{"label": "按任務挑對模型", "body": "因為 Pi 能路由到任意供應商，你可以拿一個強多模態模型去讀參考截圖，再切到另一個去做重構——全程不離開 agent。"}, {"label": "你的金鑰，無鎖定", "body": "BYOK 意味著你不被某一家供應商的定價或上下文限制綁死；按眼前的設計任務挑選其優勢最契合的模型。"}, {"label": "把規範放進 Skill", "body": "一個 Skill（再加上像 Figma 伺服器這樣的 MCP 來源）把 agent 指向你的 tokens、元件和真實規範，於是它針對一個品牌工作，而不是套用預設外觀。"}]}, {"kind": "image", "src": "/agents/pi-design/pi-design-taste-triangle.webp", "alt": "示意圖：設計系統、skill 和參考圖匯聚成優秀的設計產出", "caption": "品味來自你提供的三項輸入：一個設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這裡的教訓和每個 agent 教給我們的一樣：Pi 預設沒有品味，換什麼模型都補不上。當你給它約束時——一個設計系統、一個審美 skill 和具體參考——它才能產出好設計。Open Design 恰好把這些輸入打包好，這就是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零搭建用於設計的 Pi", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Pi 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Pi 編碼 agent CLI（Node）\nnpm install -g --ignore-scripts @earendil-works/pi-coding-agent\n\n# 2. 用你自己的供應商金鑰做認證（BYOK）\nexport ANTHROPIC_API_KEY=sk-ant-...   # 或 OPENAI_API_KEY=sk-...\n#    （或在 Pi 內執行 /login 使用 Claude / ChatGPT / Copilot 訂閱）\n\n# 3. 在你的專案裡啟動它\ncd your-project\npi\n\n# 4. 隨時用 /model 或 Ctrl+L 切換模型"}, {"kind": "image", "src": "/agents/pi-design/pi-design-setup-flow.webp", "alt": "五步搭建流程：安裝、認證、編碼設計規則、新增 skill、驗證", "caption": "搭建順序：安裝 → 認證（BYOK）→ 在 Skill 裡編碼設計規則 → 選一個模型 → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "編碼你的設計規則", "body": "把你的 tokens、基礎元素和規範放進一個 Skill 並把 Pi 指向它們，讓產出貼合一個品牌，而不是退回到千篇一律的外觀。"}, {"label": "加入瀏覽器驗證", "body": "接上 Playwright 或瀏覽器 MCP，讓 Pi 在真實瀏覽器中渲染、並跨斷點檢查產出，而不是隻確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖轉 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Pi 做設計槓桿最高的迴路，是把一張參考圖變成可用、響應式的 UI，然後迭代到匹配為止——靠一個多模態模型把產出對照參考來比較。因為 Pi 與供應商無關，本輪就把它指向最擅長讀圖的那個模型。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考入手——幷包含多種狀態（桌面端和移動端、懸停、空態、載入態），不要只給一張主視覺。", "用 /model 為本輪挑一個強多模態模型，因為影像理解才是截圖轉 UI 質量的關鍵驅動力。", "提示詞要具體；含糊的提示詞即便配強模型也會產出千篇一律的 UI。", "把你的設計系統和規範放進一個 Skill，並告訴 Pi tokens 和規範基礎元素在哪裡。", "跑一個開發伺服器，讓 Pi 在真實瀏覽器中渲染、縮放到各斷點，然後把它的實現對照截圖來迭代——而不是僅僅確認它能構建。"]}, {"kind": "p", "text": "一開始就把參考和具體約束交給 agent："}, {"kind": "code", "lang": "bash", "code": "pi\n# 在提示詞裡：\n> 用 React + Vite + Tailwind + TypeScript 實現\n  reference-desktop.png 和 reference-mobile.png。\n  複用我現有的設計系統元件和 tokens（見 Skill）。\n  匹配間距、佈局和層級；做成響應式。\n  在瀏覽器裡渲染並迭代，直到它跨斷點都與參考匹配。"}, {"kind": "p", "text": "保持提示詞小而聚焦，把好的迭代提交、把壞的回退掉（回退時告訴 Pi），這樣每一輪都在乾淨的基底上推進。Pi 可分支的 JSONL 會話也讓你在不丟失原始線索的情況下探索另一種方案。"}]}, {"id": "extend", "heading": "Skills、Extensions 與主題", "blocks": [{"kind": "p", "text": "Pi 在執行時通過幾個層自我擴充套件，而它們乾淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "Skills", "body": "遵循 Agent Skills 標準的 Markdown 能力包——是你的設計規範、tokens 和評審清單耐用、可移植的歸宿。同一個 Skill 在相容的 agent 間通用，不止 Pi。"}, {"label": "Extensions 與提示詞模板", "body": "TypeScript Extensions 新增自定義工具、命令和 UI；可複用的提示詞模板通過 /name 執行。兩者都讓你在不離開終端的前提下指令碼化驗證迴路。"}, {"label": "MCP 與主題", "body": "Pi 連線 MCP 伺服器以引入外部設計上下文（最相關的是一個 Figma MCP 伺服器），主題支援熱過載，讓終端 UI 在你工作時始終清晰可讀。"}]}, {"kind": "p", "text": "這些都是可移植的能力——尤其是 Skills 和 MCP——正是 Open Design 被設計來編排、而非每個專案都重造一遍的那類東西。"}]}, {"id": "vs", "heading": "做設計時 Pi 對比 Codex、Claude Code、Cursor、Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有唯一贏家——每個 agent 各有所長，老練的團隊會把它們疊著用。一個公允的總結："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Pi", "與供應商無關、BYOK——可路由到任意模型（Anthropic、OpenAI、Google……）並在會話中途切換；MIT，可自我擴充套件", "按任務選用最佳模型，且不被供應商鎖定"], ["Codex", "憑前端 skill 實現強視覺打磨；沙箱化的非同步構建", "委託式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（色值、間距、字型）和理解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的“構建即所見”視覺迴路", "在 IDE 內緊湊的邊迭代邊看的 UI 工作"], ["Gemini CLI", "強多模態影像理解和 100 萬 token 上下文；有免費層", "截圖密集的工作，以及把整套設計系統裝進上下文"]]}, {"kind": "p", "text": "Pi 的切入角度與其他幾家正交：它是那個讓你用自己的金鑰去呼叫上述任意底層模型的 agent。社群反覆得出的結論依然成立——品味來自人：它們在沒有 skill、參考和約束時都會退回到千篇一律的審美。那才是真正要解決的問題，而它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避免“AI 流水線感”的樣子", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和漸變、漂浮面板、過大的圓角、誇張的陰影，一種“一看就是 AI 做的”的 Inter 加紫色氣味。其他被反映的問題還包括移動端佈局崩壞、以及指令洩漏進 UI 文案。這些都不是 Pi 或某一個模型獨有的；它們是任何 agent 在缺少精選設計上下文時都會發生的結果。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 迫使 agent 承諾一個真實的方向，而不是預設外觀——而且因為它是可移植的 Skill，會跟著你跨模型走。"}, {"label": "在真實瀏覽器裡驗證", "body": "挑一個多模態模型，讓 Pi 跨斷點渲染並自檢，這樣佈局不會在移動端悄悄崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是對產出質量影響最大的那個槓桿。"}, {"label": "把規則編碼到 Pi 讀得到的地方", "body": "把“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類風格規則放進一個 agent 每次執行都載入的 Skill 裡。"}]}, {"kind": "p", "text": "注意，每一條緩解措施都是在給 agent 一個精選的設計上下文——與你路由到哪家供應商無關。手工、逐專案地維護那份上下文，正是 Open Design 幫你免去的苦差。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Pi 做設計", "blocks": [{"kind": "p", "text": "Open Design 就是上面那套工作流一直在呼喚的那個開源設計層。它把 Pi 當作一級介面卡，並圍繞它包上一套精選的 skill 與設計系統庫、一條結構化的渲染流水線，以及一個本地桌面 UI——於是讓 Pi 變好的那份設計上下文從第一次執行起就在那裡，而不是每次都手工拼裝。兩者都是開源、都本地優先，這讓這對組合天然契合。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Pi 作為你的 agent。", "用你自己的供應商 API 金鑰（BYOK）或一個訂閱登入做認證——憑證留在你機器上的 ~/.pi/agent/auth.json，絕不經我們代理。", "挑一個設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是某個託管雲端。"]}, {"kind": "p", "text": "同一個 Pi agent、同樣的金鑰、同樣可以自由切換模型——再加上圍繞它的一套真實、可移植的開源設計工作流。它本地優先、採用 MIT，所以關於你的工作或憑證的任何東西都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Pi 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一個設計系統和真實的參考圖，Pi 就能產出生產級的響應式 UI，而且你可以把它路由到一個強多模態模型，去把產出對照參考做驗證。缺了那份上下文，它往往會退回到千篇一律的外觀，而這正是 Open Design 要補上的缺口。"}, {"name": "用 Pi 做設計需要付費嗎？", "text": "Pi 本身免費且開源（MIT）。你只為底層模型付費——自帶供應商 API 金鑰（BYOK），或通過 /login 使用 Claude Pro/Max、ChatGPT Plus/Pro 或 GitHub Copilot 訂閱。無論哪種方式，Open Design 都絕不代理你的憑證。"}, {"name": "Pi 具體好在哪裡、為何適合設計？", "text": "它與供應商無關：你自帶金鑰、可路由到 20 多家供應商中的任意一家，挑選其優勢契合任務的模型並在會話中途切換。但品味仍然來自你提供的設計系統、skill 和參考，而非模型本身。"}, {"name": "做前端設計時我該用哪個模型搭配 Pi？", "text": "Pi 可路由到多家供應商，所以按任務來選——一個強多模態模型很會讀參考截圖，而別的模型可能更適合重構。Pi 的優勢在於你可以切換而不改變工作流。Open Design 讓你在所選的任意模型之間保持同一份設計上下文。"}, {"name": "我如何把 Pi 連到 Figma？", "text": "Pi 支援 MCP 伺服器，所以你可以加一個 Figma MCP 伺服器，拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼貼合源頭，而不是近似還原。"}, {"name": "Open Design 和 Pi 有從屬關係嗎？", "text": "沒有。Pi 是 earendil-works 出品的獨立開源專案；Open Design 是一個單獨的獨立開源專案，以一級介面卡的形式支援 Pi。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且開源。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的供應商金鑰由 Pi 直接使用（本地儲存在 ~/.pi/agent/auth.json），絕不經過 Open Design 伺服器路由。"}], "ctaTitle": "以開放的方式，用 Pi 做設計。", "ctaBody": "自帶供應商金鑰、路由到任意模型、讓每個檔案都留在本地，併為你早已在用的 agent 配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Pi", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'kiro': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['kiro']!,
+      title: "用於設計的 Kiro CLI —— Open Design",
+      description: "人們如何用 Amazon 的 Kiro CLI 做 UI 與網頁設計——它的規範驅動開發、agent 鉤子、引導檔案與 MCP——以及 Open Design 如何把 Kiro CLI 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Kiro CLI",
+      label: "Agent · Kiro CLI",
+      heading: "用於設計的 Kiro CLI。",
+      lead: "Kiro CLI 是 Amazon 面向規範驅動開發的終端 agent——它會先把一個提示詞變成一份需求規範、一份設計文件和一份任務清單，然後才動手寫程式碼。這種結構正是設計工作所需要的：先定意圖，再去構建。Open Design 把它接入開源的設計工作流：用你自己的 Builder ID 或登入方式、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Kiro CLI 變成一個本地優先、開源的設計 agent——用你自己的 AWS Builder ID 或登入方式、你自己的檔案，並圍繞它配上一套精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Kiro CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Kiro CLI 是 Amazon 面向規範驅動開發的終端 agent。它的與眾不同之處在於工作流：它不會從提示詞直接跳到程式碼，而是先把需求形式化為一份規範，產出一份設計文件和一份有序的任務清單，然後才動手實現——讓構建對既定意圖負責。它還提供了在檔案儲存等事件上觸發的 agent 鉤子、把你的標準與約定帶進每一次執行的引導檔案，以及面向外部工具的 Model Context Protocol 支援。Kiro 目前處於預覽階段，提供 IDE、CLI 和網頁介面三種形態，你可以免費開始使用。這是一份實用的端到端指南，講解如何用 Kiro CLI 做 UI、前端和設計系統工作，以及如何藉助 Open Design 把它接入一套結構化的設計工作流。", "本文涵蓋：Kiro CLI 究竟是什麼、為什麼規範驅動的工作流契合設計、如何從零搭建、截圖到 UI 的迴圈、引導檔案、鉤子與 MCP 如何擴充套件它、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、哪些坑會讓 AI 產出顯得千篇一律，以及 Open Design 如何作為圍繞它的開放、本地優先的設計層來補齊這塊短板。"], "heroImage": {"src": "/agents/kiro-design/kiro-design-hero.webp", "alt": "Kiro CLI 設計反饋閉環：一個終端 agent 把規範變成設計、一個瀏覽器渲染 UI、以及一個工作區，配有一條迴環的反饋箭頭", "caption": "核心閉環：Kiro CLI 在終端裡把你的意圖變成規範和任務清單，在真實瀏覽器中構建並驗證 UI，並對照你的參考反覆迭代。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-kiro", "label": "Kiro CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼規範驅動開發契合設計"}, {"id": "setup", "label": "從零搭建用於設計的 Kiro CLI"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "規範、引導檔案、鉤子與 MCP"}, {"id": "vs", "label": "Kiro 對比 Codex、Claude Code、Cursor 與 Gemini CLI"}, {"id": "pitfalls", "label": "常見坑與“AI 流水線感”外觀"}, {"id": "open-design", "label": "在 Open Design 中用 Kiro CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-kiro", "heading": "Kiro CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Kiro 是 Amazon 推出的智慧體式 AI，提供 IDE、命令列介面和網頁介面三種形態，旨在藉助規範驅動開發把你從原型一路帶到生產。Kiro CLI 把這個 agent 帶到你的終端：你可以開啟一段互動式聊天會話、建立並管理 agent、執行 Model Context Protocol 伺服器——全部都在命令列裡完成。Kiro 目前處於預覽階段。"}, {"kind": "p", "text": "對設計工作而言，最關鍵的特性是它的工作流。Kiro 不會把提示詞直接變成程式碼，而是先寫一份規範——需求、一份設計文件和一份有序的任務清單——然後照著它去實現。這讓 agent 的計劃在任何 UI 被構建之前就可見、可審閱，這恰好契合設計決策應有的方式：先定意圖，再去執行。"}, {"kind": "steps", "items": [{"label": "規範", "body": "Kiro 在寫程式碼之前先把提示詞變成一份結構化規範——需求、一份設計文件和一項項獨立的任務——這樣計劃在一開始就可審閱。"}, {"label": "引導檔案 + 鉤子", "body": "引導檔案把你的標準、約定和偏好的工具帶進每一次執行；agent 鉤子在檔案儲存等事件上觸發，自動執行後臺任務。"}, {"label": "免費起步、支援 MCP", "body": "用 Builder ID、Google、GitHub 或你所在的組織登入即可免費開始；Kiro CLI 還會管理 MCP 伺服器，以引入外部上下文。"}]}, {"kind": "ul", "items": ["廠商：Amazon（AWS）", "憑證：通過 kiro-cli login 使用 AWS Builder ID、Google、GitHub 或 AWS IAM Identity Center（無需 AWS 賬號）", "狀態：預覽階段；提供 IDE、CLI 和網頁介面"]}]}, {"id": "why-design", "heading": "為什麼規範驅動開發契合設計", "blocks": [{"kind": "p", "text": "Kiro CLI 在設計上的優勢來自它的工作流——但和每個 agent 一樣，審美仍然得由人來提供。"}, {"kind": "steps", "items": [{"label": "先有意圖，再有畫素", "body": "因為 Kiro 會先寫一份規範和一份設計文件，你可以在規劃階段就糾正佈局、層級和範圍——在 agent 還沒落入一種千篇一律的實現之前。"}, {"label": "引導檔案承載你的品牌", "body": "引導檔案在每一次執行時都把你的 tokens、元件和約定擺在 agent 面前，於是產出契合品牌，而不是落入預設的樣子。"}, {"label": "鉤子強制執行閉環", "body": "agent 鉤子可以在儲存時自動跑檢查——這是接入一個驗證或評審步驟的好地方，而不必指望 agent 自己記得。"}]}, {"kind": "image", "src": "/agents/kiro-design/kiro-design-taste-triangle.webp", "alt": "示意圖展示設計系統、skill 與參考圖匯聚成優質的設計產出", "caption": "審美來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個教訓和每個 agent 教給我們的一樣：Kiro CLI 預設並不具備審美。規範能讓構建保持誠實，但只有當你給它約束——一套設計系統、一個審美 skill 和具體的參考——它才能產出好設計。Open Design 恰好把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始，搭建用於設計工作的 Kiro CLI", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Kiro CLI 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Kiro CLI（macOS/Linux/Windows 的命令見 kiro.dev/docs/cli）\n\n# 2. 認證——會開啟瀏覽器完成登入\nkiro-cli login   # 選擇 Builder ID、Google、GitHub 或你所在的組織\n\n# 3. 確認你已登入\nkiro-cli whoami\n\n# 4. 在你的專案裡開啟互動式會話\ncd your-project\nkiro-cli chat\n\n# 5. 接入 MCP 伺服器（可選，例如用於設計交付）\nkiro-cli mcp add ..."}, {"kind": "image", "src": "/agents/kiro-design/kiro-design-setup-flow.webp", "alt": "五步搭建流程：安裝、認證、新增引導檔案、新增 skill、驗證", "caption": "搭建順序：安裝 → 認證 → 新增引導檔案和一份設計規範 → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則編碼進去", "body": "把你的 tokens、基礎元素和約定寫進引導檔案，讓 agent 在每一次執行時都讀到它們，於是產出契合品牌，而不是落入千篇一律的預設樣子。"}, {"label": "加入瀏覽器驗證", "body": "接入一個 Playwright 或瀏覽器 MCP 伺服器，讓 Kiro 在真實瀏覽器中渲染並跨斷點檢查其產出，而不是隻確認構建能通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Kiro CLI 做設計時槓桿最大的閉環，是把一張參考圖變成可用的、響應式的 UI，並反覆迭代直到吻合——讓規範先捕捉意圖，然後照著它去構建。"}, {"kind": "ol", "items": ["從你手頭最清晰的視覺參考出發——並且要包含多種狀態（桌面端和移動端、懸停、空態、載入），而不只是一張主視覺。", "讓 Kiro 從你的提示詞寫出一份規範和設計文件，並在它構建之前審閱計劃——這是你及早發現佈局和範圍問題的地方。", "把你的設計系統和約定放進引導檔案，並告訴 Kiro tokens 和規範化基礎元素在哪裡。", "跑一個開發伺服器，讓 Kiro 在真實瀏覽器中渲染，並調整到各個斷點來檢查結果。", "通過讓 Kiro 把它的實現對照參考來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "開啟一段互動式會話，並在一開始就給出具體約束，這樣它寫出的規範才能反映你真實的意圖："}, {"kind": "code", "lang": "bash", "code": "kiro-cli chat\n# 在提示詞中：\n> 這是我的參考圖：reference-desktop.png 和 reference-mobile.png。\n  先寫一份規範，然後用 React + Vite + Tailwind + TypeScript 實現這個設計。\n  複用我現有的設計系統元件和 tokens（見我的引導檔案）。\n  對齊間距、佈局和層級；做成響應式。\n  在瀏覽器裡渲染它，並反覆迭代直到它在各個斷點上\n  都與參考圖吻合。"}, {"kind": "p", "text": "保持任務小而聚焦，把好的迭代提交、把壞的回退掉（回退時告訴 Kiro），這樣每一輪都建立在一個乾淨的基礎之上。"}]}, {"id": "extend", "heading": "規範、引導檔案、鉤子與 MCP", "blocks": [{"kind": "p", "text": "四個擴充套件點讓 Kiro CLI 在持續的設計工作中變得實用，而這四個都能幹淨地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "規範", "body": "需求、一份設計文件和一份有序的任務清單——記錄一個功能本應是什麼樣的持久檔案，在構建之前和構建之中都可審閱。"}, {"label": "引導檔案", "body": "新增 agent 在每一次執行時都會讀取的上下文、編碼標準以及偏好的工作流或工具——這是安放你設計約定和 tokens 的天然之地。"}, {"label": "agent 鉤子", "body": "在檔案儲存等事件上觸發的自動化，執行檢查或文件生成等後臺任務——這是自動強制執行一個驗證步驟的好地方。"}, {"label": "MCP 伺服器", "body": "Kiro CLI 會管理 Model Context Protocol 伺服器，這是引入外部設計上下文和工具的可移植方式，能跨 agent 通用，而不僅限於 Kiro。"}]}, {"kind": "p", "text": "這些都是可移植、跨 agent 的能力——正是 Open Design 生來要去編排的那類東西，而不是每個專案重造一遍。"}]}, {"id": "vs", "heading": "做設計時 Kiro 對比 Codex、Claude Code、Cursor 與 Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上沒有唯一贏家——每個 agent 各有不同的強項，經驗豐富的團隊會把它們疊加使用。一個公允的概括："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Kiro CLI", "規範驅動的工作流——先有需求、設計文件和任務清單，再寫程式碼；引導檔案和鉤子讓構建契合品牌", "結構化、可審閱的構建，在實現之前就鎖定意圖和範圍"], ["Codex", "憑藉前端 skill 帶來出色的視覺打磨；沙箱化的非同步構建", "委託式的非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（十六進位制色值、間距、字型）以及理解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和行內編輯的視覺化“構建即所見”閉環", "在 IDE 內緊湊的“迭代即觀察”UI 工作"], ["Gemini CLI", "出色的多模態影像理解和極大的上下文；開源且帶免費額度", "大量依賴截圖的工作，以及把整套設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人類——它們在缺少 skill、參考和約束的情況下都會預設落入一種千篇一律的風格。那才是真正要解決的問題——而它是設計工具形態的問題，不是模型形態的問題。"}]}, {"id": "pitfalls", "heading": "常見坑，以及如何避免“AI 流水線感”外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它顯得千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的調調，“一看就是 AI 做的”。其他被反映的問題還包括移動端佈局錯亂、以及指令洩漏進 UI 文案裡。這些都不是 Kiro CLI 獨有的；當任何 agent 在沒有精選設計上下文的情況下執行時，就會這樣——規範能讓構建不跑題，但它無法提供審美。"}, {"kind": "steps", "items": [{"label": "加入一個審美 skill", "body": "一個精選的設計 skill 會迫使 agent 投入一個真正的方向，而不是預設的樣子。"}, {"label": "在真實瀏覽器中驗證", "body": "跨斷點渲染並自檢——能的話把它接成一個鉤子——這樣佈局就不會在移動端悄無聲息地崩掉。"}, {"label": "提供 tokens 和參考", "body": "真實的設計 tokens 和參考截圖是對產出質量影響最大的單一槓桿。"}, {"label": "把規則編碼進引導檔案", "body": "把“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類風格規則放在 agent 每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "注意，每一種緩解辦法都是關於給 agent 一份精選的設計上下文。每個專案手動維護那份上下文，正是 Open Design 要替你省掉的苦工。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Kiro CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上述工作流一再呼喚的那個開源設計層。它把 Kiro CLI 當作第一方介面卡，並用一套精選的 skill 與設計系統庫、一條結構化的渲染流水線和一個本地桌面 UI 來包裹它——於是讓 Kiro 變好的那份設計上下文從第一次執行起就在那裡，而不是每次都手動拼湊。Open Design 本地優先，這讓這對組合保持簡單：你的檔案和你的登入都留在你自己的機器上。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Kiro CLI 作為你的 agent。", "用你的 AWS Builder ID 或其他登入方式認證——憑證留在你的機器上，絕不經我們代理。", "挑一套設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一件產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管雲端。"]}, {"kind": "p", "text": "同一個 Kiro CLI agent、同一套登入——再加上圍繞它的一套真實、可移植、開源的設計工作流。Open Design 本地優先且採用 Apache-2.0，所以你的工作和憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Kiro CLI 真的能做設計工作嗎？", "text": "能——在上下文裡配上一個審美 skill、一套設計系統和真實的參考圖，Kiro CLI 就能產出生產級、響應式的 UI，而它規範驅動的工作流會讓構建對既定意圖負責。沒有那份上下文時，它往往會落入千篇一律的樣子，這正是 Open Design 補齊的短板。"}, {"name": "使用 Kiro CLI 需要 AWS 賬號嗎？", "text": "不需要——Kiro 允許你用 AWS Builder ID、Google、GitHub 或你所在的組織（AWS IAM Identity Center）登入，使用它無需 AWS 賬號。Kiro 目前處於預覽階段且可免費起步。無論哪種方式，Open Design 都絕不代理你的憑證。"}, {"name": "Kiro CLI 在設計上具體好在哪裡？", "text": "它的規範驅動工作流：Kiro 在寫程式碼之前先寫需求、一份設計文件和一份任務清單，於是你能在構建落定之前糾正佈局和範圍。引導檔案承載你的約定，鉤子能強制執行檢查——但審美仍然來自你提供的設計系統、skill 和參考。"}, {"name": "做前端設計，選 Kiro CLI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、理解程式碼庫的設計決策著稱；Kiro CLI 的優勢在於其規範驅動、可審閱、帶引導檔案和鉤子的工作流。很多團隊兩者都用——Open Design 讓你在不改變設計工作流的前提下切換 agent。"}, {"name": "我如何把 Kiro CLI 連線到外部設計工具？", "text": "Kiro CLI 會管理 Model Context Protocol（MCP）伺服器——用 kiro-cli mcp 來新增它們。一個 MCP 伺服器能把真實的設計上下文和工具帶進 agent，讓生成的程式碼與源頭吻合，而不是近似還原。"}, {"name": "Open Design 是否隸屬於 Amazon 或 AWS？", "text": "不是。Kiro 是 Amazon（AWS）的產品；Open Design 是一個獨立的開源專案，以第一方介面卡的方式支援它。Kiro 是 Amazon 的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 Kiro 登入由你的 agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，與 Kiro CLI 一起做設計。", "ctaBody": "自帶你的 AWS Builder ID 或登入方式，讓每個檔案都留在本地，併為你已經在用的 agent 配上一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Kiro CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的 agent"},
+    },
+    'kilo': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['kilo']!,
+      title: "用 Kilo Code 做設計 — Open Design",
+      description: "人們如何用 Kilo Code（開源、模型無關的 AI 編碼 agent）來做 UI 與網頁設計：它的 Architect/Code 模式、MCP 支援、跨眾多供應商的 BYOK，以及 Open Design 如何把 Kilo 變成一個本地優先、開源的設計 agent。",
+      breadcrumb: "Kilo",
+      label: "Agent · Kilo",
+      heading: "用 Kilo Code 做設計。",
+      lead: "Kilo Code 是一個面向你的 IDE 與 CLI 的開源、模型無關的 AI 編碼 agent。因為你幾乎可以讓它接入任意模型，並自帶供應商金鑰，所以只要你給它參考圖、規範和一套驗證迴路，它就能成為一個真正的設計工具。Open Design 把它接入一套開源的設計工作流：你的供應商金鑰、你的檔案、本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Kilo Code 變成一個本地優先、開源的設計 agent——你的供應商金鑰、你的檔案，外加圍繞它精選的 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Kilo Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Kilo Code 是一個開源的 AI 編碼 agent，可在 VS Code、JetBrains 系列 IDE 和終端中執行。有兩點讓它對設計尤其有意思：它是模型無關的，所以你可以選用最能讀懂截圖的前沿視覺模型來驅動它；它在眾多供應商之間支援 BYOK，所以成本和憑證都掌握在你自己手裡。配上合適的參考圖、規範和一套驗證迴路，它能構建出真正的響應式 UI。本文是一份實用的端到端指南，講如何用 Kilo Code 做 UI、前端和設計系統的工作，以及如何把它接入 Open Design 的結構化設計工作流。", "內容涵蓋：Kilo Code 究竟是什麼，為什麼一個模型無關、開放的 agent 適合設計，如何從零開始把它配置好，截圖到 UI 的迴路，自定義規則和 MCP 如何擴充套件它，它與 Codex、Claude Code、Cursor、Gemini CLI 的對比，那些讓 AI 輸出顯得千篇一律的陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來彌合這道鴻溝——這是天然的搭配，因為兩者都是開源的，都跑在你自己的機器上。"], "heroImage": {"src": "/agents/kilo-design/kilo-design-hero.webp", "alt": "Kilo Code 設計反饋迴路：IDE 與終端中的 agent 讀取一張參考圖，瀏覽器渲染 UI，以及一個工作區，反饋箭頭回環往復", "caption": "核心迴路：Kilo Code 在 IDE 或 CLI 中讀取你的參考圖，在真實瀏覽器裡構建並驗證 UI，再對照它們迭代——用你選定的模型。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-kilo", "label": "Kilo Code 究竟是什麼"}, {"id": "why-design", "label": "為什麼一個開放、模型無關的 agent 適合設計"}, {"id": "setup", "label": "從零配置 Kilo Code 做設計"}, {"id": "screenshot-workflow", "label": "截圖到 UI 的工作流"}, {"id": "extend", "label": "模式、自定義規則與 MCP"}, {"id": "vs", "label": "Kilo Code 對比 Codex、Claude Code、Cursor、Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與“AI 流水線感”的樣子"}, {"id": "open-design", "label": "在 Open Design 中用 Kilo Code 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-kilo", "heading": "Kilo Code 究竟是什麼", "blocks": [{"kind": "p", "text": "Kilo Code 是由 Kilo Code, Inc. 打造的開源 AI 編碼 agent。它以 VS Code 擴充套件、JetBrains 系列 IDE 中的外掛以及命令列介面的形式執行——讀取你的程式碼倉庫、編輯檔案、執行命令，並從自然語言任務出發去規劃和驗證工作，而不只是補全幾行程式碼。它最鮮明的特點是模型無關：由你選擇驅動它的模型，並自帶你的供應商金鑰。"}, {"kind": "p", "text": "對設計工作而言，有兩點格外突出。因為它模型無關，你可以讓它接入最能讀懂參考截圖、最會推斷佈局的強力視覺模型。又因為它開源且支援 BYOK，你可以精確檢視傳送了哪些上下文，並把憑證與成本牢牢掌握在自己手中。"}, {"kind": "steps", "items": [{"label": "Agent 模式", "body": "Kilo 自帶幾種專門模式——Architect 負責規劃、Code 負責構建、Debug 負責修復、Ask 負責答疑——還可自定義模式，於是你可以先規劃設計，再在各自專注的環節裡實現它。"}, {"label": "自定義規則 + MCP", "body": "它會讀取專案級的自定義規則以保留持久上下文，並支援 MCP 伺服器（還有 MCP 市場），於是你可以接入外部上下文，比如一份線上的 Figma 檔案或設計工具。"}, {"label": "自帶金鑰", "body": "Kilo 在眾多供應商之間支援 BYOK——Anthropic、OpenAI、Google、OpenRouter 等等——你也可以使用 Kilo 自家的閘道器，它按供應商成本提供 500 多個模型。"}]}, {"kind": "ul", "items": ["供應商：Kilo Code, Inc.（開源）", "憑證：你自己的供應商 API 金鑰（BYOK——Anthropic、OpenAI、Google、OpenRouter 等）或 Kilo 自家閘道器", "許可：開源"]}]}, {"id": "why-design", "heading": "為什麼一個開放、模型無關的 agent 適合設計", "blocks": [{"kind": "p", "text": "Kilo Code 在設計上的優勢來自開放性和模型選擇權——但和每一個 agent 一樣，品味仍然得由人來提供。"}, {"kind": "steps", "items": [{"label": "天生模型無關", "body": "因為模型由你來選，你可以用最能讀懂參考截圖的視覺模型來驅動 Kilo——並在出現更好的模型時隨時切換，無需改動工作流。"}, {"label": "開放且可審查", "body": "Kilo 是開源的，所以你能精確看到傳送了哪些上下文和提示詞——當你希望 agent 複用你真實的設計原語、而不是憑空造出一次性樣式時，這一點很有用。"}, {"label": "把規範寫進自定義規則", "body": "專案級自定義規則（再加一個 Figma 的 MCP 伺服器）把 agent 指向你的 tokens、元件和真實規格，於是它是在對照一個品牌工作，而不是套用預設外觀。"}]}, {"kind": "image", "src": "/agents/kilo-design/kilo-design-taste-triangle.webp", "alt": "圖示：設計系統、skill 與參考圖匯聚成優秀的設計輸出", "caption": "品味來自你提供的三項輸入：一套設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個道理每個 agent 都在教我們：Kilo Code 預設並沒有品味。只有當你給它約束——一套設計系統、一個審美 skill 和具體的參考圖——它才能產出優秀的設計。Open Design 恰好把這些輸入打包好了，這正是兩者契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零開始配置 Kilo Code 做設計", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Kilo Code 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. Install the Kilo Code extension from the VS Code\n#    (or JetBrains) marketplace, or install the CLI.\n\n# 2. Open your project and sign in / add a provider key\ncd your-project\nkilo              # connect your provider (BYOK) or Kilo's gateway\n\n# 3. Add project context\n#    create custom rules for this project's design conventions\n\n# 4. Wire the Figma MCP server (optional, for design handoff)\n#    add it from the MCP marketplace / MCP settings"}, {"kind": "image", "src": "/agents/kilo-design/kilo-design-setup-flow.webp", "alt": "五步配置流程：安裝、認證、新增自定義規則、新增一個 skill、驗證", "caption": "配置順序：安裝 → 接入一個供應商 → 新增自定義規則 → 新增一個 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則編碼下來", "body": "把你的 tokens、原語和規範放進 Kilo 的自定義規則，並把 agent 指向它們，讓輸出對齊一個品牌，而不是預設套上千篇一律的外觀。"}, {"label": "加上瀏覽器驗證", "body": "接入 Playwright 或瀏覽器 MCP，讓 Kilo 在真實瀏覽器中渲染，並跨各個斷點檢查輸出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "截圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Kilo Code 槓桿最高的設計迴路，是把一張參考圖變成可用的響應式 UI，並不斷迭代直到它匹配為止——藉助一個視覺模型把輸出對照參考圖反覆比對。"}, {"kind": "ol", "items": ["從你手上最清晰的視覺參考開始——幷包含多種狀態（桌面端和移動端、懸停、空態、載入態），而不只是一張主視覺圖。", "提示詞要具體；含糊的提示詞即便配上強力模型也只會產出千篇一律的 UI。", "把你的設計系統和規範放進 Kilo 的自定義規則，並告訴 agent tokens 和標準原語在哪裡。", "跑一個開發伺服器，讓 Kilo 在真實瀏覽器中渲染，並縮放到各個斷點來檢查結果。", "讓 Kilo 把自己的實現對照截圖反覆比對來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "用 Architect 模式規劃構建，然後切到 Code 模式，附上你的參考圖並給出具體約束："}, {"kind": "code", "lang": "bash", "code": "# Plan in Architect mode, then build in Code mode:\n> Implement this design from @reference-desktop.png and\n  @reference-mobile.png in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens\n  from the custom rules.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the\n  references across breakpoints."}, {"kind": "p", "text": "讓提示詞保持小而專注，把好的迭代提交、把壞的回退（回退時告訴 Kilo），這樣每一輪都建立在一個乾淨的基礎之上。"}]}, {"id": "extend", "heading": "模式、自定義規則與 MCP", "blocks": [{"kind": "p", "text": "三個擴充套件點讓 Kilo Code 在持續的設計工作中切實可用，而這三者都能幹淨利落地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "模式（Architect → Code）", "body": "在 Architect 模式下規劃一個頁面的結構，然後在 Code 模式下實現它，再在 Debug 模式下修復問題——把設計意圖與實現分開。自定義模式還能讓你編碼出一套自己的設計評審環節。"}, {"label": "自定義規則", "body": "專案級自定義規則是你設計規範的長久歸宿——tokens、原語和評審清單——每次執行都會讀取，讓 agent 對照你的品牌工作。"}, {"label": "MCP 伺服器", "body": "Kilo 通過它的市場支援 MCP 伺服器——這是引入設計上下文和外部工具的可移植方式，最相關的是一個 Figma 的 MCP 伺服器，它們跨 agent 通用，不止限於 Kilo。"}]}, {"kind": "p", "text": "這些都是可移植、跨 agent 的能力——正是 Open Design 生來要去編排的那類東西，而不是每個專案都重新搭一遍。"}]}, {"id": "vs", "heading": "做設計：Kilo Code 對比 Codex、Claude Code、Cursor、Gemini CLI", "blocks": [{"kind": "p", "text": "設計工作沒有單一贏家——每個 agent 都各有所長，有經驗的團隊會把它們疊加使用。一份公允的概括："}, {"kind": "table", "columns": ["Agent", "設計強項", "最適合"], "rows": [["Kilo Code", "開源、模型無關，跨眾多供應商支援 BYOK；具備 Architect/Code 模式和 MCP", "按任務自選模型，並把成本與憑證掌握在自己手中"], ["Codex", "憑一個前端 skill 實現出色的視覺打磨；沙箱化的非同步構建", "委託式非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（色值、間距、字型）以及對程式碼庫有感知的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的“構建即所見”視覺迴路", "在 IDE 內緊湊的“邊改邊看”UI 工作"], ["Gemini CLI", "強大的多模態影像理解和 100 萬 token 的上下文", "大量截圖的工作，以及把整套設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——它們在缺少 skill、參考圖和約束時，都會預設走向千篇一律的審美。這才是真正要解決的問題——而且它的形狀是設計工具，而非模型。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開“AI 流水線感”的樣子", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和的漸變、懸浮的面板、過大的圓角、誇張的陰影，一種 Inter 字型加紫色的調調，“一眼就知道是 AI 做的”。其他被反映的問題還包括移動端佈局錯亂，以及指令洩漏進了 UI 文案。這些都不是 Kilo Code 獨有的；任何 agent 在缺乏精選設計上下文的情況下執行，都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會逼著 agent 投入一個真實的方向，而不是套用預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "用一個視覺模型跨斷點渲染並自檢，這樣佈局就不會在移動端悄無聲息地崩壞。"}, {"label": "提供 tokens 和參考圖", "body": "真實的設計 tokens 和參考截圖，是撬動輸出質量最大的那根槓桿。"}, {"label": "把規則編碼進自定義規則", "body": "把“不要 hero 卡片、最多兩種字型、品牌優先的層級”這類風格規則放在 agent 每次執行都會讀到的地方。"}]}, {"kind": "p", "text": "請注意，每一項緩解措施都是在給 agent 一份精選的設計上下文。手動逐專案維護這份上下文，正是 Open Design 替你免去的苦差。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Kilo Code 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上文那套工作流一直在呼喚的、開源的設計層。它把 Kilo Code 當作一等公民介面卡，並在其外圍包上一套精選的 skill 與設計系統庫、一條結構化的渲染流水線和一個本地桌面 UI——於是讓 Kilo 出色的那份設計上下文從第一次執行起就在那裡，而不必每次都手動拼湊。兩者都是開源、本地優先的，這讓它們的搭配水到渠成。"}, {"kind": "ol", "items": ["安裝 Open Design，並選擇 Kilo Code 作為你的 agent。", "用你自己的供應商金鑰（BYOK）或 Kilo 的閘道器進行認證——憑證留在你的機器上，絕不經我們中轉。", "選定一套設計系統和一個 skill，然後以一致的品味生成演示稿、原型和落地頁。", "每一份產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管的雲端。"]}, {"kind": "p", "text": "還是同一個 Kilo Code agent、同一套金鑰——只是外圍多了一套真實、可移植、開源的設計工作流。它本地優先且開源，所以關於你工作或憑證的一切都不會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Kilo Code 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一套設計系統和真實的參考圖，Kilo Code 就能產出生產級的響應式 UI，再由一個視覺模型把輸出對照參考圖來驗證。缺了這份上下文，它往往會預設走向千篇一律的外觀，而這正是 Open Design 填補的空白。"}, {"name": "用 Kilo Code 做設計需要付費嗎？", "text": "Kilo Code 是開源的，安裝免費。你自帶供應商 API 金鑰（BYOK）並直接向該供應商付費，或者按供應商成本使用 Kilo 自家閘道器。無論哪種方式，Open Design 都絕不中轉你的憑證。"}, {"name": "Kilo Code 在設計上具體好在哪裡？", "text": "它模型無關且開源，所以你可以用最能讀懂參考截圖的視覺模型來驅動它，精確檢視傳送了哪些上下文，並把成本與憑證掌握在自己手中。品味仍然來自你提供的設計系統、skill 和參考圖。"}, {"name": "前端設計選 Kilo Code 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體、對程式碼庫有感知的設計決策著稱；Kilo Code 的優勢在於它開源、模型無關且支援 BYOK，模型由你來選。許多團隊兩者並用——Open Design 讓你在不改動設計工作流的前提下切換 agent。"}, {"name": "我該如何把 Kilo Code 連到 Figma？", "text": "從 Kilo 的 MCP 市場或 MCP 設定裡新增一個 Figma 的 MCP 伺服器。這樣 Kilo 就能拉取真實的設計上下文——元件、變數、佈局資料——讓生成的程式碼與源頭一致，而不是近似還原。"}, {"name": "Open Design 和 Kilo Code 有關聯嗎？", "text": "沒有。Kilo Code 是 Kilo Code, Inc. 的產品；Open Design 是一個獨立的開源專案，把它作為一等公民介面卡來支援。兩者恰好都是開源的，但它們是各自獨立的專案。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且開源。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的供應商憑證由你的 agent 直接使用，絕不經 Open Design 伺服器中轉。"}], "ctaTitle": "用開放的方式，和 Kilo Code 一起做設計。", "ctaBody": "自帶你的供應商金鑰，把每一個檔案留在本地，並在你已經用著的 agent 周圍獲得一座精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Kilo Code", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上點 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有支援的 agent"},
+    },
+    'vibe': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['vibe']!,
+      title: "用 Mistral Vibe CLI 做設計 — Open Design",
+      description: "人們如何用 Mistral 的 Vibe CLI 做 UI 與網頁設計 —— 它開放權重的 Devstral 編碼模型、代理式多檔案編輯、config.toml、MCP 與 ACP —— 以及 Open Design 如何把 Vibe CLI 變成一個本地優先、開源的設計代理。",
+      breadcrumb: "Mistral Vibe CLI",
+      label: "Agent · Mistral Vibe CLI",
+      heading: "用 Mistral Vibe CLI 做設計。",
+      lead: "Mistral Vibe CLI 是 Mistral AI 推出的開源終端編碼代理，由 Devstral 模型家族驅動。它能編輯檔案、執行命令，並基於 Agent Client Protocol 工作——只要你給它提供參考素材、規範約定和一套驗證閉環，它就能成為一個真正的設計工具。Open Design 把它接入一套開源的設計工作流：用你自己的 Mistral API 金鑰（BYOK）或本地模型、你自己的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Mistral Vibe CLI 變成一個本地優先、開源的設計代理——用你自己的 Mistral API 金鑰或本地 Devstral 模型、你自己的檔案，外加一套圍繞它的精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Vibe CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Mistral Vibe CLI 是 Mistral AI 推出的開源（Apache-2.0）終端編碼代理。它會掃描你專案的檔案結構和 Git 狀態來獲取上下文，然後根據自然語言任務，在整個程式碼庫中探索、編輯並執行改動。有兩點讓它在設計場景中格外值得關注：它由 Mistral 的 Devstral 編碼模型驅動，這是一個開放權重生態的一部分，你既可以在本地執行，也可以放到雲端；同時它支援 Agent Client Protocol（ACP），因此它能嵌入編輯器和各類工具，而不只是侷限在某一個終端裡。配上合適的參考素材、規範約定和一套驗證閉環，它能構建出真正可用的響應式 UI。這是一份實用的端到端指南，講解如何用 Vibe CLI 做 UI、前端和設計系統的工作，以及如何把它接入 Open Design 的結構化設計工作流。", "內容涵蓋：Vibe CLI 究竟是什麼、為什麼一個開放權重的編碼代理適合做設計、如何從零開始配置它、從參考素材到 UI 的閉環、config.toml、MCP 和 ACP 如何擴充套件它的能力、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 產出顯得千篇一律的陷阱，以及 Open Design 如何作為一個開放、本地優先的設計層來補上這道缺口——這是天然的搭配，因為兩者都是開源的，並且都在你自己的機器上執行。"], "heroImage": {"src": "/agents/vibe-design/vibe-design-hero.webp", "alt": "Mistral Vibe CLI 設計反饋閉環：一個終端代理讀取參考素材、一個瀏覽器渲染 UI、一個工作區，以及一個迴環的反饋箭頭", "caption": "核心閉環：Vibe CLI 在終端裡讀取你的參考素材，在真實瀏覽器中構建並驗證 UI，再對照參考反覆迭代——全程由 Mistral 的 Devstral 編碼模型驅動。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-vibe", "label": "Mistral Vibe CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼開放權重的編碼代理適合做設計"}, {"id": "setup", "label": "從零配置 Vibe CLI 做設計"}, {"id": "screenshot-workflow", "label": "從參考素材到 UI 的工作流"}, {"id": "extend", "label": "config.toml、MCP 和 ACP"}, {"id": "vs", "label": "Vibe CLI 對比 Codex、Claude Code、Cursor 和 Gemini CLI"}, {"id": "pitfalls", "label": "陷阱與「AI 味」外觀"}, {"id": "open-design", "label": "在 Open Design 中用 Vibe CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-vibe", "heading": "Mistral Vibe CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Mistral Vibe CLI 是 Mistral AI 為終端推出的開源（Apache-2.0）編碼代理。它提供一個互動式對話介面，配有檔案操作、程式碼搜尋、版本控制和命令執行等工具，並會自動掃描你專案的檔案結構和 Git 狀態，為代理提供相關上下文。它由 Mistral 的 Devstral 編碼模型驅動——根據自然語言任務進行規劃和驗證，而不只是補全程式碼行。"}, {"kind": "p", "text": "對設計工作而言，有兩個特性尤為突出。它執行在 Mistral 開放權重的 Devstral 家族上（Devstral 2 以及更小的 Devstral Small 2），因此你既可以讓代理對接雲端的 Mistral API，也可以對接本地模型——這對於注重隱私或離線的設計工作很有用。它還支援 Agent Client Protocol，因此同一個代理可以驅動編輯器和各類工具，而不只是一個終端會話。"}, {"kind": "steps", "items": [{"label": "配置檔案", "body": "Vibe CLI 通過 config.toml 檔案配置（專案級 ./.vibe/config.toml，並以 ~/.vibe/config.toml 作為回退）。這是個很實用的地方，可以把你的服務商、模型選擇和專案設定都寫進去。"}, {"label": "內建工具 + MCP", "body": "它自帶檔案、搜尋、版本控制和命令執行工具，並支援 MCP 伺服器（在 [[mcp_servers]] 區段下配置），以引入外部上下文，比如一個即時的 Figma 檔案。"}, {"label": "BYOK 或本地", "body": "用 Mistral 控制台的 Mistral API 金鑰進行認證，或把它指向本地/相容模型，讓它完全離線工作。"}]}, {"kind": "ul", "items": ["廠商：Mistral AI", "憑據：Mistral 控制台的 Mistral API 金鑰（BYOK），或本地/相容模型", "許可證：Apache-2.0，開源"]}]}, {"id": "why-design", "heading": "為什麼開放權重的編碼代理適合做設計", "blocks": [{"kind": "p", "text": "Vibe CLI 在設計上的優勢來自它開放權重的模型家族和廣泛的協議覆蓋——但與每一個代理一樣，審美仍然得由你來提供。"}, {"kind": "steps", "items": [{"label": "Devstral 編碼模型", "body": "Vibe 執行在 Mistral 的 Devstral 家族上，這是為代理式、多檔案工作打造的編碼調優模型——因此代理是在一個真實的前端程式碼庫中跨檔案編輯，而不是產出孤立的程式碼片段。"}, {"label": "開放權重且對本地友好", "body": "Devstral Small 2 足夠小，可以跑在消費級硬體上，因此設計工作可以完全保持在本地和離線狀態——參考素材和程式碼永遠不必離開你的機器。"}, {"label": "config.toml 中的約定 + 上下文", "body": "專案配置和你自己的指令會把代理引向你的 tokens、元件和真實規範，於是它是面向一個品牌工作，而不是套用預設外觀。"}]}, {"kind": "image", "src": "/agents/vibe-design/vibe-design-taste-triangle.webp", "alt": "示意圖：設計系統、skill 和參考圖匯聚成優質的設計產出", "caption": "審美來自你提供的三項輸入：一個設計系統、一個 skill 和真實的參考圖。"}, {"kind": "p", "text": "這條教訓和每個代理給出的如出一轍：Vibe CLI 預設並不具備審美。當你給它約束時——一個設計系統、一個審美 skill 和具體的參考素材——它才能產出好的設計。Open Design 恰好把這些輸入打包好了，這也是兩者能契合的原因（下文詳述）。"}]}, {"id": "setup", "heading": "從零配置 Vibe CLI 做設計工作", "blocks": [{"kind": "p", "text": "下面是從一臺乾淨的機器到一個能構建並驗證 UI 的 Vibe CLI 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Mistral Vibe CLI\nuv tool install mistral-vibe\n# 或：pip install mistral-vibe\n\n# 2. 執行配置嚮導以註冊你的 API 金鑰\nvibe --setup     # 將配置儲存到 ~/.vibe/config.toml 和 ~/.vibe/.env\n#    或直接設定：  export MISTRAL_API_KEY=...\n\n# 3. 在你的專案中啟動 Vibe\ncd your-project\nvibe\n\n# 4. 接入 Figma MCP 伺服器（可選，用於設計交付）\n#    在你的 config.toml 中新增一個 [[mcp_servers]] 條目"}, {"kind": "image", "src": "/agents/vibe-design/vibe-design-setup-flow.webp", "alt": "五步配置流程：安裝、認證、配置 config.toml、新增 skill、驗證", "caption": "配置流程：安裝 → 認證 → 配置 config.toml → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則寫進去", "body": "把你的 tokens、基礎元素和規範約定放在代理能讀到的地方，並讓 Vibe 指向它們，這樣產出就會匹配一個品牌，而不是退回到千篇一律的外觀。"}, {"label": "加上瀏覽器驗證", "body": "接入一個 Playwright 或瀏覽器 MCP，讓 Vibe 在真實瀏覽器中渲染，並跨斷點檢查產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "從參考素材到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Vibe CLI 做設計時收益最高的閉環，是把一份清晰的參考素材變成可用的響應式 UI，並反覆迭代直到匹配為止——藉助代理自身的工具來渲染、檢查並修正它自己的產出。"}, {"kind": "ol", "items": ["從你手頭最清晰的參考素材出發——並描述多種狀態（桌面和移動端、懸停、空態、載入中），而不只是一張主視覺。", "提示詞要具體；含糊的提示即便配上強大的模型也只會產出千篇一律的 UI。", "把你的設計系統和規範約定放在 Vibe 能讀到的地方，並告訴它 tokens 和標準基礎元素在哪裡。", "執行一個開發伺服器，讓 Vibe 在真實瀏覽器中渲染，並調整到各個斷點來檢查結果。", "通過讓 Vibe 把它的實現回頭對照參考素材來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "用 @ 引用檔案（Vibe 會自動補全檔案路徑），用 / 呼叫斜槓命令，然後給出具體的約束："}, {"kind": "code", "lang": "bash", "code": "vibe\n# 在提示詞裡：\n> @design-spec.md @tokens.css\n  Implement this design in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Run the dev server, render it in the browser, and iterate until\n  it matches the references across breakpoints."}, {"kind": "p", "text": "保持提示詞小而聚焦，提交好的迭代、回退壞的迭代（回退時要告訴 Vibe），這樣每一輪都能在一個乾淨的基礎上推進。"}]}, {"id": "extend", "heading": "config.toml、MCP 和 ACP", "blocks": [{"kind": "p", "text": "有三個擴充套件點讓 Vibe CLI 適合做持續性的設計工作，而且這三個都能幹淨地對應到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "config.toml", "body": "專案規則以及服務商/模型設定都存放在 config.toml 中（專案級，並以 ~/.vibe 作為回退）。它是代理如何接入你專案的持久化歸宿，每次執行都會被讀取。"}, {"label": "MCP 伺服器", "body": "在你的 config.toml 中配置 MCP 伺服器（[[mcp_servers]]，支援 HTTP、可流式 HTTP 和 stdio 傳輸）——這是引入設計上下文和外部工具的可移植方式，其中最相關的就是 Figma MCP 伺服器，並且這些在各類代理間通用，不只限於 Vibe。"}, {"label": "Agent Client Protocol", "body": "Vibe 支援 ACP，因此同一個代理可以從編輯器和其他 ACP 客戶端來驅動。Open Design 正是這樣整合它的——通過 vibe-acp 二進位制檔案經由 ACP 接入。"}]}, {"kind": "p", "text": "這些都是可移植、跨代理的能力——恰恰是 Open Design 旨在編排的那類東西，而不是在每個專案裡重新造一遍。"}]}, {"id": "vs", "heading": "做設計時 Vibe CLI 對比 Codex、Claude Code、Cursor 和 Gemini CLI", "blocks": [{"kind": "p", "text": "在設計工作上沒有唯一的贏家——每個代理各有所長，經驗豐富的團隊會把它們疊加使用。一個公允的總結："}, {"kind": "table", "columns": ["代理", "設計強項", "最適合"], "rows": [["Mistral Vibe CLI", "可在本地執行的開放權重 Devstral 編碼模型；Apache-2.0 且原生支援 ACP", "注重隱私或離線的設計工作，以及一套開放權重的技術棧"], ["Codex", "配合前端 skill 的出色視覺打磨；沙盒化的非同步構建", "委託式的非同步構建和可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（十六進位制色、間距、字型）以及理解程式碼庫的 UX", "前端推理和大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的「邊做邊看」視覺化閉環", "在 IDE 內緊湊的「迭代-觀察」式 UI 工作"], ["Gemini CLI", "出色的多模態影像理解和超大的上下文視窗", "大量依賴截圖的工作，以及把整個設計系統裝進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：審美來自人類——若沒有 skill、參考素材和約束，它們都會預設走向千篇一律的風格。這才是真正要解決的問題——而它是設計工具形態的，不是模型形態的。"}]}, {"id": "pitfalls", "heading": "陷阱，以及如何避開「AI 味」外觀", "blocks": [{"kind": "p", "text": "對 AI 生成設計最常見的抱怨，就是它看起來千篇一律——柔和的漸變、漂浮的面板、過大的圓角、誇張的陰影，以及那種「一看就是 AI 做的」的 Inter 字型加紫色調調。其他被反映的問題還包括移動端佈局錯亂，以及指令文字洩漏進 UI 文案。這些都不是 Vibe CLI 獨有的；只要任何代理在缺乏精選設計上下文的情況下執行，就會出現這些問題。"}, {"kind": "steps", "items": [{"label": "加上一個審美 skill", "body": "一個精選的設計 skill 會迫使代理給出一個真正的方向，而不是套用預設外觀。"}, {"label": "在真實瀏覽器中驗證", "body": "讓 Vibe 跨斷點渲染並自查，這樣佈局就不會在移動端悄無聲息地崩掉。"}, {"label": "提供 tokens 和參考素材", "body": "真實的設計 tokens 和參考截圖，是對產出質量影響最大的單一槓桿。"}, {"label": "把規則寫進配置和上下文", "body": "把「不要主視覺卡片、最多兩種字型、品牌優先的層級」這類風格規則放在代理每次執行都能讀到的地方。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都是在給代理一份精選的設計上下文。逐個專案手工維護這份上下文，正是 Open Design 替你省掉的苦工。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Vibe CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上面這套工作流一直在呼喚的那個開源設計層。它把 Mistral Vibe CLI 當作一等介面卡——通過 vibe-acp 二進位制檔案經由 ACP 來驅動它——併為它配上精選的 skill 與設計系統庫、一條結構化的渲染管線，以及一個本地桌面 UI。於是，讓 Vibe 變好用的那份設計上下文從第一次執行起就已就位，而不必每次手工拼湊。兩者都是開源且本地優先的，這讓這對搭配水到渠成。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Mistral Vibe CLI 作為你的代理。", "用你的 Mistral API 金鑰（BYOK）進行認證，或把 Vibe 指向本地模型——憑據留在你的機器上，絕不經我們代理轉發。", "挑選一個設計系統和一個 skill，然後以一致的審美生成演示稿、原型和落地頁。", "每一個產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是某個託管雲端。"]}, {"kind": "p", "text": "同一個 Vibe CLI 代理，同一把金鑰——外加一套圍繞它的真實、可移植、開源的設計工作流。它本地優先且採用 Apache-2.0，因此你的工作內容和憑據沒有任何一項會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Mistral Vibe CLI 真的能做設計工作嗎？", "text": "能——只要上下文裡有一個審美 skill、一個設計系統和真實的參考素材，Vibe CLI 就能產出生產級的響應式 UI，而它的 Devstral 模型會在一個真實的前端程式碼庫中跨檔案編輯。缺了這份上下文，它往往會退回到千篇一律的外觀，而這正是 Open Design 要補上的缺口。"}, {"name": "我該如何認證 Vibe CLI？", "text": "執行 vibe --setup 啟動配置嚮導來註冊一個 Mistral API 金鑰（來自 Mistral 控制台），或在你的環境中設定 MISTRAL_API_KEY。它也可以對接本地或相容模型，完全離線執行。無論哪種方式，Open Design 都絕不會代理轉發你的憑據。"}, {"name": "Vibe CLI 具體好在哪裡、為什麼適合做設計？", "text": "它是一個 Apache-2.0、原生支援 ACP 的代理，由 Mistral 開放權重的 Devstral 編碼模型驅動——因此你可以在本地執行它來處理注重隱私的工作，並在一個真實的程式碼庫中跨檔案編輯。但審美仍然來自你提供的設計系統、skill 和參考素材。"}, {"name": "做前端設計，選 Vibe CLI 還是 Claude Code？", "text": "兩者都很強。Claude Code 以具體的、理解程式碼庫的設計決策著稱；Vibe CLI 的優勢在於可在本地執行的開放權重 Devstral 技術棧以及 Apache-2.0 許可證。很多團隊兩者都用——Open Design 讓你可以切換代理而無需改變你的設計工作流。"}, {"name": "我該如何把 Vibe CLI 連線到 Figma？", "text": "在你的 config.toml 中以 [[mcp_servers]] 條目的形式新增 Figma MCP 伺服器。Vibe 隨後就能拉取真實的設計上下文——元件、變數、佈局資料——從而讓生成的程式碼匹配原始檔，而不是近似地湊出來。"}, {"name": "Open Design 與 Mistral AI 有關聯嗎？", "text": "沒有。Mistral Vibe CLI 是 Mistral AI 的產品；Open Design 是一個獨立的開源專案，以一等介面卡的形式支援它，並通過 ACP 來驅動。Mistral 是 Mistral AI 的商標。"}, {"name": "我的檔案和憑據安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 Mistral 憑據由你的代理直接使用，絕不經由 Open Design 的伺服器轉發。"}], "ctaTitle": "用 Mistral Vibe CLI 做設計，以開放的方式。", "ctaBody": "用你自己的 Mistral API 金鑰或本地模型，把每個檔案都留在本地，並圍繞你已經在用的代理獲得一套精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Vibe CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有受支援的代理"},
+    },
+    'qoder': {
+      ...INFO_PAGE_COPY.zh!.agentGuides!['qoder']!,
+      title: "用 Qoder CLI 做設計 — Open Design",
+      description: "人們如何用 Qoder CLI——阿里巴巴的智慧體編碼平臺——來做 UI 與網頁設計：它的 agent 與 quest 模式、深度的倉庫理解與 repo wiki，以及 Lite/Efficient/Auto 模型檔位——以及 Open Design 如何把 Qoder CLI 變成一個本地優先、開源的設計智慧體。",
+      breadcrumb: "Qoder CLI",
+      label: "Agent · Qoder CLI",
+      heading: "用 Qoder CLI 做設計。",
+      lead: "Qoder CLI 是 Qoder——阿里巴巴的智慧體編碼平臺——的終端智慧體。它理解整個倉庫——架構、模式以及在 repo wiki 中沉澱下來的約定——並以規範驅動的方式自主完成工作，這讓它在你給出參考、約定與驗證閉環之後，成為一個真正的設計工具。Open Design 把它接入開源設計工作流：你的 Qoder 賬戶、你的檔案，本地優先。",
+      rich: {"heroCtaLead": "Open Design 把 Qoder CLI 變成一個本地優先、開源的設計智慧體——你的 Qoder 賬戶、你的檔案，外加一套圍繞它的精選 skill 與設計系統庫。", "heroCtaActions": [{"label": "在 Open Design 中使用 Qoder CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "intro": ["Qoder CLI 是 Qoder——阿里巴巴的智慧體編碼平臺——的終端智慧體。有兩點讓它在設計上格外值得關注：它會建立起對你倉庫的深度上下文——架構、設計模式，以及它提煉進 repository wiki 的約定——因此它複用你真實的基礎元件，而不是為每個介面發明一次性的樣式；它還會執行規範驅動、自主的 quest，對一項任務從頭到尾地規劃、實現並驗證，而不只是補全程式碼行。配上合適的參考、約定與驗證閉環，它能構建出真實、響應式的 UI。這是一份實用的端到端指南，講如何用 Qoder CLI 做 UI、前端與設計系統的工作，以及如何用 Open Design 把它接入一套結構化的設計工作流。", "它涵蓋了 Qoder CLI 究竟是什麼、為什麼它的倉庫理解與智慧體化 quest 契合設計、如何從零搭建、參考圖到 UI 的閉環、規則/MCP 與 repo wiki 如何擴充套件它、它與 Codex、Claude Code、Cursor 和 Gemini CLI 的對比、那些讓 AI 產出顯得千篇一律的坑，以及 Open Design 如何作為一層開放、本地優先的設計層，彌合你已在使用的智慧體與真正設計之間的差距。"], "heroImage": {"src": "/agents/qoder-design/qoder-design-hero.webp", "alt": "Qoder CLI 設計反饋閉環：一個終端智慧體藉助 repo-wiki 上下文讀取一張參考圖，一個瀏覽器渲染 UI，以及一個工作區，一條反饋箭頭回環", "caption": "核心閉環：Qoder CLI 在終端讀取你的參考與倉庫上下文，在真實瀏覽器中構建並驗證 UI，並對照它們持續迭代。"}, "tocLabel": "本頁內容", "toc": [{"id": "what-is-qoder", "label": "Qoder CLI 究竟是什麼"}, {"id": "why-design", "label": "為什麼智慧體化 + 倉庫上下文契合設計"}, {"id": "setup", "label": "從零搭建用於設計的 Qoder CLI"}, {"id": "screenshot-workflow", "label": "參考圖到 UI 的工作流"}, {"id": "extend", "label": "規則、MCP 與 repo wiki"}, {"id": "vs", "label": "Qoder CLI vs Codex vs Claude Code vs Cursor vs Gemini CLI"}, {"id": "pitfalls", "label": "坑，以及“AI 味”觀感"}, {"id": "open-design", "label": "在 Open Design 中用 Qoder CLI 做設計"}, {"id": "faq", "label": "常見問題"}], "sections": [{"id": "what-is-qoder", "heading": "Qoder CLI 究竟是什麼", "blocks": [{"kind": "p", "text": "Qoder 是阿里巴巴推出的智慧體編碼平臺——一個 AI 開發環境，既有桌面應用也有 CLI，能理解真實的程式碼庫並端到端地完成開發任務。Qoder CLI 把這套引擎帶到了終端：它讀取你的倉庫、編輯檔案、執行 shell 命令，並從自然語言出發完成任務，而不只是補全程式碼行。它用 Qoder 賬戶登入。"}, {"kind": "p", "text": "對於設計工作，有兩個特性尤為突出。Qoder 會建立起對你倉庫的深度上下文——架構、設計模式，以及提煉進 repository wiki 的約定——因此它把產出錨定在你真實的基礎元件上。它還執行一套智慧體化、規範驅動的工作流：你勾勒出想要的東西，它便規劃、實現並驗證這項工作，包括跨多個步驟。"}, {"kind": "steps", "items": [{"label": "Agent 與 Quest 模式", "body": "Agent 模式是帶人類介入檢查點的對話式結對程式設計；Quest 模式則把更長的多步工作委派給一個自主智慧體，由它規劃、實現並自我驗證——這正是交付一項規範驅動設計任務的天然落點。"}, {"label": "Repo wiki + MCP", "body": "Qoder 把你的程式碼庫提煉成一份記錄架構與約定的 repository wiki，並支援 MCP 伺服器以引入外部上下文，比如一個即時的 Figma 檔案。"}, {"label": "模型檔位", "body": "Qoder CLI 提供 Lite、Efficient 和 Auto 三檔；Auto 讓它的排程器按任務挑選模型，這樣你就無需手動管理模型選擇。"}]}, {"kind": "ul", "items": ["廠商：Alibaba", "憑證：Qoder 賬戶（通過瀏覽器登入，或用 Qoder 個人訪問令牌進行非互動式使用）", "模型檔位：Lite、Efficient、Auto"]}]}, {"id": "why-design", "heading": "為什麼一個智慧體化、懂倉庫的智慧體契合設計", "blocks": [{"kind": "p", "text": "Qoder CLI 在設計上的優勢來自兩個特性——但和每個智慧體一樣，品味仍然得由人來提供。"}, {"kind": "steps", "items": [{"label": "深度的倉庫理解", "body": "因為 Qoder 會建立起對你整個程式碼庫的上下文並提煉成一份 repo wiki，智慧體會複用你已有的元件和 tokens，而不是為每個介面發明一次性的樣式。"}, {"label": "規範驅動、自主的 quest", "body": "Quest 模式把一份書面規範變成一個經過規劃、實現並自我驗證的結果，於是一項設計任務能端到端地跑完，而不是停在初稿。"}, {"label": "智慧體會讀取的約定", "body": "專案規則（再加上 Figma MCP 伺服器）把智慧體指向你的 tokens、元件和真實規範，於是它對著一個品牌工作，而不是一種預設觀感。"}]}, {"kind": "image", "src": "/agents/qoder-design/qoder-design-taste-triangle.webp", "alt": "圖示：設計系統、skill 與參考圖匯聚成優質的設計產出", "caption": "品味來自你提供的三項輸入：一個設計系統、一個 skill，以及真實的參考圖。"}, {"kind": "p", "text": "這個教訓和每個智慧體教給我們的一樣：Qoder CLI 預設並不具備品味。當你給它約束——一個設計系統、一個審美 skill 和具體的參考——它才產出優質的設計。Open Design 恰恰把這些輸入打包好了，這也是為什麼兩者契合（下文細說）。"}]}, {"id": "setup", "heading": "從零搭建用於設計工作的 Qoder CLI", "blocks": [{"kind": "p", "text": "這裡是從一臺乾淨的機器到一個能構建並驗證 UI 的 Qoder CLI 的完整路徑。"}, {"kind": "code", "lang": "bash", "code": "# 1. 安裝 Qoder CLI（Node 20+）\nnpm install -g @qoder-ai/qodercli\n# （macOS/Linux 也可通過 Homebrew 安裝）\n\n# 2. 驗證安裝\nqodercli --version\n\n# 3. 在你的專案裡啟動它，首次執行時登入\ncd your-project\nqodercli          # 然後 /login — 通過瀏覽器或 Qoder 訪問令牌登入\n\n# 4. 為本次會話挑選一個模型檔位\n#    Lite、Efficient 或 Auto（Auto 讓排程器按任務選擇）"}, {"kind": "image", "src": "/agents/qoder-design/qoder-design-setup-flow.webp", "alt": "五步搭建流程：安裝、認證、配置規則、新增 skill、驗證", "caption": "搭建順序：安裝 → 登入 → 配置專案規則 → 新增 skill → 啟用瀏覽器驗證。"}, {"kind": "steps", "items": [{"label": "把你的設計規則寫下來", "body": "把你的 tokens、基礎元件和約定放在智慧體會讀取的地方，讓產出貼合一個品牌，而不是退回到一種通用觀感。Qoder 的 repo wiki 有助於讓這份上下文保持最新。"}, {"label": "加上瀏覽器驗證", "body": "接入一個 Playwright 或瀏覽器 MCP，讓 Qoder 在真實瀏覽器中渲染，並跨斷點檢查其產出，而不只是確認構建通過。"}]}]}, {"id": "screenshot-workflow", "heading": "參考圖到 UI 的工作流", "blocks": [{"kind": "p", "text": "用 Qoder CLI 最具槓桿效應的設計閉環，是把一張參考變成可用、響應式的 UI，並不斷迭代直到它匹配為止——藉助智慧體的倉庫上下文和一個真實的驗證閉環，把產出對照回參考。"}, {"kind": "ol", "items": ["從你手上最清晰的視覺參考出發——幷包含多種狀態（桌面與移動端、懸停、空態、載入態），而不只是一張主視覺。", "在 prompt 裡講清楚；模糊的 prompt 即便配上能幹的智慧體也會產出通用的 UI。", "把 Qoder 指向你的設計系統和約定，並告訴它 tokens 和規範基礎元件存放在哪裡。", "跑一個 dev 伺服器，讓 Qoder 在真實瀏覽器中渲染，調整到各斷點尺寸來檢查結果。", "讓 Qoder 把它的實現對照回參考來迭代——而不只是確認它能構建通過。"]}, {"kind": "p", "text": "把任務寫成一份清晰的規範，讓一個 quest 把它貫穿到底，並給出具體約束："}, {"kind": "code", "lang": "bash", "code": "qodercli\n# 在 prompt 裡：\n> Implement this design from reference-desktop.png and\n  reference-mobile.png in React + Vite + Tailwind + TypeScript.\n  Reuse my existing design-system components and tokens.\n  Match spacing, layout, and hierarchy; make it responsive.\n  Render it in the browser and iterate until it matches the references\n  across breakpoints."}, {"kind": "p", "text": "保持 prompt 小而聚焦，提交好的迭代、回退壞的迭代（回退時告訴 Qoder），讓每一輪都建立在一個乾淨的基底之上。"}]}, {"id": "extend", "heading": "規則、MCP 與 repo wiki", "blocks": [{"kind": "p", "text": "有三個擴充套件點讓 Qoder CLI 適合持續的設計工作，而這三者都能幹淨利落地對映到一套開放的設計工作流上。"}, {"kind": "steps", "items": [{"label": "專案規則", "body": "把你的設計約定編碼為智慧體每次執行都會讀取的持久專案規則——這是 tokens、基礎元件和評審清單的歸處。"}, {"label": "MCP 伺服器", "body": "MCP 是引入設計上下文和外部工具的可移植方式，其中最相關的是 Figma MCP 伺服器，而且它跨智慧體可用，不只限於 Qoder。"}, {"label": "repo wiki", "body": "Qoder 的 repository wiki 會自動提煉架構與約定，於是智慧體能持續複用你真實的元件，而不必每個任務都重新學習一遍程式碼庫。"}]}, {"kind": "p", "text": "這些都是可移植、跨智慧體的能力——恰恰是 Open Design 生來要編排的那類東西，而不是每個專案都重新造一遍。"}]}, {"id": "vs", "heading": "做設計時 Qoder CLI vs Codex vs Claude Code vs Cursor vs Gemini CLI", "blocks": [{"kind": "p", "text": "做設計沒有單一贏家——每個智慧體各有所長，有經驗的團隊會把它們疊加使用。一個公允的小結："}, {"kind": "table", "columns": ["智慧體", "設計強項", "最適合"], "rows": [["Qoder CLI", "帶 repo wiki 的深度倉庫理解，以及規範驅動、自主的 quest；Lite/Efficient/Auto 檔位", "倉庫上下文密集的工作，以及委派多步、規範驅動的構建"], ["Codex", "憑前端 skill 帶來過硬的視覺打磨；沙箱化非同步構建", "委派的非同步構建與可移植的 AGENTS.md 規則"], ["Claude Code", "具體的設計決策（色值、間距、字型）與懂程式碼庫的 UX", "前端推理與大上下文重構"], ["Cursor", "帶即時預覽和內聯編輯的視覺化“邊建邊看”閉環", "在 IDE 內緊密迭代、邊看邊改的 UI 工作"], ["Gemini CLI", "過硬的多模態影像理解與 100 萬 token 的上下文；有免費檔", "截圖密集的工作，以及把整個設計系統放進上下文"]]}, {"kind": "p", "text": "社群反覆得出的結論是：品味來自人類——沒有 skill、參考和約束，它們全都會退回到一種通用審美。這才是真正要解決的問題——而它是設計工具形狀的，不是模型形狀的。"}]}, {"id": "pitfalls", "heading": "坑，以及如何避開“AI 味”觀感", "blocks": [{"kind": "p", "text": "關於 AI 生成設計最常見的抱怨是它看起來千篇一律——柔和漸變、懸浮面板、過大的圓角、誇張的陰影，一種“一眼就知道是 AI 做的”的 Inter 配紫色既視感。其他被反映的問題還包括移動端佈局錯亂，以及指令文字洩漏進 UI 文案。這些都不是 Qoder CLI 獨有的；任何智慧體在沒有精選設計上下文的情況下執行，都會這樣。"}, {"kind": "steps", "items": [{"label": "加一個審美 skill", "body": "一個精選的設計 skill 會迫使智慧體承諾一個真實的方向，而不是那種預設觀感。"}, {"label": "在真實瀏覽器中驗證", "body": "跨斷點渲染並自檢，這樣佈局就不會在移動端悄無聲息地崩掉。"}, {"label": "提供 tokens 與參考", "body": "真實的設計 tokens 和參考截圖，是撬動產出質量的最大單一槓桿。"}, {"label": "編碼智慧體會讀取的規則", "body": "把“不要主視覺卡片、最多兩種字型、品牌優先的層級”這類規則放進專案規則和 repo wiki，智慧體每次執行都會讀到它們。"}]}, {"kind": "p", "text": "注意，每一項緩解措施都關乎給智慧體一份精選的設計上下文。逐個專案手工維護這份上下文，正是 Open Design 替你省掉的苦活。"}]}, {"id": "open-design", "heading": "在 Open Design 中用 Qoder CLI 做設計", "blocks": [{"kind": "p", "text": "Open Design 正是上文那套工作流一再呼喚的開源設計層。它把 Qoder CLI 當作一等介面卡，並用一個精選的 skill 與設計系統庫、一條結構化的渲染管線，以及一個本地桌面 UI 把它包裹起來——於是讓 Qoder 出色的那份設計上下文從第一次執行起就在那裡，而不必每次手工拼湊。Open Design 是本地優先的，所以你的工作留在你自己的機器上。"}, {"kind": "ol", "items": ["安裝 Open Design 並選擇 Qoder CLI 作為你的智慧體。", "用你的 Qoder 賬戶認證——憑證留在你的機器上，絕不經我們代理。", "挑一個設計系統和一個 skill，然後以一致的品味生成演示稿、原型與落地頁。", "每個產物和 DESIGN.md 檔案都存在你自己的倉庫裡，而不是託管雲端。"]}, {"kind": "p", "text": "同一個 Qoder CLI 智慧體、同一個賬戶——再加上一套圍繞它的、真實、可移植、開源的設計工作流。它本地優先且採用 Apache-2.0 許可，所以你的工作或憑證沒有任何東西會離開你的機器。"}]}], "faqTitle": "常見問題", "faq": [{"name": "Qoder CLI 真的能做設計工作嗎？", "text": "能——在上下文中配上一個審美 skill、一個設計系統和真實的參考圖，Qoder CLI 能產出生產級、響應式的 UI，而它深度的倉庫理解能幫它複用你真實的元件。沒有這份上下文，它往往會退回到一種通用觀感，而這正是 Open Design 填補的差距。"}, {"name": "我該如何認證 Qoder CLI？", "text": "執行 qodercli 並用 /login 通過瀏覽器以你的 Qoder 賬戶登入，或為非互動式環境提供一個 Qoder 個人訪問令牌。Open Design 從不代理你的憑證——智慧體直接使用它們。"}, {"name": "究竟是什麼讓 Qoder CLI 適合做設計？", "text": "兩點：它會建立起對你倉庫的深度上下文——架構、約定和一份 repo wiki——所以它複用你真實的基礎元件；它的規範驅動 quest 能端到端地跑完一項設計任務。兩者都有幫助，但品味仍然來自你提供的設計系統、skill 和參考。"}, {"name": "Lite、Efficient 和 Auto 模型檔位是什麼？", "text": "Qoder CLI 讓你挑選一個模型檔位：Lite、Efficient 或 Auto。Auto 讓 Qoder 的排程器按任務選擇模型，這樣你就無需手動管理模型選擇。挑選契合任務的檔位；Auto 是個穩妥的預設值。"}, {"name": "我該如何把 Qoder CLI 連到 Figma？", "text": "把 Figma MCP 伺服器加進 Qoder 的 MCP 配置裡。Qoder 隨後就能拉取真實的設計上下文——元件、變數、佈局資料——於是生成的程式碼貼合來源，而不是近似它。"}, {"name": "Open Design 與 Qoder 或 Alibaba 有關聯嗎？", "text": "沒有。Qoder 是 Alibaba 的產品；Open Design 是一個獨立的開源專案，以一等介面卡的方式支援它。Qoder 是其各自所有者的商標。"}, {"name": "我的檔案和憑證安全嗎？", "text": "安全——Open Design 本地優先且採用 Apache-2.0 許可。你的檔案、產物和 DESIGN.md 都留在你自己的倉庫裡，你的 Qoder 憑證由你的智慧體直接使用，絕不會經過 Open Design 的伺服器中轉。"}], "ctaTitle": "用開放的方式，借 Qoder CLI 做設計。", "ctaBody": "帶上你自己的 Qoder 賬戶，讓每個檔案都留在本地，並圍繞你已在使用的智慧體獲得一個精選的設計庫。", "ctaActions": [{"label": "在 Open Design 中使用 Qoder CLI", "href": "/quickstart/", "variant": "primary"}, {"label": "在 GitHub 上 Star", "href": "https://github.com/nexu-io/open-design", "variant": "ghost", "external": true}, {"label": "下載桌面應用", "href": "https://github.com/nexu-io/open-design/releases", "variant": "ghost", "external": true}], "hubLinkLabel": "檢視所有支援的智慧體"},
+    },
+  },
   common: {
     ...INFO_PAGE_COPY.zh!.common,
     breadcrumbAria: '麵包屑',
@@ -4696,8 +3106,8 @@ INFO_PAGE_COPY['zh-tw'] = {
   },
   agents: {
     ...INFO_PAGE_COPY.zh!.agents,
-    title: 'Open Design Agent —— 17 個 BYOK adapter',
-    description: 'Open Design 內建 17 個 BYOK adapter。直接用你寫程式時已經在用的 Agent 來驅動設計，無需額外供應商登入。',
+    title: 'Open Design Agent —— {count} 個 BYOK adapter',
+    description: 'Open Design 內建 {count} 個 BYOK adapter。直接用你寫程式時已經在用的 Agent 來驅動設計，無需額外供應商登入。',
     breadcrumb: 'Agent',
     heading: (count) => `${count} 個 BYOK Agent，一套 Skill 協議。`,
     lead: (count) =>

@@ -1,8 +1,4 @@
----
-import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
----
-
-<script is:inline define:vars={{ RELEASE_METADATA_URL }}>
+<script is:inline>
   (() => {
     const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 
@@ -12,115 +8,113 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
       return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     };
 
-    const formatVersion = (metadata) => {
-      const fromVersion = (version) => {
-        if (typeof version !== 'string') return null;
-        const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-        return m ? `v${m[1]}` : null;
-      };
+    const formatVersion = (release) => {
       const fromTag = (tag) => {
         if (typeof tag !== 'string') return null;
         const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
         return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
       };
-      return (
-        fromVersion(metadata?.releaseVersion) ??
-        fromVersion(metadata?.stableVersion) ??
-        fromVersion(metadata?.baseVersion) ??
-        fromTag(metadata?.versionTag) ??
-        null
-      );
-    };
-
-    // Best-effort OS + arch detection so the header download CTA points
-    // straight at the matching installer. Mirrors app/pages/index.astro — keep
-    // the two in sync. arm64 vs x64 on macOS isn't reliably exposed (Safari
-    // hides CPU arch), so we sniff the WebGL renderer and otherwise default to
-    // arm64. Linux has no artifact, so it keeps the releases-page fallback.
-    const detectPlatform = () => {
-      const ua = (navigator.userAgent || '').toLowerCase();
-      const uaPlatform = (
-        (navigator.userAgentData && navigator.userAgentData.platform) ||
-        navigator.platform ||
-        ''
-      ).toLowerCase();
-      const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
-      const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
-      const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
-      if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
-      if (isMac) {
-        const isIntel = (() => {
-          try {
-            const gl = document.createElement('canvas').getContext('webgl');
-            const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
-            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
-            return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
-          } catch {
-            return false;
-          }
-        })();
-        const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
-        const key = isIntel ? 'macIntel' : 'mac';
-        return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
-      }
-      if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
-      return null;
-    };
-
-    const enhanceDownloadCtas = (metadata) => {
-      const ctas = document.querySelectorAll('[data-download-cta]');
-      if (ctas.length === 0) return;
-      const platform = detectPlatform();
-      if (!platform) return;
-      for (const slot of document.querySelectorAll('[data-download-os]')) {
-        slot.textContent = platform.os;
-      }
-      for (const slot of document.querySelectorAll('[data-download-arch]')) {
-        if (!platform.arch) continue;
-        slot.textContent = `（${platform.arch}）`;
-        slot.hidden = false;
-      }
-      const url = platform.artifact(metadata);
-      if (typeof url !== 'string' || url.length === 0) return;
-      for (const cta of ctas) {
-        // CTAs that intentionally route to the /download page (the header nav
-        // button) opt out of direct-asset rewriting: they still get the arch
-        // label above, but keep their page href so JS-enabled visitors land on
-        // the full installer matrix instead of an immediate download.
-        if (cta.hasAttribute('data-download-page')) continue;
-        cta.href = url;
-        cta.removeAttribute('target');
-        cta.removeAttribute('rel');
-      }
+      const fromName = (name) => {
+        if (typeof name !== 'string') return null;
+        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
     };
 
     const chrome = document.querySelector('[data-chrome-headroom]');
     if (chrome) {
-      // Wrap the scroll listener in requestAnimationFrame so a burst of
-      // scroll events (trackpads fire >60Hz) collapses to one DOM
-      // mutation per frame. PSI attributed ~700ms of "forced reflow" to
-      // the un-throttled version.
-      let lastY = window.scrollY;
+      const navBar = chrome.querySelector('.nav');
+      const glassMap = chrome.querySelector('[data-nav-glass-map]');
+
+      // Liquid Glass displacement map — ported 1:1 from Inspira UI's
+      // LiquidGlass.vue `displacementImage` computed (radius 16, border 0.07,
+      // lightness 50, alpha 0.93, blur 11, blend "difference"). Built at the
+      // live bar's pixel size so the edge refraction tracks the bar as it
+      // condenses; mirrors the component's ResizeObserver-driven data URI.
+      const buildGlassMap = (w, h) => {
+        // Pill radius — half the bar height — so the refraction follows the
+        // condensed capsule's fully rounded ends.
+        const radius = Math.round(Math.min(w, h) / 2);
+        const borderRatio = 0.07;
+        const lightness = 50;
+        const alpha = 0.93;
+        const blur = 11;
+        const blend = 'difference';
+        const inset = Math.min(w, h) * (borderRatio * 0.5);
+        const svg =
+          '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
+            '<defs>' +
+              '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+              '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+            '</defs>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#blue)" style="mix-blend-mode:' + blend + '"/>' +
+            '<rect x="' + inset + '" y="' + inset + '" width="' + (w - inset * 2) + '" height="' + (h - inset * 2) + '" rx="' + radius + '" fill="hsl(0 0% ' + lightness + '% / ' + alpha + ')" style="filter:blur(' + blur + 'px)"/>' +
+          '</svg>';
+        return 'data:image/svg+xml,' + encodeURIComponent(svg);
+      };
+
+      const syncGlassMap = () => {
+        if (!navBar || !glassMap) return;
+        const rect = navBar.getBoundingClientRect();
+        const w = Math.max(1, Math.round(rect.width));
+        const h = Math.max(1, Math.round(rect.height));
+        const uri = buildGlassMap(w, h);
+        glassMap.setAttribute('href', uri);
+        glassMap.setAttributeNS('http://www.w3.org/1999/xlink', 'href', uri);
+      };
+
+      // Debounced map rebuild — the capsule's width/height animate on
+      // condense, so rebuilding the displacement SVG every frame would
+      // re-rasterize the filter each frame and stutter. Rebuild once the size
+      // settles; the prior map covers the brief morph.
+      let mapTimer = 0;
+      const scheduleGlassMap = () => {
+        clearTimeout(mapTimer);
+        mapTimer = setTimeout(syncGlassMap, 140);
+      };
+
+      // Condense-on-scroll with hysteresis: condense past 64px, release below
+      // 24px. The dead-band stops a scroll that lingers near a single
+      // threshold from flipping the state — and the bar's geometry — back and
+      // forth (the "jitter"). rAF collapses each scroll burst to one read +
+      // at most one class change per frame.
+      const condenseOn = 64;
+      const condenseOff = 24;
+      let condensed = false;
       let ticking = false;
-      const showTopThreshold = 100;
-      const scrollDelta = 6;
+      const onScroll = () => {
+        ticking = false;
+        const y = window.scrollY;
+        if (!condensed && y > condenseOn) {
+          condensed = true;
+          chrome.classList.add('is-condensed');
+        } else if (condensed && y < condenseOff) {
+          condensed = false;
+          chrome.classList.remove('is-condensed');
+        }
+      };
       window.addEventListener(
         'scroll',
         () => {
           if (ticking) return;
           ticking = true;
-          requestAnimationFrame(() => {
-            const y = window.scrollY;
-            const delta = y - lastY;
-            if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
-            else if (delta > scrollDelta) chrome.classList.add('is-hidden');
-            else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
-            lastY = y;
-            ticking = false;
-          });
+          requestAnimationFrame(onScroll);
         },
         { passive: true },
       );
+      condensed = window.scrollY > condenseOn;
+      chrome.classList.toggle('is-condensed', condensed);
+
+      syncGlassMap();
+      if (navBar) {
+        if (window.ResizeObserver) {
+          new ResizeObserver(scheduleGlassMap).observe(navBar);
+        }
+        window.addEventListener('resize', scheduleGlassMap, { passive: true });
+      }
     }
 
     // Hamburger menu toggle. Active only at narrow viewports (CSS hides
@@ -168,18 +162,15 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
     }
 
     const versionSlots = document.querySelectorAll('[data-github-version]');
-    const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
-    if (versionSlots.length > 0 || hasDownloadCtas) {
-      fetch(RELEASE_METADATA_URL, {
-        headers: { Accept: 'application/json' },
+    if (versionSlots.length > 0) {
+      fetch(`${REPO_API}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json' },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-        .then((metadata) => {
-          enhanceDownloadCtas(metadata);
-          const label = formatVersion(metadata);
-          if (label) {
-            for (const slot of versionSlots) slot.textContent = label;
-          }
+        .then((data) => {
+          const label = formatVersion(data);
+          if (!label) return;
+          for (const slot of versionSlots) slot.textContent = label;
         })
         .catch(() => {});
     }

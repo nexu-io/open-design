@@ -199,21 +199,21 @@ describe('prompt telemetry builder', () => {
   it('preserves semantic slash-prefixed prompt tokens', () => {
     const telemetry = buildPromptStackTelemetry({
       composedPrompt:
-        'POST /api/runs/:id/tool-result, match /foo/bar, cwd /app/project',
+        'POST /api/runs/:id/cancel, match /foo/bar, cwd /app/project',
       sections: [
         {
           kind: 'daemonSystemPrompt',
           content:
-            'POST /api/runs/:id/tool-result, match /foo/bar, cwd /app/project',
+            'POST /api/runs/:id/cancel, match /foo/bar, cwd /app/project',
         },
       ],
     });
 
     expect(telemetry.sections[0]!.redactedContent).toBe(
-      `POST /api/runs/:id/tool-result, match /foo/bar, cwd ${PROMPT_STACK_PATH_MARKER}`,
+      `POST /api/runs/:id/cancel, match /foo/bar, cwd ${PROMPT_STACK_PATH_MARKER}`,
     );
     expect(telemetry.sections[0]!.redactedContent).toContain(
-      '/api/runs/:id/tool-result',
+      '/api/runs/:id/cancel',
     );
     expect(telemetry.sections[0]!.redactedContent).toContain('/foo/bar');
     expect(telemetry.sections[0]!.redactedContent).not.toContain('/app/project');

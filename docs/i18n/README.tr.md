@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: Açık kaynaklı Claude Design alternatifi</h1>
 
-> 🔥 **Open Design 0.9.0 burada: kurulum olmadan üret.** [Resmî Model Router](https://open-design.ai/amr) doğrudan uygulamaya gömülü — ek yapılandırma yok, kurulacak CLI yok, hazırlanacak API anahtarı yok. Sadece uygulamayı açın, oturum açın ve hemen tasarlamaya ve üretmeye başlayın. [0.9.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 burada: hepsi bir arada Agentic tasarım çalışma alanı.** Zanaatın tamamı artık tek pencerede — belirsiz bir fikirden referans keşfine, malzeme toplamaya, etkileşimli düzenlemeye, yorumları kuyruğa almaya, animasyonları cilalamaya ve sonucu bir editöre ya da Code Agent'a devretmeye kadar — uygulamadan hiç çıkmadan. Paralel oturumlarla artık tek bir asistan gibi değil, sizin için çalışan yerel bir tasarım ekibi gibi hissettiriyor. [0.10.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
 >
 > 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Web Sitesi</a> ·
   <a href="https://open-design.ai/">İndir</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio'yu takip et</a>
 </p>
@@ -116,13 +119,13 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 | [Cursor](https://www.cursor.com/cli) | ✅ Destekleniyor | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
-| Gemini CLI | ✅ Destekleniyor | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Destekleniyor | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Destekleniyor | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Destekleniyor | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Destekleniyor | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Destekleniyor | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Destekleniyor | `od mcp install trae` |
-| Kimi CLI | ✅ Destekleniyor | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Destekleniyor | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Destekleniyor | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Destekleniyor | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Destekleniyor | `od mcp install hermes` |

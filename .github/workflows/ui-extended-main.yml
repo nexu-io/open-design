@@ -1,9 +1,6 @@
 name: ui-extended-main
 
 on:
-  push:
-    branches:
-      - main
   schedule:
     # 02:00 UTC = 10:00 Asia/Shanghai
     - cron: "0 2 * * *"
@@ -29,7 +26,7 @@ concurrency:
 jobs:
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite != 'full')) }}
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -37,55 +34,20 @@ jobs:
       matrix:
         include:
           - name: entry-onboarding
-            smoke_command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/critical-smoke.test.ts
-              --grep '\[P0\]'
-            command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/critical-smoke.test.ts
-              ui/entry-chrome-flows.test.ts
-              ui/entry-configuration-flows.test.ts
-              ui/amr-onboarding.test.ts
-              ui/api-empty-response.test.ts
-              --grep '\[P0\]'
+            smoke_shard: smoke
+            shard: entry-onboarding
           - name: project-workspace
-            smoke_command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/critical-smoke.test.ts
-              --grep '\[P0\]'
-            command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/app.test.ts
-              ui/app-restoration.test.ts
-              ui/app-design-files.test.ts
-              ui/app-manual-edit.test.ts
-              ui/project-management-flows.test.ts
-              ui/workspace-keyboard-flows.test.ts
-              --grep '\[P0\]'
+            smoke_shard: smoke
+            shard: project-workspace
+          - name: workspace-restoration
+            smoke_shard: smoke
+            shard: workspace-restoration
           - name: runtime-recovery
-            smoke_command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/critical-smoke.test.ts
-              --grep '\[P0\]'
-            command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/real-daemon-run.test.ts
-              ui/amr-run-failure-recovery.test.ts
-              ui/amr-logout-requires-relogin.test.ts
-              ui/settings-local-cli-codex-fallback.test.ts
-              --grep '\[P0\]'
+            smoke_shard: smoke
+            shard: runtime-recovery
           - name: settings-connectors
-            smoke_command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/critical-smoke.test.ts
-              --grep '\[P0\].*settings dialog'
-            command: >-
-              pnpm -C e2e exec playwright test -c playwright.config.ts
-              ui/settings-api-protocol.test.ts
-              ui/settings-connectors-auth-happy-path.test.ts
-              ui/settings-connectors-auth-recovery.test.ts
-              --grep '\[P0\]'
+            smoke_shard: settings-smoke
+            shard: settings-connectors
 
     steps:
       - name: Checkout
@@ -110,10 +72,10 @@ jobs:
         run: pnpm -C e2e exec tsx scripts/playwright.ts clean
 
       - name: Run UI shell smoke
-        run: ${{ matrix.smoke_command }}
+        run: pnpm -C e2e exec tsx scripts/ui-p0-shards.ts ${{ matrix.smoke_shard }}
 
       - name: Run UI P0 domain
-        run: ${{ matrix.command }}
+        run: pnpm -C e2e exec tsx scripts/ui-p0-shards.ts ${{ matrix.shard }}
 
       - name: Upload Playwright debug artifact
         if: ${{ always() }}
@@ -130,7 +92,7 @@ jobs:
 
   ui_extended:
     name: UI P1 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1')) }}
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -182,9 +144,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  ui_full_manual:
+  ui_full:
     name: Full UI regression
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
+    if: ${{ github.repository == 'nexu-io/open-design' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'full')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -217,7 +179,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-full-manual-${{ github.run_id }}
+          name: ui-full-${{ github.run_id }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results

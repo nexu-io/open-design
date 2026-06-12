@@ -78,8 +78,9 @@ const tiles = [
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <header class="catalog-head">
-    <span class="label">{pcopy.hubLabel}</span>
+  {/* Bare heading — the kicker label + top rule were removed from this
+      module per design; `catalog-head-bare` drops the border/padding. */}
+  <header class="catalog-head catalog-head-bare">
     <h1 class="display">
       {pcopy.hubHeading(totalCount)}<span class="dot">.</span>
     </h1>

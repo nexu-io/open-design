@@ -196,6 +196,13 @@ export type RuntimeAgentDef = {
     args: string[];
     timeoutMs?: number;
   };
+  // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
+  // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,
+  // Kilo, Kiro, Vibe, and Devin.  `'map'` emits `{"KEY": "val"}` — used
+  // by reasonix ≥ 1.0 (Go) whose ACP implementation expects the standard
+  // MCP `map[string]string` shape. Leave `undefined` (defaults to 'array')
+  // for all other agents — the existing behavior is unchanged.
+  acpMcpEnvFormat?: 'array' | 'map';
 };
 
 export type DetectedAgent = Omit<

@@ -1,0 +1,26 @@
+{
+  "id": "zelda-style-forbidden-city-game-screenshot",
+  "surface": "image",
+  "title": "Zelda-Style Forbidden City Game Screenshot",
+  "summary": "Generates a 16:9 original-gameplay-screenshot-style image prompt inspired by The Legend of Zelda: Breath of the Wild / Tears of the Kingdom, with Link and Zelda exploring a real-world landmark such as Beijing's Forbidden City. The template keeps the prompt concise, anchors the Nintendo Switch in-game look, adds natural BOTW/TOTK-style HUD hints, and localizes all readable UI text in Chinese.",
+  "category": "Game UI",
+  "tags": [
+    "game-ui",
+    "zelda-style",
+    "open-world",
+    "hud",
+    "forbidden-city",
+    "botw",
+    "totk"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "16:9",
+  "prompt": "塞尔达原版游戏实况截图复刻\n画风：任天堂 Switch 旷野之息/王国之泪实机游戏截图风格；不要电影 CG、不要写实摄影、不要 HDR 真实光影、不要湿润真实材质；不要标题页、不要 Nintendo 或 Zelda logo、不要商标页、不要水印\n{argument name=\"game_version\" default=\"TOTK 王国之泪默认造型\"}，{argument name=\"party\" default=\"林克 + 塞尔达同行\"}\n\n海拉鲁地图区块：{argument name=\"location\" default=\"北京·故宫\"}\n画面要素：{argument name=\"scene_elements\" default=\"太和殿屋脊、红墙金瓦、汉白玉台阶、宫门轴线、远处角楼\"}\n玩法时刻：{argument name=\"gameplay_moment\" default=\"林克和塞尔达正在穿过太和殿前广场调查一座嵌入宫墙阴影里的古代神庙入口，不消耗体力，不显示耐力轮\"}\n\n塞尔达元素：{argument name=\"zelda_elements\" default=\"TOTK 左纳乌神庙、原版宝箱、希卡族研究员、波克布林巡逻营地、料理锅、远空飞行魔物\"}\n地名 UI 文字（区域发现）：顶部「发现！」 / 中间「{argument name=\"main_place_name\" default=\"北京·故宫\"}」 / 底部「{argument name=\"parent_place_name\" default=\"北京·东城区\"}」；按原版区域发现三段式呈现，底部上级区域右对齐、只在文字左侧带短横线、淡色发光、无矩形边框、无深色底纹\nHUD：按 BOTW/TOTK 原版游戏实况自然出现，不堆满；保留小地图、心心血量、互动提示或任务标记中的 1-3 种即可\n文字：所有可读 UI 使用中文，按键动词只用中文，如「调查」「打开」「拾取」「烹饪」\n\n场景要求：真实地点的建筑轮廓和地标特征必须清晰可辨；现代游客、工作人员、闸机、售票牌、塑料护栏、二维码和旅游标识全部转译为海拉鲁村民、驿站老板、旅行商人、希卡族研究员、木牌、机关或马车道具；画面像玩家正在操作角色探索，而不是旅游海报、电影剧照、封面 key visual 或现代 App 截图。\n\nNegative prompt: no photorealistic travel photo, no cinematic CG, no official logo, no watermark, no modern tourists, no modern uniforms, no QR code, no English UI words, no garbled glyphs, no fake app interface, no overcrowded HUD, no title screen, no poster typography, no signature.",
+  "previewImageUrl": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/zelda-style-forbidden-city-game-screenshot.jpg",
+  "source": {
+    "repo": "xiaoTN/zelda-style-image-prompt",
+    "license": "MIT",
+    "author": "xiaoTN",
+    "url": "https://github.com/xiaoTN/zelda-style-image-prompt"
+  }
+}

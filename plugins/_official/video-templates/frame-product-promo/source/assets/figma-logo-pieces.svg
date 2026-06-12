@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <g transform="translate(880, 420)">
+    <!-- Top-left: rounded square -->
+    <path id="logo-tl" d="M 40 0 A 40 40 0 0 0 0 40 L 0 80 A 40 40 0 0 0 40 120 A 40 40 0 0 0 80 80 L 80 40 A 40 40 0 0 0 40 0 Z" fill="#F24E1E" />
+    
+    <!-- Top-right: rounded square -->
+    <path id="logo-tr" d="M 120 0 A 40 40 0 0 0 80 40 L 80 80 A 40 40 0 0 0 120 120 A 40 40 0 0 0 160 80 L 160 40 A 40 40 0 0 0 120 0 Z" fill="#A259FF" />
+    
+    <!-- Bottom-left: half-circle -->
+    <path id="logo-bl" d="M 0 120 A 40 120 0 0 0 80 120 Z" fill="#1ABCFE" />
+    
+    <!-- Bottom-right: half-circle -->
+    <path id="logo-br" d="M 80 120 A 40 120 0 0 0 160 120 Z" fill="#0ACF83" />
+  </g>
+</svg>

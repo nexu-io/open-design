@@ -1696,7 +1696,7 @@
 
 .onboarding-view__steps {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   width: min(860px, 100%);
   margin: 0;
@@ -2874,14 +2874,6 @@
   gap: 16px;
 }
 
-.onboarding-view__newsletter-inline {
-  display: grid;
-  gap: 14px;
-  margin-top: 8px;
-  padding-top: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-}
-
 .onboarding-view__email-field {
   display: grid;
   gap: 8px;
@@ -3440,4 +3432,124 @@
     max-width: min(240px, calc(100% - 72px));
   }
 
+}
+
+/* ============================================================
+   AMR cloud card — detecting / skeleton state
+   Shown while AMR availability is still being probed. Reuses the
+   featured/amr card classes (so min-height: 246px and the responsive
+   grid are inherited — no layout jump when the real card resolves).
+   Only the probe-dependent parts shimmer; the brand stays solid.
+   ============================================================ */
+.onboarding-view__card--skeleton {
+  cursor: default;
+  /* Neutral, un-selected resting surface — the card is not yet actionable,
+     so it must not read as the accent-selected state. */
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+
+.onboarding-view__card--skeleton:hover {
+  /* Defeat the interactive card's hover lift/tint while detecting. */
+  border-color: var(--border);
+  background: var(--bg-panel);
+  transform: none;
+}
+
+/* Shared shimmer fill — matches the house skeleton sweep
+   (recent-projects / plugins-home): a soft highlight passing over a
+   muted base. Sheen kept intentionally low-contrast for a precise,
+   non-flashy read. */
+.onboarding-view__skeleton-line,
+.onboarding-view__skeleton-model-label,
+.onboarding-view__skeleton-model-bar {
+  display: block;
+  border-radius: var(--radius-pill);
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 30%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-muted) 82%, var(--bg-panel));
+  animation: onboarding-skeleton-sheen 1.55s ease-in-out infinite;
+}
+
+[data-theme="dark"] .onboarding-view__skeleton-line,
+[data-theme="dark"] .onboarding-view__skeleton-model-label,
+[data-theme="dark"] .onboarding-view__skeleton-model-bar {
+  background:
+    linear-gradient(
+      110deg,
+      transparent 28%,
+      color-mix(in srgb, #fff 12%, transparent) 50%,
+      transparent 72%
+    ) 0 0 / 200% 100%,
+    color-mix(in srgb, var(--bg-elevated) 70%, var(--bg-muted));
+}
+
+/* Version meta placeholder (sits where "AMR v0.1.0" renders). */
+.onboarding-view__skeleton-line--meta {
+  width: 116px;
+  height: 11px;
+  margin-top: 2px;
+}
+
+/* Benefit list placeholders in the aside column. Staggered widths read as
+   real copy rather than a stack of identical bars. */
+.onboarding-view__benefit-stack--skeleton {
+  gap: 11px;
+}
+
+.onboarding-view__skeleton-line--benefit {
+  height: 13px;
+  border-radius: var(--radius-sm);
+}
+.onboarding-view__benefit-stack--skeleton
+  .onboarding-view__skeleton-line--benefit:nth-child(1) { width: 90%; }
+.onboarding-view__benefit-stack--skeleton
+  .onboarding-view__skeleton-line--benefit:nth-child(2) { width: 74%; }
+.onboarding-view__benefit-stack--skeleton
+  .onboarding-view__skeleton-line--benefit:nth-child(3) { width: 83%; }
+.onboarding-view__benefit-stack--skeleton
+  .onboarding-view__skeleton-line--benefit:nth-child(4) { width: 58%; }
+
+/* Model picker placeholder (sits where the AMR model select renders). */
+.onboarding-view__skeleton-model {
+  display: grid;
+  gap: 8px;
+  width: min(260px, 100%);
+}
+.onboarding-view__card--amr .onboarding-view__skeleton-model {
+  width: 100%;
+}
+.onboarding-view__skeleton-model-label {
+  width: 96px;
+  height: 11px;
+}
+.onboarding-view__skeleton-model-bar {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--radius);
+  /* Slightly stagger the sweep from the label so the two don't pulse in
+     lockstep — reads as one surface loading, not two blinking blocks. */
+  animation-delay: 160ms;
+}
+
+@keyframes onboarding-skeleton-sheen {
+  to {
+    background-position: -200% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-view__skeleton-line,
+  .onboarding-view__skeleton-model-label,
+  .onboarding-view__skeleton-model-bar {
+    animation: none;
+    background:
+      color-mix(in srgb, var(--bg-muted) 82%, var(--bg-panel));
+  }
 }

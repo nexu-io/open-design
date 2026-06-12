@@ -620,6 +620,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     chooseDropdownOption('Organization size', /Growth company/i);
     chooseDropdownOption('Use case', /Product design/i);
     chooseDropdownOption('Where did you hear about us?', /Search/i);
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
@@ -642,11 +646,17 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           step_index: '2',
           step_name: 'about_you',
         }),
+        expect.objectContaining({
+          page_name: 'onboarding',
+          area: 'newsletter',
+          step_index: '3',
+          step_name: 'newsletter',
+        }),
       ]),
     );
 
-    // The About-you survey snapshot fires from the final step and carries
-    // the user's role/org/use-case/source picks.
+    // The About-you survey snapshot fires when the user continues past
+    // the About-you step and carries the role/org/use-case/source picks.
     expect(findTrackedEvent('ui_click', (payload) => payload.element === 'about_you_submit')).toMatchObject({
       page_name: 'onboarding',
       area: 'about_you',
@@ -693,10 +703,14 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     globalThis.fetch = fetchMock as typeof fetch;
     renderOnboarding();
 
-    // Connect -> About you
+    // Connect -> About you -> Newsletter
     fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
     });
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
@@ -746,12 +760,88 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
 
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
+  });
+
+  it('reports about_you_submit exactly once when jumping to the newsletter step via the stepper', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    chooseDropdownOption('Your role', 'Engineer');
+
+    // Jump straight to the newsletter step via the clickable stepper,
+    // bypassing the primary Continue CTA. The survey snapshot must still
+    // fire exactly once — on the final Finish — not zero times.
+    fireEvent.click(screen.getByRole('button', { name: /Stay updated/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    const aboutYouSubmits = trackedEvents('ui_click')
+      .map(([, payload]) => payload as Record<string, unknown>)
+      .filter((payload) => payload.element === 'about_you_submit');
+    expect(aboutYouSubmits).toHaveLength(1);
+    expect(aboutYouSubmits[0]).toMatchObject({ role: 'engineer' });
+  });
+
+  it('reports about_you_submit exactly once across a Back-then-Continue detour', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        configPath: '/x',
+        user: { id: 'u', email: 'user@example.com' },
+      }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    chooseDropdownOption('Your role', 'Engineer');
+
+    // About you -> Newsletter
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    // Back -> About you
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
+    });
+    // Continue -> Newsletter again, then finish.
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Finish setup/i }));
+
+    // The detour crosses the About-you step twice, but the snapshot must
+    // not double-fire.
+    const aboutYouSubmits = trackedEvents('ui_click')
+      .map(([, payload]) => payload as Record<string, unknown>)
+      .filter((payload) => payload.element === 'about_you_submit');
+    expect(aboutYouSubmits).toHaveLength(1);
   });
 
   it('persists the BYOK config before finishing onboarding', async () => {
@@ -801,6 +891,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(document.querySelector('.onboarding-view__email-input')).toBeTruthy();
     });
@@ -818,6 +909,43 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       model: 'claude-opus-4-8',
       apiProviderBaseUrl: null,
     });
+  });
+
+  it('shows the AMR cloud card as a skeleton while agent detection is still in flight', async () => {
+    // Before this fix, the AMR cloud card was simply absent for the several
+    // seconds AMR's probe takes to settle (showAmrCloudOption was false once
+    // any non-AMR agent had arrived), then popped in with no loading state.
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({
+      agents: [cliAgent()], // AMR has not surfaced from the stream yet
+      agentsLoading: true, // cold-start detection stream still running
+      onRefreshAgents: vi.fn(() => [cliAgent()]),
+    });
+
+    const skeleton = document.querySelector('.onboarding-view__card--skeleton');
+    expect(skeleton).toBeTruthy();
+    // The brand identity is known up-front and rendered solid; only the
+    // probe-dependent details shimmer.
+    expect(skeleton?.textContent).toContain('Open Design AMR');
+    expect(skeleton?.getAttribute('aria-busy')).toBe('true');
+    expect(skeleton?.querySelectorAll('.onboarding-view__skeleton-line--benefit').length).toBe(4);
+    expect(skeleton?.querySelector('.onboarding-view__skeleton-model-bar')).toBeTruthy();
+    // The real, selectable AMR card is not present while detecting.
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    // Alternatives remain available throughout detection.
+    expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
+  });
+
+  it('renders the real AMR cloud card and no skeleton once AMR is available', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding({ agentsLoading: false });
+
+    expect(screen.getByRole('button', { name: /Open Design AMR/i })).toBeTruthy();
+    expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
   });
 
   it('lets Skip exit onboarding without starting AMR login', async () => {

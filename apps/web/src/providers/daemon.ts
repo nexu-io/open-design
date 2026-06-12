@@ -47,6 +47,10 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { parseSseFrame } from './sse';
+import {
+  summarizeArtifactsForTranscript,
+  type PersistedArtifactFileRef,
+} from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
@@ -141,19 +145,27 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
 
 // Strip OD-specific markup that the agent emitted on a prior turn but
 // that the model would otherwise pattern-match as a template to echo.
-// Today this is `<question-form>` blocks and the ```json fenced schemas
+// Today this is `<question-form>` blocks (and the `<ask-question>` alias the
+// UI parser and the daemon open-tag matcher both accept) and the ```json
+// fenced schemas
 // some models (GPT-OSS-120B Medium, Gemini 3.5 Flash) emit alongside
 // them — leaving those literal in the transcript causes weak/medium
 // plain-stream models to re-emit an identical form on the user's
 // follow-up turn, looking like the discovery form loop never breaks
-// (see PR #3157 form-loop investigation).
+// (see PR #3157 form-loop investigation). If we only scrubbed the canonical
+// tag, an alias-form turn would replay verbatim and re-trigger that loop.
 //
 // User content is preserved verbatim — a user message that legitimately
 // quotes `<question-form>` (e.g. discussing the markup with the agent)
 // must not be mangled.
-export function sanitizePriorAssistantTurnForTranscript(content: string): string {
+export function sanitizePriorAssistantTurnForTranscript(
+  content: string,
+  persistedArtifactFiles: ReadonlyArray<PersistedArtifactFileRef> = [],
+): string {
   let sanitized = content.replace(
-    /<question-form\b[^>]*>[\s\S]*?<\/question-form>/g,
+    // `\1` backreference keeps the open/close tag names matched so we never
+    // splice across a `<question-form>…</ask-question>` mismatch.
+    /<(question-form|ask-question)\b[^>]*>[\s\S]*?<\/\1>/g,
     '[question-form was emitted here on a prior turn; the user already answered, see their reply below.]',
   );
   // Strip ```json (or plain ```) fenced blocks whose body matches the
@@ -169,7 +181,42 @@ export function sanitizePriorAssistantTurnForTranscript(content: string): string
       return match;
     },
   );
+  // Replace prior-turn `<artifact>` HTML with a one-line summary — but ONLY
+  // for artifacts whose save to the project files is confirmed by the
+  // message's producedFiles record. persistArtifact has refusal and
+  // write-failure branches; on those paths the transcript copy is the only
+  // surviving artifact body, so an unconfirmed block stays verbatim (the
+  // 12K truncation below still bounds it) and a follow-up turn can repair it.
+  // For confirmed saves the agent reads/edits the file from disk, never from
+  // this transcript copy, so re-sending the whole document each turn is pure
+  // waste — the summary keeps identifier/title/type plus the saved file name.
+  // Runs before truncateForTranscript so the summarized message no longer
+  // trips the 12K cap. Uses markdown-aware detection so a literal
+  // `<artifact>` recited in a code fence survives.
+  sanitized = summarizeArtifactsForTranscript(sanitized, persistedArtifactFiles);
   return sanitized;
+}
+
+// producedFiles → the persistence evidence summarizeArtifactsForTranscript
+// matches artifact blocks against. producedFiles is the whole per-turn file
+// diff — tool-written files included — so a name collision with an unrelated
+// same-turn file must not count as proof the <artifact> body was saved. Only
+// artifact-originated saves qualify: persistArtifact always writes an explicit
+// (non-inferred) manifest, whereas tool-written files surface with no manifest
+// or a daemon-inferred one (`metadata.inferred === true`). Within that
+// narrowed set, the manifest identifier is the strongest link (it survives
+// `-2`/`-3` collision renames); the file name is the fallback for artifact
+// saves whose manifest predates identifier metadata.
+function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRef[] {
+  return (message.producedFiles ?? [])
+    .filter((file) => file.artifactManifest && file.artifactManifest.metadata?.inferred !== true)
+    .map((file) => {
+      const identifier = file.artifactManifest?.metadata?.identifier;
+      return {
+        name: file.name,
+        identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
+      };
+    });
 }
 
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
@@ -179,7 +226,7 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
       const trimmed = m.content.trim();
       const sanitized =
         m.role === 'assistant'
-          ? sanitizePriorAssistantTurnForTranscript(trimmed)
+          ? sanitizePriorAssistantTurnForTranscript(trimmed, persistedArtifactFilesOf(m))
           : trimmed;
       return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
     })
@@ -640,30 +687,6 @@ export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusRe
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
     return null;
-  }
-}
-
-// Push a `tool_result` content block back into a running stream-json child.
-// Used to answer Claude's `AskUserQuestion` tool: the host card collects the
-// user's pick, formats it as one text string, and we route it through the
-// daemon's POST /api/runs/:id/tool-result. The daemon writes it as a JSONL
-// line on the still-open stdin so claude-code can resume mid-call instead
-// of auto-erroring the tool in headless mode.
-export async function submitChatRunToolResult(
-  runId: string,
-  toolUseId: string,
-  content: string,
-  options: { isError?: boolean } = {},
-): Promise<{ ok: boolean; status?: number }> {
-  try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/tool-result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ toolUseId, content, isError: !!options.isError }),
-    });
-    return { ok: resp.ok, status: resp.status };
-  } catch {
-    return { ok: false };
   }
 }
 

@@ -23,6 +23,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  "e2e/scripts/ui-p0-shards.ts",
   "e2e/scripts/visual-report.ts",
 ]);
 
@@ -80,6 +81,11 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // Shared nav enhancer for the landing-page static `/community/` pages,
+  // which are verbatim HTML served straight from `public/` (not Astro-
+  // compiled). It must ship as a browser-loadable `.js` asset, same as the
+  // web notifications service worker above.
+  "apps/landing-page/public/community/_site-nav.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",

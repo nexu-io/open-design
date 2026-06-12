@@ -1288,6 +1288,27 @@ async function reportRendererCrash(
   }
 }
 
+/**
+ * Native directory picker, parented to the renderer window that initiated
+ * the IPC call. Parenting makes the dialog window-modal and hands it
+ * keyboard focus (most visibly on Windows): without a parent the focus
+ * stays on the Electron window, so pressing Esc falls through to the web
+ * app and closes the in-app modal *behind* the still-open native picker.
+ * With a parent the picker owns Esc and cancels itself.
+ */
+async function showDirectoryPickerForSender(
+  sender: Electron.WebContents,
+): Promise<Electron.OpenDialogReturnValue> {
+  const parent =
+    BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
+  const pickerOptions: Electron.OpenDialogOptions = {
+    properties: ["openDirectory", "createDirectory"],
+  };
+  return parent
+    ? dialog.showOpenDialog(parent, pickerOptions)
+    : dialog.showOpenDialog(pickerOptions);
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
@@ -1332,7 +1353,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (_event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -1355,7 +1376,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+      const result = await showDirectoryPickerForSender(event.sender);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1384,7 +1405,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // POST are a single main-process transaction.
   ipcMain.handle(
     "dialog:pick-and-replace-working-dir",
-    async (_event, init?: { projectId?: string }) => {
+    async (event, init?: { projectId?: string }) => {
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
@@ -1398,7 +1419,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+      const result = await showDirectoryPickerForSender(event.sender);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1421,11 +1442,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // spends the token on POST /api/projects/:id/working-dir once the project
   // exists. Main remains the single source of filesystem paths crossing into
   // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
-  ipcMain.handle("dialog:pick-working-dir", async () => {
+  ipcMain.handle("dialog:pick-working-dir", async (event) => {
     if (options.desktopAuthSecret == null) {
       return { ok: false, reason: "desktop auth secret not registered" };
     }
-    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    const result = await showDirectoryPickerForSender(event.sender);
     if (result.canceled || result.filePaths.length === 0) {
       return { ok: false, canceled: true };
     }

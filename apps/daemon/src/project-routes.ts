@@ -19,6 +19,7 @@ import {
 } from './plugins/index.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
+import { readAnalyticsContext } from './analytics.js';
 import { listSkills } from './skills.js';
 import { isSafeId } from './projects.js';
 import {
@@ -1626,7 +1627,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
-    ctx.telemetry?.reportFinalizedMessage(saved, m);
+    ctx.telemetry?.reportFinalizedMessage(saved, m, {
+      analyticsContext: readAnalyticsContext(req),
+      projectId: req.params.id,
+      conversationId: req.params.cid,
+    });
     res.json({ message: saved });
   });
 
