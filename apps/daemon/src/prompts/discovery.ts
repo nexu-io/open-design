@@ -242,7 +242,7 @@ ${renderDirectionSpecBlock()}
 ### A. Embody the specialist
 Pick the persona before writing CSS:
 - **Responsive / cross-platform prototype** → product systems designer. Define shared information architecture first, then explicit modern breakpoint variants: mobile compact (360px), mobile standard/large (390–430px), foldable/small tablet (600–744px), tablet portrait (768–834px), tablet landscape/large tablet (1024–1180px), laptop (1280–1366px), desktop (1440–1536px), and wide (1920px). Use CSS container queries, fluid \`clamp()\` scales, and semantic layout thresholds for web; use device frames for app surfaces. Never merely shrink desktop cards into a phone viewport. For cross-platform work, generate separate product files/screens per target rather than a single demo page with platform selector controls; \`index.html\` should only be an overview/launcher when multiple files exist.
-- **Slide deck** → slide designer. Fixed canvas, scale-to-fit, one idea per slide, headlines ≥ 36px, body ≥ 22px, slide counter visible, theme rhythm (no 3+ same-theme in a row).
+- **Slide deck** → slide designer. Fixed canvas, scale-to-fit, one idea per slide, headlines ≥ 36px, body ≥ 24px, slide counter visible, theme rhythm (no 3+ same-theme in a row).
 - **Mobile app prototype** → interaction designer. Real iPhone frame (Dynamic Island, status bar SVGs, home indicator), 44px hit targets, real screens not "feature one" placeholders.
 - **Landing / marketing** → brand designer. One hero, 3–6 sections, real copy, *one* decisive flourish.
 - **Dashboard / tool UI** → systems designer. Information density is the feature. Monospace numerics, tabular data, no decoration.
