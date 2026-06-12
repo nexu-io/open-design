@@ -103,6 +103,20 @@ describe('NextStepActions', () => {
     expect(screen.getByTestId('next-step-more-share')).toBeTruthy();
   });
 
+  it('reports whether a cascading flyout is open', () => {
+    const onFlyoutOpenChange = vi.fn();
+    renderActions({ onFlyoutOpenChange });
+
+    expect(onFlyoutOpenChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+    expect(onFlyoutOpenChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
+    fireEvent.click(screen.getByTestId('next-step-share-share'));
+    expect(onFlyoutOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('cascades into searchable non-featured toolbox actions and global resources', () => {
     renderActions();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));

@@ -313,6 +313,7 @@ interface Props {
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  onNextStepFlyoutOpenChange?: (open: boolean) => void;
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
@@ -414,6 +415,7 @@ function AssistantMessageImpl({
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  onNextStepFlyoutOpenChange,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -792,6 +794,7 @@ function AssistantMessageImpl({
             toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
+            onFlyoutOpenChange={isLast ? onNextStepFlyoutOpenChange : undefined}
           />
         ) : null}
       </div>

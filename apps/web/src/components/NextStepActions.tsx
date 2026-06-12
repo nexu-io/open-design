@@ -53,6 +53,9 @@ interface Props {
   // Contribute the artifact to the Open Design community gallery.
   onShareToOpenDesign?: () => void;
   shareToOpenDesignBusy?: boolean;
+  // Lets the chat pane hide overlapping floating controls while the cascading
+  // next-step menus are open.
+  onFlyoutOpenChange?: (open: boolean) => void;
 }
 
 const FLYOUT_GAP = 8;
@@ -103,6 +106,7 @@ export function NextStepActions({
   toolboxSkillNames,
   onShareToOpenDesign,
   shareToOpenDesignBusy = false,
+  onFlyoutOpenChange,
 }: Props) {
   const { t, locale } = useI18n();
   const analytics = useAnalytics();
@@ -129,6 +133,18 @@ export function NextStepActions({
   const [more, setMore] = useState<Anchor | null>(null);
   const [sub, setSub] = useState<({ kind: SubKind } & Anchor) | null>(null);
   const [toolboxQuery, setToolboxQuery] = useState('');
+  const flyoutOpen = !!(detail || more || sub);
+
+  useEffect(() => {
+    onFlyoutOpenChange?.(flyoutOpen);
+  }, [flyoutOpen, onFlyoutOpenChange]);
+
+  useEffect(
+    () => () => {
+      onFlyoutOpenChange?.(false);
+    },
+    [onFlyoutOpenChange],
+  );
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelClose = useCallback(() => {

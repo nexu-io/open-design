@@ -820,6 +820,7 @@ export function ChatPane({
   const [conversationSearch, setConversationSearch] = useState('');
   const deferredConversationSearch = useDeferredValue(conversationSearch);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  const [nextStepFlyoutOpen, setNextStepFlyoutOpen] = useState(false);
   const [chatLogScrollable, setChatLogScrollable] = useState(false);
   const [chatLogScrolling, setChatLogScrolling] = useState(false);
   const [composerPortalTarget, setComposerPortalTarget] = useState<HTMLElement | null>(null);
@@ -830,6 +831,7 @@ export function ChatPane({
   } | null>(null);
   const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
+  const showJumpToLatest = scrolledFromBottom && !nextStepFlyoutOpen;
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
@@ -1951,6 +1953,7 @@ export function ChatPane({
                 onArtifactDownload={onArtifactDownload}
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
+                onNextStepFlyoutOpenChange={setNextStepFlyoutOpen}
                 onForkFromMessage={onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
@@ -2097,11 +2100,11 @@ export function ChatPane({
                 keep it out of the a11y tree when it's not visible. */}
             <button
               type="button"
-              className={`chat-jump-btn${scrolledFromBottom ? ' chat-jump-btn-active' : ''}`}
+              className={`chat-jump-btn${showJumpToLatest ? ' chat-jump-btn-active' : ''}`}
               onClick={jumpToBottom}
               title={t('chat.scrollToLatest')}
-              aria-hidden={!scrolledFromBottom}
-              tabIndex={scrolledFromBottom ? 0 : -1}
+              aria-hidden={!showJumpToLatest}
+              tabIndex={showJumpToLatest ? 0 : -1}
             >
               <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
               <span>{t('chat.jumpToLatest')}</span>
@@ -2247,6 +2250,7 @@ function ChatRows({
   onArtifactDownload,
   nextStepSkills,
   toolboxSkillNames,
+  onNextStepFlyoutOpenChange,
   onForkFromMessage,
   onAssistantFeedback,
   forkingMessageId,
@@ -2287,6 +2291,7 @@ function ChatRows({
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
   toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
+  onNextStepFlyoutOpenChange?: (open: boolean) => void;
   onForkFromMessage?: (message: ChatMessage) => void;
   onAssistantFeedback?: (message: ChatMessage, change: ChatMessageFeedbackChange) => void;
   forkingMessageId?: string | null;
@@ -2408,6 +2413,7 @@ function ChatRows({
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
         toolboxSkillNames={toolboxSkillNames}
+        onNextStepFlyoutOpenChange={onNextStepFlyoutOpenChange}
       />
     );
   };

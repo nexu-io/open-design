@@ -14,9 +14,10 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
 }
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
-import type { ChatMessage } from '../../src/types';
+import type { ChatMessage, ProjectFile } from '../../src/types';
 
 // jsdom does not run a layout engine, so scrollHeight/clientHeight/scrollTop
 // are all 0. The scroll-preservation effect derives "near bottom" and the
@@ -132,7 +133,22 @@ function setUserScroll(top: number) {
   if (el) fireEvent.scroll(el);
 }
 
-function chatPaneEl(messages: ChatMessage[], activeConversationId: string | null) {
+function producedHtmlFile(name: string): ProjectFile {
+  return {
+    name,
+    path: name,
+    size: 100,
+    mtime: Date.now(),
+    kind: 'html',
+    mime: 'text/html',
+  } as ProjectFile;
+}
+
+function chatPaneEl(
+  messages: ChatMessage[],
+  activeConversationId: string | null,
+  overrides: Partial<ComponentProps<typeof ChatPane>> = {},
+) {
   return (
     <ChatPane
       projectKindForTracking="prototype"
@@ -148,12 +164,17 @@ function chatPaneEl(messages: ChatMessage[], activeConversationId: string | null
       activeConversationId={activeConversationId}
       onSelectConversation={() => {}}
       onDeleteConversation={() => {}}
+      {...overrides}
     />
   );
 }
 
-function renderChatPane(messages: ChatMessage[], activeConversationId: string | null = null) {
-  return render(chatPaneEl(messages, activeConversationId));
+function renderChatPane(
+  messages: ChatMessage[],
+  activeConversationId: string | null = null,
+  overrides: Partial<ComponentProps<typeof ChatPane>> = {},
+) {
+  return render(chatPaneEl(messages, activeConversationId, overrides));
 }
 
 const sampleMessages: ChatMessage[] = [
@@ -235,6 +256,39 @@ describe('chat scroll behavior', () => {
     await flushFrame();
 
     expect(geom.scrollTop).toBe(1200);
+  });
+
+  it('hides the jump-to-latest pill while the next-step More flyout is open', async () => {
+    setGeom({ scrollHeight: 1000, clientHeight: 400, scrollTop: 1000 });
+    renderChatPane(
+      [
+        { id: 'u1', role: 'user', content: 'create a landing page', createdAt: Date.now() },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'Done.',
+          createdAt: Date.now(),
+          runStatus: 'succeeded',
+          producedFiles: [producedHtmlFile('landing.html')],
+        },
+      ],
+      'conv-1',
+      {
+        onArtifactShare: vi.fn(),
+        onArtifactDownload: vi.fn(),
+      },
+    );
+    await flushFrame();
+
+    setUserScroll(400);
+    const jumpButton = screen.getByRole('button', { name: /jump to latest/i });
+    expect(jumpButton.className).toContain('chat-jump-btn-active');
+    expect(jumpButton.getAttribute('aria-hidden')).toBe('false');
+
+    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
+
+    expect(jumpButton.className).not.toContain('chat-jump-btn-active');
+    expect(jumpButton.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('lands new conversation at its own bottom when switching conversations', async () => {
