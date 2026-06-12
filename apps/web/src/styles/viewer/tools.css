@@ -1301,14 +1301,16 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-decoration: none;
+  color: var(--selected);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   white-space: nowrap;
   transition: color 120ms var(--ease-out);
 }
 .field-label-link:hover {
-  color: var(--accent);
+  color: var(--selected);
 }
 .field-label-link svg {
   opacity: 0.75;

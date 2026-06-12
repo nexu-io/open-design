@@ -18213,13 +18213,25 @@ function HtmlViewer({
                   </select>
                 </label>
               ) : null}
-              <div className="field-label-row">
-                <label
-                  htmlFor="deploy-token"
-                  className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
-                >
-                  {t(deployProvider.tokenLabelKey)}
-                </label>
+                <div className="field-label-row">
+                <span className="field-label-group">
+                  <label
+                    htmlFor="deploy-token"
+                    className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
+                  >
+                    {t(deployProvider.tokenLabelKey)}
+                  </label>
+                  {deployProvider.tokenLink ? (
+                    <a
+                      className="field-label-link"
+                      href={deployProvider.tokenLink}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {t(deployProvider.tokenLinkKey)}
+                    </a>
+                  ) : null}
+                </span>
                 <div className="field-label-note">
                   {deployConfig?.tokenMask && deployProvider.tokenReuseHintKey ? (
                     <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
@@ -18229,15 +18241,6 @@ function HtmlViewer({
                   ) : null}
                   {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                     <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                  {deployProvider.tokenLink ? (
-                    <a
-                      href={deployProvider.tokenLink}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      {t(deployProvider.tokenLinkKey)}
-                    </a>
                   ) : null}
                 </div>
               </div>
