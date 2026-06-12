@@ -547,4 +547,28 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.stdinOpen).toBe(true);
     expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
+
+  it('keeps stdin open when usage reports a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      pendingHostAnswers: new Set<string>(),
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'usage',
+      usage: { input_tokens: 6, output_tokens: 40831 },
+      stopReason: 'tool_use',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
 });
