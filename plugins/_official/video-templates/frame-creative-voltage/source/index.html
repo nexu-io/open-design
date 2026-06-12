@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="fonts.css" />
+<meta charset="UTF-8" />
+<title>Creative Voltage · Electric Split + Script</title>
+
+<style>
+  /*
+   * frame-creative-voltage — electric-blue / dark split with a hand-drawn script accent.
+   * Visual style distilled from the frontend-slides "Creative Voltage" preset (MIT, © Zara Zhang).
+   * Rebuilt as a self-contained CSS/SVG @keyframes timeline for html-video / Hyperframes.
+   * Timeline (4.5s @ 60fps): blue + dark panels slide in offset -> display title rises ->
+   * handwritten script strokes itself in -> mono meta ticks fade -> underline dash sweeps.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #0d0d14; color: #fff;
+    font-family: 'Syne', sans-serif; position: relative;
+  }
+
+  /* offset split panels */
+  .panel-l { position: absolute; left: 0; top: 0; bottom: 0; width: 47%; background: #2f4bff;
+    transform: translateX(-100%); animation: slideL 0.85s cubic-bezier(0.16,1,0.3,1) 0.1s forwards; }
+  .panel-r { position: absolute; right: 0; top: 0; bottom: 0; width: 53%; background: #0d0d14;
+    transform: translateX(100%); animation: slideR 0.85s cubic-bezier(0.16,1,0.3,1) 0.25s forwards; }
+  @keyframes slideL { to { transform: translateX(0); } }
+  @keyframes slideR { to { transform: translateX(0); } }
+
+  /* electric noise glow on blue panel */
+  .glow { position: absolute; left: 0; top: 0; bottom: 0; width: 47%; z-index: 1; pointer-events: none;
+    background: radial-gradient(circle at 30% 40%, rgba(255,255,255,0.16) 0%, transparent 55%); opacity: 0;
+    animation: fade 1.2s ease-out 0.9s forwards; }
+  @keyframes fade { to { opacity: 1; } }
+
+  /* display title (right, dark) */
+  .display { position: absolute; right: 110px; top: 300px; width: 760px; text-align: right; z-index: 4;
+    font-weight: 800; font-size: 132px; line-height: 0.96; letter-spacing: -3px; }
+  .display .ln { display: block; opacity: 0; transform: translateY(34px);
+    animation: up 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .display .volt { color: #2f4bff; -webkit-text-stroke: 2px #6f86ff; }
+  @keyframes up { to { opacity: 1; transform: translateY(0); } }
+
+  /* handwritten script accent (blue panel) */
+  .script { position: absolute; left: 90px; top: 420px; z-index: 4; font-family: 'Caveat', cursive;
+    font-size: 120px; color: #fff; opacity: 0; transform: rotate(-7deg);
+    animation: scriptIn 0.8s ease-out 1.4s forwards; }
+  @keyframes scriptIn { 0%{opacity:0;transform:rotate(-7deg) translateY(20px) scale(0.9)}
+                        100%{opacity:1;transform:rotate(-7deg) translateY(0) scale(1)} }
+  .script-underline { position: absolute; left: 90px; top: 560px; z-index: 4; }
+  .script-underline path { stroke: #fff; stroke-width: 5; fill: none; stroke-linecap: round;
+    stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 0.9s ease-out 1.9s forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* mono meta line (top-left, on blue) */
+  .meta { position: absolute; left: 90px; top: 96px; z-index: 4; font-family: 'Space Mono', monospace;
+    font-size: 18px; font-weight: 700; letter-spacing: 3px; color: rgba(255,255,255,0.85);
+    opacity: 0; animation: fade 0.6s ease-out 1.0s forwards; }
+
+  /* mono caption bottom-right (on dark) */
+  .caption { position: absolute; right: 110px; bottom: 96px; z-index: 4; font-family: 'Space Mono', monospace;
+    font-size: 18px; font-weight: 400; letter-spacing: 2px; color: rgba(255,255,255,0.55);
+    opacity: 0; animation: fade 0.6s ease-out 2.2s forwards; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .panel-l,.panel-r{transform:translateX(0)}.glow,.meta,.caption{opacity:1}
+    .display .ln{opacity:1;transform:none}
+    .script{opacity:1;transform:rotate(-7deg)}.script-underline path{stroke-dashoffset:0}
+  }
+</style>
+</head>
+<body>
+  <div class="panel-l"></div>
+  <div class="panel-r"></div>
+  <div class="glow"></div>
+
+  <div class="meta">// CREATIVE_MODE · ON</div>
+
+  <div class="display">
+    <span class="ln" style="animation-delay:1.0s">Render</span>
+    <span class="ln volt" style="animation-delay:1.18s">any</span>
+    <span class="ln" style="animation-delay:1.36s">video.</span>
+  </div>
+
+  <div class="script">make it move</div>
+  <svg class="script-underline" width="520" height="60" viewBox="0 0 520 60" fill="none">
+    <path d="M8 40 C 140 12, 360 12, 512 34"/>
+  </svg>
+
+  <div class="caption">html-video · creative voltage</div>
+</body>
+</html>

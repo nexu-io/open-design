@@ -27,10 +27,11 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
   ]);
 });
 
-test('opencode args deliver prompts via stdin without passing a literal dash prompt', () => {
+test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
+  assert.equal(opencode.reasoningOptions, undefined);
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -52,6 +53,18 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
+  const withReasoning = opencode.buildArgs(
+    prompt,
+    [],
+    [],
+    {
+      model: 'anthropic/claude-sonnet-4-5',
+      reasoning: 'high',
+    },
+  );
+  assert.equal(withReasoning.some((arg) => arg.includes('reason')), false);
+  assert.equal(withReasoning.includes('--thinking'), false);
+  assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
 });
@@ -764,27 +777,56 @@ test('codex buildArgs omits model_reasoning_effort when reasoning is "default"',
   );
 });
 
-test('grok-build inlines the prompt as -p <value> and never falls back to stdin sentinels', () => {
+test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin', () => {
   const prompt = 'summarize the current page layout';
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
   const args = grokBuild.buildArgs(
     prompt,
     [],
     [],
     { model: 'grok-4.3', reasoning: 'high' },
-    { cwd: '/tmp/od-project' },
+    { cwd: '/tmp/od-project', promptFilePath },
   );
 
+  assert.equal(grokBuild.promptViaFile, true);
   assert.equal(grokBuild.promptViaStdin, false);
   assert.deepEqual(args, [
-    '-p',
-    prompt,
+    '--prompt-file',
+    promptFilePath,
     '--model',
     'grok-4.3',
+  ]);
+  assert.equal(args.includes(prompt), false);
+  assert.equal(args.includes('-'), false);
+  assert.equal(args.includes('-p'), false);
+  assert.equal(args.includes('--single'), false);
+  assert.equal(args.filter((entry) => entry === '--prompt-file').length, 1);
+});
+
+test('grok-build omits effort for default/build models but keeps it for reasoning models', () => {
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const defaultArgs = grokBuild.buildArgs('', [], [], { model: 'default', reasoning: 'high' }, { promptFilePath });
+  assert.equal(defaultArgs.includes('--effort'), false);
+
+  const buildArgs = grokBuild.buildArgs('', [], [], { model: 'grok-build', reasoning: 'high' }, { promptFilePath });
+  assert.equal(buildArgs.includes('--effort'), false);
+
+  const reasoningArgs = grokBuild.buildArgs('', [], [], { model: 'grok-4.20-reasoning', reasoning: 'high' }, { promptFilePath });
+  assert.deepEqual(reasoningArgs, [
+    '--prompt-file',
+    promptFilePath,
+    '--model',
+    'grok-4.20-reasoning',
     '--effort',
     'high',
   ]);
-  assert.equal(args.includes('-'), false);
-  assert.equal(args.filter((entry) => entry === '-p').length, 1);
+});
+
+test('grok-build requires a daemon-provided prompt file path', () => {
+  assert.throws(
+    () => grokBuild.buildArgs('hi', [], [], {}, { cwd: '/tmp/od-project' }),
+    /promptFilePath/,
+  );
 });
 
 test('claude flags promptViaStdin and never embeds the prompt in argv', () => {

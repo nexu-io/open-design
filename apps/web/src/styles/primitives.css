@@ -7,7 +7,7 @@ button {
   border-radius: var(--radius-sm);
   padding: 6px 12px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: background var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
 button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -97,7 +97,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   max-width: min(260px, calc(100vw - 16px));
   padding: 5px 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-sm);
   color: var(--text-strong);
@@ -120,7 +120,7 @@ input, textarea, select {
   border-radius: var(--radius-sm);
   padding: 7px 10px;
   width: 100%;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
 }
 input::placeholder, textarea::placeholder { color: var(--text-faint); }
 input:focus, textarea:focus, select:focus {
@@ -195,7 +195,7 @@ textarea { resize: vertical; font-family: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out);
 }
 .od-select-trigger:hover:not(:disabled),
 .od-select-trigger[aria-expanded='true'] {
@@ -214,7 +214,7 @@ textarea { resize: vertical; font-family: inherit; }
 }
 .od-select-trigger svg {
   color: var(--text-muted);
-  transition: transform 120ms ease;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 .od-select-trigger[aria-expanded='true'] svg {
   transform: rotate(180deg);
@@ -260,7 +260,7 @@ textarea { resize: vertical; font-family: inherit; }
   color: var(--text);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: 12.5px;
   text-align: left;
@@ -308,7 +308,7 @@ code {
   font-family: var(--mono);
   background: var(--bg-subtle);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 0.92em;
   color: var(--text);
 }

@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: The open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.9.0 is here: create without the setup.** The [official Model Router](https://open-design.ai/amr) is built right into the app — no extra configuration, no CLI to install, no API key to prepare. Just open the app, sign in, and start designing and creating right away. [Download 0.9.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 is here: the all-in-one Agentic design workspace.** The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you. [Download 0.10.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR (Agentic Model Router) — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try AMR](https://open-design.ai/amr/)
 >
 > 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Website</a> ·
   <a href="https://open-design.ai/">Download</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">Follow @nexudotio</a>
 </p>
@@ -22,13 +25,13 @@
   <a href="QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
-<p align="center"><b>English</b> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a></p>
+<p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · <a href="docs/i18n/README.pt-BR.md">Português</a> · <a href="docs/i18n/README.de.md">Deutsch</a> · <a href="docs/i18n/README.fr.md">Français</a> · <a href="docs/i18n/README.zh-CN.md">简体中文</a> · <a href="docs/i18n/README.zh-TW.md">繁體中文</a> · <a href="docs/i18n/README.ko.md">한국어</a> · <a href="docs/i18n/README.ja-JP.md">日本語</a> · <a href="docs/i18n/README.ar.md">العربية</a> · <a href="docs/i18n/README.ru.md">Русский</a> · <a href="docs/i18n/README.uk.md">Українська</a> · <a href="docs/i18n/README.tr.md">Türkçe</a></p>
 
 ---
 
 ## What is Open Design
 
-🎨 **The local-first, open-source [Claude Design][cd] alternative.** &nbsp;🖥️ **Native desktop app for macOS and Windows.** &nbsp;⚡ **100+ skills** · ✨ **150 brand-grade `DESIGN.md` systems** · 📦 **261 ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity and 21 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
+🎨 **The local-first, open-source [Claude Design][cd] alternative.** &nbsp;🖥️ **Native desktop app for macOS and Windows.** &nbsp;⚡ **100+ skills** · ✨ **150 brand-grade `DESIGN.md` systems** · 📦 **261 ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 22 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
 
 Open Design is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of skills, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
 
@@ -116,13 +119,13 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
-| Gemini CLI | ✅ Supported | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Supported | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Supported | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Supported | `od mcp install trae` |
-| Kimi CLI | ✅ Supported | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Supported | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
@@ -272,7 +275,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 |---|---|---|---|---|
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
-| Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 21 CLIs + BYOK** |
+| Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 22 CLIs + BYOK** |
 | Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 150 systems shipped** |
 | Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ skills · 261 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ First-class** |
@@ -322,6 +325,8 @@ echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
 # open http://localhost:7456
 ```
+
+> **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
 
 ### 🧑‍💻 Run from source
 
@@ -559,7 +564,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 
 ## Roadmap
 
-- [x] Daemon + 21 coding-agent CLI adapters + skill registry + design-system catalog
+- [x] Daemon + 22 coding-agent CLI adapters + skill registry + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
 - [x] 100+ skills · 150 design systems · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
@@ -631,7 +636,7 @@ pnpm --filter @open-design/<package> test
 gh pr create --fill
 ```
 
-Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
+Full agent-friendly contribution flow, code style, and PR bar → [`CONTRIBUTING.md`](CONTRIBUTING.md) ([Deutsch](docs/i18n/CONTRIBUTING.de.md) · [Français](docs/i18n/CONTRIBUTING.fr.md) · [简体中文](docs/i18n/CONTRIBUTING.zh-CN.md) · [日本語](docs/i18n/CONTRIBUTING.ja-JP.md) · [Português](docs/i18n/CONTRIBUTING.pt-BR.md)).
 
 ### 🏅 Open Design Fellow program
 
@@ -659,10 +664,17 @@ They carry a lot of the load — daily maintenance, review, and community suppor
       </a><br/>
       <sub>Maintainer</sub>
     </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/YOMXXX">
+        <img src="https://github.com/YOMXXX.png" width="96" alt="@YOMXXX" /><br/>
+        <sub><b>@YOMXXX</b></sub>
+      </a><br/>
+      <sub>Maintainer</sub>
+    </td>
   </tr>
 </table>
 
-Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md`](MAINTAINERS.md) (also [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)).
+Maintainer rules, promotion criteria, and the exit protocol → [`MAINTAINERS.md`](MAINTAINERS.md) (also [Deutsch](docs/i18n/MAINTAINERS.de.md) · [Français](docs/i18n/MAINTAINERS.fr.md) · [简体中文](docs/i18n/MAINTAINERS.zh-CN.md) · [日本語](docs/i18n/MAINTAINERS.ja-JP.md) · [Português](docs/i18n/MAINTAINERS.pt-BR.md)).
 
 ## Contributors
 

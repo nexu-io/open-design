@@ -12,6 +12,16 @@ const script = `
   const DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};
   const LOCALES = ${JSON.stringify(localeRoutes)};
   const codes = new Set(LOCALES.map((locale) => locale.code));
+  // Legacy alias prefixes the catch-all route still emits (zh-CN, es-ES, fa,
+  // hu, th) that are NOT canonical LANDING_LOCALES. They must count as a
+  // strippable locale segment, or switching language on an alias page like
+  // /zh-CN/blog/ would rebuild a nested, non-existent /<locale>/zh-CN/blog/.
+  // Mirrors LEGACY_LOCALE_PREFIXES in app/i18n.ts.
+  const legacyAliases = new Set(['zh-cn', 'es-es', 'fa', 'hu', 'th']);
+  const isLocaleSegment = (segment) => {
+    const value = (segment || '').toLowerCase();
+    return value !== '' && (codes.has(value) || legacyAliases.has(value));
+  };
 
   const normalizeLocale = (value) => {
     if (typeof value !== 'string' || value.trim() === '') return null;
@@ -39,13 +49,20 @@ const script = `
 
   const basePathFromCurrent = () => {
     const parts = window.location.pathname.split('/').filter(Boolean);
-    if (parts[0] && codes.has(parts[0].toLowerCase())) parts.shift();
+    if (parts[0] && isLocaleSegment(parts[0])) parts.shift();
     return parts.length > 0 ? \`/\${parts.join('/')}/\` : '/';
   };
 
+  // Pages with no per-locale variant (e.g. plugin detail pages) mark
+  // <html data-locale-canonical="true">. Switching language must stay on the
+  // single canonical URL — building /<locale>/... would 404.
+  const isCanonicalOnly = () =>
+    document.documentElement.getAttribute('data-locale-canonical') === 'true';
+
   const targetFor = (locale) => {
     const basePath = basePathFromCurrent();
-    const nextPath = locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
+    const nextPath =
+      isCanonicalOnly() || locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
     return \`\${nextPath}\${window.location.search}\${window.location.hash}\`;
   };
 
@@ -64,33 +81,53 @@ const script = `
   };
 
   const bindSwitchers = () => {
-    // Each locale entry is a real <a> link whose href is computed server-side
-    // by <Header /> from the current pathname, so it already points at the
-    // localized version of the current page (works with no JS, right-click →
-    // "open in new tab", and crawlers). The click handler's only job is to
-    // persist the user's choice so future visits to '/' auto-route to it.
+    // Each locale entry is a real <a> link with a server-computed href (the
+    // bare locale path), so right-click / modified-click ("open in new tab")
+    // keep working off the anchor. A plain left-click is intercepted and routed
+    // through selectLocale() instead, which both persists the choice AND
+    // carries the current query string + hash across the switch via
+    // targetFor() -- the bare href would otherwise drop the search + hash
+    // (e.g. switching language on /plugins/templates/?kind=deck#gallery).
     for (const link of document.querySelectorAll('[data-locale-link]')) {
       if (link.dataset.localeBound === 'true') continue;
       link.dataset.localeBound = 'true';
-      // SSR builds the correct localized path but can't know the live query
-      // string / hash (e.g. a filtered index like ?kind=deck#section). Append
-      // them so switching language preserves that state. We only add the
-      // tail, never rewrite the server-rendered path.
-      const tail = window.location.search + window.location.hash;
-      if (tail) {
-        const base = link.getAttribute('href');
-        if (base) link.setAttribute('href', base + tail);
-      }
       link.addEventListener('click', (event) => {
         if (event.defaultPrevented) return;
         if (event.button !== 0) return;
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         const code = link.dataset.localeCode;
         if (!code) return;
-        persistLocale(code);
         const details = link.closest('[data-locale-switch]');
         if (details && details.open) details.open = false;
+        event.preventDefault();
+        selectLocale(code, true);
       });
+    }
+
+    // Hover-to-open, matching the sibling nav dropdowns (which expand on
+    // hover). Click and keyboard still toggle the native <details>; the
+    // outside-click + Escape handlers below still close it. A short close
+    // delay tolerates the cursor crossing the gap between trigger and panel
+    // (a CSS bridge covers that gap too). Pointer must be hover-capable so
+    // touch devices keep the tap-to-toggle behaviour.
+    const hoverCapable = !window.matchMedia || window.matchMedia('(hover: hover)').matches;
+    if (hoverCapable) {
+      for (const details of document.querySelectorAll('[data-locale-switch]')) {
+        if (details.dataset.localeHoverBound === 'true') continue;
+        details.dataset.localeHoverBound = 'true';
+        let closeTimer = null;
+        const cancelClose = () => {
+          if (closeTimer) { window.clearTimeout(closeTimer); closeTimer = null; }
+        };
+        details.addEventListener('mouseenter', () => {
+          cancelClose();
+          details.open = true;
+        });
+        details.addEventListener('mouseleave', () => {
+          cancelClose();
+          closeTimer = window.setTimeout(() => { details.open = false; }, 120);
+        });
+      }
     }
 
     // Native <details> stays open until the summary is clicked again. Add
@@ -114,6 +151,9 @@ const script = `
   };
 
   const autoAdapt = () => {
+    // Never auto-redirect away from a canonical-only page — its /<locale>/
+    // variant does not exist, so a zh-preference visitor would hit a 404.
+    if (isCanonicalOnly()) return;
     if (currentFromPath() !== DEFAULT_LOCALE) return;
     let saved = null;
     try {

@@ -7,9 +7,9 @@ export const PROMPT_STACK_REDACTION_VERSION = 'prompt-stack-redaction-v1';
 export const PROMPT_STACK_PATH_MARKER = '[REDACTED:path]';
 
 const KIB = 1024;
-const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 32 * KIB;
-const SECTION_MAX_BYTES = 16 * KIB;
-const TOTAL_REDACTED_CONTENT_MAX_BYTES = 96 * KIB;
+const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 128 * KIB;
+const SECTION_MAX_BYTES = 64 * KIB;
+const TOTAL_REDACTED_CONTENT_MAX_BYTES = 512 * KIB;
 
 export type PromptTelemetrySectionKind =
   | 'formOverride'
@@ -60,6 +60,28 @@ export interface PromptStackTelemetry {
   redactedContentBytes: number;
   redactedContentBudgetBytes: number;
   sections: PromptTelemetrySection[];
+}
+
+export interface StructuredPromptStackInput {
+  type: 'open-design.prompt-stack';
+  redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
+  promptFingerprint: string;
+  stackFingerprint: string;
+  sectionCount: number;
+  redactedContentBytes: number;
+  redactedContentBudgetBytes: number;
+  sections: Array<{
+    kind: PromptTelemetrySectionKind;
+    ordinal: number;
+    contentMode: PromptTelemetrySection['contentMode'];
+    rawBytes: number;
+    redactedBytes: number;
+    fingerprint: string;
+    truncated: boolean;
+    truncationReason?: PromptTelemetrySection['truncationReason'];
+    redactedContent?: string;
+    metadata?: Record<string, unknown>;
+  }>;
 }
 
 interface MutablePromptTelemetrySection extends PromptTelemetrySection {
@@ -343,10 +365,40 @@ export function promptStackWithoutContent(
   };
 }
 
+export function structuredPromptStackInput(
+  telemetry: PromptStackTelemetry,
+): StructuredPromptStackInput {
+  return {
+    type: 'open-design.prompt-stack',
+    redactionVersion: telemetry.redactionVersion,
+    promptFingerprint: telemetry.promptFingerprint,
+    stackFingerprint: telemetry.stackFingerprint,
+    sectionCount: telemetry.sectionCount,
+    redactedContentBytes: telemetry.redactedContentBytes,
+    redactedContentBudgetBytes: telemetry.redactedContentBudgetBytes,
+    sections: telemetry.sections.map((section) => ({
+      kind: section.kind,
+      ordinal: section.ordinal,
+      contentMode: section.contentMode,
+      rawBytes: section.rawBytes,
+      redactedBytes: section.redactedBytes,
+      fingerprint: section.fingerprint,
+      truncated: section.truncated,
+      ...(section.truncationReason
+        ? { truncationReason: section.truncationReason }
+        : {}),
+      ...(section.redactedContent !== undefined
+        ? { redactedContent: section.redactedContent }
+        : {}),
+      ...(section.metadata ? { metadata: section.metadata } : {}),
+    })),
+  };
+}
+
 export function buildPromptStackFlatMetadata(
   telemetry: PromptStackTelemetry,
 ): Record<string, unknown> {
-  const out: Record<string, unknown> = {
+  return {
     promptStack_redactionVersion: telemetry.redactionVersion,
     promptStack_promptFingerprint: telemetry.promptFingerprint,
     promptStack_stackFingerprint: telemetry.stackFingerprint,
@@ -354,26 +406,4 @@ export function buildPromptStackFlatMetadata(
     promptStack_redactedContentBytes: telemetry.redactedContentBytes,
     promptStack_redactedContentBudgetBytes: telemetry.redactedContentBudgetBytes,
   };
-
-  const daemonSystemPrompt = telemetry.sections.find(
-    (section) => section.kind === 'daemonSystemPrompt',
-  );
-  const runtimeToolPrompt = telemetry.sections.find(
-    (section) => section.kind === 'runtimeToolPrompt',
-  );
-  const pluginStagePrompt = telemetry.sections.find(
-    (section) => section.kind === 'pluginStagePrompt',
-  );
-
-  out.promptStack_section_daemonSystemPrompt_present = Boolean(daemonSystemPrompt);
-  out.promptStack_section_daemonSystemPrompt_truncated =
-    daemonSystemPrompt?.truncated ?? false;
-  out.promptStack_section_runtimeToolPrompt_present = Boolean(runtimeToolPrompt);
-  out.promptStack_section_pluginStagePrompt_present = Boolean(pluginStagePrompt);
-
-  if (daemonSystemPrompt?.truncationReason) {
-    out.promptStack_section_daemonSystemPrompt_truncationReason =
-      daemonSystemPrompt.truncationReason;
-  }
-  return out;
 }

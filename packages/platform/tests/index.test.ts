@@ -735,6 +735,21 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  // Non-Node user toolchains that still ship agent CLIs (or their deps):
+  // Deno's install root, Go's default GOBIN, and pyenv's shim dir. GUI
+  // launches inherit a stripped PATH, so these must be searched explicitly.
+  it("includes Deno, Go, and pyenv user toolchain dirs", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-extra-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      expect(dirs).toContain(join(home, ".deno", "bin"));
+      expect(dirs).toContain(join(home, "go", "bin"));
+      expect(dirs).toContain(join(home, ".pyenv", "shims"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Regression for #442. The two dominant non-canonical npm prefixes used
   // by sudo-free tutorials (~/.npm-global, ~/.npm-packages) must always
   // appear, otherwise GUI-launched daemons miss `npm i -g`'d CLIs.

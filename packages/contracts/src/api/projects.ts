@@ -371,6 +371,17 @@ export interface CreateConversationRequest {
    * future follow-ups from the source conversation.
    */
   forkAfterMessageId?: string | null;
+  /**
+   * Client-supplied snapshot of the messages to seed the fork with, in order,
+   * up to and including the fork point. When present, the daemon copies these
+   * instead of reading the source conversation from the database by id. This
+   * makes "Fork" resilient to a fork point that was never persisted — e.g. an
+   * assistant turn whose run errored or had its connection reset before the
+   * message reached the database. Without it, such a fork would 404 on
+   * `forkAfterMessageId` and silently fail. When absent, the daemon falls back
+   * to copying from `seedFromConversationId` (the original Side Chat path).
+   */
+  seedMessages?: ChatMessage[];
 }
 
 export interface UpdateConversationRequest {

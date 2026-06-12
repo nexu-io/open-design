@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 
-import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { assertFreshToolBuildFromMeta } from "../../../packages/metatool/src/index.ts";
+
 const entryDir = dirname(fileURLToPath(import.meta.url));
-const distEntry = resolve(entryDir, "../dist/index.mjs");
+const toolRoot = resolve(entryDir, "..");
+const distEntry = resolve(toolRoot, "dist/index.mjs");
 
-if (!existsSync(distEntry)) {
-  throw new Error(`tools-serve dist entry not found at ${distEntry}. Run "pnpm --filter @open-design/tools-serve build" first.`);
-}
-
+await assertFreshToolBuildFromMeta(toolRoot);
 await import(pathToFileURL(distEntry).href);

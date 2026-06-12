@@ -109,7 +109,7 @@ describe('AmrAccountControl', () => {
     expect(screen.queryByText('local')).toBeNull();
   });
 
-  it('renders compact login errors with AMR-labeled text', () => {
+  it('renders compact login errors with daemon-provided text', () => {
     renderAccountControl({
       status: 'error',
       compact: true,
@@ -117,8 +117,8 @@ describe('AmrAccountControl', () => {
       onSignIn: vi.fn(),
     });
 
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
-    expect(screen.queryByText('command failed')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe('command failed');
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 });
@@ -142,7 +142,7 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('LOCAL')).toBeNull();
   });
 
-  it('renders a TEST badge next to the signed-out action for the test profile', async () => {
+  it('does not render a profile badge for a signed-out test profile', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         body: { loggedIn: false, profile: 'test', user: null, configPath: '/x' },
@@ -152,7 +152,7 @@ describe('AmrLoginPill', () => {
     renderPill();
 
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
-    expect(screen.getByText('TEST')).toBeTruthy();
+    expect(screen.queryByText('TEST')).toBeNull();
   });
 
   it('renders daemon-reported in-flight login attempts as signing-in', async () => {
@@ -174,7 +174,7 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
   });
 
-  it('renders a LOCAL badge next to the signed-out action for the local profile', async () => {
+  it('does not render a profile badge for a signed-out local profile', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         body: { loggedIn: false, profile: 'local', user: null, configPath: '/x' },
@@ -184,7 +184,53 @@ describe('AmrLoginPill', () => {
     renderPill();
 
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.queryByText('LOCAL')).toBeNull();
+  });
+
+  it('uses the test-profile AMR console URL for signed-in users', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      email: 'leaf@example.com',
+      profile: 'test',
+      showProfileBadge: true,
+      showConsoleAction: true,
+    });
+
+    expect(screen.getByText('leaf@example.com')).toBeTruthy();
+    expect(screen.getByText('TEST')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+      'https://vela.powerformer.net/wallet?source=open_design',
+    );
+  });
+
+  it('uses the local-profile AMR console URL for signed-in users', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      email: 'leaf@example.com',
+      profile: 'local',
+      showProfileBadge: true,
+      showConsoleAction: true,
+    });
+
     expect(screen.getByText('LOCAL')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+      'http://localhost:5173/wallet?source=open_design',
+    );
+  });
+
+  it('uses the production AMR console URL by default', () => {
+    renderAccountControl({
+      status: 'signed-in',
+      email: 'leaf@example.com',
+      profile: 'prod',
+      showProfileBadge: true,
+      showConsoleAction: true,
+    });
+
+    expect(screen.queryByText('PROD')).toBeNull();
+    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+      'https://open-design.ai/amr/wallet?source=open_design',
+    );
   });
 
   it('renders a "Signed in" pill (with the Sign-out aria-label) when /status reports a logged-in user', async () => {
@@ -281,7 +327,10 @@ describe('AmrLoginPill', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe(
+      'profile "prod" api URL: is not configured',
+    );
+    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 

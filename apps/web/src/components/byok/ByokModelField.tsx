@@ -72,7 +72,6 @@ export function ByokModelField({
           searchInputTestId="settings-byok-model-search"
           popoverTestId="settings-byok-model-popover"
           popoverClassName="settings-byok-select-popover"
-          minSearchableOptions={Number.POSITIVE_INFINITY}
           models={models}
           value={selectValue}
           onFocus={onFocus}

@@ -11,6 +11,10 @@ import {
   recordAmrEntry,
   type TrackingAmrEntrySource,
 } from '../analytics/amr-attribution';
+import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
 import { useI18n } from '../i18n';
 import {
   AMR_LOGIN_STATUS_EVENT,
@@ -20,7 +24,7 @@ import {
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
-import { AMR_CONSOLE_URL } from '../runtime/amr-guidance';
+import { amrConsoleUrlForProfile, amrProfileBadgeLabel } from '../runtime/amr-guidance';
 
 interface AmrLoginPillProps {
   className?: string;
@@ -73,7 +77,7 @@ export interface AmrAccountControlProps {
 
 const AMR_CANCELED_RESET_MS = 1500;
 
-function closeAmrActivationWindowBestEffort(): boolean {
+export function closeAmrActivationWindowBestEffort(): boolean {
   if (typeof window === 'undefined') return false;
   if (window.opener == null) return false;
   try {
@@ -82,12 +86,6 @@ function closeAmrActivationWindowBestEffort(): boolean {
   } catch {
     return false;
   }
-}
-
-function profileBadgeLabel(profile: string | undefined): string | null {
-  if (profile === 'test') return 'TEST';
-  if (profile === 'local') return 'LOCAL';
-  return null;
 }
 
 function classNames(...names: Array<string | false | null | undefined>): string {
@@ -99,6 +97,7 @@ export function AmrAccountControl({
   className,
   compact = false,
   email = '',
+  errorMessage,
   profile,
   showProfileBadge = false,
   showSignInAction = true,
@@ -106,7 +105,7 @@ export function AmrAccountControl({
   hideSignedInStatus = false,
   signInLabel,
   showConsoleAction = false,
-  consoleUrl = AMR_CONSOLE_URL,
+  consoleUrl,
   showCancelSignInAction = false,
   onSignIn,
   onSignOut,
@@ -116,11 +115,14 @@ export function AmrAccountControl({
   cancelSignInDisabled = false,
 }: AmrAccountControlProps) {
   const { t } = useI18n();
-  const badgeLabel = showProfileBadge ? profileBadgeLabel(profile) : null;
   const isSignedIn = status === 'signed-in';
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
   const hasError = status === 'error';
+  const badgeLabel = showProfileBadge ? amrProfileBadgeLabel(profile) : null;
+  const visibleBadgeLabel = isSignedIn ? badgeLabel : null;
+  const resolvedConsoleUrl = consoleUrl ?? amrConsoleUrlForProfile(profile);
+  const loginErrorText = errorMessage || t('settings.amrLoginErrorCompact');
   const statusText = isSignedIn
     ? hideSignedInStatus
       ? ''
@@ -146,12 +148,17 @@ export function AmrAccountControl({
       aria-label={t('settings.amrAccountStatus')}
     >
       {statusText ? (
-        <span className="amr-account-control__status">{statusText}</span>
+        <span className="amr-account-control__status">
+          <span className="amr-account-control__status-text">{statusText}</span>
+          {visibleBadgeLabel ? (
+            <span className="amr-login-pill-badge">{visibleBadgeLabel}</span>
+          ) : null}
+        </span>
       ) : null}
       {isSignedIn && showConsoleAction ? (
         <a
           className="amr-account-control__action"
-          href={consoleUrl}
+          href={resolvedConsoleUrl}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t('settings.amrConsole')}
@@ -192,12 +199,9 @@ export function AmrAccountControl({
           {signInLabel ?? t('settings.amrSignIn')}
         </button>
       ) : null}
-      {badgeLabel ? (
-        <span className="amr-login-pill-badge">{badgeLabel}</span>
-      ) : null}
       {hasError ? (
         <span className="amr-account-control__error" role="alert">
-          {t('settings.amrLoginErrorCompact')}
+          {loginErrorText}
         </span>
       ) : null}
     </div>
@@ -238,9 +242,12 @@ export function AmrLoginPill({
 
   const refresh = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
-    if (next) setStatus(next);
+    if (next) {
+      setStatus(next);
+      onStatusChange?.(next);
+    }
     return next;
-  }, []);
+  }, [onStatusChange]);
 
   useEffect(() => {
     if (!skipInitialRefresh) void refresh();
@@ -287,6 +294,12 @@ export function AmrLoginPill({
       const next = await refresh();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: next?.user?.id ?? null,
+        });
+        // Wake the app-level status sync so configure_type flips to 'amr'
+        // on the very next capture, not on an unrelated later refresh.
+        notifyAmrLoginStatusChanged();
         stopPolling();
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
@@ -296,9 +309,12 @@ export function AmrLoginPill({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopPolling();
         if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
           void cancelVelaLogin().then(() =>
             notifyAmrLoginStatusChanged('login-canceled'),
           );
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
         }
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
@@ -309,7 +325,7 @@ export function AmrLoginPill({
     pollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
-  }, [refresh, stopPolling, t]);
+  }, [analytics.track, refresh, stopPolling, t]);
 
   useEffect(() => {
     const onStatusChange = (event: Event) => {
@@ -389,8 +405,10 @@ export function AmrLoginPill({
             reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
           })
         : null;
+      beginAmrAuthTracking(attribution, startedAt);
       const result = await startVelaLogin(attribution);
       if (!result.ok && !result.alreadyRunning) {
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
         setPending(null);
@@ -406,6 +424,7 @@ export function AmrLoginPill({
   const handleCancelLogin = useCallback(
     async (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
+      resolveAmrAuthTracking(analytics.track, 'cancelled');
       stopPolling();
       setErrorMessage(null);
       setPending('cancel');
@@ -433,7 +452,7 @@ export function AmrLoginPill({
       setCanceledVisible(true);
       notifyAmrLoginStatusChanged('login-canceled');
     },
-    [stopPolling, t],
+    [analytics.track, stopPolling, t],
   );
 
   const handleLogout = useCallback(
@@ -481,6 +500,7 @@ export function AmrLoginPill({
         status={accountStatus}
         compact
         email={userEmail}
+        errorMessage={errorMessage}
         profile={status?.profile}
         showProfileBadge
         hideSignedOutStatus={hideSignedOutStatus}

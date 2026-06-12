@@ -1,0 +1,138 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-electric-studio",
+  "title": "Electric Studio Frame",
+  "title_i18n": {
+    "en": "Electric Studio Frame",
+    "zh-CN": "电光工作室分屏帧"
+  },
+  "version": "0.1.0",
+  "description": "Two-panel split with quote as hero — white/blue panels open from center, accent bar grows, quote reveals line by line.",
+  "description_i18n": {
+    "en": "Two-panel split with quote as hero — white/blue panels open from center, accent bar grows, quote reveals line by line.",
+    "zh-CN": "电光工作室分屏帧:白/蓝双屏从中心开合 + 强调条生长 + 引言逐行浮现, 高对比专业感"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "nexu-io",
+    "url": "https://github.com/nexu-io",
+    "contact": "open-design@nexu.io"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-electric-studio",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "split-panel",
+    "quote",
+    "blue",
+    "high-contrast",
+    "studio",
+    "editorial",
+    "presentation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-electric-studio/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-electric-studio/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Electric Studio Frame template to turn my quote into a two-panel split reveal — white top and electric-blue bottom panels opening from center, a black accent bar growing on the seam, and the quote revealing line by line. Preserve the template's visual signature, use real content, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「电光工作室分屏帧」模板把我的引言做成一段双屏开合揭示:白色上屏 + 电光蓝下屏从中心开合 + 接缝处黑色强调条生长 + 引言逐行浮现。保持模板的视觉签名,使用真实内容,避免 lorem ipsum 和占位图片。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 15
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "provenance": {
+      "origin": {
+        "name": "none (original preset by the L2 skill author)",
+        "kind": "none",
+        "reference": "No specific real-world studio; the 'Electric Studio' look is an original preset composed by the frontend-slides author"
+      },
+      "via_skill": {
+        "name": "frontend-slides",
+        "author": "Zara Zhang",
+        "url": "https://github.com/zarazhangrui/frontend-slides",
+        "license": "MIT",
+        "source_file": "STYLE_PRESETS.md (preset \"Electric Studio\")"
+      },
+      "transformation": "Static slide preset → animated hyperframes timeline (white/blue panels open from the center, a black accent bar grows on the seam, the quote reveals line by line across the divide) built as original CSS keyframes. Original sample data. No upstream source code copied verbatim.\n"
+    }
+  }
+}

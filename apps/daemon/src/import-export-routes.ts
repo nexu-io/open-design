@@ -200,7 +200,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      if (entryFile) setTabs(db, projectId, [entryFile], entryFile);
+      // Folder imports should land on Design Files so users can choose from
+      // the imported folder's artifacts. Persist an empty saved tab state so
+      // ProjectView does not auto-open the detected primary file on hydration.
+      setTabs(db, projectId, [], null);
       /** @type {import('@open-design/contracts').ReplaceProjectWorkingDirResponse} */
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
@@ -341,7 +344,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         createdAt: now,
         updatedAt: now,
       });
-      if (entryFile) setTabs(db, id, [entryFile], entryFile);
+      // Folder imports should land on Design Files so users can choose from
+      // the imported folder's artifacts. Persist an empty saved tab state so
+      // ProjectView does not auto-open the detected primary file on hydration.
+      setTabs(db, id, [], null);
       /** @type {import('@open-design/contracts').ImportFolderResponse} */
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
@@ -651,9 +657,18 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         };
       };
 
-      const rendered = await inlineRelativeAssets(
-        file.buffer.toString('utf8'),
+      const exportSource = await resolveHtmlExportSource({
+        projectId: req.params.id,
+        projectsRoot: PROJECTS_DIR,
         relPath,
+        html: file.buffer.toString('utf8'),
+        metadata: project?.metadata,
+        readProjectFile,
+        resolveProjectFilePath,
+      });
+      const rendered = await inlineRelativeAssets(
+        exportSource.html,
+        exportSource.relPath,
         fileReader,
       );
       // PR #1312 round-2 (lefarcen P2): top-level browser navigation to
@@ -679,6 +694,53 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     }
   });
 
+}
+
+async function resolveHtmlExportSource({
+  projectId,
+  projectsRoot,
+  relPath,
+  html,
+  metadata,
+  readProjectFile,
+  resolveProjectFilePath,
+}: {
+  projectId: string;
+  projectsRoot: string;
+  relPath: string;
+  html: string;
+  metadata: unknown;
+  readProjectFile: (projectsRoot: string, projectId: string, relPath: string, metadata?: unknown) => Promise<{ buffer: Buffer }>;
+  resolveProjectFilePath: (projectsRoot: string, projectId: string, relPath: string, metadata?: unknown) => Promise<{ size: number; mime: string }>;
+}): Promise<{ html: string; relPath: string }> {
+  if (!isViteDevHtmlEntry(html)) return { html, relPath };
+
+  const ownerDir = nodePath.posix.dirname(relPath);
+  const distRelPath = ownerDir === '.' ? 'dist/index.html' : `${ownerDir}/dist/index.html`;
+  try {
+    const distMeta = await resolveProjectFilePath(projectsRoot, projectId, distRelPath, metadata);
+    if (distMeta.size > MAX_INLINE_OWNER_BYTES || !distMeta.mime.startsWith('text/html')) {
+      return { html, relPath };
+    }
+    const distFile = await readProjectFile(projectsRoot, projectId, distRelPath, metadata);
+    return {
+      html: rewriteViteDistRootAssetUrls(distFile.buffer.toString('utf8')),
+      relPath: distRelPath,
+    };
+  } catch {
+    return { html, relPath };
+  }
+}
+
+function isViteDevHtmlEntry(html: string): boolean {
+  return /<script\b[^>]*\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']\/src\/[^"']+["'][^>]*>\s*<\/script>/i.test(html);
+}
+
+function rewriteViteDistRootAssetUrls(html: string): string {
+  return html.replace(
+    /\b(href|src)\s*=\s*(["'])\/assets\//gi,
+    (_match, attr: string, quote: string) => `${attr}=${quote}assets/`,
+  );
 }
 
 function buildProjectExportManifestResponse({

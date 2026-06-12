@@ -7,6 +7,7 @@ import {
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
+  fetchAgentsStream,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchAppVersionInfo,
@@ -22,6 +23,79 @@ import {
   uploadProjectFiles,
   writeProjectTextFileDetailed,
 } from '../../src/providers/registry';
+
+function agentStreamResponse(text: string): Response {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(text));
+        controller.close();
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    },
+  );
+}
+
+describe('fetchAgentsStream', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('collects streamed agents only after the terminal done event', async () => {
+    const agent = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        `event: agent\ndata: ${JSON.stringify(agent)}\n\n` +
+          'event: done\ndata: {}\n\n',
+      )),
+    );
+    const onAgent = vi.fn();
+
+    await expect(fetchAgentsStream({ onAgent })).resolves.toEqual([agent]);
+    expect(onAgent).toHaveBeenCalledWith(agent);
+  });
+
+  it('throws when the stream emits an error event', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        'event: error\ndata: {"error":"agent probe failed"}\n\n',
+      )),
+    );
+
+    await expect(fetchAgentsStream({ onAgent: vi.fn() }))
+      .rejects.toThrow('agent probe failed');
+  });
+
+  it('throws when the stream closes before the terminal done event', async () => {
+    const agent = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => agentStreamResponse(
+        `event: agent\ndata: ${JSON.stringify(agent)}\n\n`,
+      )),
+    );
+
+    await expect(fetchAgentsStream({ onAgent: vi.fn() }))
+      .rejects.toThrow('agents stream ended before done');
+  });
+});
 
 describe('fetchAppVersionInfo', () => {
   afterEach(() => {

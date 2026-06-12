@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
 import type { DesignSystemSummary } from './design-systems.js';
-import type { RoutineRoutesService } from './routine-routes.js';
+import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -59,7 +59,16 @@ export interface ProjectPreviewScopeDeps {
 }
 
 export interface TelemetryDeps {
-  reportFinalizedMessage: (saved: any, body?: any) => void;
+  reportFinalizedMessage: (
+    saved: any,
+    body?: any,
+    options?: {
+      analyticsContext?: any;
+      projectId?: string;
+      conversationId?: string;
+      reportTrigger?: 'final_message' | 'terminal_fallback';
+    },
+  ) => void;
   /**
    * Best-effort Langfuse score emission for assistant-turn user ratings.
    * Returns the categorical outcome so the API surface in chat-routes can

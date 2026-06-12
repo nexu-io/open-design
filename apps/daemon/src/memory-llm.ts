@@ -60,7 +60,9 @@ import {
   markFailed,
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media-config.js';
+import { AIHUBMIX_APP_CODE } from './aihubmix.js';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   applyAgentLaunchEnv,
@@ -126,7 +128,7 @@ const PROVIDER_DEFAULTS = {
     apiVersion: '2024-10-21',
   },
   google: {
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.5-flash',
     baseUrl: 'https://generativelanguage.googleapis.com',
   },
   // Ollama Cloud speaks OpenAI-compatible chat-completions, so the
@@ -147,6 +149,13 @@ const PROVIDER_DEFAULTS = {
   senseaudio: {
     model: 'senseaudio-s2-flash',
     baseUrl: 'https://api.senseaudio.cn',
+  },
+  // AIHubMix is OpenAI-wire-compatible, so the extractor falls through to
+  // callOpenAI with this base URL and the user's AIHubMix key (plus the fixed
+  // APP-Code header callOpenAI injects). Default to a small/fast model.
+  aihubmix: {
+    model: 'gpt-4o-mini',
+    baseUrl: 'https://aihubmix.com/v1',
   },
 };
 
@@ -179,6 +188,13 @@ function envKeyFor(provider) {
     return (
       process.env.OD_SENSEAUDIO_API_KEY?.trim()
       || process.env.SENSEAUDIO_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'aihubmix') {
+    return (
+      process.env.OD_AIHUBMIX_API_KEY?.trim()
+      || process.env.AIHUBMIX_API_KEY?.trim()
       || ''
     );
   }
@@ -666,6 +682,11 @@ async function callOpenAI(provider, system, user) {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${provider.apiKey}`,
+          // AIHubMix routes through this same OpenAI-compatible path but wants
+          // the fixed APP-Code attribution header on every request.
+          ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
+            ? { 'APP-Code': AIHUBMIX_APP_CODE }
+            : {}),
         },
         body: JSON.stringify({
           model: provider.model,
@@ -816,10 +837,15 @@ async function callLocalCli(provider, system, user, options) {
     throw new Error(`${def.name} CLI is not installed or not on PATH`);
   }
 
+  // The memory extractor is a tool-less, JSON-only background call that never
+  // reads project files, so it has no reason to run in the daemon's own cwd.
+  // Falling back to process.cwd() there meant a bun-based agent (OpenCode) ran
+  // its startup `bun install` in whatever directory the daemon was launched from
+  // — clobbering a pnpm workspace (dev checkout). Use a neutral temp cwd.
   const cwd =
     typeof options?.projectRoot === 'string' && options.projectRoot.trim()
       ? options.projectRoot
-      : process.cwd();
+      : os.tmpdir();
   const prompt = [
     system,
     '',

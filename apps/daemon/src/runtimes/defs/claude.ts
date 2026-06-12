@@ -45,15 +45,13 @@ export const claudeAgentDef = {
     // prompt reads the prompt from stdin under `--input-format text` (the
     // default), which has no length cap. Mirrors the codex/gemini/opencode/
     // cursor/qwen entries below.
-    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}) => {
+    buildArgs: (_prompt, _imagePaths, extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
       const caps = agentCapabilities.get('claude') || {};
       // `--input-format stream-json` lets the daemon stream multiple JSONL
-      // messages into stdin instead of closing it after the initial prompt.
-      // This is what lets us answer Claude's `AskUserQuestion` tool calls
-      // with a real `tool_result` block — without it claude-code auto errors
-      // the tool because it cannot prompt the user interactively in headless
-      // mode, and the model falls back to a markdown duplicate of the same
-      // options.
+      // messages into stdin instead of closing it after the initial prompt,
+      // keeping the turn open so the daemon can stream further user messages
+      // mid-conversation. Paired with `--output-format stream-json` so the
+      // adapter parses structured events (see claude-stream.ts).
       const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'];
       // `--include-partial-messages` lands richer streaming events but only
       // exists in newer Claude Code builds. Older installs reject it with
@@ -72,6 +70,16 @@ export const claudeAgentDef = {
       if (dirs.length > 0 && caps.addDir !== false) {
         args.push('--add-dir', ...dirs);
       }
+      // Continue Claude's own CLI session across turns so it keeps its
+      // working memory (files read, edits made, tool history) instead of
+      // re-deriving everything from the rendered transcript each turn.
+      // `--resume <id>` continues a stored session; `--session-id <uuid>`
+      // starts a new one with an id the daemon controls and persists.
+      if (typeof runtimeContext.resumeSessionId === 'string' && runtimeContext.resumeSessionId) {
+        args.push('--resume', runtimeContext.resumeSessionId);
+      } else if (typeof runtimeContext.newSessionId === 'string' && runtimeContext.newSessionId) {
+        args.push('--session-id', runtimeContext.newSessionId);
+      }
       args.push('--permission-mode', 'bypassPermissions');
       return args;
     },
@@ -82,4 +90,5 @@ export const claudeAgentDef = {
     // so the daemon writes the user's external MCP servers there before
     // launching (server.ts handles the cwd guard).
     externalMcpInjection: 'claude-mcp-json',
+    resumesSessionViaCli: true,
 } satisfies RuntimeAgentDef;

@@ -35,6 +35,8 @@ import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../../runtime/plugin-source';
 import { resolvePluginQueryFallback } from '../../state/projects';
+import { useI18n } from '../../i18n';
+import { localizePluginDescription } from '../plugins-home/localization';
 
 export interface PluginMetaOmit {
   description?: boolean;
@@ -67,15 +69,25 @@ interface Props {
    * a label would be redundant (scenario fallback).
    */
   heading?: string;
+  /**
+   * 'minimal' keeps the designer-relevant blocks (author, example
+   * query) inline and tucks the developer-oriented manifest detail
+   * (inputs, context bundles, workflow, GenUI, connectors,
+   * capabilities, source) behind a collapsed "Developer details"
+   * disclosure. Defaults to 'full' so the scenario / media / design
+   * variants keep their existing flat inspector.
+   */
+  variant?: 'full' | 'minimal';
 }
 
-export function PluginMetaSections({ record, omit, compact, heading }: Props) {
+export function PluginMetaSections({ record, omit, compact, heading, variant = 'full' }: Props) {
+  const { locale } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
   const specVersion = typeof manifest.specVersion === 'string' ? manifest.specVersion : '';
   const od = manifest.od ?? {};
-  const description = manifest.description ?? '';
+  const description = localizePluginDescription(locale, record);
   const query = resolvePluginQueryFallback(od.useCase?.query);
   const inputs = (od.inputs ?? []) as InputField[];
   const ctx = od.context ?? {};
@@ -217,6 +229,21 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
         </Section>
       ) : null}
 
+      {((advanced) =>
+        variant === 'minimal' ? (
+          <details
+            className="plugin-meta-sections__advanced"
+            data-testid="plugin-meta-advanced"
+          >
+            <summary className="plugin-meta-sections__advanced-summary">
+              Developer details
+            </summary>
+            {advanced}
+          </details>
+        ) : (
+          advanced
+        ))(
+        <>
       {showInputs ? (
         <Section
           title="Inputs"
@@ -558,6 +585,8 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
           </div>
         </dl>
       </Section>
+        </>,
+      )}
     </div>
   );
 }

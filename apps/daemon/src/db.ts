@@ -86,6 +86,16 @@ function migrate(db: SqliteDb): void {
     CREATE INDEX IF NOT EXISTS idx_conv_project
       ON conversations(project_id, updated_at DESC);
 
+    CREATE TABLE IF NOT EXISTS agent_sessions (
+      conversation_id TEXT NOT NULL,
+      agent_id        TEXT NOT NULL,
+      session_id      TEXT NOT NULL,
+      stable_prompt_hash TEXT,
+      updated_at      INTEGER NOT NULL,
+      PRIMARY KEY (conversation_id, agent_id),
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       conversation_id TEXT NOT NULL,
@@ -101,6 +111,7 @@ function migrate(db: SqliteDb): void {
       session_mode TEXT,
       run_context_json TEXT,
       applied_plugin_snapshot_json TEXT,
+      telemetry_finalized_at INTEGER,
       started_at INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
@@ -275,6 +286,9 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
   }
+  if (!messageCols.some((c: DbRow) => c.name === 'telemetry_finalized_at')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN telemetry_finalized_at INTEGER`);
+  }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
     db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
@@ -324,6 +338,10 @@ function migrate(db: SqliteDb): void {
   }
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+  }
+  const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
   const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
@@ -606,7 +624,13 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
              FROM messages m
              JOIN conversations c ON c.id = m.conversation_id
             WHERE m.role = 'assistant'
-              AND LOWER(m.content) LIKE '%<question-form%'
+              -- ask-question is an accepted alias for question-form (UI parser
+              -- + daemon open-tag matcher), so an alias-form turn must also
+              -- count as awaiting input.
+              AND (
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )
          ) latest
         WHERE latest.rowNum = 1
           AND NOT EXISTS (
@@ -1064,6 +1088,88 @@ export function deleteConversation(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM conversations WHERE id = ?`).run(id);
 }
 
+// ---------- agent sessions ----------
+
+export function getAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): string | null {
+  const row = db
+    .prepare(
+      `SELECT session_id FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as DbRow | undefined;
+  return row && typeof row.session_id === 'string' ? row.session_id : null;
+}
+
+export function upsertAgentSession(
+  db: SqliteDb,
+  input: {
+    conversationId: string;
+    agentId: string;
+    sessionId: string;
+    stablePromptHash?: string | null;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO agent_sessions (conversation_id, agent_id, session_id, stable_prompt_hash, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(conversation_id, agent_id)
+       DO UPDATE SET session_id = excluded.session_id,
+                     stable_prompt_hash = excluded.stable_prompt_hash,
+                     updated_at = excluded.updated_at`,
+  ).run(
+    input.conversationId,
+    input.agentId,
+    input.sessionId,
+    input.stablePromptHash ?? null,
+    Date.now(),
+  );
+}
+
+export function getAgentSessionRecord(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): { sessionId: string; stablePromptHash: string | null } | null {
+  const row = db
+    .prepare(
+      `SELECT session_id, stable_prompt_hash FROM agent_sessions
+        WHERE conversation_id = ? AND agent_id = ?`,
+    )
+    .get(conversationId, agentId) as DbRow | undefined;
+  if (!row || typeof row.session_id !== 'string') return null;
+  return {
+    sessionId: row.session_id,
+    stablePromptHash:
+      typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
+  };
+}
+
+export function updateAgentSessionStableHash(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+  stablePromptHash: string,
+): void {
+  db.prepare(
+    `UPDATE agent_sessions SET stable_prompt_hash = ?, updated_at = ?
+      WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(stablePromptHash, Date.now(), conversationId, agentId);
+}
+
+export function clearAgentSession(
+  db: SqliteDb,
+  conversationId: string,
+  agentId: string,
+): void {
+  db.prepare(
+    `DELETE FROM agent_sessions WHERE conversation_id = ? AND agent_id = ?`,
+  ).run(conversationId, agentId);
+}
+
 // ---------- messages ----------
 
 export function listMessages(db: SqliteDb, conversationId: string) {
@@ -1105,6 +1211,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               produced_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
+              telemetry_finalized_at = CASE
+                WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
+                ELSE telemetry_finalized_at
+              END,
               started_at = ?, ended_at = ?
         WHERE id = ?`,
     ).run(
@@ -1124,6 +1234,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      m.telemetryFinalized === true ? 1 : 0,
+      now,
       m.startedAt ?? null,
       m.endedAt ?? null,
       m.id,
@@ -1135,11 +1247,12 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
-    // 22 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 23 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, feedback_json,
     // pre_turn_file_names_json, session_mode, run_context_json,
-    // applied_plugin_snapshot_json, started_at, ended_at, position, created_at.
+    // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
+    // ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -1147,8 +1260,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           attachments_json, comment_attachments_json, produced_files_json,
           feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, applied_plugin_snapshot_json,
-          started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          telemetry_finalized_at, started_at, ended_at, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1168,6 +1281,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       position,
@@ -1199,6 +1313,27 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     )
     .get(m.id) as DbRow | undefined;
   return row ? normalizeMessage(row) : null;
+}
+
+export function getMessageTelemetryFinalizationState(db: SqliteDb, messageId: string) {
+  const row = db
+    .prepare(
+      `SELECT telemetry_finalized_at AS telemetryFinalizedAt
+         FROM messages
+        WHERE id = ?`,
+    )
+    .get(messageId) as DbRow | undefined;
+  if (!row) {
+    return {
+      exists: false,
+      finalizedAt: null,
+    };
+  }
+  return {
+    exists: true,
+    finalizedAt:
+      typeof row.telemetryFinalizedAt === 'number' ? row.telemetryFinalizedAt : null,
+  };
 }
 
 export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event: DbRow) {

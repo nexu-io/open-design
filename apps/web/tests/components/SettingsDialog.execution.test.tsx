@@ -19,6 +19,7 @@ const {
   importGitHubDesignSystemMock,
   fetchProviderModelsMock,
   fetchLatestGithubReleaseInfoMock,
+  openExternalUrlMock,
   analyticsTrackMock,
 } = vi.hoisted(() => ({
   playSoundMock: vi.fn(),
@@ -35,6 +36,7 @@ const {
   importGitHubDesignSystemMock: vi.fn(),
   fetchProviderModelsMock: vi.fn(),
   fetchLatestGithubReleaseInfoMock: vi.fn(),
+  openExternalUrlMock: vi.fn(),
   analyticsTrackMock: vi.fn(),
 }));
 
@@ -66,6 +68,7 @@ vi.mock('../../src/providers/registry', async () => {
     importLocalDesignSystem: importLocalDesignSystemMock,
     importGitHubDesignSystem: importGitHubDesignSystemMock,
     fetchLatestGithubReleaseInfo: fetchLatestGithubReleaseInfoMock,
+    openExternalUrl: openExternalUrlMock,
     codexPetSpritesheetUrl: (pet: { spritesheetUrl: string }) => pet.spritesheetUrl,
   };
 });
@@ -88,8 +91,11 @@ vi.mock('../../src/analytics/provider', () => ({
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
+import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
+import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
+import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
 
 const baseConfig: AppConfig = {
@@ -320,6 +326,7 @@ beforeEach(() => {
   importLocalDesignSystemMock.mockReset();
   importGitHubDesignSystemMock.mockReset();
   fetchProviderModelsMock.mockReset();
+  openExternalUrlMock.mockReset();
   analyticsTrackMock.mockReset();
   notificationPermissionMock.mockReturnValue('default');
   requestNotificationPermissionMock.mockResolvedValue('granted');
@@ -348,6 +355,7 @@ beforeEach(() => {
   }));
   fetchLatestGithubReleaseInfoMock.mockReset();
   fetchLatestGithubReleaseInfoMock.mockResolvedValue(null);
+  openExternalUrlMock.mockResolvedValue(true);
   importLocalDesignSystemMock.mockResolvedValue({
     designSystem: {
       id: 'imported-system',
@@ -453,6 +461,53 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
+  });
+
+  it('only persists Max tokens overrides within the supported BYOK range', async () => {
+    const { onPersist } = renderSettingsDialog({ apiKey: 'sk-test' });
+
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.min).toBe(String(MIN_MAX_TOKENS));
+    expect(maxTokensInput.max).toBe(String(MAX_MAX_TOKENS));
+    expect(maxTokensInput.step).toBe('1');
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MIN_MAX_TOKENS - 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MIN_MAX_TOKENS - 1),
+    ).toBe(false);
+    expect(maxTokensInput.value).toBe(String(MIN_MAX_TOKENS - 1));
+
+    fireEvent.blur(maxTokensInput);
+    expect(maxTokensInput.value).toBe('');
+
+    fireEvent.change(maxTokensInput, { target: { value: '64000' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBe(64000);
+    });
+
+    fireEvent.change(maxTokensInput, { target: { value: String(MAX_MAX_TOKENS + 1) } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
+    expect(
+      onPersist.mock.calls.some(([config]) => (config as AppConfig).maxTokens === MAX_MAX_TOKENS + 1),
+    ).toBe(false);
+
+    fireEvent.change(maxTokensInput, { target: { value: '' } });
+
+    await waitFor(() => {
+      const latestConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig | undefined;
+      expect(latestConfig?.maxTokens).toBeUndefined();
+    });
   });
 
   it('lets Anthropic and Google users customize the default base URL', () => {
@@ -1032,7 +1087,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(1);
   });
 
-  it('shows long BYOK model lists without a search field after provider discovery succeeds', async () => {
+  it('filters long BYOK model lists after provider discovery succeeds without hiding the current selection', async () => {
     fetchProviderModelsMock.mockResolvedValueOnce({
       ok: true,
       kind: 'success',
@@ -1063,14 +1118,16 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(modelPicker);
 
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(within(modelPopover).queryByTestId('settings-byok-model-search')).toBeNull();
+    const searchInput = within(modelPopover).getByTestId('settings-byok-model-search') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: '5.5' } });
+
     expect(
       within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    ).toEqual([
       'gpt-4.1-mini · From your account',
       'gpt-5.5 · From your account',
       'Custom (type below)…',
-    ]));
+    ]);
   });
 
   it('fetches provider models, merges them into the picker, and preserves a custom current model', async () => {
@@ -1984,6 +2041,53 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Scan failed. Check the daemon and try again.')).toBeTruthy();
+    });
+  });
+
+  it('renders diagnostics and fix actions on installed agents with auth failures', async () => {
+    const docsUrl = 'https://docs.example.com/codex-auth';
+    const authMissingAgent: AgentInfo = {
+      ...availableAgents[0]!,
+      authStatus: 'missing',
+      authMessage: 'Codex CLI is installed but not authenticated.',
+      docsUrl,
+      diagnostics: [
+        {
+          reason: 'auth-missing',
+          severity: 'error',
+          message: 'Codex CLI is installed but not authenticated.',
+          fixActions: [{ kind: 'openDocs' }, { kind: 'rescan' }],
+        },
+      ],
+    };
+    const onRefreshAgents = vi.fn(async () => [authMissingAgent]);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: [authMissingAgent], onRefreshAgents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    const codexCard = screen.getByRole('button', { name: /Codex CLI/i })
+      .closest('.agent-card') as HTMLElement;
+
+    expect(
+      within(codexCard).getByText('Codex CLI is installed but not authenticated.'),
+    ).toBeTruthy();
+
+    fireEvent.click(within(codexCard).getByRole('button', {
+      name: en['settings.agentInstall.docs'],
+    }));
+    expect(openExternalUrlMock).toHaveBeenCalledWith(docsUrl);
+
+    fireEvent.click(within(codexCard).getByRole('button', {
+      name: en['settings.rescan'],
+    }));
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+      });
     });
   });
 
@@ -3411,6 +3515,135 @@ describe('SettingsDialog appearance interactions', () => {
       }),
       {},
     );
+  });
+
+  it('reconciles the open settings draft when the parent agent CLI env changes', async () => {
+    const view = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'amr',
+        theme: 'dark',
+        agentModels: {
+          amr: {
+            model: 'prod-only-model',
+            reasoning: 'default',
+          },
+        },
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+      },
+      { initialSection: 'appearance', agents: [amrAgent, ...availableAgents] },
+    );
+
+    view.rerender(
+      <SettingsDialog
+        initial={{
+          ...baseConfig,
+          mode: 'daemon',
+          agentId: 'amr',
+          theme: 'dark',
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+              AMR_API_BASE_URL: 'https://daemon.example.test',
+            },
+          },
+        }}
+        agents={[amrAgent, ...availableAgents]}
+        daemonLive={true}
+        appVersionInfo={null}
+        initialSection="appearance"
+        onPersist={view.onPersist}
+        onPersistComposioKey={view.onPersistComposioKey}
+        onClose={view.onClose}
+        onRefreshAgents={view.onRefreshAgents}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+
+    await waitForPersist(
+      view.onPersist,
+      expect.objectContaining({
+        theme: 'light',
+        agentModels: {},
+        agentCliEnv: {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'local',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+      }),
+      {},
+    );
+  });
+
+  it('clears a stale AMR draft model when the external profile changes and the draft still matches the previous config', () => {
+    expect(
+      reconcileAmrModelChoice(
+        {
+          amr: {
+            model: 'prod-only-model',
+            reasoning: 'default',
+          },
+        },
+        {
+          ...baseConfig,
+          agentModels: {
+            amr: {
+              model: 'prod-only-model',
+              reasoning: 'default',
+            },
+          },
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'prod',
+            },
+          },
+        },
+        {
+          ...baseConfig,
+          agentModels: {},
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+            },
+          },
+        },
+      ),
+    ).toEqual({});
+  });
+
+  it('preserves unrelated draft env entries when reconciling the AMR profile', () => {
+    expect(
+      reconcileAmrProfileEnv(
+        {
+          codex: { CODEX_BIN: '/tmp/codex-dev' },
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'prod',
+            AMR_API_BASE_URL: 'https://draft.example.test',
+          },
+        },
+        {
+          amr: {
+            OPEN_DESIGN_AMR_PROFILE: 'local',
+            AMR_API_BASE_URL: 'https://daemon.example.test',
+          },
+        },
+      ),
+    ).toEqual({
+      codex: { CODEX_BIN: '/tmp/codex-dev' },
+      amr: {
+        OPEN_DESIGN_AMR_PROFILE: 'local',
+        AMR_API_BASE_URL: 'https://draft.example.test',
+      },
+    });
   });
 
   it('switches back to the default accent color and persists it explicitly', async () => {

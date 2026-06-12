@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elegant spacing</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+
+      .stack { display: grid; gap: var(--space-3); margin-bottom: var(--space-8); }
+      .row { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: var(--space-4); color: var(--muted); font-size: var(--text-sm); }
+      .bar { height: var(--space-4); min-width: 2px; background: var(--accent); }
+      .radii { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); }
+      .radii article { min-height: 88px; display: grid; place-items: center; border: 1px solid var(--border); background: var(--surface); color: var(--fg-2); font-size: var(--text-sm); box-shadow: var(--elev-ring); }
+
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing and radius</h1>
+
+      <section class="stack">
+        <div class="row"><span>--space-2</span><div class="bar" style="width: var(--space-2)"></div></div>
+        <div class="row"><span>--space-4</span><div class="bar" style="width: var(--space-4)"></div></div>
+        <div class="row"><span>--space-6</span><div class="bar" style="width: var(--space-6)"></div></div>
+        <div class="row"><span>--space-8</span><div class="bar" style="width: var(--space-8)"></div></div>
+        <div class="row"><span>--space-12</span><div class="bar" style="width: var(--space-12)"></div></div>
+      </section>
+      <section class="radii">
+        <article style="border-radius: var(--radius-sm)">--radius-sm</article>
+        <article style="border-radius: var(--radius-md)">--radius-md</article>
+        <article style="border-radius: var(--radius-lg)">--radius-lg</article>
+        <article style="border-radius: var(--radius-pill)">--radius-pill</article>
+      </section>
+
+    </main>
+  </body>
+</html>

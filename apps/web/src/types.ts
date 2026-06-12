@@ -1,5 +1,7 @@
 import type {
   AgentInfo,
+  AgentDiagnostic,
+  AgentFixIntent,
   AgentCliEnvPrefs,
   AgentModelPrefs,
   AgentTestRequest,
@@ -31,6 +33,9 @@ import type {
   DesignSystemRevisionJobRequest,
   DesignSystemRevisionStatus,
   DesignSystemSummary,
+  DesignSystemTokenContractRebuildDecision,
+  DesignSystemTokenContractRebuildJobRequest,
+  DesignSystemTokenContractRebuildJobResponse,
   LiveArtifact,
   LiveArtifactDetailResponse,
   LiveArtifactListResponse,
@@ -99,7 +104,7 @@ export type {
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio';
+export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
 
 export type LiveArtifactTabId = `live:${string}`;
 // Tab ids are arbitrary strings; the template-literal members below are
@@ -239,6 +244,15 @@ export interface ApiProtocolConfig {
    *  per-protocol so flipping between BYOK tabs doesn't reset the
    *  SenseAudio image-model choice. */
   byokImageModel?: string;
+  /** BYOK only — default video model the daemon-side `generate_video` tool
+   *  uses when the LLM doesn't pass one. Carries an `aihubmix-` prefixed
+   *  video model id. Stored per-protocol, like byokImageModel. */
+  byokVideoModel?: string;
+  /** BYOK only — default speech (TTS) model for the daemon-side generate_speech
+   *  tool (`aihubmix-` prefixed). Stored per-protocol, like byokImageModel. */
+  byokSpeechModel?: string;
+  /** BYOK only — default speech voice id for the generate_speech tool. */
+  byokSpeechVoice?: string;
 }
 
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
@@ -358,6 +372,12 @@ export interface AppConfig {
    *  so the active protocol's value lives at the top level (consistent
    *  with how apiKey / baseUrl / model are projected onto AppConfig). */
   byokImageModel?: string;
+  /** BYOK only — default video model for the daemon-side generate_video tool.
+   *  Mirrors apiProtocolConfigs.<protocol>.byokVideoModel onto AppConfig. */
+  byokVideoModel?: string;
+  /** BYOK only — default speech model + voice for the generate_speech tool. */
+  byokSpeechModel?: string;
+  byokSpeechVoice?: string;
   apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;
@@ -409,13 +429,12 @@ export interface AppConfig {
   // Privacy preferences governing what (if anything) is shipped to the
   // PostHog / Langfuse telemetry endpoints. `metrics` and `content`
   // default ON (set by `DEFAULT_CONFIG.telemetry` in state/config.ts) so
-  // the onboarding funnel actually captures the first-run events the
-  // user hasn't had a chance to consent to yet; the post-onboarding
-  // disclosure modal explains this and Settings → Privacy is the
-  // one-click opt-out. `artifactManifest` stays off until the user
-  // turns it on explicitly. A daemon-stored override always wins over
-  // these client defaults — once the user picks a value the modal /
-  // PrivacySection persist it through `syncConfigToDaemon`.
+  // the onboarding funnel actually captures the first-run events. The
+  // post-onboarding disclosure modal explains this and Settings → Privacy is
+  // the one-click opt-out. Complete-context object manifests follow the
+  // content switch. A daemon-stored override always wins over these client
+  // defaults — once the user picks a value the modal / PrivacySection persist
+  // it through `syncConfigToDaemon`.
   telemetry?: TelemetryConfig;
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
@@ -513,6 +532,8 @@ export interface PromptTemplateDetail extends PromptTemplateSummary {
 
 export type {
   AgentInfo,
+  AgentDiagnostic,
+  AgentFixIntent,
   AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
@@ -535,6 +556,9 @@ export type {
   DesignSystemRevisionJobRequest,
   DesignSystemRevisionStatus,
   DesignSystemSummary,
+  DesignSystemTokenContractRebuildDecision,
+  DesignSystemTokenContractRebuildJobRequest,
+  DesignSystemTokenContractRebuildJobResponse,
   LiveArtifact,
   LiveArtifactDetailResponse,
   LiveArtifactListResponse,

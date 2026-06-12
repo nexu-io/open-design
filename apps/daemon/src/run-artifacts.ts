@@ -24,6 +24,8 @@
 // uniform zero on PostHog and made the same funnel useless from the
 // other direction.
 
+import { emittedRenderableQuestionForm } from './question-form-detect.js';
+
 // Tool names cover Claude-style, Codex-style, and the ACP/MCP shapes
 // the daemon proxies. Keep aligned with the web-side `WRITE_NAMES` /
 // `EDIT_NAMES` sets in `apps/web/src/runtime/file-ops.ts`.
@@ -34,16 +36,6 @@ const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'str_replace_edit',
   'MultiEdit',
   'multi_edit',
-]);
-
-// Tool names the daemon recognizes as an intent-clarification card. Claude
-// emits `AskUserQuestion`; the ACP/MCP snake_case proxy shape emits
-// `ask_user_question`. Keep aligned with the AskUserQuestion detection in
-// `apps/daemon/src/server.ts` and the card rendering in
-// `apps/web/src/components/ToolCard.tsx`.
-const ASK_USER_QUESTION_TOOL_NAMES: ReadonlySet<string> = new Set([
-  'AskUserQuestion',
-  'ask_user_question',
 ]);
 
 function extractToolFilePath(input: unknown): string | null {
@@ -208,25 +200,47 @@ export function countNewHtmlArtifacts(events: readonly RunEventLike[]): number {
   return writtenPaths.size;
 }
 
-// True iff the run raised an AskUserQuestion clarification card. Fed into
+// True iff the run raised an intent-clarification question. Fed into
 // `run_finished.asked_user_question`. A clarification turn is the agent
 // stopping to ask the user a finite-choice question; it inherently produces
 // no artifact, so the dashboard uses this flag to exclude such runs from the
 // "run finished -> has artifact" funnel rather than scoring them as
 // artifact-generation failures.
+//
+// Clarification now surfaces as a `<question-form>` artifact in the
+// assistant's streamed text (the AskUserQuestion tool was retired in favor of
+// the unified question-form flow; see `apps/web/src/artifacts/question-form.ts`
+// and the `awaiting_input` detection in `apps/daemon/src/db.ts`). Assistant
+// text arrives as `text_delta` chunks, so the marker can straddle a chunk
+// boundary — concatenate the run's text before testing for it.
+//
+// Two correctness points enforced here:
+//   1. Persisted `text_delta` events carry the chunk on `delta`
+//      (`{ type: 'text_delta'; delta }`, see packages/contracts/src/sse/chat.ts),
+//      NOT `text`. Reading `text` appended nothing for real runs, leaving the
+//      signal permanently false. We read `delta` first, and still accept a
+//      `text` field for any runtime that emits a whole-text event.
+//   2. We require a *renderable* closed `<question-form>`/`<ask-question>`
+//      block (shared `emittedRenderableQuestionForm`), not a raw open-tag
+//      match — so a run that merely shows the literal markup inside a generated
+//      doc, code sample, or HTML artifact is not misclassified as a
+//      clarification turn and wrongly excluded from the artifact funnel. The
+//      `<ask-question>` alias is covered by that shared matcher.
 export function runAskedUserQuestion(
   events: readonly RunEventLike[],
 ): boolean {
   if (!events || events.length === 0) return false;
+  let text = '';
   for (const rec of events) {
     if (rec?.event !== 'agent') continue;
     const data = rec.data as
-      | { type?: string; name?: unknown }
+      | { type?: unknown; text?: unknown; delta?: unknown }
       | null
       | undefined;
-    if (data?.type !== 'tool_use') continue;
-    if (typeof data.name !== 'string') continue;
-    if (ASK_USER_QUESTION_TOOL_NAMES.has(data.name)) return true;
+    if (!data) continue;
+    if (data.type !== 'text_delta' && data.type !== 'text') continue;
+    if (typeof data.delta === 'string') text += data.delta;
+    else if (typeof data.text === 'string') text += data.text;
   }
-  return false;
+  return emittedRenderableQuestionForm(text);
 }

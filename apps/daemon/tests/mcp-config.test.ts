@@ -406,6 +406,75 @@ describe('buildOpenCodeMcpConfigContent', () => {
     ).toBeNull();
   });
 
+  it('emits an external_directory allowlist when the daemon grants OpenCode absolute project dirs', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [],
+      {},
+      {
+        allowedDirectories: [
+          '/tmp/od-project',
+          '',
+          'relative/path',
+          '/tmp/od-skills',
+          '/tmp/od-project',
+        ],
+      },
+    );
+
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as {
+      permission?: {
+        external_directory?: Record<string, string>;
+      };
+      mcp?: Record<string, unknown>;
+    };
+
+    expect(parsed.mcp).toBeUndefined();
+    expect(parsed.permission?.external_directory).toEqual({
+      '/tmp/od-project': 'allow',
+      '/tmp/od-project/*': 'allow',
+      '/tmp/od-project/**': 'allow',
+      '/tmp/od-skills': 'allow',
+      '/tmp/od-skills/*': 'allow',
+      '/tmp/od-skills/**': 'allow',
+    });
+  });
+
+  it('merges MCP servers and granted external_directory rules into one payload', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [
+        {
+          id: 'basic-memory',
+          transport: 'stdio',
+          enabled: true,
+          command: '/opt/homebrew/bin/uvx',
+          args: ['basic-memory', 'mcp'],
+        },
+      ],
+      {},
+      { allowedDirectories: ['/tmp/od-project'] },
+    );
+
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as {
+      permission?: {
+        external_directory?: Record<string, string>;
+      };
+      mcp: Record<string, Record<string, unknown>>;
+    };
+
+    expect(parsed.mcp['basic-memory']).toEqual({
+      type: 'local',
+      command: ['/opt/homebrew/bin/uvx', 'basic-memory', 'mcp'],
+      enabled: true,
+    });
+    expect(parsed.permission?.external_directory).toMatchObject({
+      '/tmp/od-project': 'allow',
+      '/tmp/od-project/*': 'allow',
+      '/tmp/od-project/**': 'allow',
+    });
+  });
+
   it('serialises a stdio server to OpenCode local schema (type=local, command=[cmd,...args])', () => {
     const raw = buildOpenCodeMcpConfigContent([
       {

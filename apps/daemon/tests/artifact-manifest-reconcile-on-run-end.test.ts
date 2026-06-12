@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { closeDatabase, insertProject, openDatabase } from '../src/db.js';
-import { isRunTouchedProjectFile, reconcileHtmlArtifactManifest, writeProjectFile } from '../src/projects.js';
+import { isRunTouchedProjectFile, listFiles, reconcileHtmlArtifactManifest, writeProjectFile } from '../src/projects.js';
 
 const PROJECT_ID = 'reconcile-test';
 let tempDir = null;
@@ -130,6 +130,59 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
     const manifest = JSON.parse(fs.readFileSync(sidecarPath, 'utf8'));
     expect(manifest.kind).toBe('html');
     expect(manifest.entry).toBe('page.htm');
+  });
+
+  it('does not reconcile dependency package HTML files as artifacts', async () => {
+    setup();
+
+    const dir = path.join(projectsRoot, PROJECT_ID);
+    fs.mkdirSync(path.join(dir, 'node_modules', 'tslib'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'node_modules', 'tslib', 'tslib.html'),
+      '<script src="tslib.js"></script>',
+    );
+
+    const result = await reconcileHtmlArtifactManifest(
+      projectsRoot,
+      PROJECT_ID,
+      'node_modules/tslib/tslib.html',
+    );
+
+    expect(result).toBeNull();
+    expect(
+      fs.existsSync(path.join(dir, 'node_modules', 'tslib', 'tslib.html.artifact.json')),
+    ).toBe(false);
+  });
+
+  it('does not infer or surface Vite dev index.html as an HTML artifact', async () => {
+    setup();
+
+    const dir = path.join(projectsRoot, PROJECT_ID);
+    fs.writeFileSync(
+      path.join(dir, 'index.html'),
+      '<div id="root"></div><script type="module" src="/src/main.jsx"></script>',
+    );
+    fs.writeFileSync(path.join(dir, 'vite.config.js'), 'export default {};');
+
+    const reconciled = await reconcileHtmlArtifactManifest(projectsRoot, PROJECT_ID, 'index.html');
+    expect(reconciled).toBeNull();
+    expect(fs.existsSync(path.join(dir, 'index.html.artifact.json'))).toBe(false);
+
+    fs.writeFileSync(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html', 'zip'],
+      }),
+    );
+
+    const files = await listFiles(projectsRoot, PROJECT_ID);
+    const index = files.find((file) => file.name === 'index.html');
+    expect(index?.artifactManifest).toBeNull();
   });
 
   it('skips pre-existing HTML files whose mtime is before the run start (imported-folder guard)', async () => {

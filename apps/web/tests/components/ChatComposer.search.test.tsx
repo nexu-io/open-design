@@ -68,6 +68,58 @@ describe('ChatComposer /search command', () => {
     );
   });
 
+  it('appends uploaded attachments after already staged design-file context', async () => {
+    const onSend = vi.fn();
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'uploads/pasted.png', name: 'pasted.png', kind: 'image', size: 8 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[
+          {
+            path: 'designs/landing.html',
+            name: 'landing.html',
+            kind: 'html',
+            mime: 'text/html',
+            mtime: 1,
+            size: 128,
+          },
+        ]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await typeAndSettle('@landing');
+    await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
+    fireEvent.click(screen.getByText('designs/landing.html'));
+
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html'));
+
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [new File(['pasted'], 'pasted.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('pasted.png'));
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      '@designs/landing.html',
+      [
+        { path: 'designs/landing.html', name: 'landing.html', kind: 'file', order: 0 },
+        { path: 'uploads/pasted.png', name: 'pasted.png', kind: 'image', size: 8, order: 1 },
+      ],
+      [],
+      undefined,
+    );
+  });
+
   it('queues a typed follow-up when send is clicked during streaming', async () => {
     const onSend = vi.fn();
 
@@ -399,7 +451,7 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(screen.getByText(`uploads/${longName}`)).toBeTruthy());
     fireEvent.click(screen.getByText(`uploads/${longName}`));
 
-    const chip = screen.getByTestId('staged-attachments').querySelector('.staged-chip.staged-image');
+    const chip = screen.getByTestId('staged-contexts').querySelector('.staged-chip.staged-image');
     const previewTrigger = screen.getByRole('button', { name: `Preview ${longName}` });
     expect(chip?.contains(previewTrigger)).toBe(true);
     expect(chip?.contains(screen.getByRole('button', { name: `Remove ${longName}` }))).toBe(true);
@@ -614,6 +666,50 @@ describe('ChatComposer /search command', () => {
 
     expect(onSend).not.toHaveBeenCalled();
     expect(composerText()).toContain('keep this draft');
+  });
+
+  it('shows the active imported-folder file and sends it as edit context', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[
+          {
+            name: 'site/index.html',
+            path: 'site/index.html',
+            type: 'file',
+            kind: 'html',
+            mime: 'text/html',
+            size: 128,
+            mtime: 1,
+          },
+        ]}
+        activeProjectFileName="site/index.html"
+        streaming={false}
+        projectMetadata={{ kind: 'prototype', importedFrom: 'folder' }}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const activeFileStrip = screen.getByTestId('composer-active-file');
+    expect(activeFileStrip.textContent).toContain('Editing');
+    expect(activeFileStrip.textContent).toContain('site/index.html');
+    expect(screen.getByTestId('chat-composer').className).toContain('composer-active-file-mode');
+
+    expect(screen.getAllByText('Ask Open Design to change index.html...').length).toBeGreaterThan(0);
+    await typeAndSettle('Make the hero clearer');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      'Make the hero clearer',
+      [{ path: 'site/index.html', name: 'index.html', kind: 'file' }],
+      [],
+      undefined,
+    );
   });
 });
 

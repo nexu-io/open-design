@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { KEY_ENTER_COMMAND } from 'lexical';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
-  InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
   PluginSourceKind,
@@ -13,9 +12,9 @@ import type {
   TrustTier,
 } from '@open-design/contracts';
 import { HomeHero } from '../../src/components/HomeHero';
+import { I18nProvider } from '../../src/i18n';
 import {
   getHomeHeroEditor,
-  homeHeroPromptText,
   setHomeHeroPrompt,
 } from '../helpers/home-hero-lexical';
 
@@ -108,6 +107,55 @@ afterEach(() => {
 });
 
 describe('HomeHero plugin picker', () => {
+  it('closes the portal picker when the home view becomes inactive', async () => {
+    const { rerender } = render(
+      <HomeHero
+        active
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@');
+    await settle();
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+
+    rerender(
+      <HomeHero
+        active={false}
+        prompt="@"
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+    await settle();
+
+    expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+  });
+
   it('opens plugin search from an @ token across community and my plugins', async () => {
     const onPromptChange = vi.fn();
     const onPickPlugin = vi.fn();
@@ -148,6 +196,177 @@ describe('HomeHero plugin picker', () => {
       expect.objectContaining({ id: 'sample-user-plugin' }),
       'Make @Sample User Plugin ',
     );
+  });
+
+  it('does not truncate home @ plugin results to six entries', async () => {
+    const pluginOptions = Array.from({ length: 9 }, (_, index) =>
+      makePlugin(`catalog-plugin-${index}`, `Catalog Plugin ${index + 1}`),
+    );
+    render(
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={pluginOptions}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@catalog');
+    await settle();
+
+    const picker = screen.getByTestId('home-hero-plugin-picker');
+    expect(within(picker).getAllByRole('option')).toHaveLength(9);
+    expect(within(picker).getByText('Catalog Plugin 9')).toBeTruthy();
+    expect(within(picker).getByRole('tab', { name: /plugins/i }).textContent).toContain('9');
+  });
+
+  it('matches localized plugin and skill text in the home @ picker', async () => {
+    const localizedPlugin = makePlugin('localized-plugin', 'Localized Plugin');
+    localizedPlugin.manifest.title_i18n = { 'zh-CN': '官方看板' };
+    localizedPlugin.manifest.description_i18n = { 'zh-CN': '内置官方插件。' };
+    const localizedSkill = makeSkill('localized-skill', 'localized-skill');
+    localizedSkill.displayName = { 'zh-CN': '杂志文章' };
+    localizedSkill.descriptionI18n = { 'zh-CN': '中文能力描述' };
+    const { rerender } = render(
+      <I18nProvider initial="zh-CN">
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[localizedPlugin]}
+          pluginsLoading={false}
+          skillOptions={[localizedSkill]}
+          skillsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickSkill={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+      </I18nProvider>,
+    );
+
+    setHomeHeroPrompt('@看板');
+    await settle();
+
+    expect(screen.getByRole('option', { name: /官方看板/i })).toBeTruthy();
+
+    rerender(
+      <I18nProvider initial="zh-CN">
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[localizedPlugin]}
+          pluginsLoading={false}
+          skillOptions={[localizedSkill]}
+          skillsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickSkill={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+      </I18nProvider>,
+    );
+
+    setHomeHeroPrompt('@中文能力');
+    await settle();
+
+    expect(screen.getByRole('option', { name: /杂志文章/i })).toBeTruthy();
+  });
+
+  it('closes the home @ picker when focus moves outside the composer', async () => {
+    render(
+      <>
+        <HomeHero
+          prompt=""
+          onPromptChange={() => undefined}
+          onSubmit={() => undefined}
+          activePluginTitle={null}
+          activeChipId={null}
+          onClearActivePlugin={() => undefined}
+          pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+          pluginsLoading={false}
+          pendingPluginId={null}
+          pendingChipId={null}
+          onPickPlugin={() => undefined}
+          onPickChip={() => undefined}
+          contextItemCount={0}
+          error={null}
+        />
+        <button type="button" data-testid="outside-control">Outside</button>
+      </>,
+    );
+
+    setHomeHeroPrompt('@sample');
+    await settle();
+
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+
+    fireEvent.mouseDown(screen.getByTestId('outside-control'));
+    fireEvent.focusIn(screen.getByTestId('outside-control'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
+    });
+  });
+
+  it('keeps the home @ picker open while interacting with its tabs', async () => {
+    render(
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[makePlugin('sample-plugin', 'Sample Plugin')]}
+        pluginsLoading={false}
+        skillOptions={[makeSkill('sample-skill', 'Sample Skill')]}
+        skillsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickSkill={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    setHomeHeroPrompt('@sample');
+    await settle();
+
+    const picker = screen.getByTestId('home-hero-plugin-picker');
+    const skillsTab = within(picker).getByRole('tab', { name: /skills/i });
+    fireEvent.pointerDown(skillsTab);
+    fireEvent.click(skillsTab);
+
+    await settle();
+
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+    expect(within(screen.getByTestId('home-hero-plugin-picker')).getByRole('tab', { name: /skills/i }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders selected @ plugins inside the prompt as mention pills', async () => {
@@ -453,36 +672,19 @@ describe('HomeHero plugin picker', () => {
     expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
   });
 
-  it('renders rendered plugin input values in the inputs form below the editor', async () => {
-    // The inline `{{slot}}` widget (`home-hero-prompt-slot-*`) in the prompt
-    // body is gone with the Lexical migration. Every non-footer plugin input now
-    // renders in the structured PluginInputsForm (`plugin-inputs-form`) below the
-    // editor, so this test asserts the input surfaces (and reflects its value)
-    // there instead of as an inline pill.
-    const fields: InputFieldSpec[] = [
-      {
-        name: 'source',
-        label: 'Import source',
-        type: 'select',
-        options: ['folder', 'zip', 'github', 'marketplace'],
-        default: 'marketplace',
-      },
-    ];
-    const prompt =
-      'Create a compact import receipt for community-import-smoke-test installed from marketplace.';
-
-    const { rerender } = render(
+  it('closes the @ picker when opening plugin details from the hover card', async () => {
+    const onOpenPluginDetails = vi.fn();
+    const plugin = makePlugin('sample-plugin', 'Sample Plugin');
+    render(
       <HomeHero
-        prompt={prompt}
+        prompt=""
         onPromptChange={() => undefined}
         onSubmit={() => undefined}
-        activePluginTitle="Community Import Smoke Test"
+        activePluginTitle={null}
         activeChipId={null}
         onClearActivePlugin={() => undefined}
-        pluginInputFields={fields}
-        pluginInputValues={{ source: 'marketplace' }}
-        pluginInputTemplate="Create a compact import receipt for community-import-smoke-test installed from {{source}}."
-        pluginOptions={[]}
+        onOpenPluginDetails={onOpenPluginDetails}
+        pluginOptions={[plugin]}
         pluginsLoading={false}
         pendingPluginId={null}
         pendingChipId={null}
@@ -493,45 +695,16 @@ describe('HomeHero plugin picker', () => {
       />,
     );
 
+    setHomeHeroPrompt('@sam');
+    await settle();
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /sample plugin/i }));
     await settle();
 
-    const form = screen.getByTestId('plugin-inputs-form');
-    expect(form).toBeTruthy();
-    const select = form.querySelector<HTMLSelectElement>('select[data-field-name="source"]');
-    expect(select).toBeTruthy();
-    expect(select?.value).toBe('marketplace');
-    expect(select?.tagName).toBe('SELECT');
-    // The field's label wrapper marks the rendered value as filled.
-    expect(select?.closest('label')?.getAttribute('data-filled')).toBe('true');
+    expect(screen.getByTestId('home-hero-plugin-picker')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
 
-    // Extra prompt text no longer removes any inline slot (there are none); the
-    // structured inputs form keeps rendering the field so the value stays
-    // editable below the editor.
-    rerender(
-      <HomeHero
-        prompt={`${prompt} Extra user edit.`}
-        onPromptChange={() => undefined}
-        onSubmit={() => undefined}
-        activePluginTitle="Community Import Smoke Test"
-        activeChipId={null}
-        onClearActivePlugin={() => undefined}
-        pluginInputFields={fields}
-        pluginInputValues={{ source: 'marketplace' }}
-        pluginInputTemplate="Create a compact import receipt for community-import-smoke-test installed from {{source}}."
-        pluginOptions={[]}
-        pluginsLoading={false}
-        pendingPluginId={null}
-        pendingChipId={null}
-        onPickPlugin={() => undefined}
-        onPickChip={() => undefined}
-        contextItemCount={0}
-        error={null}
-      />,
-    );
-    await settle();
-
-    expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
-    expect(homeHeroPromptText()).toContain('Extra user edit.');
+    expect(onOpenPluginDetails).toHaveBeenCalledWith(plugin);
+    expect(screen.queryByTestId('home-hero-plugin-picker')).toBeNull();
   });
 
   it('opens active plugin details from the active plugin chip', () => {
@@ -563,5 +736,70 @@ describe('HomeHero plugin picker', () => {
     const activeChipText = screen.getByTestId('home-hero-active-plugin').textContent;
     expect(activeChipText).toContain('Prototype');
     expect(activeChipText).not.toContain('Plugin');
+  });
+
+  it('shows a clear button on the active plugin chip for an explicit plugin pick (example prompt), even with a task chip set', () => {
+    // Example-prompt presets bind a specific plugin AND set a task chipId. The
+    // chip shows the plugin's own title and must own its clear (×) button, just
+    // like a Community pick — not hide it behind the footer task chip.
+    const onClearActivePlugin = vi.fn();
+    const active = makePlugin('mythic-reverie', 'Mythic Naturecore — Reverie');
+    render(
+      <HomeHero
+        prompt="A cinematic landing page"
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle="Mythic Naturecore — Reverie"
+        activePluginRecord={active}
+        activeChipId="prototype"
+        activePluginIsExplicit
+        onClearActivePlugin={onClearActivePlugin}
+        onOpenPluginDetails={() => undefined}
+        pluginOptions={[]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    const chip = screen.getByTestId('home-hero-active-plugin');
+    const clear = chip.querySelector('.home-hero__active-clear') as HTMLButtonElement | null;
+    expect(clear).toBeTruthy();
+    fireEvent.click(clear!);
+    expect(onClearActivePlugin).toHaveBeenCalled();
+  });
+
+  it('hides the active plugin chip clear button when it stands in for a task chip default plugin', () => {
+    // Plain task-chip pick: the chip shows the task label and the footer
+    // ActiveTypeChip owns the clear affordance, so the plugin chip has none.
+    const active = makePlugin('prototype-plugin', 'Prototype Plugin');
+    render(
+      <HomeHero
+        prompt="Build a prototype"
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle="Prototype"
+        activePluginRecord={active}
+        activeChipId="prototype"
+        activePluginIsExplicit={false}
+        onClearActivePlugin={() => undefined}
+        onOpenPluginDetails={() => undefined}
+        pluginOptions={[]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    const chip = screen.getByTestId('home-hero-active-plugin');
+    expect(chip.querySelector('.home-hero__active-clear')).toBeNull();
   });
 });

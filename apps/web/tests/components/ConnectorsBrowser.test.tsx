@@ -8,12 +8,14 @@ import { ConnectorsBrowser } from '../../src/components/ConnectorsBrowser';
 import {
   cancelConnectorAuthorization,
   connectConnector,
+  disconnectConnector,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
   fetchConnectors,
   fetchConnectorStatuses,
   openExternalUrl,
 } from '../../src/providers/registry';
+import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -64,6 +66,7 @@ describe('ConnectorsBrowser', () => {
     cleanup();
     vi.mocked(cancelConnectorAuthorization).mockReset();
     vi.mocked(connectConnector).mockReset();
+    vi.mocked(disconnectConnector).mockReset();
     vi.mocked(fetchConnectors).mockReset();
     vi.mocked(fetchConnectorDetail).mockReset();
     vi.mocked(fetchConnectorDiscovery).mockReset();
@@ -71,6 +74,7 @@ describe('ConnectorsBrowser', () => {
     vi.mocked(openExternalUrl).mockReset();
     vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
     vi.mocked(connectConnector).mockResolvedValue({ connector: null });
+    vi.mocked(disconnectConnector).mockResolvedValue(null);
     vi.mocked(fetchConnectorDetail).mockResolvedValue(null);
     vi.mocked(openExternalUrl).mockResolvedValue(true);
     window.sessionStorage.clear();
@@ -85,6 +89,79 @@ describe('ConnectorsBrowser', () => {
 
     await waitFor(() => expect(screen.getByTestId('connector-gate')).toBeTruthy());
     expect(screen.getByTestId('connector-grid-wrap').className).toContain('is-masked');
+  });
+
+  it('broadcasts connector changes when a connect action completes immediately', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    const connectedConnector: ConnectorDetail = {
+      ...availableConnector,
+      status: 'connected',
+      accountLabel: 'inbox@example.com',
+    };
+    const onChanged = vi.fn();
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: connectedConnector,
+      auth: { kind: 'connected' },
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    window.removeEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
+  });
+
+  it('broadcasts connector changes when a status refresh observes a completed authorization', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    const onChanged = vi.fn();
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'connected', accountLabel: 'inbox@example.com' },
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    window.removeEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
+  });
+
+  it('broadcasts connector changes after disconnect succeeds', async () => {
+    const onChanged = vi.fn();
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
+    vi.mocked(fetchConnectors).mockResolvedValue([configuredComposioConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([configuredComposioConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(disconnectConnector).mockResolvedValue({
+      ...configuredComposioConnector,
+      status: 'available',
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    window.removeEventListener(CONNECTORS_CHANGED_EVENT, onChanged);
   });
 
   it('keeps discovered tools when discovery resolves before the base catalog', async () => {

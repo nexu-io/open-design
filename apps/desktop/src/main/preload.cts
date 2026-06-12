@@ -9,6 +9,7 @@ import type {
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectReplaceWorkingDirResult,
+  OpenDesignHostPickWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
@@ -17,6 +18,8 @@ import type {
 const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
 const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 2;
 const UPDATER_STATUS_EVENT = 'od:update:status-changed';
+const APP_CONFIG_CHANGED_IPC_CHANNEL = 'od:app-config-changed';
+const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
 // runtime's `additionalArguments`. Duplicated literal on purpose: the
@@ -94,6 +97,27 @@ function normalizeProjectReplaceWorkingDirResult(input: unknown): OpenDesignHost
   return { baseDir, entryFile, ok: true };
 }
 
+function pickWorkingDirFailure(reason: string): OpenDesignHostPickWorkingDirResult {
+  return failure(reason);
+}
+
+function normalizePickWorkingDirResult(input: unknown): OpenDesignHostPickWorkingDirResult {
+  if (!isRecord(input)) return failure('desktop working-dir pick returned an invalid response', input);
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    return failure(
+      typeof input.reason === 'string' && input.reason.length > 0 ? input.reason : 'unknown failure',
+      input.details,
+    );
+  }
+  const baseDir = typeof input.baseDir === 'string' ? input.baseDir : null;
+  const token = typeof input.token === 'string' ? input.token : null;
+  if (baseDir == null || token == null) {
+    return failure('desktop working-dir pick did not include baseDir and token', input);
+  }
+  return { baseDir, ok: true, token };
+}
+
 function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImportResult {
   if (!isRecord(input)) return failure('desktop import returned an invalid response', input);
   if (input.ok !== true) {
@@ -159,6 +183,10 @@ const project = {
     ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId })
       .then(normalizeProjectReplaceWorkingDirResult)
       .catch((error: unknown) => replaceWorkingDirFailure(reasonFromError(error))),
+  pickWorkingDir: (): Promise<OpenDesignHostPickWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-working-dir')
+      .then(normalizePickWorkingDirResult)
+      .catch((error: unknown) => pickWorkingDirFailure(reasonFromError(error))),
 };
 
 const shell = {
@@ -246,6 +274,10 @@ const updater = {
 };
 
 const osLocale = readOsLocaleFromArgv();
+
+ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
+  window.dispatchEvent(new CustomEvent(APP_CONFIG_CHANGED_EVENT));
+});
 
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,

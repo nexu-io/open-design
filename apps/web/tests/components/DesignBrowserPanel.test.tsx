@@ -138,6 +138,14 @@ describe('inspiration action prompts', () => {
         actions: [browserUseActionById('audit_accessibility')!],
       },
     ]);
+    expect(
+      filterBrowserUseCategories(
+        BROWSER_USE_CATEGORIES,
+        '字体',
+        categoryTitle,
+        (action) => (action.id === 'extract_fonts' ? ['字体家族、字号、字重和 @font-face'] : []),
+      )[0]?.actions,
+    ).toEqual([browserUseActionById('extract_fonts')!]);
     expect(filterBrowserUseCategories(BROWSER_USE_CATEGORIES, '通用操作', categoryTitle)[0]?.id).toBe('general');
     expect(filterBrowserUseCategories(BROWSER_USE_CATEGORIES, 'no-such-action', categoryTitle)).toEqual([]);
   });
@@ -223,13 +231,13 @@ describe('formatAddressDisplay', () => {
 
   it('appends a real page title for the passive address display', () => {
     expect(formatAddressDisplay('https://www.baidu.com/', '百度一下，你就知道')).toBe(
-      'https://www.baidu.com/ / 百度一下，你就知道',
+      'https://www.baidu.com / 百度一下，你就知道',
     );
   });
 
   it('exposes URL and title as separate passive display parts', () => {
     expect(formatAddressDisplayParts('https://brandfetch.com/', 'Just a moment...')).toEqual({
-      url: 'https://brandfetch.com/',
+      url: 'https://brandfetch.com',
       title: 'Just a moment...',
     });
   });

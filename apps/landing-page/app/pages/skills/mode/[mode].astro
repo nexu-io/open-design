@@ -1,0 +1,78 @@
+---
+/*
+ * /skills/mode/<slug>/ — every skill that emits a given artifact mode
+ * (deck, prototype, template, image, video, audio, design-system, utility).
+ *
+ * One static page per distinct `od.mode` value. Mode is the strongest
+ * mental-model facet ("I want a deck-builder") so this is the primary
+ * faceted view; scenario/category live alongside.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import SkillRow from '../../../_components/skill-row.astro';
+import {
+  getSkillModeIndex,
+  getSkillsForMode,
+  type TagDescriptor,
+} from '../../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
+
+export async function getStaticPaths() {
+  const tags = await getSkillModeIndex();
+  return tags.map((tag) => ({
+    params: { mode: tag.slug },
+    props: { tag },
+  }));
+}
+
+interface Props {
+  tag: TagDescriptor;
+}
+
+const { tag } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const { records, label } = await getSkillsForMode(tag.slug, locale);
+const heading = label ?? tag.label;
+
+const title = ui.catalog.skills.filterTitle(heading, records.length);
+const description = ui.catalog.skills.modeDescription(heading, records.length);
+
+const url = new URL(`/skills/mode/${tag.slug}/`, Astro.site).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url,
+  numberOfItems: records.length,
+};
+---
+
+<Layout title={title} description={description} active="skills" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
+      <a href={href('/skills/')}>{ui.catalog.skills.detailLabel}</a>
+      <span aria-hidden="true">/</span>
+      <span>{ui.catalog.skills.mode}</span>
+      <span aria-hidden="true">/</span>
+      <span class="crumb-active">{heading}</span>
+    </nav>
+    <span class="label">{ui.catalog.skills.label}</span>
+    <h1 class="display">
+      {ui.catalog.skills.modeHeading(heading, records.length)}
+    </h1>
+    <p class="lead">
+      {ui.catalog.skills.modeLead(label ?? tag.label)}
+    </p>
+    <p class="filter-clear">
+      <a href={href('/skills/')}>{ui.catalog.skills.allSkills(tag.count)}</a>
+    </p>
+  </header>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label={ui.catalog.skills.allAria}>
+    <ol>
+      {records.map((s, idx) => <SkillRow skill={s} index={idx} />)}
+    </ol>
+  </section>
+</Layout>

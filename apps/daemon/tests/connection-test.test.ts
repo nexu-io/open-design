@@ -6,6 +6,7 @@ import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
@@ -23,6 +24,7 @@ import {
 } from '../src/connectionTest.js';
 import { listProviderModels } from '../src/providerModels.js';
 import { startServer } from '../src/server.js';
+import { rememberLiveModels } from '../src/runtimes/models.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -35,6 +37,7 @@ interface StartedServer {
 const realFetch = globalThis.fetch;
 let baseUrl: string;
 let server: http.Server;
+const FAKE_VELA_FIXTURE = path.resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -1611,6 +1614,55 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('reports a helpful base URL error when Google Gemini is tested against Anthropic', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'goog-key',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('invalid_base_url');
+    expect(String(body.detail ?? '')).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('maps Google API key failures on HTTP 400 to auth_failed', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse(
+        {
+          error: {
+            code: 400,
+            message: 'API key not valid. Please pass a valid API key.',
+            status: 'INVALID_ARGUMENT',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AQ.TestKeyForUnitTests01234567890123456789012',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('auth_failed');
+  });
+
   it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -1985,6 +2037,65 @@ describe('POST /api/test/connection provider mode', () => {
 });
 
 describe('POST /api/test/connection agent mode', () => {
+  it('uses the AMR profile-scoped remembered model during connection tests when no explicit model is selected', async () => {
+    rememberLiveModels('amr', [{ id: 'local-scoped-model', label: 'local-scoped-model' }], 'local');
+
+    await withFakeAgent(
+      'vela',
+      `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'amr',
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+            },
+          },
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'AMR',
+          sample: 'Hello from fake vela.',
+        });
+      },
+    );
+  });
+
+  it('resolves the AMR connection-test scope from the merged launch env', async () => {
+    rememberLiveModels('amr', [{ id: 'local-env-model', label: 'local-env-model' }], 'local');
+    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
+    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
+
+    try {
+      await withFakeAgent(
+        'vela',
+        `void import(${JSON.stringify(pathToFileURL(FAKE_VELA_FIXTURE).href)});\n`,
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'amr',
+            agentCliEnv: {
+              amr: {
+                VELA_BIN: '/tmp/fake-vela-bin',
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'AMR',
+            sample: 'Hello from fake vela.',
+          });
+        },
+      );
+    } finally {
+      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
+      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
+    }
+  });
+
   it('reports success for a fake Codex agent response', async () => {
     await withFakeCodex(
       `
@@ -2667,6 +2778,9 @@ process.stdin.on('end', () => {
               'json',
               '-m',
               'github-copilot/gpt-4o',
+              '--pure',
+              '--title',
+              'Connection test',
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
@@ -2674,6 +2788,49 @@ process.stdin.on('end', () => {
       );
     } finally {
       await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
+    const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
+    const oldPath = process.env.PATH;
+    try {
+      if (process.platform === 'win32') {
+        await fsp.writeFile(path.join(gitDir, 'git.cmd'), '@echo off\r\nexit /b 1\r\n');
+      } else {
+        const gitBin = path.join(gitDir, 'git');
+        await fsp.writeFile(gitBin, '#!/bin/sh\nexit 1\n');
+        await fsp.chmod(gitBin, 0o755);
+      }
+      process.env.PATH = `${gitDir}${path.delimiter}${oldPath ?? ''}`;
+
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            sample: 'ok',
+          });
+        },
+      );
+    } finally {
+      process.env.PATH = oldPath;
+      await fsp.rm(gitDir, { recursive: true, force: true });
     }
   });
 

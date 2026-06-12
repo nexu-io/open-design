@@ -25,7 +25,7 @@
   max-height: calc(100vh - 36px);
   background: var(--bg-panel);
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 24px 64px -34px rgba(15, 23, 42, 0.5);
   overflow: hidden;
   animation: connector-drawer-slide 220ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -96,7 +96,7 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-muted);
 }
 .connector-drawer-close:hover {
@@ -154,7 +154,7 @@
   min-width: 20px;
   height: 18px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -227,7 +227,7 @@
   background: color-mix(in srgb, var(--bg-panel) 74%, var(--bg-subtle));
   border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   border-radius: var(--radius);
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 .connector-drawer-tool:hover {
   background: var(--bg-panel);
@@ -287,7 +287,7 @@
   color: var(--text-faint);
   background: color-mix(in srgb, var(--bg-subtle) 76%, transparent);
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   align-self: flex-start;
   max-width: 100%;
   overflow: hidden;
@@ -440,7 +440,7 @@
   border-radius: var(--radius);
   padding: 0;
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out), transform 120ms var(--ease-out);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -594,7 +594,7 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -620,7 +620,7 @@
   min-width: 144px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   padding: 4px;
   display: flex;
@@ -634,7 +634,7 @@
   padding: 7px 10px;
   border: 0;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-strong);
   font-size: 12.5px;
   text-align: left;
@@ -651,7 +651,7 @@
   left: 8px;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   display: inline-flex;
@@ -678,7 +678,7 @@
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-strong);
   font-size: 12.5px;
@@ -691,7 +691,7 @@
   gap: 8px;
   padding: 4px 6px 4px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
 }
 .designs-select-count {
@@ -700,7 +700,7 @@
 }
 .designs-select-delete {
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 0;
   background: var(--red);
   color: #fff;
@@ -710,7 +710,7 @@
 .designs-select-delete:disabled { opacity: 0.5; cursor: not-allowed; }
 .designs-select-cancel {
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
@@ -786,7 +786,7 @@
 .project-thumb-glyph {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   display: grid;
   place-items: center;
   color: var(--text-strong);
@@ -832,7 +832,7 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   padding: 2px 7px;
   font-size: 10px;
@@ -977,7 +977,7 @@
   flex-direction: column;
   gap: 6px;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
   box-shadow: var(--shadow-xs);
 }
 .design-kanban-card.is-design-system-project {
@@ -1120,10 +1120,10 @@
   flex-direction: column;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 .ds-card:hover {
   border-color: var(--border-strong);
@@ -1182,9 +1182,9 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s var(--ease-out);
 }
 .ds-card:hover .ds-card-thumb-overlay,
 .ds-card-thumb:focus-visible .ds-card-thumb-overlay {
@@ -1221,7 +1221,7 @@
   padding: 2px 6px;
   background: var(--accent-soft);
   color: var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
 }
 .ds-card-summary {
@@ -1251,7 +1251,7 @@
 .ds-card-swatches {
   display: inline-flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   overflow: hidden;
   flex-shrink: 0;
@@ -1297,14 +1297,14 @@
   padding: 2px 6px;
   background: var(--accent-soft);
   color: var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .ds-row-summary { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .ds-row-swatches {
   display: inline-flex;
   align-items: center;
   gap: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   overflow: hidden;
   flex-shrink: 0;
@@ -1361,11 +1361,10 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
-  /* Grow to fill, but always yield to the right-side actions cluster:
-     min-width:0 lets the bar shrink and scroll its tabs internally so the
-     Handoff/Share/Present/avatar buttons keep their reserved space and are
-     never pushed off-screen or overlapped. */
-  flex: 1 1 auto;
+  /* Size to the opened tabs so the nearby "+" reads as part of the tab strip.
+     When space gets tight, this item still shrinks and scrolls internally so
+     the right-side action cluster keeps its reserved space. */
+  flex: 0 1 auto;
   min-width: 0;
   height: 100%;
   /* thinner scrollbar to avoid overlap */
@@ -1457,10 +1456,14 @@
   max-width: 110px;
   min-width: 0;
   color: var(--text-muted);
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .ws-tab.live-artifact-tab {
-  max-width: 160px;
+  /* Wide enough to hold the icon, a truncated title, the status badges
+     (LIVE + REFRESH FAILED) and the close button without any of them
+     spilling onto the neighbouring tab. The title yields space first
+     (see .ws-tab-text override below), so the badges stay fully legible. */
+  max-width: 260px;
 }
 .ws-tab:hover { background: var(--bg-subtle); color: var(--text); }
 .ws-tab.draggable { cursor: grab; }
@@ -1547,11 +1550,22 @@
 .ws-tab.live-artifact-tab .ws-tab-label {
   max-width: none;
 }
+/* The title is the lowest-priority element in a live-artifact tab: when the
+   tab is squeezed, collapse the title (it stays available via the tab tooltip)
+   before clipping the status badges or pushing the close button out. */
+.ws-tab.live-artifact-tab .ws-tab-text {
+  flex-shrink: 100;
+}
 .ws-live-artifact-badges {
-  flex: 0 0 auto;
+  /* Shrink (and clip) as a last resort instead of overflowing the tab box.
+     Previously flex:0 0 auto + overflow:visible let long badge combinations
+     (e.g. LIVE + REFRESH FAILED, or longer locales) bleed the badges and the
+     close button onto the adjacent tab. */
+  flex: 0 1 auto;
   flex-wrap: nowrap;
+  min-width: 0;
   max-width: none;
-  overflow: visible;
+  overflow: hidden;
 }
 .ws-live-artifact-badges .live-artifact-badge:not(.live):not(.refreshing):not(.refresh-failed):not(.archived) {
   display: none;
@@ -1567,7 +1581,7 @@
   font-size: 14px;
   line-height: 1;
   color: var(--text-faint);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   margin-left: 2px;
   width: 16px;
   height: 16px;
@@ -1610,9 +1624,7 @@
   z-index: 3;
   margin-left: 2px;
 }
-.ws-tabs-bar.is-overflowing .ws-add-tab {
-  position: sticky;
-  right: 0;
+.ws-tabs-bar.is-overflowing + .ws-add-tab {
   padding-left: 4px;
   background: var(--bg-panel);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
@@ -1629,7 +1641,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .ws-tab-add:hover,
 .ws-tab-add.active,

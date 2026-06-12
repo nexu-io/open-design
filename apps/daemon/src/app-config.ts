@@ -12,6 +12,7 @@
 // for Codex). Those values are local-only and should not be logged or
 // returned outside this machine.
 
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -19,6 +20,7 @@ import { expandHomePrefix } from './home-expansion.js';
 
 import {
   readInstallationFile,
+  readInstallationFileSync,
   resolveInstallationDir,
   writeInstallationFile,
   type InstallationFilePatch,
@@ -108,7 +110,16 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Most-recently-used local working directories the user granted the agent
+  // read access to from the Home composer. Become a project's
+  // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
+  // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
+  recentLinkedDirs?: string[];
 }
+
+// Cap on how many recent working directories we remember. Keeps the picker's
+// "Recent" submenu short and the config file bounded.
+export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'onboardingCompleted',
@@ -126,6 +137,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'recentLinkedDirs',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -400,6 +412,29 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'recentLinkedDirs') {
+    if (Array.isArray(value)) {
+      // Keep non-empty strings, trim, de-dupe preserving most-recent-first
+      // order, and cap the list. Path existence/safety is enforced later by
+      // validateLinkedDirs when the dir is actually attached to a project, so
+      // a folder that was since deleted simply drops out at use time rather
+      // than corrupting the whole config write here.
+      const seen = new Set<string>();
+      const cleaned: string[] = [];
+      for (const entry of value) {
+        if (typeof entry !== 'string') continue;
+        const trimmed = entry.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        cleaned.push(trimmed);
+        if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
+      }
+      target[key] = cleaned;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
 }
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
@@ -426,7 +461,7 @@ function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   if (prefs.telemetry === undefined) {
     return {
       ...prefs,
-      telemetry: { metrics: true, content: true, artifactManifest: false },
+      telemetry: { metrics: true, content: true },
     };
   }
   return prefs;
@@ -461,6 +496,46 @@ export async function readAppConfig(dataDir: string): Promise<AppConfigPrefs> {
     }
   }
   return applyTelemetryDefaults(base);
+}
+
+// Synchronous mirror of readAppConfig for callers that cannot await — e.g.
+// building the spawn env for the vela CLI inside the synchronous
+// spawnEnvForAgent. It reuses the exact same parsing, validation and telemetry
+// defaulting as the async path, so the consent decision and installationId can
+// never drift from what the rest of the daemon (and the web analytics config)
+// sees. The only intentional difference is that it skips the best-effort
+// legacy→channel-root migration *write*, which is a side effect rather than
+// part of the read result.
+export function readAppConfigSync(dataDir: string): AppConfigPrefs {
+  const base = readAppConfigFileOnlySync(dataDir);
+  const installation = readInstallationFileSync(resolveInstallationDir(dataDir));
+  if (
+    typeof installation.installationId === 'string' &&
+    installation.installationId.length > 0
+  ) {
+    return applyTelemetryDefaults({
+      ...base,
+      installationId: installation.installationId,
+    });
+  }
+  return applyTelemetryDefaults(base);
+}
+
+function readAppConfigFileOnlySync(dataDir: string): AppConfigPrefs {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(configFile(dataDir), 'utf8'),
+    );
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return filterAllowedKeys(parsed as Record<string, unknown>);
+    }
+    return {};
+  } catch (err: unknown) {
+    const e = err as { code?: string; name?: string };
+    if (e.code === 'ENOENT') return {};
+    if (e.name === 'SyntaxError') return {};
+    throw err;
+  }
 }
 
 async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {

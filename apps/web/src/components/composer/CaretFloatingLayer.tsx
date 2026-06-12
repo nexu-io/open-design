@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type RefObject,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -31,10 +32,19 @@ interface PopoverPos {
 function computePopoverPos(
   caret: CaretRect,
   size: { width: number; height: number } | null,
+  boundary: DOMRect | null,
 ): PopoverPos {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const width = Math.min(PREF_W, Math.max(MIN_W, vw - MARGIN * 2));
+  const viewportAvailableWidth = vw - MARGIN * 2;
+  const boundaryAvailableWidth = boundary
+    ? boundary.width - MARGIN * 2
+    : viewportAvailableWidth;
+  const availableWidth = Math.max(
+    240,
+    Math.min(viewportAvailableWidth, boundaryAvailableWidth),
+  );
+  const width = Math.min(PREF_W, availableWidth);
 
   const spaceAbove = caret.top - GAP - MARGIN;
   const spaceBelow = vh - caret.bottom - GAP - MARGIN;
@@ -56,9 +66,13 @@ function computePopoverPos(
     top = caret.bottom + GAP;
   }
 
+  const minLeft = boundary ? Math.max(MARGIN, boundary.left + MARGIN) : MARGIN;
+  const maxLeft = boundary
+    ? Math.max(minLeft, Math.min(vw - MARGIN - width, boundary.right - MARGIN - width))
+    : vw - MARGIN - width;
   let left = caret.left;
-  if (left + width > vw - MARGIN) left = vw - MARGIN - width;
-  if (left < MARGIN) left = MARGIN;
+  if (left > maxLeft) left = maxLeft;
+  if (left < minLeft) left = minLeft;
 
   return { left, top, width, maxHeight, placement };
 }
@@ -66,10 +80,12 @@ function computePopoverPos(
 export function CaretFloatingLayer({
   caret,
   open,
+  boundaryRef,
   children,
 }: {
   caret: CaretRect | null;
   open: boolean;
+  boundaryRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   const layerRef = useRef<HTMLDivElement | null>(null);
@@ -79,8 +95,9 @@ export function CaretFloatingLayer({
     if (!caret) return;
     const el = layerRef.current;
     const size = el ? { width: el.offsetWidth, height: el.scrollHeight } : null;
-    setPos(computePopoverPos(caret, size));
-  }, [caret]);
+    const boundary = boundaryRef?.current?.getBoundingClientRect() ?? null;
+    setPos(computePopoverPos(caret, size, boundary));
+  }, [boundaryRef, caret]);
 
   // Measured pass on open + every caret change. useLayoutEffect avoids a
   // wrong-coordinate flash before paint.

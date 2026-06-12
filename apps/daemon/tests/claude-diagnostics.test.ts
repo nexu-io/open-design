@@ -184,4 +184,109 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('b'.repeat(80));
     expect(diagnostic?.detail).toContain('x-api-key: [REDACTED:api_key_header]');
   });
+
+  it('maps mid-stream socket drops to a retryable connection diagnostic', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail:
+        'API Error: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()',
+      env: {},
+    });
+
+    expect(diagnostic?.message).toContain('lost its connection');
+    expect(diagnostic?.message).toContain('Anthropic API');
+    expect(diagnostic?.detail).toContain('Retry');
+    expect(diagnostic?.detail).not.toContain('/login');
+    expect(diagnostic?.retryable).toBe(true);
+    expect(diagnostic?.code).toBe('AGENT_CONNECTION_DROPPED');
+  });
+
+  it('uses OpenClaude copy for OpenClaude mid-stream socket drops', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail: 'API Error: The socket connection was closed unexpectedly.',
+      env: {},
+      resolvedBin: '/usr/local/bin/openclaude',
+    });
+
+    expect(diagnostic?.message).toContain('OpenClaude lost its connection');
+    expect(diagnostic?.message).toContain('its configured endpoint');
+    expect(diagnostic?.detail).not.toContain('Claude Code');
+    expect(diagnostic?.detail).not.toContain('Anthropic API');
+    expect(diagnostic?.retryable).toBe(true);
+  });
+
+  // Captured verbatim from the real Claude Code CLI (2.1.168, official auth,
+  // no ANTHROPIC_BASE_URL) driven through a local proxy that reset the TLS
+  // tunnel mid-stream. The CLI retried internally for ~3 minutes, then emitted
+  // this on stdout as a result frame with is_error:true and exited 1.
+  it('classifies the real "Unable to connect to API (ECONNRESET)" transcript', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stdoutTail:
+        '{"type":"result","subtype":"success","is_error":true,"result":"API Error: Unable to connect to API (ECONNRESET)","stop_reason":"stop_sequence"}',
+      env: {},
+    });
+
+    expect(diagnostic?.message).toContain('lost its connection to the Anthropic API');
+    expect(diagnostic?.detail).not.toContain('/login');
+    expect(diagnostic?.retryable).toBe(true);
+    expect(diagnostic?.code).toBe('AGENT_CONNECTION_DROPPED');
+  });
+
+  it('does not classify generic first-connect API failures as mid-stream drops', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stdoutTail:
+        '{"type":"result","subtype":"success","is_error":true,"result":"API Error: Unable to connect to API (ENOTFOUND)","stop_reason":"stop_sequence"}',
+      env: {},
+    });
+
+    expect(diagnostic).toBeNull();
+  });
+
+  it('classifies ECONNRESET and socket hang up as connection drops', () => {
+    for (const tail of ['Error: socket hang up', 'read ECONNRESET', 'TypeError: fetch failed']) {
+      const diagnostic = diagnoseClaudeCliFailure({
+        agentId: 'claude',
+        exitCode: 1,
+        stderrTail: tail,
+        env: {},
+      });
+      expect(diagnostic?.message, tail).toContain('lost its connection');
+    }
+  });
+
+  it('points socket drops at the proxy when a custom endpoint is configured', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail: 'API Error: The socket connection was closed unexpectedly.',
+      env: { ANTHROPIC_BASE_URL: 'https://relay.example.com' },
+    });
+
+    expect(diagnostic?.message).toContain('custom Anthropic endpoint');
+    expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
+    expect(diagnostic?.detail).toContain('timeout');
+  });
+
+  it('uses OpenClaude copy for OpenClaude custom endpoint socket drops', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail: 'API Error: The socket connection was closed unexpectedly.',
+      env: { ANTHROPIC_BASE_URL: 'https://relay.example.com' },
+      resolvedBin: '/usr/local/bin/openclaude',
+    });
+
+    expect(diagnostic?.message).toContain('OpenClaude lost its connection');
+    expect(diagnostic?.message).toContain('custom Anthropic endpoint');
+    expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
+    expect(diagnostic?.detail).toContain('OpenClaude endpoint configuration');
+    expect(diagnostic?.detail).not.toContain('Claude Code');
+  });
 });

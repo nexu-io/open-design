@@ -1,12 +1,23 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { createRef, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatComposer } from '../../src/components/ChatComposer';
+const trackChatPanelClickMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../../src/analytics/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/events')>();
+  return {
+    ...actual,
+    trackChatPanelClick: trackChatPanelClickMock,
+  };
+});
+
+import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
+import type { AppliedPluginSnapshot } from '@open-design/contracts';
 import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
@@ -155,11 +166,18 @@ async function flushMounts() {
   });
 }
 
+function stagedPluginChip(): Element | null {
+  return screen
+    .queryByTestId('staged-contexts')
+    ?.querySelector('.staged-chip.staged-context--plugin') ?? null;
+}
+
 // The contenteditable serializes newlines as `<br>`, which jsdom's
 // `.textContent` drops — so use the Lexical-aware `composerText()` helper for
 // every editor-text assertion (it walks the tree and emits real `\n`s).
 
 beforeEach(() => {
+  trackChatPanelClickMock.mockClear();
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
   servers = [MCP_SERVER];
@@ -345,7 +363,7 @@ describe('ChatComposer context pickers', () => {
     pressEnter();
 
     await waitFor(() => expect(composerText()).toBe('@designs/landing.html '));
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -490,6 +508,106 @@ describe('ChatComposer context pickers', () => {
     expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
   });
 
+  it('clears the inline plugin context when the plugin token is removed', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@export');
+
+    await waitFor(() => expect(screen.getByText('My Export')).toBeTruthy());
+    fireEvent.click(screen.getByText('My Export'));
+
+    await waitFor(() => expect(composerText()).toBe('@My Export '));
+    await waitFor(() => expect(stagedPluginChip()?.textContent).toContain(USER_PLUGIN.id));
+
+    await typeAndSettle('');
+
+    await waitFor(() => expect(stagedPluginChip()).toBeNull());
+  });
+
+  it('clears restored inline plugin context when the queued draft token is removed', async () => {
+    const onSend = vi.fn();
+    const composerRef = createRef<ChatComposerHandle>();
+    const restoredAppliedPlugin = APPLY_RESULT.appliedPlugin as AppliedPluginSnapshot;
+    render(<ChatComposer ref={composerRef} {...composerElement({ onSend }).props} />);
+    await flushMounts();
+
+    act(() => {
+      composerRef.current?.restoreDraft({
+        text: '@My Export queued work',
+        meta: {
+          appliedPluginSnapshot: restoredAppliedPlugin,
+          appliedPluginSnapshotId: restoredAppliedPlugin.snapshotId,
+          inlineAppliedPlugin: {
+            pluginId: USER_PLUGIN.id,
+            label: USER_PLUGIN.title,
+          },
+          context: { pluginIds: [USER_PLUGIN.id] },
+        },
+      });
+    });
+
+    await waitFor(() => expect(composerText()).toBe('@My Export queued work'));
+
+    await typeAndSettle('queued work');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]?.context?.pluginIds).toBeUndefined();
+    expect(onSend.mock.calls[0]?.[3]?.appliedPluginSnapshot).toBeUndefined();
+  });
+
+  it('keeps restored non-inline plugin context when matching prompt text is removed', async () => {
+    const onSend = vi.fn();
+    const composerRef = createRef<ChatComposerHandle>();
+    const restoredAppliedPlugin = APPLY_RESULT.appliedPlugin as AppliedPluginSnapshot;
+    render(<ChatComposer ref={composerRef} {...composerElement({ onSend }).props} />);
+    await flushMounts();
+
+    act(() => {
+      composerRef.current?.restoreDraft({
+        text: '@My Export queued work',
+        meta: {
+          appliedPluginSnapshot: restoredAppliedPlugin,
+          appliedPluginSnapshotId: restoredAppliedPlugin.snapshotId,
+          context: { pluginIds: [USER_PLUGIN.id] },
+        },
+      });
+    });
+
+    await waitFor(() => expect(composerText()).toBe('@My Export queued work'));
+
+    await typeAndSettle('queued work');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]).toMatchObject({
+      appliedPluginSnapshotId: restoredAppliedPlugin.snapshotId,
+      appliedPluginSnapshot: expect.objectContaining({
+        pluginId: USER_PLUGIN.id,
+      }),
+      context: { pluginIds: [USER_PLUGIN.id] },
+    });
+  });
+
+  it('keeps the inline plugin context when the plugin token has trailing punctuation', async () => {
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@export');
+
+    await waitFor(() => expect(screen.getByText('My Export')).toBeTruthy());
+    fireEvent.click(screen.getByText('My Export'));
+
+    await waitFor(() => expect(composerText()).toBe('@My Export '));
+    await waitFor(() => expect(stagedPluginChip()?.textContent).toContain(USER_PLUGIN.id));
+
+    await typeAndSettle('@My Export, refine this export');
+
+    await waitFor(() => expect(composerText()).toBe('@My Export, refine this export'));
+    expect(stagedPluginChip()?.textContent).toContain(USER_PLUGIN.id);
+  });
+
   it('sends the applied plugin snapshot as per-turn context', async () => {
     const onSend = vi.fn();
     renderComposer({ onSend });
@@ -501,9 +619,13 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('My Export'));
 
     await waitFor(() => expect(composerText()).toBe('@My Export '));
-    await waitFor(() =>
-      expect(screen.getByTestId('context-chip-strip').textContent).toContain('My Export'),
-    );
+    // The applied-plugin chip now rides the shared staged-context row as a
+    // `.staged-context--plugin` chip (rendered by the host, not PluginsSection's
+    // own ContextChipStrip). It is keyed off the plugin id when no display title
+    // is present in the applied snapshot.
+    await waitFor(() => {
+      expect(stagedPluginChip()?.textContent).toContain(USER_PLUGIN.id);
+    });
 
     fireEvent.click(screen.getByTestId('chat-send'));
 
@@ -516,6 +638,10 @@ describe('ChatComposer context pickers', () => {
         pluginId: USER_PLUGIN.id,
       }),
       context: { pluginIds: [USER_PLUGIN.id] },
+    });
+    // After sending, the applied plugin clears, so its staged chip is gone.
+    await waitFor(() => {
+      expect(stagedPluginChip()).toBeNull();
     });
   });
 
@@ -540,7 +666,7 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('designs/landing.html'));
 
     await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Remove landing.html'));
@@ -548,7 +674,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use '));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('preserves surrounding draft formatting when removing a design file token', async () => {
@@ -577,7 +703,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() =>
       expect(composerText()).toBe('Plan:\n\n@designs/landing.html '),
     );
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
 
     // The user keeps typing after the trailing space; re-seed the full draft to
     // capture that, then remove the staged chip.
@@ -592,7 +718,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Plan:\n\n\n\nKeep spacing'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('removes a design file token when punctuation follows it', async () => {
@@ -624,7 +750,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use , please'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('removes a quoted design file token when its chip is removed', async () => {
@@ -656,7 +782,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('""'));
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
   });
 
   it('clears an attachment upload error after a later retry succeeds', async () => {
@@ -711,7 +837,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => {
       expect(screen.getByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeTruthy();
     });
-    expect(screen.queryByTestId('staged-attachments')).toBeNull();
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
 
     fireEvent.change(input, {
       target: {
@@ -722,26 +848,13 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => {
       expect(screen.queryByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeNull();
     });
-    expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('recovered.txt');
   });
 
-  it('lets the tools panel switch between Official and My plugins', async () => {
-    renderComposer();
-    await flushMounts();
-    fireEvent.click(screen.getByLabelText('Open CLI and model settings'));
-
-    await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
-    expect(screen.queryByText('My Export')).toBeNull();
-
-    fireEvent.click(screen.getByText('My plugins'));
-    expect(screen.getByText('My Export')).toBeTruthy();
-    expect(screen.queryByText('Community Deck')).toBeNull();
-
-    fireEvent.change(screen.getByLabelText('Search plugins'), {
-      target: { value: 'private' },
-    });
-    expect(screen.getByText('Private export workflow')).toBeTruthy();
-  });
+  // The sliders "tools" popover (Official / My plugins switch, plugin search)
+  // and the standalone "@" mention trigger button were removed from the
+  // composer; plugins/skills/MCP are now reached via typed @-mentions and the
+  // "+" menu, so their dedicated click-tracking coverage moved out with them.
 
   // The inline pet popover (the "Pets — wake, tuck, or pick one" button and
   // its `.composer-pet-menu` flyout) was removed from ChatComposer; only the

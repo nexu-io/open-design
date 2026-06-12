@@ -250,6 +250,107 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(forkMessagesBody.messages[1]?.lastRunEventId).toBeUndefined();
   });
 
+  it('forks from a client-supplied snapshot when the fork point was never persisted', async () => {
+    // Regression: forking an assistant turn whose run errored / had its
+    // connection reset before the message reached the database used to 404 on
+    // `forkAfterMessageId` (the message is only in the browser), so the fork
+    // silently failed and the user never switched into the new conversation.
+    // The "Fork" action now sends the in-memory snapshot, which the daemon
+    // copies even though the fork point is absent from the source DB.
+    const projectId = `proj-conv-fork-snapshot-${Date.now()}`;
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Fork snapshot fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResp.status).toBe(200);
+
+    const sourceResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Source', sessionMode: 'chat' }),
+    });
+    expect(sourceResp.status).toBe(200);
+    const sourceId = (
+      (await sourceResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    // Persist only the user turn. The assistant turn errored before it was
+    // ever written, so it exists solely in the client's snapshot below.
+    const saveUserResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages/ghost-user-1`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'ghost-user-1', role: 'user', content: 'enrich it' }),
+      },
+    );
+    expect(saveUserResp.status).toBe(200);
+
+    const forkResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Fork',
+        sessionMode: 'chat',
+        seedFromConversationId: sourceId,
+        forkAfterMessageId: 'ghost-assistant-1',
+        seedMessages: [
+          { id: 'ghost-user-1', role: 'user', content: 'enrich it' },
+          {
+            id: 'ghost-assistant-1',
+            role: 'assistant',
+            content: 'partial answer before reset',
+            runId: 'dead-run-1',
+            runStatus: 'failed',
+            lastRunEventId: 'evt-dead',
+            events: [{ kind: 'status', label: 'error', detail: 'Connection reset by server' }],
+          },
+          // Anything after the fork point must be dropped.
+          { id: 'ghost-user-2', role: 'user', content: 'should not be copied' },
+        ],
+      }),
+    });
+    expect(forkResp.status).toBe(200);
+    const forkId = (
+      (await forkResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    const forkMessagesResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${forkId}/messages`,
+    );
+    expect(forkMessagesResp.status).toBe(200);
+    const forkMessages = (
+      (await forkMessagesResp.json()) as {
+        messages: Array<{
+          id: string;
+          role: string;
+          content: string;
+          runId?: string;
+          runStatus?: string;
+          lastRunEventId?: string;
+        }>;
+      }
+    ).messages;
+
+    // Cut at the (unpersisted) fork point — the trailing user turn is dropped.
+    expect(forkMessages.map((m) => m.content)).toEqual([
+      'enrich it',
+      'partial answer before reset',
+    ]);
+    // Fresh ids, and the dead run pointers are not inherited.
+    expect(forkMessages.map((m) => m.id)).not.toContain('ghost-assistant-1');
+    expect(forkMessages[1]).toMatchObject({ role: 'assistant', content: 'partial answer before reset' });
+    expect(forkMessages[1]?.runId).toBeUndefined();
+    expect(forkMessages[1]?.runStatus).toBeUndefined();
+    expect(forkMessages[1]?.lastRunEventId).toBeUndefined();
+  });
+
   it('serves project files through raw and files path routes', async () => {
     const projectId = `proj-raw-route-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -327,6 +428,44 @@ describe('GET /api/projects/:id resolvedDir', () => {
     const body = (await resp.json()) as { error?: { code?: string; message?: string } };
     expect(body.error?.code).toBe('BAD_REQUEST');
     expect(body.error?.message).toMatch(/skipDiscoveryBrief/i);
+  });
+
+  it('rejects invalid metadata.linkedDirs on POST /api/projects', async () => {
+    const projectId = `proj-bad-linked-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Bad linked dir',
+        metadata: { kind: 'prototype', linkedDirs: ['/no/such/folder/here'] },
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('INVALID_LINKED_DIR');
+    // The project must not have been created.
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detail.status).toBe(404);
+  });
+
+  it('accepts an existing metadata.linkedDirs on POST /api/projects', async () => {
+    const dir = makeFolder();
+    const projectId = `proj-good-linked-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Good linked dir',
+        metadata: { kind: 'prototype', linkedDirs: [dir] },
+      }),
+    });
+    expect(resp.status).toBe(200);
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detail.status).toBe(200);
+    const body = (await detail.json()) as { project?: { metadata?: { linkedDirs?: string[] } } };
+    expect(body.project?.metadata?.linkedDirs?.length).toBe(1);
   });
 
   it('returns 404 with PROJECT_NOT_FOUND for unknown ids', async () => {

@@ -22,11 +22,13 @@ export interface Props {
 const { system } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
-const detailHref = detailHrefForSystemSlug(system.slug) ?? '/plugins/systems/';
+// The bundled-plugin detail page is canonical-only (no locale prefix); only
+// the `/plugins/systems/` index fallback has localized variants to link to.
+const detailHref = detailHrefForSystemSlug(system.slug) ?? href('/plugins/systems/');
 ---
 
 <li class="system-card">
-  <a href={href(detailHref)}>
+  <a href={detailHref}>
     <div class="system-swatches" aria-hidden="true">
       {system.palette.length > 0 ? (
         system.palette.slice(0, 4).map((hex) => (

@@ -13,6 +13,14 @@ export const API_ERROR_CODES = [
   'AGENT_UNAVAILABLE',
   'AGENT_AUTH_REQUIRED',
   'AGENT_EXECUTION_FAILED',
+  // The agent's connection to its model provider was established and then
+  // dropped or kept resetting mid-response (e.g. "socket connection was closed
+  // unexpectedly", ECONNRESET, "Unable to connect to API", ETIMEDOUT). Distinct
+  // from a refused connection that never opened. Transient and retryable;
+  // surfaced by the daemon's per-agent failure diagnostics so the UI can show a
+  // localized, human-readable reason instead of the raw SDK string, and so
+  // triage can count this failure class by code.
+  'AGENT_CONNECTION_DROPPED',
   'AGENT_PROMPT_TOO_LARGE',
   'AMR_MODEL_UNAVAILABLE',
   'AMR_AUTH_REQUIRED',

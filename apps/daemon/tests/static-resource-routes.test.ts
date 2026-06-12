@@ -3,11 +3,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
 
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 import { listDesignSystems } from '../src/design-systems.js';
-import { registerStaticResourceRoutes } from '../src/static-resource-routes.js';
+import { registerStaticResourceRoutes } from '../src/routes/static-resource.js';
 
 describe('static resource mutation routes', () => {
   let server: http.Server;
@@ -92,6 +93,7 @@ describe('static resource mutation routes', () => {
     ['POST', '/api/design-systems/install'],
     ['POST', '/api/design-systems/import/local'],
     ['POST', '/api/design-systems/import/github'],
+    ['POST', '/api/design-systems/import/shadcn'],
     ['DELETE', '/api/design-systems/demo-system'],
   ])('rejects cross-origin %s %s before catalog or filesystem work', async (method, route) => {
     catalogReadCount = 0;
@@ -108,6 +110,7 @@ describe('static resource mutation routes', () => {
         path: tempRoot,
         baseDir: tempRoot,
         githubUrl: 'https://github.com/example/repo',
+        reference: 'shadcn/ui/theme-zinc',
       });
     }
     const res = await fetch(`${baseUrl}${route}`, init);
@@ -132,6 +135,22 @@ describe('static resource mutation routes', () => {
     expect(await res.json()).toMatchObject({ code: 'BAD_REQUEST' });
     expect(catalogReadCount).toBe(0);
   });
+
+  it('returns a bad request for a blank shadcn design-system reference', async () => {
+    catalogReadCount = 0;
+    const res = await fetch(`${baseUrl}/api/design-systems/import/shadcn`, {
+      method: 'POST',
+      headers: {
+        Origin: baseUrl,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reference: '   ' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'BAD_REQUEST' });
+    expect(catalogReadCount).toBe(0);
+  });
 });
 
 describe('design system import catalog lookup', () => {
@@ -140,6 +159,9 @@ describe('design system import catalog lookup', () => {
   let tempRoot: string;
   let sourceRoot: string;
   let userDesignSystemsDir: string;
+  let maybeStartTokenContractRebuild:
+    | ((designSystemId: string) => Promise<DesignSystemTokenContractRebuildJobResponse | undefined>)
+    | undefined;
 
   beforeAll(
     () =>
@@ -208,6 +230,10 @@ describe('design system import catalog lookup', () => {
             listAllSkillLikeEntries: async () => [],
             mimeFor: () => 'application/octet-stream',
           },
+          tokenContractRebuild: {
+            maybeStartForImportedDesignSystem: async (designSystemId) =>
+              maybeStartTokenContractRebuild?.(designSystemId),
+          },
         });
 
         server = app.listen(0, '127.0.0.1', () => {
@@ -217,6 +243,11 @@ describe('design system import catalog lookup', () => {
         });
       }),
   );
+
+  afterEach(() => {
+    maybeStartTokenContractRebuild = undefined;
+    vi.restoreAllMocks();
+  });
 
   afterAll(
     () =>
@@ -243,5 +274,76 @@ describe('design system import catalog lookup', () => {
     expect(body.designSystem.id).toBe('user:demo-app');
     expect(body.designSystem.title).toBe('demo app');
     expect(fs.existsSync(path.join(userDesignSystemsDir, 'demo-app', 'DESIGN.md'))).toBe(true);
+  });
+
+  it('keeps local design-system import successful when token contract auto-queue fails', async () => {
+    maybeStartTokenContractRebuild = async () => {
+      throw new Error('token report stat failed');
+    };
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const res = await fetch(`${baseUrl}/api/design-systems/import/local`, {
+      method: 'POST',
+      headers: {
+        Origin: baseUrl,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ baseDir: sourceRoot }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as {
+      designSystem: { id: string; title: string };
+      tokenContractRebuild?: unknown;
+    };
+    expect(body.designSystem.id).toMatch(/^user:demo-app(?:-\d+)?$/u);
+    expect(body.designSystem.title).toBe('demo app');
+    expect(body.tokenContractRebuild).toBeUndefined();
+    expect(fs.existsSync(path.join(userDesignSystemsDir, body.designSystem.id.replace(/^user:/u, ''), 'DESIGN.md'))).toBe(true);
+  });
+
+  it('imports a shadcn registry item served from a loopback registry URL', async () => {
+    const item = {
+      name: 'theme-loopback',
+      type: 'registry:theme',
+      title: 'Theme Loopback',
+      description: 'Served from a loopback fixture.',
+      cssVars: { light: { background: '0 0% 100%', primary: '262 83% 58%' } },
+    };
+    const fixture = http.createServer((req, res) => {
+      if (req.url === '/r/theme-loopback.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(item));
+        return;
+      }
+      res.writeHead(404);
+      res.end('not found');
+    });
+    await new Promise<void>((resolve) => fixture.listen(0, '127.0.0.1', () => resolve()));
+
+    try {
+      const fixturePort = (fixture.address() as { port: number }).port;
+      const reference = `http://127.0.0.1:${fixturePort}/r/theme-loopback.json`;
+      const res = await fetch(`${baseUrl}/api/design-systems/import/shadcn`, {
+        method: 'POST',
+        headers: {
+          Origin: baseUrl,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reference }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { designSystem: { id: string; title: string } };
+      expect(body.designSystem.id).toBe('user:theme-loopback');
+      expect(body.designSystem.title).toBe('Theme Loopback');
+      const tokens = fs.readFileSync(
+        path.join(userDesignSystemsDir, 'theme-loopback', 'tokens.css'),
+        'utf8',
+      );
+      expect(tokens).toContain('--accent: hsl(262 83% 58%)');
+    } finally {
+      await new Promise<void>((resolve) => fixture.close(() => resolve()));
+    }
   });
 });

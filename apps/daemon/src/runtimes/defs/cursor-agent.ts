@@ -82,4 +82,8 @@ export const cursorAgentDef = {
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'cursor-agent',
+    // `cursor-agent status` is a cheap, side-effect-free auth check. Declaring
+    // it here is what makes detection surface an "auth required" badge for
+    // Cursor Agent (the generalized probe only runs for adapters that opt in).
+    authProbe: { args: ['status'], timeoutMs: 5000 },
 } satisfies RuntimeAgentDef;

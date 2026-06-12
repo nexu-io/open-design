@@ -105,8 +105,31 @@ describe('ManualEditPanel', () => {
     expect(scrollRegion?.textContent).toContain('TYPOGRAPHY');
     expect(scrollRegion?.contains(deleteButton)).toBe(false);
     expect(footer?.contains(deleteButton)).toBe(true);
+    expect(deleteButton?.textContent).toBe('');
     expect(footer?.textContent).toContain('Cancel');
     expect(footer?.textContent).toContain('Save');
+  });
+
+  it('keeps delete confirmation as an icon-only action', () => {
+    renderPanel();
+
+    const footer = host.querySelector('.manual-edit-footer');
+    const deleteButton = host.querySelector('button[aria-label="Delete element"]') as HTMLButtonElement | null;
+    if (!deleteButton) throw new Error('Delete button not found');
+
+    act(() => {
+      deleteButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    const confirmDeleteButton = host.querySelector(
+      '.manual-edit-delete-confirm-action[aria-label="Delete element"]',
+    ) as HTMLButtonElement | null;
+    if (!confirmDeleteButton) throw new Error('Confirm delete button not found');
+
+    expect(footer?.contains(confirmDeleteButton)).toBe(true);
+    expect(confirmDeleteButton.textContent).toBe('');
+    expect(confirmDeleteButton.className).toContain('manual-edit-delete-btn');
+    expect(host.querySelector('.manual-edit-delete-confirm')?.textContent).toBe('Cancel');
   });
 
   it('routes footer cancel and save actions', () => {
