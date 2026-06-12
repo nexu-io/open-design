@@ -1713,6 +1713,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // to recover instead of leaving the window blank, e.g. after a long-minimized
   // window is restored and its connection to the web server has dropped.
   let rendererFailed = false;
+  // True while a `tick()` is mid-flight. A failed `loadURL` inside a tick fires
+  // `did-fail-load` AND rejects into the tick's `catch`; without this guard both
+  // would queue a poll timer, leaving two independent loops (multiplying on each
+  // repeat failure). When set, `markRendererFailed` only flips the flag and lets
+  // the running tick own the next reschedule.
+  let ticking = false;
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
@@ -1880,6 +1886,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const markRendererFailed = () => {
     if (stopped || window.isDestroyed()) return;
     rendererFailed = true;
+    // Mid-tick failures (a rejecting loadURL) are rescheduled by the tick's own
+    // catch/success path; scheduling here too would spawn a second poll loop.
+    if (ticking) return;
     if (timer) {
       clearTimeout(timer);
       timer = null;
@@ -1890,6 +1899,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const tick = async () => {
     if (stopped || window.isDestroyed()) return;
 
+    ticking = true;
     try {
       const url = await options.discoverUrl();
       // Reload when the discovered URL changes, OR when the renderer is in a
@@ -1921,6 +1931,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       pendingUrl = null;
       console.error("desktop web discovery failed", error);
       schedule(PENDING_POLL_MS);
+    } finally {
+      ticking = false;
     }
   };
 
