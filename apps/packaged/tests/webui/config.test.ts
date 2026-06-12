@@ -17,6 +17,7 @@ import {
   loadConfigFile,
   parseWebuiArgs,
   persistTokenToConfig,
+  resolveDaemonProxyHost,
   resolveDisplayHost,
   resolveRuntimeNamespace,
   resolveWebuiConfig,
@@ -156,6 +157,19 @@ describe("resolveDisplayHost", () => {
       typeof import("node:os").networkInterfaces
     >;
     expect(resolveDisplayHost("0.0.0.0", loopbackOnly)).toBe("localhost");
+  });
+});
+
+describe("resolveDaemonProxyHost", () => {
+  it("returns a concrete non-loopback host so the web proxy reaches a host-bound daemon", () => {
+    expect(resolveDaemonProxyHost("192.168.1.10")).toBe("192.168.1.10");
+    expect(resolveDaemonProxyHost("fd00::10")).toBe("fd00::10");
+  });
+
+  it("returns null for loopback, bind-all, empty, and unset hosts (web keeps 127.0.0.1)", () => {
+    for (const host of [null, undefined, "", "127.0.0.1", "127.0.0.5", "localhost", "::1", "0.0.0.0", "::"]) {
+      expect(resolveDaemonProxyHost(host), `host=${String(host)}`).toBeNull();
+    }
   });
 });
 

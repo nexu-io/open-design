@@ -32,6 +32,7 @@ import {
 
 import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
+import { resolveDaemonProxyHost } from "./webui/config.js";
 
 const require = createRequire(import.meta.url);
 const PACKAGED_CHILD_ENV_ALLOWLIST = [
@@ -411,8 +412,12 @@ export function buildPackagedWebSpawnEnv(options: {
   webOutputMode: PackagedWebOutputMode;
   network?: PackagedNetworkOptions | null;
 }): NodeJS.ProcessEnv {
+  // When the daemon is bound to a concrete non-loopback host, loopback is not
+  // listening, so the web child must proxy /api there instead of 127.0.0.1.
+  const daemonProxyHost = resolveDaemonProxyHost(options.network?.bindHost);
   return {
     [SIDECAR_ENV.DAEMON_PORT]: extractPort(options.daemonUrl),
+    ...(daemonProxyHost == null ? {} : { [SIDECAR_ENV.DAEMON_HOST]: daemonProxyHost }),
     [SIDECAR_ENV.WEB_PORT]: String(options.network?.webPort ?? 0),
     ...(options.webStandaloneRoot == null
       ? {}

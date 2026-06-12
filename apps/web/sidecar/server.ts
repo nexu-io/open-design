@@ -31,7 +31,16 @@ const HOST = process.env.OD_HOST || "127.0.0.1";
 if (process.env.OD_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.OD_HOST)) {
   throw new Error(`OD_HOST contains invalid characters: ${process.env.OD_HOST}`);
 }
-const DAEMON_HOST = "127.0.0.1";
+// The daemon normally listens on loopback, but a packaged WebUI launched with a
+// concrete `--host <ip>` binds the daemon ONLY to that address, so the sidecar
+// passes OD_DAEMON_HOST and the proxy must target it instead of 127.0.0.1. A
+// bare IPv6 literal is bracketed for the URL authority.
+const RAW_DAEMON_HOST = process.env[SIDECAR_ENV.DAEMON_HOST]?.trim() || "127.0.0.1";
+if (process.env[SIDECAR_ENV.DAEMON_HOST] != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(RAW_DAEMON_HOST)) {
+  throw new Error(`OD_DAEMON_HOST contains invalid characters: ${process.env[SIDECAR_ENV.DAEMON_HOST]}`);
+}
+const DAEMON_HOST =
+  RAW_DAEMON_HOST.includes(":") && !RAW_DAEMON_HOST.startsWith("[") ? `[${RAW_DAEMON_HOST}]` : RAW_DAEMON_HOST;
 const STANDALONE_BACKEND_HOST = "127.0.0.1";
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_DIST_DIR_ENV = SIDECAR_ENV.WEB_DIST_DIR;

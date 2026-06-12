@@ -24,6 +24,11 @@ export type SidecarSource = (typeof SIDECAR_SOURCES)[keyof typeof SIDECAR_SOURCE
 export const SIDECAR_ENV = Object.freeze({
   BASE: "OD_SIDECAR_BASE",
   DAEMON_CLI_PATH: "OD_DAEMON_CLI_PATH",
+  // Proxy host the web sidecar must reach the daemon at. Only set when the
+  // daemon is bound to a concrete non-loopback address (e.g. `--host
+  // 192.168.1.10`); absent for loopback/bind-all, where the web child defaults
+  // to 127.0.0.1. Pairs with DAEMON_PORT.
+  DAEMON_HOST: "OD_DAEMON_HOST",
   DAEMON_PORT: "OD_PORT",
   IPC_BASE: "OD_SIDECAR_IPC_BASE",
   IPC_PATH: "OD_SIDECAR_IPC_PATH",

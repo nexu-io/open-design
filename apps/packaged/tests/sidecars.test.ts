@@ -640,4 +640,30 @@ describe('buildPackagedWebSpawnEnv', () => {
     });
     expect(env.OD_PORT).toBe('55001');
   });
+
+  it('points the web proxy at a concrete non-loopback daemon host', () => {
+    // `open-design start --host 192.168.1.10` binds the daemon ONLY to that
+    // address, so loopback is not listening; the web child must proxy /api to
+    // the real bind host, not 127.0.0.1.
+    const env = buildPackagedWebSpawnEnv({
+      daemonUrl: 'http://192.168.1.10:7457',
+      webStandaloneRoot: null,
+      webOutputMode: 'server',
+      network: { bindHost: '192.168.1.10', webPort: 0 },
+    });
+    expect(env.OD_DAEMON_HOST).toBe('192.168.1.10');
+    expect(env.OD_PORT).toBe('7457');
+  });
+
+  it('omits OD_DAEMON_HOST for loopback, bind-all, and unset hosts (web defaults to 127.0.0.1)', () => {
+    for (const bindHost of [undefined, null, '', '127.0.0.1', 'localhost', '0.0.0.0', '::']) {
+      const env = buildPackagedWebSpawnEnv({
+        daemonUrl: 'http://127.0.0.1:7456',
+        webStandaloneRoot: null,
+        webOutputMode: 'server',
+        network: { bindHost, webPort: 0 },
+      });
+      expect(env.OD_DAEMON_HOST, `bindHost=${String(bindHost)}`).toBeUndefined();
+    }
+  });
 });

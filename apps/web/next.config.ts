@@ -9,7 +9,15 @@ import { fileURLToPath } from 'node:url';
 // the same env so /api, /artifacts, and /frames always reach the right
 // daemon instance during `next dev`.
 const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
-const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
+// The daemon normally listens on loopback, but a packaged WebUI launched with a
+// concrete `--host <ip>` binds the daemon ONLY to that address (loopback is not
+// listening). In that case the sidecar passes OD_DAEMON_HOST so the proxy
+// targets the real bind host instead of 127.0.0.1. A bare IPv6 literal must be
+// bracketed for the URL authority.
+const DAEMON_HOST = process.env.OD_DAEMON_HOST?.trim() || '127.0.0.1';
+const DAEMON_AUTHORITY =
+  DAEMON_HOST.includes(':') && !DAEMON_HOST.startsWith('[') ? `[${DAEMON_HOST}]` : DAEMON_HOST;
+const DAEMON_ORIGIN = `http://${DAEMON_AUTHORITY}:${DAEMON_PORT}`;
 
 // The regular CLI build still ships as a static export so the `od` daemon can
 // serve a single-process production build. Packaged desktop builds opt into a

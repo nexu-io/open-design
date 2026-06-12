@@ -190,6 +190,20 @@ export function resolveDisplayHost(
   return isLoopbackHost(host) ? "localhost" : host;
 }
 
+// Maps the daemon's *bind* host to the host the web sidecar must use to reach
+// it. When the daemon binds a concrete non-loopback address (e.g.
+// `--host 192.168.1.10`) loopback is not listening, so the web proxy must
+// target that address. A bind-all host (0.0.0.0 / ::) keeps loopback listening
+// and is not itself a connectable target, and a loopback bind is already
+// loopback — both resolve to null so the web child keeps its 127.0.0.1 default.
+export function resolveDaemonProxyHost(host: string | null | undefined): string | null {
+  if (host == null) return null;
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "" || normalized === "0.0.0.0" || normalized === "::") return null;
+  if (isLoopbackHost(host)) return null;
+  return host;
+}
+
 // Makes a host safe to interpolate into a URL authority. A bare IPv6 literal
 // (e.g. `fd00::10`, or `::1`) must be bracketed — `http://fd00::10:7456` is not
 // parseable, `http://[fd00::10]:7456` is. IPv4 addresses, hostnames, and
