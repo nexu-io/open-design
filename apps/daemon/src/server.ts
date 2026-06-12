@@ -6750,7 +6750,12 @@ export async function startServer({
     try {
       const def = getAgentDef('amr');
       if (!def) {
-        res.json({ models: [], preset: true, source: 'amr-unavailable' });
+        res.json({
+          models: [],
+          source: 'preset',
+          refreshing: false,
+          remoteError: 'AMR runtime definition is missing — Vela CLI may not be installed',
+        } satisfies import('@open-design/contracts/api').AmrModelsResponse);
         return;
       }
       const probe = await resolveAmrModelProbe();
@@ -6760,7 +6765,12 @@ export async function startServer({
       });
       res.json(response);
     } catch (err) {
-      res.json({ models: [], preset: true, source: 'amr-error', error: err instanceof Error ? err.message : String(err) });
+      res.json({
+        models: [],
+        source: 'preset',
+        refreshing: false,
+        remoteError: err instanceof Error ? err.message : String(err),
+      } satisfies import('@open-design/contracts/api').AmrModelsResponse);
     }
   });
 

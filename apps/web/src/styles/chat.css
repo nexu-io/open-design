@@ -238,6 +238,17 @@
   background-clip: padding-box;
 }
 
+/* Each chat message row delegates off-screen rendering to the browser via
+   content-visibility: auto.  This is the root-cause fix for scroll lag:
+   below the virtualization threshold, messages still render as DOM nodes
+   but the browser skips layout/paint for rows that are far outside the
+   viewport.  contain-intrinsic-size provides a height hint so the
+   scrollbar doesn't jump as rows enter/leave the rendered region. */
+.chat-message-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}
+
 /* Anchor-to-top tail spacer. Height is driven imperatively by ChatPane; the
    negative margin cancels the flex `gap` so it contributes nothing when idle
    (height: 0). */

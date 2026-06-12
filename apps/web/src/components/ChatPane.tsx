@@ -2402,7 +2402,9 @@ function ChatRows({
     return (
       <>
         {items.map((item) => (
-          <Fragment key={item.key}>{renderItem(item)}</Fragment>
+          <div key={item.key} className="chat-message-row">
+            {renderItem(item)}
+          </div>
         ))}
       </>
     );
