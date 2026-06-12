@@ -114,12 +114,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     design.runs.stream(run, req, res);
   });
 
-  app.post('/api/runs/:id/cancel', (req, res) => {
+  app.post('/api/runs/:id/cancel', async (req, res) => {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.cancel(run);
+    const status = await design.runs.cancel(run);
     /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true };
+    const body = { ok: true, run: status };
     res.json(body);
   });
 
