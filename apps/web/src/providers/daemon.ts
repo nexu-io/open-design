@@ -47,7 +47,10 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { parseSseFrame } from './sse';
-import { summarizeArtifactsForTranscript } from '../artifacts/strip';
+import {
+  summarizeArtifactsForTranscript,
+  type PersistedArtifactFileRef,
+} from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
@@ -155,7 +158,10 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
 // User content is preserved verbatim — a user message that legitimately
 // quotes `<question-form>` (e.g. discussing the markup with the agent)
 // must not be mangled.
-export function sanitizePriorAssistantTurnForTranscript(content: string): string {
+export function sanitizePriorAssistantTurnForTranscript(
+  content: string,
+  persistedArtifactFiles: ReadonlyArray<PersistedArtifactFileRef> = [],
+): string {
   let sanitized = content.replace(
     // `\1` backreference keeps the open/close tag names matched so we never
     // splice across a `<question-form>…</ask-question>` mismatch.
@@ -175,16 +181,34 @@ export function sanitizePriorAssistantTurnForTranscript(content: string): string
       return match;
     },
   );
-  // Replace prior-turn `<artifact>` HTML with a one-line summary. The full
-  // artifact already lives in the project files; the agent reads/edits it from
-  // disk, never from this transcript copy. Re-sending the whole document each
-  // turn (truncated to 12K chars below, but still ~3K tokens) is pure waste —
-  // a summary keeps the metadata the agent needs (identifier/title/type) and
-  // points it at the on-disk file. Runs before truncateForTranscript so the
-  // summarized message no longer trips the 12K cap. Uses markdown-aware
-  // detection so a literal `<artifact>` recited in a code fence survives.
-  sanitized = summarizeArtifactsForTranscript(sanitized);
+  // Replace prior-turn `<artifact>` HTML with a one-line summary — but ONLY
+  // for artifacts whose save to the project files is confirmed by the
+  // message's producedFiles record. persistArtifact has refusal and
+  // write-failure branches; on those paths the transcript copy is the only
+  // surviving artifact body, so an unconfirmed block stays verbatim (the
+  // 12K truncation below still bounds it) and a follow-up turn can repair it.
+  // For confirmed saves the agent reads/edits the file from disk, never from
+  // this transcript copy, so re-sending the whole document each turn is pure
+  // waste — the summary keeps identifier/title/type plus the saved file name.
+  // Runs before truncateForTranscript so the summarized message no longer
+  // trips the 12K cap. Uses markdown-aware detection so a literal
+  // `<artifact>` recited in a code fence survives.
+  sanitized = summarizeArtifactsForTranscript(sanitized, persistedArtifactFiles);
   return sanitized;
+}
+
+// producedFiles → the persistence evidence summarizeArtifactsForTranscript
+// matches artifact blocks against. The manifest identifier is the strongest
+// link (it survives `-2`/`-3` collision renames); the file name is the
+// fallback for files persisted before manifests carried identifiers.
+function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRef[] {
+  return (message.producedFiles ?? []).map((file) => {
+    const identifier = file.artifactManifest?.metadata?.identifier;
+    return {
+      name: file.name,
+      identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
+    };
+  });
 }
 
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
@@ -194,7 +218,7 @@ export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: st
       const trimmed = m.content.trim();
       const sanitized =
         m.role === 'assistant'
-          ? sanitizePriorAssistantTurnForTranscript(trimmed)
+          ? sanitizePriorAssistantTurnForTranscript(trimmed, persistedArtifactFilesOf(m))
           : trimmed;
       return `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(sanitized))}`;
     })

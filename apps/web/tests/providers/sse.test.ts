@@ -380,7 +380,7 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toBe(original);
   });
 
-  it('replaces prior-turn <artifact> HTML with a one-line summary (the deliverable lives on disk)', () => {
+  it('replaces a persisted prior-turn <artifact> with a one-line summary (the deliverable lives on disk)', () => {
     const original = [
       'Build summary below.',
       '',
@@ -389,7 +389,9 @@ describe('streamViaDaemon', () => {
       '<html><body>slide content</body></html>',
       '</artifact>',
     ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck.html', identifier: 'deck' },
+    ]);
 
     // The HTML body is gone — no point re-sending it, the agent reads it from disk.
     expect(sanitized).not.toContain('<!doctype html>');
@@ -399,24 +401,64 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toContain('artifact emitted on a prior turn');
     expect(sanitized).toContain('identifier="deck"');
     expect(sanitized).toContain('title="Pitch deck"');
-    expect(sanitized).toContain('list/grep the project directory');
+    expect(sanitized).toContain('"deck.html"');
     // Surrounding prose is preserved.
     expect(sanitized).toContain('Build summary below.');
   });
 
-  it('summarizes every <artifact> when an assistant turn emits multiple', () => {
+  it('keeps an <artifact> body verbatim when its save is NOT confirmed (failed/refused persist path)', () => {
+    // persistArtifact has refusal (validateHtmlArtifact) and write-failure
+    // (writeProjectTextFile → null) branches. On those paths the transcript
+    // copy is the ONLY surviving artifact body — summarizing it would strand
+    // the next turn with no content to inspect or repair.
+    const original = [
+      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
+      '<html><body>only surviving copy</body></html>',
+      '</artifact>',
+    ].join('\n');
+    // No producedFiles recorded for this artifact → no confirmed persistence.
+    expect(sanitizePriorAssistantTurnForTranscript(original, [])).toBe(original);
+    // A produced file that does not match the artifact also must not trigger
+    // summarization for it.
+    expect(
+      sanitizePriorAssistantTurnForTranscript(original, [{ name: 'other.html', identifier: 'other' }]),
+    ).toBe(original);
+  });
+
+  it('matches persistence by manifest identifier even when collision-suffix renames changed the file name', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>v3</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck-3.html', identifier: 'deck' },
+    ]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('"deck-3.html"');
+    expect(sanitized).not.toContain('v3');
+  });
+
+  it('matches persistence by derived file name when the manifest carries no identifier (legacy files)', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>legacy</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [{ name: 'deck.html' }]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).not.toContain('legacy');
+  });
+
+  it('summarizes only the persisted <artifact> when a turn emits multiple and one save failed', () => {
     const sanitized = sanitizePriorAssistantTurnForTranscript(
       [
         '<artifact identifier="a" type="text/html" title="A"><html>aaa</html></artifact>',
         'and',
         '<artifact identifier="b" type="text/html" title="B"><html>bbb</html></artifact>',
       ].join('\n'),
+      [{ name: 'a.html', identifier: 'a' }],
     );
+    // `a` is confirmed on disk → summarized.
     expect(sanitized).not.toContain('aaa');
-    expect(sanitized).not.toContain('bbb');
     expect(sanitized).toContain('identifier="a"');
-    expect(sanitized).toContain('identifier="b"');
-    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(2);
+    // `b` never persisted → its body must survive in the transcript.
+    expect(sanitized).toContain('bbb');
+    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(1);
   });
 
   it('leaves a literal <artifact> recited inside a code fence intact (not a real protocol block)', () => {
@@ -427,9 +469,42 @@ describe('streamViaDaemon', () => {
       '<artifact identifier="x" type="text/html" title="X">...</artifact>',
       '```',
     ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'x.html', identifier: 'x' },
+    ]);
     // Inside a fenced code block → a literal recitation, must survive.
     expect(sanitized).toBe(original);
+  });
+
+  it('summarizes via buildDaemonTranscript using the message producedFiles as persistence evidence', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content:
+          '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>slide content</html></artifact>',
+        producedFiles: [
+          {
+            name: 'deck.html',
+            size: 100,
+            mtime: 1,
+            kind: 'html',
+            mime: 'text/html',
+            artifactManifest: {
+              version: 1,
+              kind: 'html',
+              title: 'Pitch deck',
+              entry: 'deck.html',
+              renderer: 'html',
+              exports: [],
+              metadata: { identifier: 'deck' },
+            },
+          },
+        ],
+      },
+    ]);
+    expect(transcript).toContain('artifact emitted on a prior turn');
+    expect(transcript).not.toContain('slide content');
   });
 
   it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
