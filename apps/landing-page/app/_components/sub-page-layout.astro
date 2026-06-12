@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from './favicon-links.astro';
 import GoogleAnalytics from './google-analytics.astro';
+import PostHogAnalytics from './posthog-analytics.astro';
 import ResourceHints from './resource-hints.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
@@ -43,17 +44,39 @@ export interface Props {
   active?: HeaderProps['active'];
   ogImage?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+  /**
+   * Set on pages that are NOT generated per-locale (e.g. plugin detail pages,
+   * which would explode the page count × 18 locales). The language switcher
+   * then points every locale at the single canonical URL and the client script
+   * suppresses its locale auto-redirect, so a zh-preference visitor is not sent
+   * to a non-existent `/zh/...` variant that 404s.
+   */
+  localeCanonicalOnly?: boolean;
 }
 
-const { title, description, active = 'home', ogImage, jsonLd } = Astro.props;
+const {
+  title,
+  description,
+  active = 'home',
+  ogImage,
+  jsonLd,
+  localeCanonicalOnly = false,
+} = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
-const alternateLinks = alternateLinksForPath(Astro.url.pathname).map((entry) => ({
-  ...entry,
-  href: new URL(entry.hrefPath, Astro.site).toString(),
-}));
-const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString();
+// Canonical-only pages have no per-locale variants, so emit only the canonical
+// (x-default) hreflang — listing `/<locale>/...` alternates that 404 would feed
+// search engines dangling targets. `altEntries[0]` is the default-locale
+// (stripped) path, so x-default stays correct for localized pages too.
+const altEntries = alternateLinksForPath(Astro.url.pathname);
+const alternateLinks = localeCanonicalOnly
+  ? []
+  : altEntries.map((entry) => ({
+      ...entry,
+      href: new URL(entry.hrefPath, Astro.site).toString(),
+    }));
+const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
 // Absolute URL for the social share card: og:image / twitter:image are read
 // by external crawlers outside the page-origin context, so a same-origin path
 // like `/hero-home.png?v=2` is unreliable for rich previews. `new URL()`
@@ -68,14 +91,20 @@ const headerHtml = renderToStaticMarkup(
     github,
     brandHref: '/',
     locale,
-    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+      canonicalOnly: localeCanonicalOnly,
+    }),
   }) as ReturnType<typeof createElement>,
 );
 const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 ---
 
 <!doctype html>
-<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+<html
+  lang={localeDef.htmlLang}
+  dir={localeDef.dir}
+  data-locale-canonical={localeCanonicalOnly ? 'true' : undefined}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -92,6 +121,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <ResourceHints />
 
     <GoogleAnalytics />
+    <PostHogAnalytics />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />

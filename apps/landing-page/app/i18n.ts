@@ -6829,6 +6829,7 @@ export function localizedHref(
 export function getHeaderLocaleSwitcher(
   locale: LandingLocaleCode,
   pathname = '/',
+  opts: { canonicalOnly?: boolean } = {},
 ): {
   label: string;
   prefix: string;
@@ -6842,13 +6843,18 @@ export function getHeaderLocaleSwitcher(
 } {
   const localeDef = getLocaleDefinition(locale);
   const topbar = getCommonCopy(locale).topbar;
+  // Canonical-only pages (e.g. plugin detail pages, which are not generated
+  // per-locale to avoid a page explosion) have no localized variant, so every
+  // option must point at the single canonical URL. Prefixing it with a locale
+  // would link to a non-existent `/<locale>/...` page and 404.
+  const canonicalPath = stripLocaleFromPath(pathname).pathname;
   return {
     label: topbar.languageSwitcherLabel,
     prefix: topbar.languageSwitcherPrefix ?? 'Lang',
     shortLabel: localeDef.shortLabel,
     options: LANDING_LOCALES.map((entry) => ({
       code: entry.code,
-      href: localePath(entry.code, pathname),
+      href: opts.canonicalOnly ? canonicalPath : localePath(entry.code, pathname),
       htmlLang: entry.htmlLang,
       label: entry.label,
     })),

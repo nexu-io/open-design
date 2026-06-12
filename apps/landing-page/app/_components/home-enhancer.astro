@@ -200,7 +200,9 @@
     // to a direct download, appending the detected chip label. Falls back to
     // the server-rendered releases-page href when detection or the API fails.
     const enhanceDownloadCta = () => {
-      const btn = document.querySelector('[data-download-cta]');
+      // Skip `[data-download-page]` CTAs (e.g. the nav "Download" button) — they
+      // must keep their /download/ page href; only direct-download CTAs rewrite.
+      const btn = document.querySelector('[data-download-cta]:not([data-download-page])');
       if (!btn) return;
       const ua = navigator.userAgent || '';
       const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);

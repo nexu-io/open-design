@@ -4440,6 +4440,13 @@ section.tight { padding: 90px 0; }
   font-size: 15px;
   color: var(--ink);
 }
+.newsletter-error {
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--coral, #ed6f5c);
+}
 @media (max-width: 720px) {
   .newsletter { padding: 72px 0; }
   .newsletter-grid {
@@ -4921,6 +4928,16 @@ footer .container {
     background: var(--paper);
     border-top: 1px solid rgba(26, 26, 26, 0.08);
     box-shadow: 0 12px 32px rgba(26, 26, 26, 0.06);
+    /* The flattened menu can be taller than the viewport. Cap it to the space
+     * below the (sticky) header bar and let the panel itself scroll — `100%`
+     * resolves to the header height here since `.nav` is the positioned
+     * containing block. `overscroll-behavior: contain` stops the scroll from
+     * chaining to the page behind once the list hits its top/bottom edge. */
+    max-height: calc(100vh - 100%);
+    max-height: calc(100dvh - 100%);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .nav.is-open > .nav-inner > nav[data-nav-primary] {
     pointer-events: auto;

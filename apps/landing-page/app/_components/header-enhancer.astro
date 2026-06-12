@@ -208,10 +208,41 @@
     // data-share-dialog="...">` and the `Copy text` button inside
     // copies the textarea contents. Modal closes via the form's
     // method="dialog" submit (the × button) or Escape key.
+    // Build real platform share-intent URLs from the dialog's message + link so
+    // the social buttons pre-fill the post instead of opening an empty composer.
+    // Recomputes on EVERY call (no one-time guard): grid pages such as
+    // plugins/templates reuse a single dialog across cards, overwriting the
+    // textarea + copy-link per click, so the intents must be rebuilt from the
+    // dialog's current payload each time it reopens. Exposed on `window` so
+    // those per-card handlers can re-wire after they swap the payload.
+    const wireSharePlatforms = (dialog) => {
+      if (!dialog) return;
+      const ta = dialog.querySelector('[data-share-text]');
+      const linkBtn = dialog.querySelector('[data-copy-link]');
+      const message = ta ? (ta.value || ta.textContent || '').trim() : '';
+      const url = linkBtn ? (linkBtn.getAttribute('data-copy-link') || '') : '';
+      if (!message && !url) return;
+      const title = (message.split('\n')[0] || '').trim();
+      const m = encodeURIComponent(message);
+      const u = encodeURIComponent(url);
+      const intents = {
+        X: `https://twitter.com/intent/tweet?text=${m}`,
+        LinkedIn: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+        Reddit: `https://www.reddit.com/submit?url=${u}&title=${encodeURIComponent(title)}`,
+        Facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+      };
+      dialog.querySelectorAll('.detail-share-platform-btn').forEach((btn) => {
+        const label = btn.getAttribute('aria-label');
+        if (label && intents[label]) btn.setAttribute('href', intents[label]);
+      });
+    };
+    window.__odWireShareIntents = wireSharePlatforms;
+
     document.querySelectorAll('[data-share-open]').forEach((trigger) => {
       trigger.addEventListener('click', () => {
         const key = trigger.getAttribute('data-share-open');
         const dialog = document.querySelector(`[data-share-dialog="${key}"]`);
+        wireSharePlatforms(dialog);
         if (dialog && typeof dialog.showModal === 'function') {
           dialog.showModal();
         } else if (dialog) {

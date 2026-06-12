@@ -53,9 +53,16 @@ const script = `
     return parts.length > 0 ? \`/\${parts.join('/')}/\` : '/';
   };
 
+  // Pages with no per-locale variant (e.g. plugin detail pages) mark
+  // <html data-locale-canonical="true">. Switching language must stay on the
+  // single canonical URL — building /<locale>/... would 404.
+  const isCanonicalOnly = () =>
+    document.documentElement.getAttribute('data-locale-canonical') === 'true';
+
   const targetFor = (locale) => {
     const basePath = basePathFromCurrent();
-    const nextPath = locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
+    const nextPath =
+      isCanonicalOnly() || locale === DEFAULT_LOCALE ? basePath : \`/\${locale}\${basePath}\`;
     return \`\${nextPath}\${window.location.search}\${window.location.hash}\`;
   };
 
@@ -144,6 +151,9 @@ const script = `
   };
 
   const autoAdapt = () => {
+    // Never auto-redirect away from a canonical-only page — its /<locale>/
+    // variant does not exist, so a zh-preference visitor would hit a 404.
+    if (isCanonicalOnly()) return;
     if (currentFromPath() !== DEFAULT_LOCALE) return;
     let saved = null;
     try {

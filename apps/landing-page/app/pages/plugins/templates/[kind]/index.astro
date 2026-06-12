@@ -362,6 +362,10 @@ const jsonLd = {
             const copyLinkBtn = dialog.querySelector<HTMLButtonElement>('[data-copy-link]');
             if (ta) ta.value = text;
             if (copyLinkBtn) copyLinkBtn.setAttribute('data-copy-link', url);
+            // Rebuild the social share-intent hrefs from this card's payload;
+            // the dialog is reused across cards, so the intents must be
+            // recomputed on each open rather than wired once.
+            (window as unknown as { __odWireShareIntents?: (d: Element) => void }).__odWireShareIntents?.(dialog);
             if (dialog.open) dialog.close();
             positionPopover(btn);
           });

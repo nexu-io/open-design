@@ -7,6 +7,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
 import GoogleAnalytics from '../_components/google-analytics.astro';
+import PostHogAnalytics from '../_components/posthog-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
@@ -159,6 +160,7 @@ const matterRuntime = readFileSync(
     <ResourceHints />
 
     <GoogleAnalytics />
+    <PostHogAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
@@ -333,15 +335,16 @@ const matterRuntime = readFileSync(
             }
           }
 
-          const stars = document.querySelector('[data-github-stars]');
-          if (stars) {
+          const starSlots = document.querySelectorAll('[data-github-stars]');
+          if (starSlots.length) {
             fetch('https://api.github.com/repos/nexu-io/open-design', {
               headers: { Accept: 'application/vnd.github+json' },
             })
               .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
               .then((data) => {
                 if (typeof data?.stargazers_count === 'number') {
-                  stars.textContent = formatStars(data.stargazers_count);
+                  const label = formatStars(data.stargazers_count);
+                  for (const slot of starSlots) slot.textContent = label;
                 }
               })
               .catch(() => {});
@@ -519,9 +522,57 @@ const matterRuntime = readFileSync(
         // geometry (unaffected by the scale transform), so there's no
         // feedback wobble. rAF-throttled; resets on leave; no-ops under
         // reduced-motion.
+        // Lab clips ship as VP9 WebM (sharp at a fraction of the H.264 size) with
+        // the original .mp4 kept as a fallback. Prefer WebM where the browser can
+        // decode it (Chrome/Edge/Firefox/Safari 16+); older Safari keeps the mp4.
+        // `data-preview-video` carries the .mp4 path; this swaps the extension.
+        const labPrefersWebm = (() => {
+          try {
+            const v = document.createElement('video');
+            return !!(v.canPlayType && v.canPlayType('video/webm; codecs="vp9"'));
+          } catch (e) {
+            return false;
+          }
+        })();
+        const labClipSrc = (src) =>
+          labPrefersWebm && /\.mp4$/i.test(src || '') ? src.replace(/\.mp4$/i, '.webm') : src;
+
         const enhanceLabDock = () => {
           const dock = document.querySelector('[data-lab-dock]');
           if (!dock) return;
+          // Prefetch the lab clips (Video / HyperFrames tiles) so switching to
+          // them is instant rather than waiting 1-2s for the first byte — but
+          // only once the lab section is about to scroll into view, not on page
+          // load. Most visitors who never reach the lab never pay the ~1.7MB.
+          // An IntersectionObserver with a one-viewport bottom margin fires the
+          // fetch just before the dock enters, then disconnects (one-shot).
+          // Falls back to an idle prefetch where IntersectionObserver is absent.
+          (function prefetchLabVideos() {
+            const srcs = Array.from(dock.querySelectorAll('[data-preview-video]'))
+              .map((el) => el.getAttribute('data-preview-video'))
+              .filter(Boolean)
+              .map(labClipSrc);
+            if (srcs.length === 0) return;
+            let done = false;
+            const run = () => {
+              if (done) return;
+              done = true;
+              srcs.forEach((src) => { try { fetch(src).catch(() => {}); } catch (e) {} });
+            };
+            if ('IntersectionObserver' in window) {
+              const io = new IntersectionObserver((entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                  io.disconnect();
+                  run();
+                }
+              }, { rootMargin: '0px 0px 100% 0px' });
+              io.observe(dock);
+            } else if ('requestIdleCallback' in window) {
+              requestIdleCallback(run, { timeout: 4000 });
+            } else {
+              setTimeout(run, 2500);
+            }
+          })();
           if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
           const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
           if (items.length === 0) return;
@@ -841,7 +892,12 @@ const matterRuntime = readFileSync(
         // Falls back to the server-rendered releases-page href when detection or
         // the API fails.
         const enhanceDownloadCta = () => {
-          const buttons = Array.from(document.querySelectorAll('[data-download-cta]'));
+          // `[data-download-page]` CTAs (e.g. the nav "Download" button) must
+          // keep their server-rendered href to the /download/ page — only the
+          // direct-download CTAs (hero) are rewritten to the release asset.
+          const buttons = Array.from(
+            document.querySelectorAll('[data-download-cta]:not([data-download-page])'),
+          );
           if (buttons.length === 0) return;
           const ua = navigator.userAgent || '';
           const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
@@ -967,7 +1023,8 @@ const matterRuntime = readFileSync(
             // at a different clip, then show + restart the looping video.
             if (vsrc && video) {
               artifact.classList.remove('is-visible');
-              if (video.getAttribute('src') !== vsrc) video.setAttribute('src', vsrc);
+              const clip = labClipSrc(vsrc);
+              if (video.getAttribute('src') !== clip) video.setAttribute('src', clip);
               video.classList.add('is-visible');
               try {
                 video.currentTime = 0;
@@ -1254,16 +1311,78 @@ const matterRuntime = readFileSync(
             form.addEventListener('submit', (event) => {
               event.preventDefault();
               if (!form.reportValidity()) return;
-              const done = document.createElement('p');
-              done.className = 'newsletter-done';
-              done.textContent = form.dataset.newsletterDone || 'Thanks!';
-              form.replaceChildren(done);
+              const input = form.querySelector('input[type="email"], input[name="email"]');
+              const email = input && input.value ? input.value.trim() : '';
+              if (!email) return;
+              const submit = form.querySelector('[type="submit"]');
+              // Drop any prior inline error, lock the button while in flight.
+              const priorErr = form.querySelector('.newsletter-error');
+              if (priorErr) priorErr.remove();
+              if (submit) submit.disabled = true;
+
+              const showDone = () => {
+                const done = document.createElement('p');
+                done.className = 'newsletter-done';
+                done.textContent = form.dataset.newsletterDone || 'Thanks!';
+                form.replaceChildren(done);
+              };
+              const showError = () => {
+                if (submit) submit.disabled = false;
+                if (form.querySelector('.newsletter-error')) return;
+                const err = document.createElement('p');
+                err.className = 'newsletter-error';
+                err.setAttribute('role', 'alert');
+                err.textContent =
+                  form.dataset.newsletterError || 'Couldn’t subscribe just now — please try again.';
+                form.appendChild(err);
+              };
+
+              // Real subscription: POST the email to the Cloudflare Pages
+              // Function at /subscribe (writes the Resend contact + KV backup).
+              // Success → thanks line; failure → inline error so the visitor
+              // knows it didn't go through (no silent fake-success).
+              fetch('/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, source: 'landing' }),
+              })
+                .then((r) => {
+                  if (r.ok) showDone();
+                  else showError();
+                })
+                .catch(showError);
             });
           }
         };
 
         const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
         enhanceHeader();
+        // Mobile hamburger toggle. `header-enhancer.astro` binds this on every
+        // sub-page (via sub-page-layout), but the homepage doesn't include it,
+        // so the toggle was inert here — wire the same behaviour inline.
+        (function enhanceMobileNav() {
+          const navToggle = document.querySelector('[data-nav-toggle]');
+          const primaryNav = document.querySelector('[data-nav-primary]');
+          const navHost = navToggle ? navToggle.closest('header.nav') : null;
+          if (!navToggle || !primaryNav || !navHost) return;
+          const setNavOpen = (open) => {
+            navHost.classList.toggle('is-open', open);
+            navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+          };
+          navToggle.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            setNavOpen(!navHost.classList.contains('is-open'));
+          });
+          primaryNav.querySelectorAll('a').forEach((link) => {
+            link.addEventListener('click', () => setNavOpen(false));
+          });
+          document.addEventListener('click', (ev) => {
+            if (!navHost.contains(ev.target)) setNavOpen(false);
+          });
+          document.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape') setNavOpen(false);
+          });
+        })();
         enhanceDragIcon();
         enhanceWire();
         enhanceStatementReveal();

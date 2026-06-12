@@ -266,6 +266,33 @@ const jsonLd = [
 
   <script is:inline define:vars={{ autoPrefix: page.autoCtaPrefix }}>
     (() => {
+      // Download-intent analytics: capture clicks on the hero auto-CTA and on
+      // every platform card link so the /download/ funnel is measurable. PostHog
+      // is mounted by sub-page-layout; `__odTrack` is its shared capture wrapper
+      // (fall back to posthog.capture). Bound before any early return so it works
+      // regardless of platform detection.
+      (function trackDownloadClicks() {
+        const fire = (variant, el) => {
+          try {
+            const props = {
+              page_name: 'download',
+              variant: variant,
+              link_url: (el && (el.getAttribute('href') || el.href)) || '',
+            };
+            if (typeof window.__odTrack === 'function') window.__odTrack('download_click', props);
+            else if (window.posthog && window.posthog.capture) window.posthog.capture('download_click', props);
+          } catch (e) {}
+        };
+        document.addEventListener('click', function (event) {
+          const t = event.target;
+          if (!t || !t.closest) return;
+          const card = t.closest('[data-dl-key]');
+          if (card) { fire(card.getAttribute('data-dl-key') || 'unknown', card); return; }
+          const auto = t.closest('[data-dl-auto]');
+          if (auto) { fire('auto-detected', auto); return; }
+        });
+      })();
+
       const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 
       // Mirror header-enhancer.astro detection. Returns the matchKey used

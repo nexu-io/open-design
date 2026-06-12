@@ -42,6 +42,7 @@ export interface HomeExtra {
   newsDesc: string;
   newsBtn: string;
   newsDone: string; // shown by the inline enhancer after submit
+  newsError?: string; // shown when the /subscribe POST fails (falls back to EN)
   faqTitle: string;
   // Footer column headings. The link labels inside the columns stay in
   // English across locales (proper nouns: Download, Plugins, GitHub, ...).
@@ -90,6 +91,7 @@ const en: HomeExtra = {
     'New templates, design-system updates, ambassador events, and product news — straight to your inbox.',
   newsBtn: 'Subscribe',
   newsDone: 'Thanks — you’re on the list!',
+  newsError: 'Couldn’t subscribe just now — please try again.',
   faqTitle: 'FAQ',
   footProduct: 'Product',
   footCommunity: 'Community',
@@ -131,6 +133,7 @@ const zh: HomeExtra = {
   newsDesc: '新模板、设计系统更新、大使活动与产品动态，直接发到你的邮箱。',
   newsBtn: '订阅',
   newsDone: '已收到，感谢关注！',
+  newsError: '订阅失败，请稍后重试。',
   faqTitle: '常见问题',
   footProduct: '产品',
   footCommunity: '社区',

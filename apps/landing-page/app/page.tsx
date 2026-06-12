@@ -427,16 +427,19 @@ export default function Page({
               <div className='hero-actions' data-reveal>
                 {/* Platform-aware download: `enhanceDownloadCta` in the inline
                     script of pages/index.astro rewrites href to the matching
-                    release asset (Apple Silicon / Intel Mac / Windows) and
-                    appends the detected chip label. Falls back to releases. */}
-                <a className='btn btn-primary' href={REPO_RELEASES} data-download-cta data-download-chip-target {...ext}>
+                    release asset (Apple Silicon / Intel Mac / Windows) for a
+                    direct download and appends the detected chip label. When
+                    the platform can't be named (Linux / undetermined / API
+                    rate-limited) it falls back to the /download/ page (the
+                    per-platform picker) rather than the GitHub releases list. */}
+                <a className='btn btn-primary' href={href('/download/')} data-download-cta data-download-chip-target>
                   <span className='arrow'>{iconDownload}</span>
                   {home.hero.download}
                 </a>
                 <a className='btn btn-ghost' href={REPO} {...ext}>
                   <span className='arrow'>{<RemixIcon glyph={RI.github} />}</span>
                   <span>
-                    Star us{' '}
+                    Star{' '}
                     <span className='star-count' data-github-stars>
                       {github.starsLabel}
                     </span>
@@ -848,14 +851,18 @@ export default function Page({
           </h2>
           <div className='work'>
             <div className='work-stats-grid' data-reveal>
-                {[
-                  { src: 'card-1.webp', num: '52K+', to: '52', suffix: 'K+', alt: 'GitHub Stars', href: REPO },
-                  { src: 'card-2.webp', num: '280+', to: '280', suffix: '+', alt: tt('贡献者', 'Contributors'), href: `${REPO}/graphs/contributors` },
+                {([
+                  // `live` cards show the real-time GitHub count (filled by the
+                  // [data-github-stars] / [data-github-contributors] enhancers in
+                  // index.astro); the hard-coded `num` is only the SSR fallback
+                  // shown until the API responds. The rest count up from 0.
+                  { src: 'card-1.webp', num: '52K+', to: '52', suffix: 'K+', alt: 'GitHub Stars', href: REPO, live: 'stars' as const },
+                  { src: 'card-2.webp', num: '280+', to: '280', suffix: '+', alt: tt('贡献者', 'Contributors'), href: `${REPO}/graphs/contributors`, live: 'contributors' as const },
                   { src: 'card-3.webp', num: '217+', to: '217', suffix: '+', alt: 'Plugins', href: href('/plugins/') },
                   { src: 'card-4.webp', num: '129+', to: '129', suffix: '+', alt: 'Design Systems', href: href('/plugins/systems/') },
                   { src: 'card-5.webp', num: '21', to: '21', suffix: '', alt: tt('Coding Agent 支持', 'Coding Agents'), href: REPO },
                   { src: 'card-6.webp', num: null, to: null, suffix: '', alt: 'Star us', href: REPO, cta: true },
-                ].map((item, index) => (
+                ] as ReadonlyArray<{ src: string; num: string | null; to: string | null; suffix: string; alt: string; href: string; live?: 'stars' | 'contributors'; cta?: boolean }>).map((item, index) => (
                   <a
                     className={`work-stat-card work-img-card${item.cta ? ' work-stat-card-cta' : ''}`}
                     href={item.href}
@@ -868,7 +875,11 @@ export default function Page({
                       {arrowOut}
                     </span>
                     <h3 className='work-stat-overlay'>
-                      {item.num ? (
+                      {item.live === 'stars' ? (
+                        <span data-github-stars>{item.num}</span>
+                      ) : item.live === 'contributors' ? (
+                        <span data-github-contributors>{item.num}</span>
+                      ) : item.num ? (
                         <span
                           data-countup
                           data-countup-to={item.to}
@@ -910,13 +921,24 @@ export default function Page({
                 <h2 className='display'>{t.ctaTitle}</h2>
                 <p className='lead'>{home.cta.lead}</p>
                 <div className='cta-actions'>
-                  <a className='btn btn-primary' href={REPO_RELEASES} {...ext}>
+                  {/* Same direct-download behaviour as the hero CTA: the
+                      `enhanceDownloadCta` enhancer detects the OS, rewrites this
+                      to the matching release asset (.dmg/.exe) with a download
+                      attr, and appends the platform chip. Falls back to the
+                      /download/ picker when detection or the API is unavailable
+                      — not the raw GitHub releases list. */}
+                  <a
+                    className='btn btn-primary'
+                    href={href('/download/')}
+                    data-download-cta
+                    data-download-chip-target
+                  >
                     <span className='arrow'>{iconDownload}</span>
-                    Download
+                    {home.hero.download}
                   </a>
                   <a className='btn btn-primary' href={REPO} {...ext}>
                     <span className='arrow'>{<RemixIcon glyph={RI.github} />}</span>
-                    Star on GitHub
+                    {home.cta.star}
                   </a>
                 </div>
               </div>
@@ -941,6 +963,7 @@ export default function Page({
                 className='newsletter-form'
                 data-newsletter
                 data-newsletter-done={t.newsDone}
+                data-newsletter-error={t.newsError ?? 'Couldn’t subscribe just now — please try again.'}
                 data-reveal='right'
               >
                 <input
@@ -990,7 +1013,7 @@ export default function Page({
         </section>
 
         {/* ====== FOOTER ====== */}
-        <footer className='sub-footer' data-od-id='sub-footer'>
+        <footer className='sub-footer' data-od-id='footer'>
           <div className='container sub-footer-inner'>
             <div className='sub-footer-grid'>
               <div className='sub-footer-col'>

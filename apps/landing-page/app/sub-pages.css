@@ -1544,6 +1544,15 @@ body.sub-page {
  * uniformly reliable.
  */
 .detail-share-dialog {
+  /* Explicit modal centering. A native <dialog>.showModal() is centered by the
+     UA via `position:fixed; inset:0; margin:auto`; a global margin reset on the
+     page can knock out the `margin:auto` and drop the dialog to the top-left,
+     so re-assert it here to keep the popup centered. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  max-height: calc(100vh - 32px);
   border: 1px solid var(--ink);
   background: var(--paper);
   color: var(--ink);

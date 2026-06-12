@@ -410,6 +410,11 @@ const jsonLd = [
           const copyLinkBtn = dialog.querySelector<HTMLButtonElement>('[data-copy-link]');
           if (ta) ta.value = text;
           if (copyLinkBtn) copyLinkBtn.setAttribute('data-copy-link', url);
+          // Rebuild the X/LinkedIn/Reddit/Facebook share-intent hrefs from
+          // this card's freshly-swapped message + link; the shared dialog is
+          // reused across cards, so without this the social buttons keep the
+          // previous card's payload (or open an empty composer on first use).
+          (window as unknown as { __odWireShareIntents?: (d: Element) => void }).__odWireShareIntents?.(dialog);
           // Close-then-reopen so the positioner runs fresh against the
           // new trigger; otherwise an already-open dialog stays put at
           // its previous coordinates while the textarea swaps.
