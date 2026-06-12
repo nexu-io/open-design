@@ -6,7 +6,7 @@ import {
 } from '../../src/runtime/chat-events';
 
 describe('acpTerminalAuthFromErrorDetails', () => {
-  it('normalizes ACP terminal-auth details for persisted chat events', () => {
+  it('normalizes ACP terminal-auth details without exposing launch internals', () => {
     const auth = acpTerminalAuthFromErrorDetails(
       {
         kind: 'acp_terminal_auth',
@@ -26,9 +26,6 @@ describe('acpTerminalAuthFromErrorDetails', () => {
       agentId: 'kimi',
       methodId: 'login',
       label: 'Login with Kimi account',
-      command: '/Users/test/.kimi-code/bin/kimi',
-      args: ['login'],
-      env: { KIMI_HOME: '/Users/test/.kimi-code' },
     });
   });
 
@@ -57,8 +54,7 @@ describe('appendErrorStatusEvent', () => {
         kind: 'terminal-auth',
         agentId: 'kimi',
         methodId: 'login',
-        command: '/Users/test/.kimi-code/bin/kimi',
-        args: ['login'],
+        label: 'Login with Kimi account',
       },
     );
 
@@ -72,8 +68,7 @@ describe('appendErrorStatusEvent', () => {
           kind: 'terminal-auth',
           agentId: 'kimi',
           methodId: 'login',
-          command: '/Users/test/.kimi-code/bin/kimi',
-          args: ['login'],
+          label: 'Login with Kimi account',
         },
       },
     ]);

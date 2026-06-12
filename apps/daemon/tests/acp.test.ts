@@ -5,7 +5,7 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/acp.js';
+import { attachAcpSession, buildAcpSessionNewParams, detectAcpTerminalAuth, normalizeModels } from '../src/acp.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -225,9 +225,6 @@ test('attachAcpSession promotes ACP terminal-auth failures with launch metadata'
               kind: 'terminal-auth',
               methodId: 'login',
               label: 'Login with Kimi account',
-              command: '/Users/test/.kimi-code/bin/kimi',
-              args: ['login'],
-              env: { KIMI_HOME: '/Users/test/.kimi-code' },
             },
           },
         },
@@ -235,6 +232,66 @@ test('attachAcpSession promotes ACP terminal-auth failures with launch metadata'
     },
   ]);
   assert.equal(child.killed, true);
+});
+
+test('detectAcpTerminalAuth returns the requested terminal-auth method', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-acp-auth-detect-'));
+  const mockPath = path.join(tmpDir, 'mock-acp.mjs');
+  fs.writeFileSync(
+    mockPath,
+    `process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        authMethods: [
+          {
+            id: 'login-terminal',
+            type: 'terminal',
+            name: 'Terminal login',
+            _meta: {
+              'terminal-auth': {
+                command: '/usr/local/bin/kimi',
+                args: ['login', '--terminal'],
+              },
+            },
+          },
+          {
+            id: 'login-browser',
+            type: 'terminal',
+            name: 'Browser login',
+            _meta: {
+              'terminal-auth': {
+                label: 'Login with Kimi account',
+                command: '/usr/local/bin/kimi',
+                args: ['login', '--browser'],
+                env: { KIMI_HOME: '/Users/test/.kimi-code' },
+              },
+            },
+          },
+        ],
+      },
+    }) + '\\n');\nsetTimeout(() => {}, 10_000);\n`,
+    'utf8',
+  );
+  try {
+    const detected = await detectAcpTerminalAuth({
+      bin: process.execPath,
+      args: [mockPath],
+      methodId: 'login-browser',
+      timeoutMs: 5_000,
+    });
+
+    assert.deepEqual(detected, {
+      kind: 'terminal-auth',
+      methodId: 'login-browser',
+      label: 'Login with Kimi account',
+      command: '/usr/local/bin/kimi',
+      args: ['login', '--browser'],
+      env: { KIMI_HOME: '/Users/test/.kimi-code' },
+    });
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('attachAcpSession keeps legacy session/set_model when no model config option exists', () => {

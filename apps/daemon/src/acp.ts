@@ -237,8 +237,17 @@ function stringMap(value: unknown): Record<string, string> | undefined {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-function firstTerminalAuthMethod(authMethods: unknown): AcpTerminalAuthMetadata | null {
+function publicTerminalAuthMetadata(auth: AcpTerminalAuthMetadata): Omit<AcpTerminalAuthMetadata, 'command' | 'args' | 'env'> {
+  return {
+    kind: 'terminal-auth',
+    methodId: auth.methodId,
+    ...(auth.label ? { label: auth.label } : {}),
+  };
+}
+
+function terminalAuthMethod(authMethods: unknown, preferredMethodId?: string | null): AcpTerminalAuthMetadata | null {
   const methods = Array.isArray(authMethods) ? authMethods : [];
+  let first: AcpTerminalAuthMetadata | null = null;
   for (const rawMethod of methods) {
     const method = asObject(rawMethod);
     if (!method) continue;
@@ -261,7 +270,7 @@ function firstTerminalAuthMethod(authMethods: unknown): AcpTerminalAuthMetadata 
           : undefined;
     const args = stringArray(source?.args);
     const env = stringMap(source?.env);
-    return {
+    const auth: AcpTerminalAuthMetadata = {
       kind: 'terminal-auth',
       methodId,
       ...(label ? { label } : {}),
@@ -269,8 +278,10 @@ function firstTerminalAuthMethod(authMethods: unknown): AcpTerminalAuthMetadata 
       ...(args ? { args } : {}),
       ...(env ? { env } : {}),
     };
+    if (preferredMethodId && methodId === preferredMethodId) return auth;
+    if (!first) first = auth;
   }
-  return null;
+  return preferredMethodId ? null : first;
 }
 
 function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessage: string) {
@@ -902,11 +913,7 @@ export async function detectAcpTerminalAuth({
         return;
       }
       if (obj?.id !== 1 || !result) return;
-      const auth = firstTerminalAuthMethod(result.authMethods);
-      if (methodId && auth?.methodId !== methodId) {
-        finish(resolve, null);
-        return;
-      }
+      const auth = terminalAuthMethod(result.authMethods, methodId);
       finish(resolve, auth);
     });
 
@@ -1209,7 +1216,7 @@ export function attachAcpSession({
         fail('Agent authentication requires a terminal sign-in. Open the sign-in terminal, complete the flow, then retry this run.', {
           details: {
             kind: 'acp_terminal_auth',
-            auth: terminalAuth,
+            auth: publicTerminalAuthMetadata(terminalAuth),
             upstreamMessage: rpcErr,
           },
           retryable: true,
@@ -1349,7 +1356,7 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 1) {
-      terminalAuth = firstTerminalAuthMethod(result.authMethods);
+      terminalAuth = terminalAuthMethod(result.authMethods);
       expectedId = nextId;
       writeRpc(
         nextId,

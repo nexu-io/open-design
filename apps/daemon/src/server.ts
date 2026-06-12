@@ -2748,25 +2748,14 @@ function persistedTerminalAuthFromErrorData(data, context = {}) {
     : typeof context.agentId === 'string'
       ? context.agentId
       : null;
-  if (agentId == null || typeof auth.methodId !== 'string' || typeof auth.command !== 'string') {
+  if (agentId == null || typeof auth.methodId !== 'string') {
     return null;
   }
-  const args = Array.isArray(auth.args)
-    ? auth.args.filter((value) => typeof value === 'string')
-    : undefined;
-  const env = auth.env && typeof auth.env === 'object'
-    ? Object.fromEntries(
-      Object.entries(auth.env).filter((entry) => typeof entry[1] === 'string'),
-    )
-    : undefined;
   return {
     kind: 'terminal-auth',
     agentId,
     methodId: auth.methodId,
     ...(typeof auth.label === 'string' ? { label: auth.label } : {}),
-    command: auth.command,
-    ...(args && args.length > 0 ? { args } : {}),
-    ...(env && Object.keys(env).length > 0 ? { env } : {}),
   };
 }
 

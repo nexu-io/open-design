@@ -286,9 +286,6 @@ export interface AgentTerminalAuthMetadata {
   agentId: string;
   methodId: string;
   label?: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
 }
 
 export interface ChatAttachment {
