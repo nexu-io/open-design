@@ -76,8 +76,8 @@
    focus box-shadow). We override every property the parent pill
    already provides so the focus halo only paints once, on the
    pill-shaped container, and the input renders flush inside it. */
-.plugins-home__search-input,
-.plugins-home__search-input:focus {
+.plugins-home__search .plugins-home__search-input,
+.plugins-home__search .plugins-home__search-input:focus {
   appearance: none;
   width: 100%;
   border: 0;
