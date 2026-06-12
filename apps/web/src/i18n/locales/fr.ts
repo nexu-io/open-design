@@ -1505,6 +1505,7 @@ export const fr: Dict = {
   'chat.annotationSendDisabledReason': 'Une tâche est en cours d\'exécution',
   'chat.annotationPreviewMissing': 'Impossible de capturer l\'aperçu. Veuillez réessayer.',
   'chat.annotationPreviewMissingInk': 'Impossible de capturer l\'aperçu. Réessayez pour éviter de n\'envoyer que l\'annotation.',
+  'chat.annotationSentWithoutScreenshot': 'Impossible de capturer l\'aperçu. L\'annotation a été envoyée sans capture d\'écran.',
   'chat.annotationTimeout': 'L\'envoi de l\'annotation a expiré. Veuillez réessayer.',
   'chat.annotationFailed': 'L\'envoi de l\'annotation a échoué. Veuillez réessayer.',
   'chat.annotationProjectCreateFailed': 'Impossible de créer un projet, l\'annotation n\'a donc pas été envoyée.',

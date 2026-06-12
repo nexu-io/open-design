@@ -1505,6 +1505,7 @@ export const esES: Dict = {
   'chat.annotationSendDisabledReason': 'Hay una tarea en ejecución',
   'chat.annotationPreviewMissing': 'No se pudo capturar la vista previa. Inténtalo de nuevo.',
   'chat.annotationPreviewMissingInk': 'No se pudo capturar la vista previa. Inténtalo de nuevo para evitar enviar solo la anotación.',
+  'chat.annotationSentWithoutScreenshot': 'No se pudo capturar la vista previa. La anotación se envió sin captura de pantalla.',
   'chat.annotationTimeout': 'Se agotó el tiempo de envío de la anotación. Inténtalo de nuevo.',
   'chat.annotationFailed': 'Error al enviar la anotación. Inténtalo de nuevo.',
   'chat.annotationProjectCreateFailed': 'No se pudo crear un proyecto, por lo que la anotación no se envió.',

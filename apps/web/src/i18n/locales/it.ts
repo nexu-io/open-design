@@ -1505,6 +1505,7 @@ export const it: Dict = {
   'chat.annotationSendDisabledReason': 'È in esecuzione un\'attività',
   'chat.annotationPreviewMissing': 'Impossibile acquisire l\'anteprima. Riprova.',
   'chat.annotationPreviewMissingInk': 'Impossibile acquisire l\'anteprima. Riprova per evitare di inviare solo l\'inchiostro.',
+  'chat.annotationSentWithoutScreenshot': 'Impossibile catturare l\'anteprima. L\'annotazione è stata inviata senza screenshot.',
   'chat.annotationTimeout': 'Invio dell\'annotazione scaduto. Riprova.',
   'chat.annotationFailed': 'Invio dell\'annotazione non riuscito. Riprova.',
   'chat.annotationProjectCreateFailed': 'Impossibile creare un progetto, quindi l\'annotazione non è stata inviata.',

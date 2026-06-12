@@ -1505,6 +1505,7 @@ export const zhCN: Dict = {
   'chat.annotationSendDisabledReason': '当前正有任务在执行',
   'chat.annotationPreviewMissing': '无法截到下面的预览，请重试',
   'chat.annotationPreviewMissingInk': '无法截到下面的预览，请重试，避免只附带笔迹',
+  'chat.annotationSentWithoutScreenshot': '未能截取预览，已发送标注（不含截图）。',
   'chat.annotationTimeout': '标注发送超时，请重试',
   'chat.annotationFailed': '标注发送失败，请重试',
   'chat.annotationProjectCreateFailed': '无法创建项目，标注未发送',

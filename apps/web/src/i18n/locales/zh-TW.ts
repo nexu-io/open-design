@@ -1505,6 +1505,7 @@ export const zhTW: Dict = {
   'chat.annotationSendDisabledReason': '目前正有任務執行中',
   'chat.annotationPreviewMissing': '無法截到下方預覽，請重試',
   'chat.annotationPreviewMissingInk': '無法截到下方預覽，請重試，避免只附帶筆跡',
+  'chat.annotationSentWithoutScreenshot': '未能擷取預覽，已傳送標註（不含截圖）。',
   'chat.annotationTimeout': '標註傳送逾時，請重試',
   'chat.annotationFailed': '標註傳送失敗，請重試',
   'chat.annotationProjectCreateFailed': '無法建立專案，因此未送出標註。',

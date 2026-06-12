@@ -642,7 +642,16 @@ export function PreviewDrawOverlay({
         let blob: Blob | null = null;
         const snap = await requestSnapshot();
         if (snap) blob = await compositeWithBackground(snap);
-        if (!blob) {
+        if (blob) {
+          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+          file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
+        } else if (!note.trim() && extraFiles.length === 0) {
+          // The snapshot pipeline is best-effort — the srcDoc foreignObject
+          // rasterizer legitimately fails on real-world artifacts (issue
+          // #4064), and retrying replays the same failure. Only block when
+          // the annotation has no meaning without pixels: ink/box-only marks
+          // are pure bitmap. A typed note or attached images still carry the
+          // user's intent, so those fall through and send without the shot.
           setCaptureWarning({
             action,
             message: captureViewport && !hasInk && !hasBox && !hasTarget
@@ -651,9 +660,8 @@ export function PreviewDrawOverlay({
           });
           return;
         }
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        file = new File([blob], `drawing-${ts}.png`, { type: 'image/png' });
       }
+      const sentWithoutScreenshot = shouldCapture && !file;
       const kind = markKind();
       const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
         let settled = false;
@@ -686,7 +694,13 @@ export function PreviewDrawOverlay({
         return;
       }
       clearInk();
-      setCaptureWarning(null);
+      // Degraded sends keep the user honest about what the agent received:
+      // the note went out, the pixels did not.
+      setCaptureWarning(
+        sentWithoutScreenshot
+          ? { action, message: t('chat.annotationSentWithoutScreenshot') }
+          : null,
+      );
       setNote('');
       setExtraFiles([]);
       setPreviewIndex(null);

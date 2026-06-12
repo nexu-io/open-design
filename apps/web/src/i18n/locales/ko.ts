@@ -1505,6 +1505,7 @@ export const ko: Dict = {
   'chat.annotationSendDisabledReason': '현재 작업이 실행 중입니다',
   'chat.annotationPreviewMissing': '미리보기를 캡처할 수 없습니다. 다시 시도해 주세요.',
   'chat.annotationPreviewMissingInk': '미리보기를 캡처할 수 없습니다. 잉크만 전송되지 않도록 다시 시도해 주세요.',
+  'chat.annotationSentWithoutScreenshot': '미리보기를 캡처하지 못했습니다. 주석은 스크린샷 없이 전송되었습니다.',
   'chat.annotationTimeout': '주석 전송 시간이 초과되었습니다. 다시 시도해 주세요.',
   'chat.annotationFailed': '주석 전송에 실패했습니다. 다시 시도해 주세요.',
   'chat.annotationProjectCreateFailed': '프로젝트를 생성할 수 없어 주석이 전송되지 않았습니다.',
