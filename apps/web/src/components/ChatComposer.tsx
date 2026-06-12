@@ -1084,12 +1084,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function insertSkillMention(skill: SkillSummary) {
-      const applied = await applyProjectSkill(skill);
-      if (!applied) return;
-      // Stage the skill so it rides this turn's skillIds, then insert an
-      // atomic `@<name>` pill carrying the skill's real id. The onChange
-      // prune keys on `skill:<id>` being present in the editor text, so the
-      // chip survives until the user deletes the pill.
+      // Stage + insert the `@<name>` pill *before* awaiting applyProjectSkill.
+      // Awaiting first let focus/selection drift during the project patch, so
+      // insertMention fell back to `$getRoot().selectEnd()` and dropped the
+      // pill at the end of the draft instead of the typed `@` trigger (#3596).
+      // insertPluginMention already inserts before its async apply; this
+      // mirrors that ordering. The onChange prune keys on `skill:<id>` being
+      // present in the editor text, so the chip survives until the user
+      // deletes the pill.
       setStagedSkills((prev) =>
         prev.some((s) => s.id === skill.id) ? prev : [...prev, skill],
       );
@@ -1098,6 +1100,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         entity: { id: skill.id, kind: 'skill', label: skill.name },
       });
       setMention(null);
+      await applyProjectSkill(skill);
     }
 
     function stageSkillForCurrentTurn(skill: SkillSummary) {
