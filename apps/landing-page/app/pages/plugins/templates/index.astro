@@ -126,22 +126,11 @@ const jsonLd = [
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pcopy.tileTemplates}</span>
-  </nav>
-
-  <header class="catalog-head tpl-hero">
+  <header class="catalog-head tpl-hero plugin-templates-head">
     <div class="tpl-hero-text">
       <span class="label">{pcopy.templatesHeroEyebrow}</span>
       <h1 class="display">{pcopy.tileTemplates}<span class="dot">.</span></h1>
       <p class="lead">{pcopy.templatesHeroLead}</p>
-    </div>
-    <div class="tpl-hero-side">
-      <span class="tpl-counter">{pcopy.templatesCounterLabel} · <strong>{totalCount}</strong></span>
     </div>
   </header>
 
@@ -261,6 +250,16 @@ const jsonLd = [
       </div>
     </form>
   </dialog>
+
+  <style>
+    .plugin-templates-head {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .plugin-templates-head .label {
+      display: none;
+    }
+  </style>
 </Layout>
 
 <script>
@@ -309,9 +308,6 @@ const jsonLd = [
         // fired late on a scroll-and-hover sequence.
         const startPlayback = () => {
           hydrate(v);
-          // Restart from the top so every hover plays the full animation
-          // from frame 0 rather than resuming wherever the last loop paused.
-          try { v.currentTime = 0; } catch { /* not seekable yet — plays from current */ }
           v.play().catch(() => {/* user-gesture / autoplay-policy fallback: card stays on poster */});
         };
         const stopPlayback = () => {

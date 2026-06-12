@@ -79,12 +79,7 @@ const featuredSet = new Set(
 );
 
 const totalCount = items.length;
-// HyperFrames is a high-intent long-tail: people search "hyperframes template"
-// and "hyperframes skill" specifically, so give that page a keyword-led title
-// instead of the generic "<Label> templates · …" pattern.
-const title = categorySlug === 'hyperframes'
-  ? 'HyperFrames templates & skills · agent-built motion video · Open Design'
-  : `${categoryCopy.label} templates · Open Source Claude Design alternative`;
+const title = `${categoryCopy.label} templates · Open Source Claude Design alternative`;
 const description = categoryCopy.description;
 
 const jsonLd = {
@@ -98,24 +93,10 @@ const jsonLd = {
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <a href={href('/plugins/templates/')}>{pcopy.tileTemplates}</a>
-    <span>/</span>
-    <span aria-current="page">{categoryCopy.label}</span>
-  </nav>
-
   <header class="catalog-head tpl-hero">
     <div class="tpl-hero-text">
-      <span class="label">{pcopy.templatesHeroEyebrow} · {pcopy.tileTemplates}</span>
       <h1 class="display">{categoryCopy.label}<span class="dot">.</span></h1>
       <p class="lead">{categoryCopy.description}</p>
-    </div>
-    <div class="tpl-hero-side">
-      <span class="tpl-counter">{pcopy.templatesCounterLabel} · <strong>{totalCount}</strong></span>
     </div>
   </header>
 
@@ -316,9 +297,6 @@ const jsonLd = {
           lazyObs.observe(v);
           const startPlayback = () => {
             hydrate(v);
-            // Restart from the top so every hover plays the full animation
-            // from frame 0 rather than resuming wherever the last loop paused.
-            try { v.currentTime = 0; } catch { /* not seekable yet — plays from current */ }
             v.play().catch(() => {});
           };
           const stopPlayback = () => {
@@ -408,10 +386,13 @@ const jsonLd = {
    *
    * Resetting only the user-agent decorations (appearance, the bold
    * font shorthand defaults that override .chip's mono/11px, the
-   * narrow button padding) — explicitly NOT inheriting font/color,
-   * so .chip's `font-family: var(--mono)` and `font-size: 11px`
-   * stay authoritative and the chip reads identical to the anchor
-   * chips on the same rail.
+   * narrow button padding) so the chip reads identical to the anchor
+   * chips on the same rail. No `color` here: this scoped rule out-ranks
+   * the plain-class chip rules in sub-pages.css, so declaring one would
+   * pin the label to ink even on `.is-active` (dark fill + dark label).
+   * `.chip` / `.chip:hover` / `.chip-link.is-active` already cover every
+   * state, and author rules beat the UA button color regardless of
+   * specificity.
    */
   [data-scene-strip] .chip-link[data-scene-pick] {
     appearance: none;
@@ -422,6 +403,5 @@ const jsonLd = {
     line-height: 1;
     letter-spacing: 0.06em;
     text-transform: none;
-    color: var(--ink);
   }
 </style>

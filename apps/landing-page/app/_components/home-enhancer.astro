@@ -24,10 +24,9 @@
  * attributes. If you rename any of them in `page.tsx` / `wire.tsx`,
  * update the selectors below in lockstep.
  */
-import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
 ---
 
-<script is:inline define:vars={{ RELEASE_METADATA_URL }}>
+<script is:inline>
   (() => {
     const formatStars = (count) => {
       if (!Number.isFinite(count) || count <= 0) return '0';
@@ -35,24 +34,29 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
       return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     };
 
-    const formatVersion = (metadata) => {
-      const fromVersion = (version) => {
-        if (typeof version !== 'string') return null;
-        const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-        return m ? `v${m[1]}` : null;
-      };
+    // Pull a clean 'v0.3.0'-style label from a GitHub release record.
+    // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+    // what we hand-author; fall back to tag_name (e.g.
+    // 'open-design-v0.3.0') with the project prefix stripped.
+    //
+    // Expected input shapes (release.name / release.tag_name):
+    //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+    //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+    //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
+    //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
+    //   { name: null,                 tag_name: null }                  → null (caller skips)
+    const formatVersion = (release) => {
       const fromTag = (tag) => {
         if (typeof tag !== 'string') return null;
         const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
         return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
       };
-      return (
-        fromVersion(metadata?.releaseVersion) ??
-        fromVersion(metadata?.stableVersion) ??
-        fromVersion(metadata?.baseVersion) ??
-        fromTag(metadata?.versionTag) ??
-        null
-      );
+      const fromName = (name) => {
+        if (typeof name !== 'string') return null;
+        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
     };
 
     const enhanceHeader = () => {
@@ -99,17 +103,18 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
           .catch(() => {});
       }
 
-      // Stable release metadata powers every "v0.x.y" badge on the page.
-      // Fetch it through the landing origin so deployed static pages stay
-      // fresh without depending on cross-origin R2 CORS headers.
+      // Latest stable release powers every "v0.x.y" badge on the page
+      // (topbar pulse, hero CTA-foot, footer download). Hits one
+      // unauthenticated API call per page view; the static fallback in
+      // each slot keeps the layout sane if the request fails or 403s.
       const versionSlots = document.querySelectorAll('[data-github-version]');
       if (versionSlots.length === 0) return;
-      fetch(RELEASE_METADATA_URL, {
-        headers: { Accept: 'application/json' },
+      fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-        .then((metadata) => {
-          const label = formatVersion(metadata);
+        .then((data) => {
+          const label = formatVersion(data);
           if (!label) return;
           for (const slot of versionSlots) slot.textContent = label;
         })
@@ -189,9 +194,88 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
         .catch(() => {});
     };
 
+    // Platform-aware hero download button. Detects OS and — on macOS — the chip
+    // family (Apple Silicon vs Intel), resolves the matching asset from the
+    // latest GitHub release, and rewrites the [data-download-cta] button's href
+    // to a direct download, appending the detected chip label. Falls back to
+    // the server-rendered releases-page href when detection or the API fails.
+    const enhanceDownloadCta = () => {
+      const btn = document.querySelector('[data-download-cta]');
+      if (!btn) return;
+      const ua = navigator.userAgent || '';
+      const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
+      const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
+
+      const labelChip = (text) => {
+        let chip = btn.querySelector('[data-download-chip]');
+        if (!chip) {
+          chip = document.createElement('span');
+          chip.setAttribute('data-download-chip', '');
+          chip.style.opacity = '0.7';
+          chip.style.fontWeight = '400';
+          const arrow = btn.querySelector('.arrow');
+          if (arrow) btn.insertBefore(chip, arrow);
+          else btn.appendChild(chip);
+        }
+        chip.textContent = ' · ' + text;
+      };
+
+      const resolveAsset = (chipLabel, matcher) => {
+        fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((rel) => {
+            if (!rel || !Array.isArray(rel.assets)) return;
+            const asset = rel.assets.find((a) => matcher(a.name || ''));
+            if (asset && asset.browser_download_url) {
+              btn.href = asset.browser_download_url;
+              btn.setAttribute('download', '');
+              labelChip(chipLabel);
+            }
+          })
+          .catch(() => {});
+      };
+
+      const detectMacArch = async () => {
+        // Chromium exposes the real architecture; Safari does not, so fall back
+        // to the WebGL renderer string (Apple Silicon reports an "Apple" GPU).
+        try {
+          const uad = navigator.userAgentData;
+          if (uad && typeof uad.getHighEntropyValues === 'function') {
+            const hv = await uad.getHighEntropyValues(['architecture']);
+            if (hv && hv.architecture) return hv.architecture === 'arm' ? 'arm64' : 'x64';
+          }
+        } catch (e) {}
+        try {
+          const cvs = document.createElement('canvas');
+          const gl = cvs.getContext('webgl') || cvs.getContext('experimental-webgl');
+          if (gl) {
+            const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            if (/apple/i.test(renderer) && !/intel|amd|radeon|nvidia/i.test(renderer)) return 'arm64';
+            if (/intel|amd|radeon|nvidia/i.test(renderer)) return 'x64';
+          }
+        } catch (e) {}
+        return null;
+      };
+
+      if (isWin) {
+        resolveAsset('Windows', (n) => /win-x64-setup\.exe$/i.test(n));
+      } else if (isMac) {
+        detectMacArch().then((arch) => {
+          if (arch === 'arm64') resolveAsset('Apple Silicon', (n) => /mac-arm64\.dmg$/i.test(n));
+          else if (arch === 'x64') resolveAsset('Intel', (n) => /mac-x64\.dmg$/i.test(n));
+          // undetermined → keep the releases-page fallback
+        });
+      }
+      // Linux / other → keep the releases-page fallback
+    };
+
     const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
     enhanceHeader();
     enhanceWire();
+    enhanceDownloadCta();
     if (elements.length === 0) return;
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -212,19 +296,5 @@ import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
     );
 
     for (const el of elements) observer.observe(el);
-
-    // Restart the looping accent GIF every 40s. We clone + replace the node
-    // rather than toggling `src`: assigning '' would resolve to the document
-    // URL and fire a bogus request for '/' (re-downloading the HTML and
-    // briefly flashing a broken image). Cloning re-decodes the same cached
-    // GIF from its first frame with no extra network request.
-    let scene = document.querySelector('[data-hero-scene]');
-    if (scene) {
-      setInterval(() => {
-        const fresh = scene.cloneNode(true);
-        scene.replaceWith(fresh);
-        scene = fresh;
-      }, 40000);
-    }
   })();
 </script>
