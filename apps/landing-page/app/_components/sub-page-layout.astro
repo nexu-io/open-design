@@ -26,6 +26,7 @@ import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
 import LocaleSwitcherScript from './locale-switcher-script.astro';
 import PreciseLazyload from './precise-lazyload.astro';
+import TemplateCardAutoplay from './template-card-autoplay.astro';
 import SiteFooter from './site-footer.astro';
 import { heroImage } from '../image-assets';
 import {
@@ -161,5 +162,11 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <HeaderEnhancer />
     <LocaleSwitcherScript />
     <PreciseLazyload />
+    {/* Hover-autoplay + idle hold/pan loop for any TemplateCard preview clips on
+        the page. Self-initialising and a no-op when the page has no cards, so it
+        covers every TemplateCard consumer (templates grids, solution pages, …)
+        from one place — a card that renders <video data-tpl-autoplay> is never
+        left inert. */}
+    <TemplateCardAutoplay />
   </body>
 </html>
