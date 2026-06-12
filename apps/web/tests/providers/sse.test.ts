@@ -380,7 +380,7 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toBe(original);
   });
 
-  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
+  it('replaces prior-turn <artifact> HTML with a one-line summary (the deliverable lives on disk)', () => {
     const original = [
       'Build summary below.',
       '',
@@ -391,9 +391,58 @@ describe('streamViaDaemon', () => {
     ].join('\n');
     const sanitized = sanitizePriorAssistantTurnForTranscript(original);
 
+    // The HTML body is gone — no point re-sending it, the agent reads it from disk.
+    expect(sanitized).not.toContain('<!doctype html>');
+    expect(sanitized).not.toContain('slide content');
+    expect(sanitized).not.toContain('</artifact>');
+    // The summary keeps the metadata the agent needs to locate the file.
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('identifier="deck"');
+    expect(sanitized).toContain('title="Pitch deck"');
+    expect(sanitized).toContain('list/grep the project directory');
+    // Surrounding prose is preserved.
+    expect(sanitized).toContain('Build summary below.');
+  });
+
+  it('summarizes every <artifact> when an assistant turn emits multiple', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        '<artifact identifier="a" type="text/html" title="A"><html>aaa</html></artifact>',
+        'and',
+        '<artifact identifier="b" type="text/html" title="B"><html>bbb</html></artifact>',
+      ].join('\n'),
+    );
+    expect(sanitized).not.toContain('aaa');
+    expect(sanitized).not.toContain('bbb');
+    expect(sanitized).toContain('identifier="a"');
+    expect(sanitized).toContain('identifier="b"');
+    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(2);
+  });
+
+  it('leaves a literal <artifact> recited inside a code fence intact (not a real protocol block)', () => {
+    const original = [
+      'Here is how the artifact protocol looks:',
+      '',
+      '```html',
+      '<artifact identifier="x" type="text/html" title="X">...</artifact>',
+      '```',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+    // Inside a fenced code block → a literal recitation, must survive.
     expect(sanitized).toBe(original);
-    expect(sanitized).toContain('<artifact');
-    expect(sanitized).toContain('<!doctype html>');
+  });
+
+  it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'user',
+        content: 'Can you explain what <artifact identifier="z" type="text/html" title="Z">...</artifact> means?',
+      },
+    ]);
+    // User content is never sanitized — their artifact mention survives verbatim.
+    expect(transcript).toContain('<artifact identifier="z" type="text/html" title="Z">');
+    expect(transcript).not.toContain('artifact emitted on a prior turn');
   });
 
   it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {

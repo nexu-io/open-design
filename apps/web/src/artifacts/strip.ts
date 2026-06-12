@@ -164,6 +164,71 @@ function parseArtifactAttrs(raw: string): Record<string, string> {
   return out;
 }
 
+/**
+ * Replace every real `<artifact …>…</artifact>` block with a one-line summary
+ * for use in the multi-turn transcript sent to the agent.
+ *
+ * The full artifact body was already written to the project files (the agent
+ * reads/edits it from disk via grep/sed, never from this transcript copy), so
+ * re-sending the whole HTML each turn is pure waste — a 30K-token artifact
+ * balloons every subsequent turn's input. The summary keeps the metadata the
+ * agent needs to know the file exists (`identifier` / `title` / `type`) and
+ * tells it to locate the file on disk rather than rely on the transcript.
+ *
+ * Uses the same skip-range / real-open detection as {@link stripArtifact}, so
+ * a literal `<artifact …>` recited inside a code fence (a user or assistant
+ * explaining the protocol) is left intact — only genuine protocol blocks are
+ * summarized. Malformed / still-streaming blocks (real open, no real close)
+ * are left untouched, mirroring stripArtifact's conservative behavior.
+ */
+export function summarizeArtifactsForTranscript(content: string): string {
+  let result = '';
+  let cursor = 0;
+  // Recompute skip ranges per iteration against the remaining tail so indices
+  // stay valid as we consume the string left to right.
+  while (cursor <= content.length) {
+    const tail = content.slice(cursor);
+    const { ranges: baseRanges, unclosedFenceStart } = computeSkipRanges(tail);
+    const ranges: Range[] =
+      unclosedFenceStart !== null ? [...baseRanges, [unclosedFenceStart, tail.length]] : baseRanges;
+    const open = findRealOpen(tail, 0, ranges);
+    if (open === -1) {
+      result += tail;
+      break;
+    }
+    const gt = tail.indexOf('>', open);
+    if (gt === -1) {
+      result += tail;
+      break;
+    }
+    const end = findUnskipped(tail, CLOSE, gt, ranges);
+    if (end === -1) {
+      // Real open but no real close — refuse to summarize (safer than eating
+      // to end-of-string on a malformed/streaming tag). Keep the rest as-is.
+      result += tail;
+      break;
+    }
+    const attrs = parseArtifactAttrs(tail.slice(open, gt));
+    result += tail.slice(0, open) + artifactTranscriptSummary(attrs);
+    cursor += end + CLOSE.length;
+  }
+  return result;
+}
+
+function artifactTranscriptSummary(attrs: Record<string, string>): string {
+  const id = attrs['identifier'] ?? '';
+  const title = attrs['title'] ?? '';
+  const type = attrs['type'] ?? 'text/html';
+  const meta = [
+    id ? `identifier="${id}"` : '',
+    title ? `title="${title}"` : '',
+    `type="${type}"`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  return `[artifact emitted on a prior turn — ${meta}. Its full content was written to the project files and is NOT repeated here. If you need to read or modify it, list/grep the project directory to locate the file first; do not rely on this transcript for its contents.]`;
+}
+
 export interface StreamingArtifact {
   artifactType: string;
   title: string;
