@@ -4,6 +4,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SideChatTab } from '../../../src/components/workspace/SideChatTab';
+import type { AgentTerminalAuthMetadata } from '@open-design/contracts';
 import type { AppConfig, Conversation } from '../../../src/types';
 
 const chatPaneMock = vi.fn((_: unknown) => <div data-testid="chat-pane" />);
@@ -77,5 +78,52 @@ describe('SideChatTab', () => {
         config,
       }),
     );
+  });
+
+  it('forwards ACP terminal-auth launcher to ChatPane', () => {
+    const config = {
+      mode: 'daemon',
+    } as unknown as AppConfig;
+    const conversations = [
+      {
+        id: 'conv-1',
+        title: 'Current',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectId: 'project-1',
+        messageCount: 1,
+        sessionMode: 'design',
+      },
+    ] as unknown as Conversation[];
+    const onLaunchTerminalAuth = vi.fn(async () => {});
+    const auth: AgentTerminalAuthMetadata = {
+      kind: 'terminal-auth',
+      agentId: 'kimi',
+      methodId: 'login',
+      label: 'Login with Kimi account',
+    };
+
+    render(
+      <SideChatTab
+        projectId="project-1"
+        conversationId="conv-1"
+        config={config}
+        agentsById={new Map()}
+        locale="en"
+        projectFiles={[]}
+        conversations={conversations}
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        onLaunchTerminalAuth={onLaunchTerminalAuth}
+      />,
+    );
+
+    const props = chatPaneMock.mock.calls[0]?.[0] as {
+      onLaunchTerminalAuth?: (value: AgentTerminalAuthMetadata) => Promise<void>;
+    };
+    expect(props.onLaunchTerminalAuth).toBe(onLaunchTerminalAuth);
+
+    void props.onLaunchTerminalAuth?.(auth);
+    expect(onLaunchTerminalAuth).toHaveBeenCalledWith(auth);
   });
 });

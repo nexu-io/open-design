@@ -5854,7 +5854,7 @@ export function ProjectView({
           conversationError={error}
           onRetry={handleRetry}
           onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
-          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+          onLaunchTerminalAuth={handleLaunchTerminalAuth}
           conversationId={activeConversationId}
           headerActions={(
             <>

@@ -11,7 +11,7 @@ import type {
   Conversation,
   ProjectFile,
 } from '../../types';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { AgentTerminalAuthMetadata, ChatSessionMode } from '@open-design/contracts';
 import type { ChatSendMeta } from '../ChatComposer';
 import { useConversationChat } from './useConversationChat';
 import styles from './SideChatTab.module.css';
@@ -83,6 +83,7 @@ interface Props {
   activeConversationChat?: ActiveConversationChatState;
   /** Forward produced-file / tool-card open requests to the workspace. */
   onRequestOpenFile?: (name: string) => void;
+  onLaunchTerminalAuth?: (auth: AgentTerminalAuthMetadata) => Promise<void>;
 }
 
 // A ChatPane mounted as a workspace tab, bound to a single (usually
@@ -105,6 +106,7 @@ export function SideChatTab({
   onNewConversation,
   activeConversationChat,
   onRequestOpenFile,
+  onLaunchTerminalAuth,
 }: Props) {
   const t = useT();
   const sessionMode =
@@ -152,6 +154,7 @@ export function SideChatTab({
           onStop={controlledChat?.onStop ?? chat.onStop}
           onAssistantFeedback={controlledChat?.onAssistantFeedback}
           onRequestOpenFile={onRequestOpenFile}
+          onLaunchTerminalAuth={onLaunchTerminalAuth}
           conversations={conversations}
           activeConversationId={conversationId}
           // Intentionally omit `messagesConversationId`: `useConversationChat`

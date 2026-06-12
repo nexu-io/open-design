@@ -61,7 +61,7 @@ import {
   type ProjectFile,
   type ProjectFolder,
 } from '../types';
-import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { AgentTerminalAuthMetadata, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
@@ -192,7 +192,7 @@ interface Props {
   // preview surface can offer the same one-click fix (AMR authorize, terminal
   // sign-in) instead of a bare retry.
   onAuthorizeAndRetry?: (message: ChatMessage) => void;
-  onLaunchTerminalAuth?: () => void;
+  onLaunchTerminalAuth?: (auth: AgentTerminalAuthMetadata) => Promise<void>;
   // Conversation id for the AMR promotion-card telemetry payload.
   conversationId?: string | null;
   // Project-level actions (settings, handoff, avatar menu) rendered at the
@@ -423,6 +423,7 @@ export function FileWorkspace({
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
+  onLaunchTerminalAuth,
   conversationId,
   headerActions,
   questionForm = null,
@@ -2219,6 +2220,7 @@ export function FileWorkspace({
             onNewConversation={onNewConversation}
             activeConversationChat={activeConversationChat}
             onRequestOpenFile={openFile}
+            onLaunchTerminalAuth={onLaunchTerminalAuth}
           />
         ) : isTerminalTabId(activeTab) ? (
           <TerminalViewer
