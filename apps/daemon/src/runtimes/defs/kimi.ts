@@ -19,6 +19,11 @@ export const kimiAgentDef = {
       }
       return args;
     },
+    // Kimi's prompt mode requires the full composed prompt as `-p <prompt>`.
+    // Keep this under Windows' ~32 KB CreateProcess command-line ceiling so
+    // /api/chat can fail fast with AGENT_PROMPT_TOO_LARGE instead of letting
+    // spawn surface ENAMETOOLONG / E2BIG.
+    maxPromptArgBytes: 30_000,
     streamFormat: 'json-event-stream',
     eventParser: 'kimi',
 } satisfies RuntimeAgentDef;
