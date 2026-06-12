@@ -33,10 +33,10 @@ button.primary-ghost:hover:not(:disabled) { background: var(--accent-tint); }
 
 button.ghost {
   background: transparent;
-  border-color: transparent;
+  border-color: var(--border);
   color: var(--text);
 }
-button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
 /*
  * Transient success state for ghost buttons. Used by the Media
  * Providers "Reload from daemon" button after a successful reload —
