@@ -38,6 +38,7 @@ import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+import { diagnoseOpenCodeCliFailure } from './opencode-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
@@ -2230,6 +2231,32 @@ async function testAgentConnectionInternal(
           detail: auth.message ?? cursorAuthGuidance(),
           diagnostics: buildDiagnostics({
             phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
+      const opencodeDiagnostic = diagnoseOpenCodeCliFailure({
+        agentId: input.agentId,
+        exitCode: winner.code,
+        signal: winner.signal,
+        stderrTail,
+        stdoutTail: rawStdoutTail || buffered,
+        resolvedBin: executableResolution.selectedPath,
+      });
+      if (opencodeDiagnostic) {
+        console.warn(
+          `[test:agent] ${def.name} → opencode_diagnostic: ${opencodeDiagnostic.detail}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail: opencodeDiagnostic.detail,
+          diagnostics: buildDiagnostics({
+            phase: 'spawn',
             exitCode: winner.code,
             signal: winner.signal,
           }),
