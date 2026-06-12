@@ -261,8 +261,42 @@ async function runServer(config: ResolvedWebuiConfig): Promise<ServeHandle> {
   return { webUrl: displayUrl, daemonUrl };
 }
 
-function printStartBanner(opts: {
+// Pure builder for the `--json` start payload. The `pid` MUST be the process
+// that keeps serving after this banner prints: the current process on a
+// foreground start, but the spawned detached worker on a background start —
+// never the short-lived launcher parent, or `start --json` consumers would
+// record a pid that is already gone while the service runs under another one.
+export function buildStartBannerPayload(opts: {
+  pid: number;
+  handle: ServeHandle;
+  config: ResolvedWebuiConfig;
+  token: string | null;
+  tokenPersisted: boolean | null;
+  background: boolean;
+}): {
+  pid: number;
+  url: string;
+  webPort: number;
+  daemonUrl: string | null;
+  token: string | null;
+  background: boolean;
+  tokenPersisted: boolean | null;
+} {
+  const { webUrl, daemonUrl } = opts.handle;
+  return {
+    pid: opts.pid,
+    url: webUrl,
+    webPort: opts.config.port,
+    daemonUrl,
+    token: opts.token,
+    background: opts.background,
+    tokenPersisted: opts.tokenPersisted,
+  };
+}
+
+export function printStartBanner(opts: {
   json: boolean;
+  pid: number;
   handle: ServeHandle;
   config: ResolvedWebuiConfig;
   token: string | null;
@@ -272,17 +306,7 @@ function printStartBanner(opts: {
 }): void {
   const { webUrl, daemonUrl } = opts.handle;
   if (opts.json) {
-    process.stdout.write(
-      `${JSON.stringify({
-        pid: process.pid,
-        url: webUrl,
-        webPort: opts.config.port,
-        daemonUrl,
-        token: opts.token,
-        background: opts.background,
-        tokenPersisted: opts.tokenPersisted,
-      })}\n`,
-    );
+    process.stdout.write(`${JSON.stringify(buildStartBannerPayload(opts))}\n`);
     return;
   }
   const t = webuiMessages(currentLocale());
@@ -400,7 +424,8 @@ async function commandStart(
     // Attached mode (systemd/docker/debug): run the server inline and block via
     // the IPC server. Ctrl+C triggers the shutdown handler installed in runServer.
     const handle = await runServer(resolved);
-    printStartBanner({ json, handle, config: resolved, token, tokenNotice, tokenPersisted, background: false });
+    // Foreground: this very process keeps serving, so its own pid is correct.
+    printStartBanner({ json, pid: process.pid, handle, config: resolved, token, tokenNotice, tokenPersisted, background: false });
     if (resolved.openBrowser && hasDisplay(process.platform, process.env)) openBrowser(handle.webUrl);
     return;
   }
@@ -433,7 +458,9 @@ async function commandStart(
   }
 
   const handle = await waitForWebuiReady(ipcPath, pid, 60_000, logPath);
-  printStartBanner({ json, handle, config: resolved, token, tokenNotice, tokenPersisted, background: true });
+  // Detached: the spawned worker keeps serving after this launcher parent exits,
+  // so report ITS pid, not process.pid (the short-lived parent).
+  printStartBanner({ json, pid, handle, config: resolved, token, tokenNotice, tokenPersisted, background: true });
   if (resolved.openBrowser && hasDisplay(process.platform, process.env)) openBrowser(handle.webUrl);
   process.exit(0);
 }
