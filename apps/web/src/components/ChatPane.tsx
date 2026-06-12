@@ -2097,11 +2097,11 @@ export function ChatPane({
                 keep it out of the a11y tree when it's not visible. */}
             <button
               type="button"
-              className={`chat-jump-btn${scrolledFromBottom ? ' chat-jump-btn-active' : ''}`}
+              className={`chat-jump-btn${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
               onClick={jumpToBottom}
               title={t('chat.scrollToLatest')}
-              aria-hidden={!scrolledFromBottom}
-              tabIndex={scrolledFromBottom ? 0 : -1}
+              aria-hidden={!scrolledFromBottom || showConvList}
+              tabIndex={scrolledFromBottom && !showConvList ? 0 : -1}
             >
               <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
               <span>{t('chat.jumpToLatest')}</span>
