@@ -1,4 +1,3 @@
-import { Button } from '@open-design/components';
 import { useEffect, useRef, useState } from 'react';
 import type { SocialSharePlatform, SocialShareResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
@@ -115,8 +114,9 @@ export function SocialShareGrid({ share, className, onShare, onAfterShare }: Pro
           );
         }
         return (
-          <Button
+          <button
             key={target.platform}
+            type="button"
             className={`social-share-button social-share-button--${target.platform}`}
             onClick={() => {
               onShare?.(target.platform);
@@ -129,7 +129,7 @@ export function SocialShareGrid({ share, className, onShare, onAfterShare }: Pro
                 ? t('socialShare.copied')
                 : label}
             </span>
-          </Button>
+          </button>
         );
       })}
     </div>

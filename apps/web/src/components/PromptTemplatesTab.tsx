@@ -1,4 +1,4 @@
-import { Button, Input, Select } from '@open-design/components';
+import { Input, Select } from '@open-design/components';
 import { useMemo, useState } from 'react';
 import { useI18n, useT } from '../i18n';
 import {
@@ -165,7 +165,8 @@ function PromptTemplateCard({
     ? `${tpl.source.author} · ${tpl.source.repo.split('/').pop()}`
     : tpl.source.repo.split('/').pop();
   return (
-    <Button
+    <button
+      type="button"
       className="prompt-template-card"
       onClick={onPreview}
       title={t('promptTemplates.openPreviewTitle')}
@@ -212,6 +213,6 @@ function PromptTemplateCard({
           {t('promptTemplates.sourcePrefix')} {sourceLabel}
         </span>
       </span>
-    </Button>
+    </button>
   );
 }
