@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  collectCraftReferences,
   extractCraftRequiresSlugs,
   findCraftReferenceViolations,
 } from "./lint-craft-references.ts";
@@ -56,6 +58,19 @@ test("craft reference violations allow present and planned slugs while reporting
       kind: "invalid",
       manifestPath: "skills/example/SKILL.md",
       slug: 42,
+    },
+  ]);
+});
+
+test("bad bundled scenario manifest craft references are reported", async () => {
+  const fixtureRoot = fileURLToPath(new URL("./fixtures/lint-craft-references", import.meta.url));
+  const references = await collectCraftReferences(fixtureRoot);
+
+  assert.deepEqual(findCraftReferenceViolations(references, new Set(), new Set()), [
+    {
+      kind: "unresolved",
+      manifestPath: "plugins/_official/scenarios/bad-scenario/open-design.json",
+      slug: "typograpy",
     },
   ]);
 });

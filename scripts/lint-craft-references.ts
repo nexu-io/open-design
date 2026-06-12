@@ -7,12 +7,13 @@ import { parseFrontmatter } from "../packages/plugin-runtime/src/parsers/frontma
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const craftRoot = path.join(repoRoot, "craft");
 const futureSectionsPath = path.join(craftRoot, "FUTURE_SECTIONS.md");
-const manifestRoots = [
+const skillManifestRoots = [
   "skills",
   "design-templates",
   "plugins/_official/examples",
   "docs/examples",
 ];
+const pluginManifestRoot = "plugins/_official";
 const slugPattern = /^[a-z0-9][a-z0-9-]*$/;
 
 export type CraftReference = {
@@ -42,8 +43,8 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-function toRepositoryPath(filePath: string): string {
-  return path.relative(repoRoot, filePath).split(path.sep).join("/");
+function toRepositoryPath(root: string, filePath: string): string {
+  return path.relative(root, filePath).split(path.sep).join("/");
 }
 
 export function extractCraftRequiresSlugs(source: string): unknown[] {
@@ -56,6 +57,20 @@ export function extractCraftRequiresSlugs(source: string): unknown[] {
 
   const requires = craft["requires"];
   return Array.isArray(requires) ? [...requires] : [];
+}
+
+export function extractPluginManifestContextCraftSlugs(source: string): unknown[] {
+  const manifest: unknown = JSON.parse(source);
+  if (!isRecord(manifest)) return [];
+
+  const od = manifest["od"];
+  if (!isRecord(od)) return [];
+
+  const context = od["context"];
+  if (!isRecord(context)) return [];
+
+  const craft = context["craft"];
+  return Array.isArray(craft) ? [...craft] : [];
 }
 
 export function findCraftReferenceViolations(
@@ -78,7 +93,7 @@ export function findCraftReferenceViolations(
   return violations;
 }
 
-async function collectSkillManifests(directory: string): Promise<string[]> {
+async function collectNamedManifests(directory: string, fileName: string): Promise<string[]> {
   if (!(await pathExists(directory))) return [];
 
   const entries = await readdir(directory, { withFileTypes: true });
@@ -87,8 +102,8 @@ async function collectSkillManifests(directory: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      manifests.push(...(await collectSkillManifests(fullPath)));
-    } else if (entry.isFile() && entry.name === "SKILL.md") {
+      manifests.push(...(await collectNamedManifests(fullPath, fileName)));
+    } else if (entry.isFile() && entry.name === fileName) {
       manifests.push(fullPath);
     }
   }
@@ -96,17 +111,35 @@ async function collectSkillManifests(directory: string): Promise<string[]> {
   return manifests;
 }
 
-async function collectCraftReferences(): Promise<CraftReference[]> {
-  const manifests = (
-    await Promise.all(manifestRoots.map((root) => collectSkillManifests(path.join(repoRoot, root))))
+export async function collectCraftReferences(root: string = repoRoot): Promise<CraftReference[]> {
+  const skillManifests = (
+    await Promise.all(
+      skillManifestRoots.map((manifestRoot) =>
+        collectNamedManifests(path.join(root, manifestRoot), "SKILL.md"),
+      ),
+    )
   ).flat();
+  const pluginManifests = await collectNamedManifests(
+    path.join(root, pluginManifestRoot),
+    "open-design.json",
+  );
   const references: CraftReference[] = [];
 
-  for (const manifestPath of manifests) {
+  for (const manifestPath of skillManifests) {
     const source = await readFile(manifestPath, "utf8");
     for (const slug of extractCraftRequiresSlugs(source)) {
       references.push({
-        manifestPath: toRepositoryPath(manifestPath),
+        manifestPath: toRepositoryPath(root, manifestPath),
+        slug,
+      });
+    }
+  }
+
+  for (const manifestPath of pluginManifests) {
+    const source = await readFile(manifestPath, "utf8");
+    for (const slug of extractPluginManifestContextCraftSlugs(source)) {
+      references.push({
+        manifestPath: toRepositoryPath(root, manifestPath),
         slug,
       });
     }
@@ -155,7 +188,7 @@ function printViolations(violations: CraftReferenceViolation[]): void {
   const unresolved = violations.filter((violation) => violation.kind === "unresolved");
 
   if (invalid.length > 0) {
-    console.error("Invalid od.craft.requires entries:");
+    console.error("Invalid craft reference entries:");
     for (const violation of invalid) {
       console.error(`- ${violation.manifestPath}: ${formatSlug(violation.slug)}`);
     }
@@ -163,7 +196,7 @@ function printViolations(violations: CraftReferenceViolation[]): void {
   }
 
   if (unresolved.length > 0) {
-    console.error("Unresolved od.craft.requires slugs:");
+    console.error("Unresolved craft reference slugs:");
     for (const violation of unresolved) {
       console.error(`- ${violation.manifestPath}: ${formatSlug(violation.slug)}`);
     }
