@@ -12,27 +12,67 @@ const execFileAsync = promisify(execFile);
 // the system keyring. Spawning a terminal from inside OD makes that
 // a one-click action instead of a "go open Terminal yourself" task.
 //
-// Each platform branch uses primitives that are safe against shell
-// injection BECAUSE we never accept user input here — the `command`
-// argument is always a hard-coded binary name like `agy`. Adding
-// caller-supplied flags or env vars to this helper would invalidate
-// that guarantee, so the signature is intentionally narrow.
+// Each platform branch quotes argv/env before handing it to the host
+// terminal's shell. Callers must still keep the source of commands
+// constrained: today these are either hard-coded adapter commands or
+// terminal-auth commands re-read from an ACP server's initialize response.
+
+export type TerminalLaunchCommand = {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+};
 
 export type TerminalLaunchResult =
   | { ok: true; platform: NodeJS.Platform; via: string }
   | { ok: false; platform: NodeJS.Platform; reason: string };
 
+function normalizeCommand(input: string | TerminalLaunchCommand): Required<TerminalLaunchCommand> {
+  if (typeof input === 'string') return { command: input, args: [], env: {} };
+  return {
+    command: input.command,
+    args: Array.isArray(input.args) ? input.args : [],
+    env: input.env && typeof input.env === 'object' ? input.env : {},
+  };
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function shellCommand(input: string | TerminalLaunchCommand): string {
+  const command = normalizeCommand(input);
+  const envPrefix = Object.entries(command.env)
+    .map(([key, value]) => `${key}=${shellQuote(value)}`)
+    .join(' ');
+  const argv = [command.command, ...command.args].map(shellQuote).join(' ');
+  return envPrefix ? `${envPrefix} ${argv}` : argv;
+}
+
+function cmdQuote(value: string): string {
+  return `"${value.replace(/(["^&|<>%])/g, '^$1')}"`;
+}
+
+function windowsCommand(input: string | TerminalLaunchCommand): string {
+  const command = normalizeCommand(input);
+  const envPrefix = Object.entries(command.env)
+    .map(([key, value]) => `set ${cmdQuote(`${key}=${value}`)}&&`)
+    .join('');
+  const argv = [command.command, ...command.args].map(cmdQuote).join(' ');
+  return `${envPrefix}${argv}`;
+}
+
 // macOS: AppleScript via osascript. Bringing Terminal.app to the
 // foreground and creating a new shell that immediately runs the
 // command is the canonical macOS pattern (same one VS Code uses for
 // "Open in External Terminal").
-async function launchOnDarwin(command: string): Promise<TerminalLaunchResult> {
+async function launchOnDarwin(command: string | TerminalLaunchCommand): Promise<TerminalLaunchResult> {
   // `do script "<cmd>"` opens a new Terminal window and runs <cmd>
   // in it; activate brings Terminal.app to the foreground so the
   // user actually sees the new window. Strict double-quote escaping
   // protects us if `command` ever grows special characters (today
   // it's just `agy`, so this is belt-and-suspenders).
-  const safe = command.replace(/"/g, '\\"');
+  const safe = shellCommand(command).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const script = `tell application "Terminal" to do script "${safe}"\ntell application "Terminal" to activate`;
   try {
     await execFileAsync('osascript', ['-e', script], { timeout: 5_000 });
@@ -53,17 +93,18 @@ async function launchOnDarwin(command: string): Promise<TerminalLaunchResult> {
 // because terminals like xterm and x-terminal-emulator stay alive for
 // the duration of the interactive session — waiting for exit would time
 // out and kill the window mid-OAuth-flow.
-async function launchOnLinux(command: string): Promise<TerminalLaunchResult> {
+async function launchOnLinux(command: string | TerminalLaunchCommand): Promise<TerminalLaunchResult> {
   // Order matters: x-terminal-emulator is the Debian alternative that
   // resolves to whichever terminal the distro chose. Otherwise try the
   // common ones. Each requires a slightly different invocation syntax
   // (`-e` vs `--` vs `-x`), captured in this table.
+  const rendered = shellCommand(command);
   const attempts: Array<{ bin: string; args: string[] }> = [
-    { bin: 'x-terminal-emulator', args: ['-e', command] },
-    { bin: 'gnome-terminal', args: ['--', 'sh', '-c', `${command}; exec $SHELL`] },
-    { bin: 'konsole', args: ['-e', command] },
-    { bin: 'xfce4-terminal', args: ['-e', command] },
-    { bin: 'xterm', args: ['-e', command] },
+    { bin: 'x-terminal-emulator', args: ['-e', 'sh', '-lc', rendered] },
+    { bin: 'gnome-terminal', args: ['--', 'sh', '-lc', `${rendered}; exec $SHELL`] },
+    { bin: 'konsole', args: ['-e', 'sh', '-lc', rendered] },
+    { bin: 'xfce4-terminal', args: ['-e', `sh -lc ${shellQuote(rendered)}`] },
+    { bin: 'xterm', args: ['-e', 'sh', '-lc', rendered] },
   ];
   const errors: string[] = [];
   for (const { bin, args } of attempts) {
@@ -92,11 +133,12 @@ async function launchOnLinux(command: string): Promise<TerminalLaunchResult> {
 // when the next token is also quoted), and the inner `cmd /k` keeps
 // the window open after the command finishes so the user can see
 // OAuth output and finish the flow before the window closes.
-async function launchOnWindows(command: string): Promise<TerminalLaunchResult> {
+async function launchOnWindows(command: string | TerminalLaunchCommand): Promise<TerminalLaunchResult> {
+  const rendered = windowsCommand(command);
   try {
     await execFileAsync(
       'cmd.exe',
-      ['/c', 'start', 'Open Design', 'cmd.exe', '/k', command],
+      ['/c', 'start', 'Open Design', 'cmd.exe', '/k', rendered],
       { timeout: 5_000 },
     );
     return { ok: true, platform: 'win32', via: 'cmd /c start' };
@@ -110,7 +152,7 @@ async function launchOnWindows(command: string): Promise<TerminalLaunchResult> {
 }
 
 export async function launchAgentInSystemTerminal(
-  command: string,
+  command: string | TerminalLaunchCommand,
   platform: NodeJS.Platform = process.platform,
 ): Promise<TerminalLaunchResult> {
   switch (platform) {

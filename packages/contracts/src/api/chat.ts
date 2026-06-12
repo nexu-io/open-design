@@ -281,6 +281,16 @@ export interface ChatRunCancelResponse {
   ok: true;
 }
 
+export interface AgentTerminalAuthMetadata {
+  kind: 'terminal-auth';
+  agentId: string;
+  methodId: string;
+  label?: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
 export interface ChatAttachment {
   path: string;
   name: string;
@@ -324,7 +334,7 @@ export type PersistedAgentEvent =
   // `code` carries the structured API error code for `label: 'error'`
   // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
   // decide error-specific affordances such as the hosted-AMR nudge.
-  | { kind: 'status'; label: string; detail?: string; code?: string }
+  | { kind: 'status'; label: string; detail?: string; code?: string; auth?: AgentTerminalAuthMetadata }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
   | {

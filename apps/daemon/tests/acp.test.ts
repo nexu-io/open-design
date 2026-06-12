@@ -173,6 +173,70 @@ test('attachAcpSession sets selected models through ACP config options', () => {
   ]);
 });
 
+test('attachAcpSession promotes ACP terminal-auth failures with launch metadata', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {
+    authMethods: [
+      {
+        id: 'login',
+        type: 'terminal',
+        name: 'Login with Kimi account',
+        _meta: {
+          'terminal-auth': {
+            type: 'terminal',
+            label: 'Login with Kimi account',
+            command: '/Users/test/.kimi-code/bin/kimi',
+            args: ['login'],
+            env: { KIMI_HOME: '/Users/test/.kimi-code' },
+          },
+        },
+      },
+    ],
+  });
+  writeAcpError(child, 2, {
+    code: -32000,
+    message: 'Authentication required',
+  });
+
+  assert.deepEqual(events, [
+    {
+      event: 'error',
+      payload: {
+        message: 'Agent authentication requires a terminal sign-in. Open the sign-in terminal, complete the flow, then retry this run.',
+        error: {
+          code: 'AGENT_AUTH_REQUIRED',
+          message: 'Agent authentication requires a terminal sign-in. Open the sign-in terminal, complete the flow, then retry this run.',
+          retryable: true,
+          details: {
+            kind: 'acp_terminal_auth',
+            upstreamMessage: 'json-rpc id 2: Authentication required',
+            auth: {
+              kind: 'terminal-auth',
+              methodId: 'login',
+              label: 'Login with Kimi account',
+              command: '/Users/test/.kimi-code/bin/kimi',
+              args: ['login'],
+              env: { KIMI_HOME: '/Users/test/.kimi-code' },
+            },
+          },
+        },
+      },
+    },
+  ]);
+  assert.equal(child.killed, true);
+});
+
 test('attachAcpSession keeps legacy session/set_model when no model config option exists', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];

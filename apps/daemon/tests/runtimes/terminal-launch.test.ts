@@ -18,4 +18,20 @@ describe('launchAgentInSystemTerminal', () => {
     expect(result.reason).toContain('not supported');
     expect(result.reason).toContain('aix');
   });
+
+  it('accepts structured command objects without treating arguments as unsupported platforms', async () => {
+    const result = await launchAgentInSystemTerminal(
+      {
+        command: '/usr/bin/kimi',
+        args: ['login'],
+        env: { KIMI_HOME: '/tmp/kimi home' },
+      },
+      'aix',
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.platform).toBe('aix');
+    expect(result.reason).toContain('not supported');
+  });
 });

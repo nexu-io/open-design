@@ -28,7 +28,7 @@ import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { AgentTerminalAuthMetadata, AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
@@ -520,6 +520,7 @@ interface Props {
   onSwitchToLocalCli?: () => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
+  onLaunchTerminalAuth?: (auth: AgentTerminalAuthMetadata) => Promise<void>;
   // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
   // so the auth banner offers a "Sign in via terminal" button that
   // POSTs to /api/agents/antigravity/oauth-launch. Handler resolves
@@ -701,6 +702,7 @@ export function ChatPane({
   onSwitchToLocalCli,
   onOpenAmrSettings,
   onSwitchToAmrAndRetry,
+  onLaunchTerminalAuth,
   onLaunchAntigravityOauth,
   onOpenMcpSettings,
   onBrowsePlugins,
@@ -853,10 +855,16 @@ export function ChatPane({
     }
     return null;
   })();
+  const terminalAuth =
+    failedRunErrorEvent?.auth?.kind === 'terminal-auth'
+      ? failedRunErrorEvent.auth
+      : null;
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
   const runFailureUi = retryAssistant
-    ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId)
+    ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId, {
+        hasTerminalAuth: terminalAuth !== null,
+      })
     : null;
   // Offer Continue (resume) when the failed run is resumable AND the active
   // agent still matches the agent that produced it. The daemon stores a
@@ -2005,10 +2013,14 @@ export function ChatPane({
                               type="button"
                               className="chat-error-action"
                               onClick={() => {
-                                onLaunchAntigravityOauth?.();
+                                if (terminalAuth) {
+                                  void onLaunchTerminalAuth?.(terminalAuth);
+                                } else {
+                                  onLaunchAntigravityOauth?.();
+                                }
                               }}
                             >
-                              {t('chat.antigravityError.launchTerminalCta')}
+                              {terminalAuth?.label ?? t('chat.antigravityError.launchTerminalCta')}
                             </button>
                           ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
                             <button

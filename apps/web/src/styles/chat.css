@@ -736,15 +736,21 @@
   padding: 10px 12px;
   border-radius: var(--radius);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
 }
-.chat-error-text { min-width: 0; }
+.chat-error-text {
+  flex: 1 0 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .chat-error-actions {
-  flex: 0 0 auto;
+  flex: 1 1 100%;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .chat-error-copy {

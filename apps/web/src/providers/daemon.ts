@@ -688,6 +688,44 @@ export async function launchAntigravityOauth(): Promise<LaunchAntigravityOauthRe
   }
 }
 
+export interface LaunchAcpTerminalAuthResult {
+  ok: boolean;
+  platform?: string;
+  via?: string;
+  methodId?: string;
+  label?: string | null;
+  error?: string;
+}
+
+export async function launchAcpTerminalAuth(
+  agentId: string,
+  methodId: string,
+): Promise<LaunchAcpTerminalAuthResult> {
+  try {
+    const resp = await fetch(`/api/agents/${encodeURIComponent(agentId)}/acp-terminal-auth-launch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ methodId }),
+    });
+    const body = (await resp.json().catch(() => null)) as
+      | LaunchAcpTerminalAuthResult
+      | null;
+    if (!resp.ok) {
+      return {
+        ok: false,
+        error:
+          body?.error ?? `daemon returned ${resp.status} ${resp.statusText}`,
+      };
+    }
+    return body ?? { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export interface VelaUser {
   id: string;
   email: string;

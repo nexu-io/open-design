@@ -56,6 +56,7 @@ import { useProjectFileEvents, type ProjectEvent } from '../providers/project-ev
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
+  type AgentTerminalAuthMetadata,
   type AudioVoiceOption,
   type MemorySystemPromptResponse,
   type ResearchOptions,
@@ -98,7 +99,7 @@ import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
-import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { acpTerminalAuthFromErrorDetails, appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
@@ -2393,11 +2394,16 @@ export function ProjectView({
   // rides along on the error status event so AssistantMessage can render the
   // hosted-AMR nudge for model/auth/quota failures on non-AMR agents.
   const appendAssistantErrorEvent = useCallback(
-    (messageId: string, message: string, code?: string) => {
+    (
+      messageId: string,
+      message: string,
+      code?: string,
+      auth?: ReturnType<typeof acpTerminalAuthFromErrorDetails>,
+    ) => {
       if (!message) return;
       updateMessageById(
         messageId,
-        (prev) => appendErrorStatusEvent(prev, message, code),
+        (prev) => appendErrorStatusEvent(prev, message, code, auth),
         true,
       );
     },
@@ -2815,6 +2821,10 @@ export function ProjectView({
             },
             onError: (err) => {
               const errorCode = (err as Error & { code?: string }).code;
+              const auth = acpTerminalAuthFromErrorDetails(
+                (err as Error & { details?: unknown }).details,
+                message.agentId,
+              );
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.
@@ -2825,7 +2835,7 @@ export function ProjectView({
               unregisterTextBuffer();
               if (runMayFinalize) {
                 setError(err.message);
-                appendAssistantErrorEvent(message.id, err.message, errorCode);
+                appendAssistantErrorEvent(message.id, err.message, errorCode, auth);
                 updateMessageById(
                   message.id,
                   (prev) => ({
@@ -3550,6 +3560,10 @@ export function ProjectView({
         onError: (err: Error) => {
           const endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
+          const auth = acpTerminalAuthFromErrorDetails(
+            (err as Error & { details?: unknown }).details,
+            config.agentId,
+          );
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
           // A run superseded by a "send now" interrupt can still surface a
           // late disconnect error (e.g. a canceled stream that lost its
@@ -3563,7 +3577,7 @@ export function ProjectView({
           cancelSendTextBuffer();
           if (runMayFinalize) {
             setError(err.message);
-            appendAssistantErrorEvent(assistantId, err.message, errorCode);
+            appendAssistantErrorEvent(assistantId, err.message, errorCode, auth);
             updateAssistant((prev) => ({
               ...prev,
               endedAt,
@@ -4057,6 +4071,18 @@ export function ProjectView({
       }
     } catch (err) {
       console.warn('[antigravity] oauth-launch threw:', err);
+    }
+  }, []);
+
+  const handleLaunchTerminalAuth = useCallback(async (auth: AgentTerminalAuthMetadata) => {
+    try {
+      const { launchAcpTerminalAuth } = await import('../providers/daemon');
+      const result = await launchAcpTerminalAuth(auth.agentId, auth.methodId);
+      if (!result.ok) {
+        console.warn('[acp] terminal-auth launch failed:', result.error);
+      }
+    } catch (err) {
+      console.warn('[acp] terminal-auth launch threw:', err);
     }
   }, []);
   // Poll the AMR login status while a retry is armed, rather than only reacting
@@ -5654,6 +5680,7 @@ export function ProjectView({
               }}
               onOpenAmrSettings={onOpenAmrSettings}
               onSwitchToAmrAndRetry={handleSwitchToAmrAndRetry}
+              onLaunchTerminalAuth={handleLaunchTerminalAuth}
               onLaunchAntigravityOauth={handleLaunchAntigravityOauth}
               onOpenMcpSettings={onOpenMcpSettings}
               onBrowsePlugins={onBrowsePlugins}

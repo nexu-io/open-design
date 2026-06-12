@@ -134,4 +134,20 @@ describe('resolveRunFailureUi', () => {
       expect(ui.primaryAction).not.toBe('launch-terminal-auth');
     }
   });
+
+  it('offers terminal auth for non-antigravity ACP failures only when metadata exists', () => {
+    const defaultUi = resolveRunFailureUi('AGENT_AUTH_REQUIRED', 'kimi');
+    expect(defaultUi.primaryAction).toBe('retry');
+    expect(defaultUi.showSwitchCard).toBe(true);
+
+    const terminalUi = resolveRunFailureUi('AGENT_AUTH_REQUIRED', 'kimi', {
+      hasTerminalAuth: true,
+    });
+    expect(terminalUi).toMatchObject({
+      primaryAction: 'launch-terminal-auth',
+      messageKey: null,
+      secondaryRetry: true,
+      showSwitchCard: false,
+    });
+  });
 });

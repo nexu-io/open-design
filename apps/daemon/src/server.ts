@@ -188,7 +188,7 @@ import {
   revokeProjectSurface,
 } from './genui/index.js';
 import { composeMemoryBody, extractFromMessage } from './memory.js';
-import { attachAcpSession } from './acp.js';
+import { attachAcpSession, detectAcpTerminalAuth } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './amr-image-staging.js';
 import {
@@ -2724,7 +2724,7 @@ export function upsertSkillPluginCandidateAssistantMessage(db, run, candidate) {
 
 function persistRunEventToAssistantMessage(db, run, event, data) {
   if (!run.assistantMessageId) return;
-  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  const persisted = runSseEventToPersistedAgentEvent(event, data, { agentId: run.agentId });
   if (!persisted) return;
   try {
     appendMessageAgentEvent(db, run.assistantMessageId, persisted);
@@ -2733,7 +2733,44 @@ function persistRunEventToAssistantMessage(db, run, event, data) {
   }
 }
 
-function runSseEventToPersistedAgentEvent(event, data) {
+export function __forTestRunSseEventToPersistedAgentEvent(event, data, context = {}) {
+  return runSseEventToPersistedAgentEvent(event, data, context);
+}
+
+function persistedTerminalAuthFromErrorData(data, context = {}) {
+  const details = data?.error?.details;
+  if (!details || typeof details !== 'object') return null;
+  const auth = details.auth;
+  if (!auth || typeof auth !== 'object') return null;
+  if (auth.kind !== 'terminal-auth') return null;
+  const agentId = typeof auth.agentId === 'string'
+    ? auth.agentId
+    : typeof context.agentId === 'string'
+      ? context.agentId
+      : null;
+  if (agentId == null || typeof auth.methodId !== 'string' || typeof auth.command !== 'string') {
+    return null;
+  }
+  const args = Array.isArray(auth.args)
+    ? auth.args.filter((value) => typeof value === 'string')
+    : undefined;
+  const env = auth.env && typeof auth.env === 'object'
+    ? Object.fromEntries(
+      Object.entries(auth.env).filter((entry) => typeof entry[1] === 'string'),
+    )
+    : undefined;
+  return {
+    kind: 'terminal-auth',
+    agentId,
+    methodId: auth.methodId,
+    ...(typeof auth.label === 'string' ? { label: auth.label } : {}),
+    command: auth.command,
+    ...(args && args.length > 0 ? { args } : {}),
+    ...(env && Object.keys(env).length > 0 ? { env } : {}),
+  };
+}
+
+function runSseEventToPersistedAgentEvent(event, data, context = {}) {
   if (event === 'start') {
     return {
       kind: 'status',
@@ -2751,10 +2788,13 @@ function runSseEventToPersistedAgentEvent(event, data) {
       : typeof data?.message === 'string'
         ? data.message
         : '';
+    const auth = persistedTerminalAuthFromErrorData(data, context);
     return {
       kind: 'status',
       label: 'error',
       ...(message ? { detail: message } : {}),
+      ...(typeof data?.error?.code === 'string' ? { code: data.error.code } : {}),
+      ...(auth ? { auth } : {}),
     };
   }
   if (event !== 'agent') return null;
@@ -5321,6 +5361,90 @@ export async function startServer({
       const result = await launchAgentInSystemTerminal('agy');
       if (result.ok) {
         return res.json({ ok: true, platform: result.platform, via: result.via });
+      }
+      return res.status(500).json({
+        ok: false,
+        platform: result.platform,
+        error: result.reason,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        ok: false,
+        error: String(err),
+      });
+    }
+  });
+
+  app.post('/api/agents/:agentId/acp-terminal-auth-launch', requireLocalDaemonRequest, async (req, res) => {
+    const agentId = req.params.agentId;
+    const methodId = typeof req.body?.methodId === 'string' && req.body.methodId.trim()
+      ? req.body.methodId.trim()
+      : null;
+    if (!methodId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'methodId is required',
+      });
+    }
+    const def = getAgentDef(agentId);
+    if (!def) {
+      return res.status(404).json({
+        ok: false,
+        error: `unknown agent: ${agentId}`,
+      });
+    }
+    if (def.streamFormat !== 'acp-json-rpc') {
+      return res.status(400).json({
+        ok: false,
+        error: `${def.name} does not use ACP terminal auth`,
+      });
+    }
+    try {
+      const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
+      const configuredEnv = agentCliEnvForAgent(appCfg.agentCliEnv, def.id);
+      const agentLaunch = resolveAgentLaunch(def, configuredEnv);
+      const bin = agentLaunch.launchPath ?? agentLaunch.selectedPath;
+      if (!bin) {
+        return res.status(400).json({
+          ok: false,
+          error: `${def.name} executable was not found`,
+        });
+      }
+      const env = applyAgentLaunchEnv(
+        {
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredEnv,
+        },
+        agentLaunch,
+      );
+      const auth = await detectAcpTerminalAuth({
+        bin,
+        args: def.buildArgs('', [], [], {}),
+        env,
+        methodId,
+        timeoutMs: 10_000,
+      });
+      if (!auth) {
+        return res.status(404).json({
+          ok: false,
+          error: `${def.name} did not advertise ACP terminal auth method ${methodId}`,
+        });
+      }
+      const { launchAgentInSystemTerminal } = await import('./runtimes/terminal-launch.js');
+      const result = await launchAgentInSystemTerminal({
+        command: auth.command,
+        args: auth.args ?? [],
+        env: auth.env ?? {},
+      });
+      if (result.ok) {
+        return res.json({
+          ok: true,
+          platform: result.platform,
+          via: result.via,
+          methodId: auth.methodId,
+          label: auth.label ?? null,
+        });
       }
       return res.status(500).json({
         ok: false,

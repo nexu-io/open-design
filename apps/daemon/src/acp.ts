@@ -62,6 +62,15 @@ interface AcpModelConfigOption {
   values: unknown[];
 }
 
+export interface AcpTerminalAuthMetadata {
+  kind: 'terminal-auth';
+  methodId: string;
+  label?: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
 const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'modelids']);
 
 interface DetectAcpModelsOptions {
@@ -73,6 +82,17 @@ interface DetectAcpModelsOptions {
   clientName?: string;
   clientVersion?: string;
   defaultModelOption?: ModelOption;
+}
+
+interface DetectAcpTerminalAuthOptions {
+  bin: string;
+  args: string[];
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  methodId?: string;
+  clientName?: string;
+  clientVersion?: string;
 }
 
 interface AttachAcpSessionOptions {
@@ -199,6 +219,58 @@ function rpcErrorData(raw: unknown): unknown {
 function rpcErrorRetryable(data: unknown): boolean | undefined {
   const details = asObject(data);
   return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is string => typeof item === 'string');
+  return out.length > 0 ? out : undefined;
+}
+
+function stringMap(value: unknown): Record<string, string> | undefined {
+  const obj = asObject(value);
+  if (!obj) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(obj)) {
+    if (typeof raw === 'string') out[key] = raw;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function firstTerminalAuthMethod(authMethods: unknown): AcpTerminalAuthMetadata | null {
+  const methods = Array.isArray(authMethods) ? authMethods : [];
+  for (const rawMethod of methods) {
+    const method = asObject(rawMethod);
+    if (!method) continue;
+    const methodId = typeof method.id === 'string' && method.id.trim()
+      ? method.id.trim()
+      : '';
+    const meta = asObject(method._meta);
+    const terminalAuth = asObject(meta?.['terminal-auth']);
+    const directTerminal = method.type === 'terminal' ? method : null;
+    const source = terminalAuth ?? directTerminal;
+    const command = typeof source?.command === 'string' && source.command.trim()
+      ? source.command.trim()
+      : '';
+    if (!methodId || !command) continue;
+    const label =
+      typeof source?.label === 'string' && source.label.trim()
+        ? source.label.trim()
+        : typeof method.name === 'string' && method.name.trim()
+          ? method.name.trim()
+          : undefined;
+    const args = stringArray(source?.args);
+    const env = stringMap(source?.env);
+    return {
+      kind: 'terminal-auth',
+      methodId,
+      ...(label ? { label } : {}),
+      command,
+      ...(args ? { args } : {}),
+      ...(env ? { env } : {}),
+    };
+  }
+  return null;
 }
 
 function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessage: string) {
@@ -779,6 +851,99 @@ export async function detectAcpModels({
   });
 }
 
+export async function detectAcpTerminalAuth({
+  bin,
+  args,
+  cwd = process.cwd(),
+  env = process.env,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  methodId,
+  clientName = 'open-design-auth-detect',
+  clientVersion = 'runtime-adapter',
+}: DetectAcpTerminalAuthOptions): Promise<AcpTerminalAuthMetadata | null> {
+  const effectiveTimeoutMs = resolveAcpTimeoutMs(env, timeoutMs);
+  return await new Promise<AcpTerminalAuthMetadata | null>((resolve, reject) => {
+    const child = spawn(bin, args, {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...env },
+    });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+
+    let settled = false;
+    let stderrBuf = '';
+    let timer: TimerHandle | null = null;
+
+    const finish = <T extends AcpTerminalAuthMetadata | null | Error>(
+      fn: (value: T) => void,
+      value: T,
+    ) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      try {
+        child.stdin.end();
+      } catch {}
+      if (!child.killed) child.kill('SIGTERM');
+      fn(value);
+    };
+
+    const fail = (message: string) => {
+      finish(reject, new Error(message));
+    };
+
+    const parser = createJsonLineStream((raw) => {
+      const obj = asObject(raw);
+      const result = asObject(obj?.result);
+      const rpcErr = rpcErrorMessage(raw);
+      if (rpcErr) {
+        fail(rpcErr);
+        return;
+      }
+      if (obj?.id !== 1 || !result) return;
+      const auth = firstTerminalAuthMethod(result.authMethods);
+      if (methodId && auth?.methodId !== methodId) {
+        finish(resolve, null);
+        return;
+      }
+      finish(resolve, auth);
+    });
+
+    child.stdout.on('data', (chunk) => parser.feed(chunk));
+    child.stdout.on('close', () => parser.flush());
+    child.stdin.on('error', (err) => fail(`stdin error: ${err.message}`));
+    child.stderr.on('data', (chunk) => {
+      stderrBuf = `${stderrBuf}${chunk}`.slice(-16_000);
+    });
+    child.on('error', (err) => fail(`spawn failed: ${err.message}`));
+    child.on('close', (code, signal) => {
+      parser.flush();
+      if (!settled) {
+        const errTail = stderrBuf.trim();
+        const suffix = errTail ? ` stderr=${errTail}` : '';
+        fail(`ACP auth detection exited code=${code} signal=${signal ?? 'none'}${suffix}`);
+      }
+    });
+
+    if (effectiveTimeoutMs > 0) {
+      timer = setTimeout(() => {
+        fail(`ACP auth detection timed out after ${effectiveTimeoutMs}ms`);
+      }, effectiveTimeoutMs);
+    }
+
+    try {
+      sendRpc(child.stdin, 1, 'initialize', {
+        protocolVersion: ACP_PROTOCOL_VERSION,
+        clientCapabilities: { terminal: true },
+        clientInfo: { name: clientName, version: clientVersion },
+      });
+    } catch (err) {
+      fail(`stdin write failed: ${errorMessage(err)}`);
+    }
+  });
+}
+
 export function attachAcpSession({
   child,
   prompt,
@@ -807,6 +972,7 @@ export function attachAcpSession({
   let sessionId: string | null = null;
   let activeModel: string | null = null;
   let modelConfigId: string | null = null;
+  let terminalAuth: AcpTerminalAuthMetadata | null = null;
   let emittedThinkingStart = false;
   let emittedFirstTokenStatus = false;
   let emittedTextChunk = false;
@@ -822,6 +988,7 @@ export function attachAcpSession({
   let dsmlArtifactSuppressorArmedAfterText = false;
   let dsmlArtifactSuppressorSawIncrementalProse = false;
   const acpArtifactWriteToolCallIds = new Set<string>();
+  let forceKillTimer: TimerHandle | null = null;
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -840,6 +1007,18 @@ export function attachAcpSession({
   const clearStageTimer = () => {
     if (stageTimer) clearTimeout(stageTimer);
     stageTimer = null;
+  };
+
+  const terminateChild = () => {
+    if (!child.killed) child.kill('SIGTERM');
+    if (forceKillTimer) clearTimeout(forceKillTimer);
+    forceKillTimer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, 1_000);
+    child.once('close', () => {
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      forceKillTimer = null;
+    });
   };
 
   const amrModelUnavailablePayload = (message: string) => ({
@@ -868,12 +1047,17 @@ export function attachAcpSession({
     fatal = true;
     clearStageTimer();
     send('error', payload);
-    if (!child.killed) child.kill('SIGTERM');
+    terminateChild();
   };
 
   const fail = (
     message: string,
-    options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
+    options: {
+      code?: 'AGENT_AUTH_REQUIRED' | 'AGENT_EXECUTION_FAILED';
+      forceModelUnavailable?: boolean;
+      details?: unknown;
+      retryable?: boolean;
+    } = {},
   ) => {
     if (finished) return;
     finished = true;
@@ -891,14 +1075,14 @@ export function attachAcpSession({
           : {
               message,
               error: {
-                code: 'AGENT_EXECUTION_FAILED',
+                code: options.code ?? 'AGENT_EXECUTION_FAILED',
                 message,
                 retryable: options.retryable ?? false,
                 ...(options.details === undefined ? {} : { details: options.details }),
               },
             },
     );
-    if (!child.killed) child.kill('SIGTERM');
+    terminateChild();
   };
 
   const writeRpc = (id: JsonRpcId, method: string, params: unknown, timeoutLabel: string) => {
@@ -1016,6 +1200,23 @@ export function attachAcpSession({
         return;
       }
       const retryable = rpcErrorRetryable(details);
+      if (
+        error?.code === -32000 &&
+        /auth/i.test(rpcErr) &&
+        terminalAuth &&
+        (obj.id === expectedId || obj.id === setModelRequestId)
+      ) {
+        fail('Agent authentication requires a terminal sign-in. Open the sign-in terminal, complete the flow, then retry this run.', {
+          details: {
+            kind: 'acp_terminal_auth',
+            auth: terminalAuth,
+            upstreamMessage: rpcErr,
+          },
+          retryable: true,
+          code: 'AGENT_AUTH_REQUIRED',
+        });
+        return;
+      }
       fail(rpcErr, {
         details,
         ...(retryable === undefined ? {} : { retryable }),
@@ -1148,6 +1349,7 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 1) {
+      terminalAuth = firstTerminalAuthMethod(result.authMethods);
       expectedId = nextId;
       writeRpc(
         nextId,
@@ -1213,6 +1415,8 @@ export function attachAcpSession({
   stdout.on('data', (chunk: string) => parser.feed(chunk));
   child.on('close', (code, signal) => {
     clearStageTimer();
+    if (forceKillTimer) clearTimeout(forceKillTimer);
+    forceKillTimer = null;
     parser.flush();
     if (!finished && !aborted && !fatal) {
       fail(`ACP session exited before completion (code=${code ?? 'null'}, signal=${signal ?? 'none'})`);
@@ -1223,7 +1427,7 @@ export function attachAcpSession({
 
   writeRpc(1, 'initialize', {
     protocolVersion: ACP_PROTOCOL_VERSION,
-    clientCapabilities: { terminal: false },
+    clientCapabilities: { terminal: true },
     clientInfo: { name: clientName, version: clientVersion },
   }, 'initialize');
 

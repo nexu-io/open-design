@@ -101,6 +101,7 @@ export interface RunFailureUi {
 export function resolveRunFailureUi(
   code: string | null | undefined,
   agentId: string | null | undefined,
+  options: { hasTerminalAuth?: boolean } = {},
 ): RunFailureUi {
   if (agentId === 'amr') {
     if (code === 'AMR_AUTH_REQUIRED') {
@@ -152,6 +153,14 @@ export function resolveRunFailureUi(
         showSwitchCard: false,
       };
     }
+  }
+  if (code === 'AGENT_AUTH_REQUIRED' && options.hasTerminalAuth) {
+    return {
+      primaryAction: 'launch-terminal-auth',
+      messageKey: null,
+      secondaryRetry: true,
+      showSwitchCard: false,
+    };
   }
   // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
   // localized "lost connection — retry" message instead of the raw SDK string.
