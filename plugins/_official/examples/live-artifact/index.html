@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live Artifact — Example Preview</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #0d1117;
+        color: #c9d1d9;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #f0f6fc;
+      }
+      .subtitle {
+        font-size: 0.875rem;
+        color: #8b949e;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .card-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #f0f6fc;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 500;
+      }
+      .badge-live {
+        background: rgba(56, 139, 253, 0.15);
+        color: #58a6ff;
+        border: 1px solid rgba(56, 139, 253, 0.3);
+      }
+      .badge-live::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #58a6ff;
+      }
+      .badge-connector {
+        background: rgba(63, 185, 80, 0.15);
+        color: #3fb950;
+        border: 1px solid rgba(63, 185, 80, 0.3);
+      }
+      .metric-row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .metric {
+        flex: 1;
+        min-width: 120px;
+        background: #0d1117;
+        border-radius: 6px;
+        padding: 14px;
+      }
+      .metric-label {
+        font-size: 0.75rem;
+        color: #8b949e;
+        margin-bottom: 4px;
+      }
+      .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #f0f6fc;
+        font-variant-numeric: tabular-nums;
+      }
+      .metric-delta {
+        font-size: 0.75rem;
+        margin-top: 2px;
+      }
+      .metric-delta.up {
+        color: #3fb950;
+      }
+      .audit-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #21262d;
+        font-size: 0.8125rem;
+      }
+      .audit-item:last-child {
+        border-bottom: none;
+      }
+      .audit-time {
+        color: #8b949e;
+        font-variant-numeric: tabular-nums;
+      }
+      .audit-status {
+        font-weight: 500;
+      }
+      .audit-status.ok {
+        color: #3fb950;
+      }
+      .audit-status.warn {
+        color: #d29922;
+      }
+      .refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #21262d;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        color: #c9d1d9;
+        font-size: 0.8125rem;
+        padding: 6px 14px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .refresh-btn:hover {
+        background: #30363d;
+      }
+      .data-source {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.8125rem;
+        color: #8b949e;
+        margin-top: 12px;
+      }
+      .data-source-icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+      }
+      .data-source-icon.local {
+        background: #58a6ff;
+      }
+      .data-source-icon.api {
+        background: #3fb950;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Live Dashboard</h1>
+    <p class="subtitle">
+      Real-time artifact with auto-refresh, connector data, and audit trail.
+    </p>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Performance Metrics</span>
+        <span class="badge badge-live">Live</span>
+      </div>
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-label">Requests / min</div>
+          <div class="metric-value">1,247</div>
+          <div class="metric-delta up">▲ 12%</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">P95 Latency</div>
+          <div class="metric-value">142ms</div>
+          <div class="metric-delta up" style="color: #f85149">▼ 8ms</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Error Rate</div>
+          <div class="metric-value">0.3%</div>
+          <div class="metric-delta up">▲ 0.1pp</div>
+        </div>
+      </div>
+      <div class="data-source">
+        <span class="data-source-icon api"></span>
+        Connector: Datadog API
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Audit Trail</span>
+        <button
+          class="refresh-btn"
+          onclick="
+            this.textContent = '✓ Refreshed';
+            setTimeout(() => (this.textContent = '↻ Refresh'), 1500);
+          "
+        >
+          ↻ Refresh
+        </button>
+      </div>
+      <div class="audit-item">
+        <span>Deploy v2.14.1 — production</span
+        ><span class="audit-time">14:32 UTC</span
+        ><span class="audit-status ok">Success</span>
+      </div>
+      <div class="audit-item">
+        <span>Config change — rate limit</span
+        ><span class="audit-time">13:15 UTC</span
+        ><span class="audit-status ok">Applied</span>
+      </div>
+      <div class="audit-item">
+        <span>SSL cert rotation — api</span
+        ><span class="audit-time">11:48 UTC</span
+        ><span class="audit-status ok">Rotated</span>
+      </div>
+      <div class="audit-item">
+        <span>DB migration — users schema</span
+        ><span class="audit-time">09:02 UTC</span
+        ><span class="audit-status warn">Retrying</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Active Connectors</span>
+        <span class="badge badge-connector">3 Connected</span>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px">
+        <div class="metric" style="min-width: 100px; text-align: center">
+          <div class="metric-label">GitHub</div>
+          <div style="font-size: 1.25rem; font-weight: 600; color: #f0f6fc">
+            12 repos
+          </div>
+        </div>
+        <div class="metric" style="min-width: 100px; text-align: center">
+          <div class="metric-label">Stripe</div>
+          <div style="font-size: 1.25rem; font-weight: 600; color: #f0f6fc">
+            $42.8k
+          </div>
+        </div>
+        <div class="metric" style="min-width: 100px; text-align: center">
+          <div class="metric-label">Postgres</div>
+          <div style="font-size: 1.25rem; font-weight: 600; color: #f0f6fc">
+            3.2M rows
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
