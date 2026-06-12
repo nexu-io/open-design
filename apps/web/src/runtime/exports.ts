@@ -1,5 +1,5 @@
 // Client-side export helpers used by the Share menu in the HTML viewer.
-// Four of the five formats run entirely in the browser:
+// The common formats run entirely in the browser:
 //   - PDF  : open the artifact in a popup window and trigger window.print().
 //            The user picks "Save as PDF" from the system print dialog.
 //   - HTML : download the artifact as a single .html file via a Blob URL.
@@ -9,12 +9,14 @@
 //            windows, vault apps, etc.). No conversion is performed — the
 //            file content is the same source the Source view shows. See
 //            issue #279.
-// PPTX export is fundamentally different — it asks the agent to convert the
-// artifact server-side, so it lives in ProjectView.tsx (not here).
+//   - PPTX: for deck previews, capture each slide as a PNG and package those
+//            images into a PowerPoint deck. This is a direct download path;
+//            it does not start an agent turn.
 
 import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
+import { buildImageSlidesPptx, type PptxSlideImage } from './pptx';
 import { randomUUID } from '../utils/uuid';
 import {
   captureHostPage,
@@ -348,6 +350,11 @@ export function exportAsMd(source: string, title: string): void {
   // bytes the Source view displays.
   const blob = new Blob([source], { type: 'text/markdown;charset=utf-8' });
   triggerDownload(blob, `${safeFilename(title, 'artifact')}.md`);
+}
+
+export function exportImageSlidesAsPptx(slides: PptxSlideImage[], title: string): void {
+  const blob = buildImageSlidesPptx(slides, title);
+  triggerDownload(blob, `${safeFilename(title, 'deck')}.pptx`);
 }
 
 // ---------------------------------------------------------------------------

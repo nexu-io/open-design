@@ -68,6 +68,7 @@ import {
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsZip,
+  exportImageSlidesAsPptx,
   copyImageDataUrlToClipboard,
   exportReactComponentAsHtml,
   exportReactComponentAsZip,
@@ -939,7 +940,6 @@ interface Props {
   liveHtml?: string;
   filesRefreshKey?: number;
   isDeck?: boolean;
-  onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
@@ -969,7 +969,6 @@ export function FileViewer({
   liveHtml,
   filesRefreshKey = 0,
   isDeck,
-  onExportAsPptx,
   streaming,
   commentQueueOnSend = false,
   commentSendDisabled = false,
@@ -1013,7 +1012,6 @@ export function FileViewer({
         liveHtml={liveHtml}
         filesRefreshKey={filesRefreshKey}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
-        onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
         commentQueueOnSend={commentQueueOnSend}
         commentSendDisabled={commentSendDisabled}
@@ -4410,7 +4408,6 @@ function HtmlViewer({
   liveHtml,
   filesRefreshKey = 0,
   isDeck,
-  onExportAsPptx,
   streaming,
   commentQueueOnSend = false,
   commentSendDisabled = false,
@@ -4430,7 +4427,6 @@ function HtmlViewer({
   liveHtml?: string;
   filesRefreshKey?: number;
   isDeck: boolean;
-  onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
@@ -4601,6 +4597,7 @@ function HtmlViewer({
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [pptxExporting, setPptxExporting] = useState(false);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
   const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -5176,6 +5173,7 @@ function HtmlViewer({
     return /class\s*=\s*['"][^'"]*\bslide\b/i.test(source);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
+  const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const livePreviewSource = inlinedSource ?? source;
   // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
   // source rewrite during edit (1.5s debounced set-style patches) stays
@@ -7135,7 +7133,6 @@ function HtmlViewer({
   }
 
   const showPresent = source !== null;
-  const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const artifactKind = file.artifactManifest?.kind ?? file.artifactKind ?? null;
   const rendererId = file.artifactManifest?.renderer ?? null;
   const isDeckArtifact = isDeck || artifactKind === 'deck' || rendererId === 'deck-html' || file.kind === 'presentation';
@@ -7150,7 +7147,7 @@ function HtmlViewer({
     rendererId === 'html';
   const canShare = source !== null && isShareableArtifact;
   const canDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
-  const canPptx = canShare && isDeckArtifact && Boolean(onExportAsPptx) && !streaming;
+  const canPptx = canShare && isDeckArtifact && !pptxExporting;
   const showPptxExport = canShare && isDeckArtifact;
   const showMarkdownExport = source !== null && isMarkdownArtifact;
   const showImageExport = canShare;
@@ -7275,6 +7272,97 @@ function HtmlViewer({
     srcDocShellReady,
     useLazySrcDocTransport,
     useUrlLoadPreview,
+  ]);
+
+  const waitForDeckSlide = useCallback((index: number): Promise<void> => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return Promise.reject(new Error('Deck preview is not ready'));
+    const target = Math.max(0, Math.floor(index));
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeout: number | undefined;
+      const cleanup = () => {
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        window.removeEventListener('message', onMessage);
+      };
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      timeout = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(`Deck slide ${target + 1} did not render in time`));
+      }, 2500);
+      function onMessage(ev: MessageEvent) {
+        if (ev.source !== win) return;
+        const data = ev.data as { type?: string; active?: number; count?: number } | null;
+        if (!data || data.type !== 'od:slide-state') return;
+        if (typeof data.active !== 'number' || typeof data.count !== 'number') return;
+        const next = { active: data.active, count: data.count };
+        setSlideStateCached(previewStateKey, next);
+        setSlideState(next);
+        if (data.active === target) finish();
+      }
+      window.addEventListener('message', onMessage);
+      try {
+        win.postMessage({ type: 'od:slide', action: 'go', index: target }, '*');
+      } catch (err) {
+        settled = true;
+        cleanup();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+  }, [previewStateKey]);
+
+  const exportDeckAsPptx = useCallback(async () => {
+    if (pptxExporting) return;
+    setPptxExporting(true);
+    const before = slideState ?? htmlPreviewSlideState.get(previewStateKey);
+    let restoreSlide = before?.active ?? 0;
+    try {
+      if (!effectiveDeck) throw new Error('PPTX export requires a deck preview');
+      let count = before?.count ?? 0;
+      if (count <= 0) {
+        await waitForDeckSlide(0);
+        const current = htmlPreviewSlideState.get(previewStateKey);
+        count = current?.count ?? 1;
+        restoreSlide = current?.active ?? restoreSlide;
+      }
+      const snapshots = [];
+      for (let i = 0; i < count; i += 1) {
+        await waitForDeckSlide(i);
+        await waitForAnimationFrame();
+        await waitForAnimationFrame();
+        const snapshot = await captureExportImageSnapshot();
+        if (!snapshot) throw new Error(`Could not capture slide ${i + 1}`);
+        snapshots.push({
+          dataUrl: snapshot.dataUrl,
+          height: snapshot.h,
+          width: snapshot.w,
+        });
+      }
+      exportImageSlidesAsPptx(snapshots, exportTitle);
+    } catch (err) {
+      console.warn('[exportDeckAsPptx] failed:', err);
+      setExportToast({ message: t('fileViewer.exportImageFailed'), tone: 'error' });
+      throw err;
+    } finally {
+      void waitForDeckSlide(restoreSlide).catch(() => {});
+      setPptxExporting(false);
+    }
+  }, [
+    captureExportImageSnapshot,
+    effectiveDeck,
+    exportTitle,
+    pptxExporting,
+    previewStateKey,
+    slideState,
+    t,
+    waitForDeckSlide,
   ]);
 
   const handleCopyScreenshot = useCallback(async () => {
@@ -8340,17 +8428,15 @@ function HtmlViewer({
                       role="menuitem"
                       disabled={!canPptx}
                       title={
-                        onExportAsPptx
-                          ? streaming
-                            ? t('fileViewer.exportPptxBusy')
-                            : t('fileViewer.exportPptxHint')
-                          : t('fileViewer.exportPptxNa')
+                        pptxExporting
+                          ? t('fileViewer.exportPptxBusy')
+                          : canPptx
+                            ? t('fileViewer.exportPptxHint')
+                            : t('fileViewer.exportPptxNa')
                       }
                       onClick={() => {
                         setDownloadMenuOpen(false);
-                        fireShareExport('pptx', () => {
-                          if (onExportAsPptx) onExportAsPptx(file.name);
-                        });
+                        fireShareExport('pptx', exportDeckAsPptx);
                       }}
                     >
                       <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
