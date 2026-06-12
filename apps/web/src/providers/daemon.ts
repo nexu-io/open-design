@@ -198,17 +198,25 @@ export function sanitizePriorAssistantTurnForTranscript(
 }
 
 // producedFiles → the persistence evidence summarizeArtifactsForTranscript
-// matches artifact blocks against. The manifest identifier is the strongest
-// link (it survives `-2`/`-3` collision renames); the file name is the
-// fallback for files persisted before manifests carried identifiers.
+// matches artifact blocks against. producedFiles is the whole per-turn file
+// diff — tool-written files included — so a name collision with an unrelated
+// same-turn file must not count as proof the <artifact> body was saved. Only
+// artifact-originated saves qualify: persistArtifact always writes an explicit
+// (non-inferred) manifest, whereas tool-written files surface with no manifest
+// or a daemon-inferred one (`metadata.inferred === true`). Within that
+// narrowed set, the manifest identifier is the strongest link (it survives
+// `-2`/`-3` collision renames); the file name is the fallback for artifact
+// saves whose manifest predates identifier metadata.
 function persistedArtifactFilesOf(message: ChatMessage): PersistedArtifactFileRef[] {
-  return (message.producedFiles ?? []).map((file) => {
-    const identifier = file.artifactManifest?.metadata?.identifier;
-    return {
-      name: file.name,
-      identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
-    };
-  });
+  return (message.producedFiles ?? [])
+    .filter((file) => file.artifactManifest && file.artifactManifest.metadata?.inferred !== true)
+    .map((file) => {
+      const identifier = file.artifactManifest?.metadata?.identifier;
+      return {
+        name: file.name,
+        identifier: typeof identifier === 'string' && identifier ? identifier : undefined,
+      };
+    });
 }
 
 export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {

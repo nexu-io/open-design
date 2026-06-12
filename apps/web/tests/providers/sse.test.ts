@@ -507,6 +507,52 @@ describe('streamViaDaemon', () => {
     expect(transcript).not.toContain('slide content');
   });
 
+  it('does NOT treat an unrelated same-named tool-written file as artifact persistence evidence', () => {
+    // Regression for the producedFiles-evidence review: producedFiles is the
+    // whole per-turn diff, not just persistArtifact outputs. When the
+    // artifact save fails but a tool wrote `deck.html` in the same turn
+    // (surfacing with no manifest, or a daemon-inferred one), the filename
+    // coincidence must NOT summarize the <artifact> block — its transcript
+    // body is still the only surviving copy.
+    const artifactTurn =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>only copy</html></artifact>';
+    const toolWrittenNoManifest = {
+      id: '1',
+      role: 'assistant' as const,
+      content: artifactTurn,
+      producedFiles: [
+        { name: 'deck.html', size: 10, mtime: 1, kind: 'html' as const, mime: 'text/html' },
+      ],
+    };
+    const toolWrittenInferredManifest = {
+      ...toolWrittenNoManifest,
+      id: '2',
+      producedFiles: [
+        {
+          name: 'deck.html',
+          size: 10,
+          mtime: 1,
+          kind: 'html' as const,
+          mime: 'text/html',
+          artifactManifest: {
+            version: 1 as const,
+            kind: 'html' as const,
+            title: 'deck.html',
+            entry: 'deck.html',
+            renderer: 'html' as const,
+            exports: ['html' as const],
+            metadata: { inferred: true },
+          },
+        },
+      ],
+    };
+    for (const message of [toolWrittenNoManifest, toolWrittenInferredManifest]) {
+      const transcript = buildDaemonTranscript([message]);
+      expect(transcript).toContain('only copy');
+      expect(transcript).not.toContain('artifact emitted on a prior turn');
+    }
+  });
+
   it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
     const transcript = buildDaemonTranscript([
       {
