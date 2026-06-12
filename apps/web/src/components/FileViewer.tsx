@@ -15545,13 +15545,18 @@ function HtmlViewer({
     if (hasDisplayDevApiKey) {
       return t('fileViewer.displayDevDeployAuthenticatedCreateHint');
     }
-    return t('fileViewer.displayDevDeployAnonymousHint');
+    return '';
   })();
   const shouldShowDisplayDevClaimUrl =
     activeDisplayDev?.mode === 'anonymous' &&
     Boolean(activeDisplayDev.claimUrl);
   const activeCloudflareCustomDomain = activeCloudflarePages?.customDomain;
   const deployProvider = getDeployProviderOption(deployProviderId);
+  const deployHint = deployProviderId === DISPLAYDEV_PROVIDER_ID
+    ? displayDevDeployHint
+    : deployProvider.previewHintKey
+      ? t(deployProvider.previewHintKey)
+      : '';
   const deployProviderLabel = t(deployProvider.labelKey);
   const selectedCloudflareZone = cloudflareZones.find((zone) => zone.id === cloudflareZoneId) ?? null;
   const normalizedCloudflarePrefix = normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix);
@@ -18199,126 +18204,128 @@ function HtmlViewer({
                     ))}
                   </select>
                 </label>
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <label className="deploy-target-field">
-                  <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
-                  <select
-                    value={deployTarget}
-                    onChange={(e) => {
-                      setDeployTarget(e.target.value as 'preview' | 'production');
-                    }}
-                  >
-                    <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
-                    <option value="production">{t('fileViewer.deployTargetProduction')}</option>
-                  </select>
-                </label>
-              ) : null}
-                <div className="field-label-row">
-                <span className="field-label-group">
-                  <label
-                    htmlFor="deploy-token"
-                    className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
-                  >
-                    {t(deployProvider.tokenLabelKey)}
-                  </label>
-                  {deployProvider.tokenLink ? (
-                    <a
-                      className="field-label-link"
-                      href={deployProvider.tokenLink}
-                      target="_blank"
-                      rel="noreferrer noopener"
+                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <label className="deploy-target-field">
+                    <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
+                    <select
+                      value={deployTarget}
+                      onChange={(e) => {
+                        setDeployTarget(e.target.value as 'preview' | 'production');
+                      }}
                     >
-                      {t(deployProvider.tokenLinkKey)}
-                    </a>
-                  ) : null}
-                </span>
-                <div className="field-label-note">
-                  {deployConfig?.tokenMask && deployProvider.tokenReuseHintKey ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
-                    <p className="hint">{displayDevApiKeyHint}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="deploy-token-input-row">
-                <input
-                  ref={deployTokenInputRef}
-                  id="deploy-token"
-                  type="password"
-                  value={deployToken}
-                  placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                  onChange={(e) => setDeployToken(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="ghost-link button-like"
-                  disabled={savingDeployConfig}
-                  onClick={() => {
-                    void saveDeployConfig();
-                  }}
-                >
-                  {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
-                </button>
-              </div>
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <>
-                  <div className="deploy-field-grid single-field">
-                    <label>
-                      <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
-                      <input
-                        value={cloudflareAccountId}
-                        onChange={(e) => setCloudflareAccountId(e.target.value)}
-                      />
-                      <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
-                    </label>
-                  </div>
-                  <div className="deploy-field-grid cloudflare-domain-grid">
-                    <label>
-                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
-                      <input
-                        value={cloudflareDomainPrefix}
-                        placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
-                        onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
-                      />
-                    </label>
-                    <div className="deploy-field-control">
-                      <span className="deploy-field-title-row">
-                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
-                          {t('fileViewer.cloudflareZoneLabel')}
-                        </label>
-                        <button
-                          type="button"
-                          className="ghost-link deploy-field-inline-action"
-                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                          onClick={() => {
-                            void loadCloudflareZones();
-                          }}
-                        >
-                          <RemixIcon name="refresh-line" size={13} />
-                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
-                        </button>
-                      </span>
-                      <select
-                        id="cloudflare-zone-select"
-                        value={cloudflareZoneId}
-                        disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
-                        onChange={(e) => setCloudflareZoneId(e.target.value)}
+                      <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
+                      <option value="production">{t('fileViewer.deployTargetProduction')}</option>
+                    </select>
+                  </label>
+                ) : null}
+                <div className="deploy-token-field">
+                  <div className="field-label-row">
+                    <span className="field-label-group">
+                      <label
+                        htmlFor="deploy-token"
+                        className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
                       >
-                        {cloudflareZones.length === 0 ? (
-                          <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
-                        ) : null}
-                        {cloudflareZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
+                        {t(deployProvider.tokenLabelKey)}
+                      </label>
+                      {deployProvider.tokenLink ? (
+                        <a
+                          className="field-label-link"
+                          href={deployProvider.tokenLink}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          {t(deployProvider.tokenLinkKey)}
+                        </a>
+                      ) : null}
+                    </span>
+                    <div className="field-label-note">
+                      {deployConfig?.tokenMask && deployProvider.tokenReuseHintKey ? (
+                        <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                      ) : null}
+                      {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                        <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                      ) : null}
                     </div>
                   </div>
+                  <div className="deploy-token-input-row">
+                    <input
+                      ref={deployTokenInputRef}
+                      id="deploy-token"
+                      type="password"
+                      value={deployToken}
+                      placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                      onChange={(e) => setDeployToken(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="ghost-link button-like"
+                      disabled={savingDeployConfig}
+                      onClick={() => {
+                        void saveDeployConfig();
+                      }}
+                    >
+                      {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
+                    </button>
+                  </div>
+                  {deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
+                    <span className="field-hint">{displayDevApiKeyHint}</span>
+                  ) : null}
+                </div>
+                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <>
+                    <div className="deploy-field-grid single-field">
+                      <label>
+                        <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
+                        <input
+                          value={cloudflareAccountId}
+                          onChange={(e) => setCloudflareAccountId(e.target.value)}
+                        />
+                        <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                      </label>
+                    </div>
+                    <div className="deploy-field-grid cloudflare-domain-grid">
+                      <label>
+                        <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                        <input
+                          value={cloudflareDomainPrefix}
+                          placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
+                          onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
+                        />
+                      </label>
+                      <div className="deploy-field-control">
+                        <span className="deploy-field-title-row">
+                          <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                            {t('fileViewer.cloudflareZoneLabel')}
+                          </label>
+                          <button
+                            type="button"
+                            className="ghost-link deploy-field-inline-action"
+                            disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                            onClick={() => {
+                              void loadCloudflareZones();
+                            }}
+                          >
+                            <RemixIcon name="refresh-line" size={13} />
+                            {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                          </button>
+                        </span>
+                        <select
+                          id="cloudflare-zone-select"
+                          value={cloudflareZoneId}
+                          disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
+                          onChange={(e) => setCloudflareZoneId(e.target.value)}
+                        >
+                          {cloudflareZones.length === 0 ? (
+                            <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                          ) : null}
+                          {cloudflareZones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   {cloudflareZonesError ? (
                     <p className="deploy-error">{cloudflareZonesError}</p>
                   ) : cloudflareZonesLoading ? (
@@ -18424,13 +18431,7 @@ function HtmlViewer({
                   </label>
                 </div>
               )}
-              <p className="hint">
-                {deployProviderId === DISPLAYDEV_PROVIDER_ID
-                  ? displayDevDeployHint
-                  : deployProvider.previewHintKey
-                    ? t(deployProvider.previewHintKey)
-                    : ''}
-              </p>
+              {deployHint ? <p className="hint">{deployHint}</p> : null}
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'

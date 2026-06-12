@@ -1235,6 +1235,11 @@
   color: var(--accent);
   font-weight: 700;
 }
+.deploy-token-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .deploy-token-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
