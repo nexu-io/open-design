@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,8 @@ describe('OpenAI-compatible media providers', () => {
   const realFetch = globalThis.fetch;
   const originalImageRouterKey = process.env.OD_IMAGEROUTER_API_KEY;
   const originalCustomImageKey = process.env.OD_CUSTOM_IMAGE_API_KEY;
+  const originalCodexBin = process.env.CODEX_BIN;
+  const originalCodexHome = process.env.CODEX_HOME;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
 
@@ -25,6 +27,8 @@ describe('OpenAI-compatible media providers', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_IMAGEROUTER_API_KEY;
     delete process.env.OD_CUSTOM_IMAGE_API_KEY;
+    delete process.env.CODEX_BIN;
+    delete process.env.CODEX_HOME;
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
   });
@@ -41,6 +45,16 @@ describe('OpenAI-compatible media providers', () => {
       delete process.env.OD_CUSTOM_IMAGE_API_KEY;
     } else {
       process.env.OD_CUSTOM_IMAGE_API_KEY = originalCustomImageKey;
+    }
+    if (originalCodexBin == null) {
+      delete process.env.CODEX_BIN;
+    } else {
+      process.env.CODEX_BIN = originalCodexBin;
+    }
+    if (originalCodexHome == null) {
+      delete process.env.CODEX_HOME;
+    } else {
+      process.env.CODEX_HOME = originalCodexHome;
     }
     if (originalMediaConfigDir == null) {
       delete process.env.OD_MEDIA_CONFIG_DIR;
@@ -390,6 +404,50 @@ describe('OpenAI-compatible media providers', () => {
     expect(result.name).toBe('imagerouter.mp4');
     expect(result.providerNote).toContain('imagerouter/xAI/grok-imagine-video');
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'imagerouter.mp4'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('renders Codex subscription images through the local Codex CLI', async () => {
+    const generatedHome = path.join(root, 'codex-home');
+    const codexBin = path.join(root, 'fake-codex.mjs');
+    await writeFile(codexBin, `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+const pngBase64 = '${PNG_BASE64}';
+const args = process.argv.slice(2);
+const addDirIndex = args.indexOf('--add-dir');
+const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
+  const threadId = 'codex-thread-test';
+  const outDir = path.join(generatedRoot, threadId);
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 4, output_tokens: 2 } }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.CODEX_BIN = codexBin;
+    process.env.CODEX_HOME = generatedHome;
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'codex.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex.png'));
     expect(bytes.length).toBeGreaterThan(0);
   });
 });
