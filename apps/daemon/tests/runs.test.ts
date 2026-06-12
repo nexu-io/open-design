@@ -203,6 +203,111 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  describe('cancel kill fallback', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    });
+
+    it('sends SIGTERM immediately and escalates to SIGKILL after the cancel grace window', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      const runs = createRuns();
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+      const run = runs.create();
+      run.status = 'running';
+      (run as any).child = child;
+
+      const cancelPromise = runs.cancel(run);
+
+      expect(run.cancelRequested).toBe(true);
+      expect(child.signals).toEqual(['SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(24);
+      expect(child.signals).toEqual(['SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
+      await cancelPromise;
+      expect(run.status).toBe('canceled');
+      expect(run.signal).toBe('SIGKILL');
+    });
+
+    it('uses ACP abort before falling back to process signals', async () => {
+      vi.useFakeTimers();
+      vi.stubEnv('PI_ABORT_GRACE_MS', '30');
+      const runs = createRuns();
+      const child = new FakeChildProcess({ closeOn: 'SIGKILL' });
+      const order: string[] = [];
+      const originalKill = child.kill.bind(child);
+      vi.spyOn(child, 'kill').mockImplementation((signal: string) => {
+        order.push(signal);
+        return originalKill(signal);
+      });
+      const abort = vi.fn(() => order.push('abort'));
+      const run = runs.create();
+      run.status = 'running';
+      (run as any).child = child;
+      (run as any).acpSession = { abort };
+
+      const cancelPromise = runs.cancel(run);
+
+      expect(abort).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['abort']);
+
+      await vi.advanceTimersByTimeAsync(30);
+      expect(order).toEqual(['abort', 'SIGTERM']);
+
+      await vi.advanceTimersByTimeAsync(30);
+      expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
+      await cancelPromise;
+      expect(run.status).toBe('canceled');
+      expect(run.signal).toBe('SIGKILL');
+    });
+
+    it('waits for a real process group to exit before returning canceled status', async () => {
+      if (process.platform === 'win32') return;
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_GRACE_MS', '25');
+      vi.stubEnv('OD_CHAT_RUN_CANCEL_FORCE_WAIT_MS', '250');
+      const script = [
+        "const { spawn } = require('node:child_process');",
+        "process.on('SIGTERM', () => {});",
+        "const child = spawn(process.execPath, ['-e', \"process.on('SIGTERM',()=>{}); setInterval(()=>{}, 1000);\"], { stdio: 'ignore' });",
+        "process.stdout.write(JSON.stringify({ pid: process.pid, childPid: child.pid }) + '\\n');",
+        "setInterval(() => {}, 1000);",
+      ].join('\n');
+      const child = spawn(process.execPath, ['-e', script], {
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      try {
+        const line = await readOneLine(child.stdout);
+        const payload = JSON.parse(line) as { childPid: number };
+        const runs = createRuns();
+        const run = runs.create();
+        run.status = 'running';
+        (run as any).child = child;
+        (run as any).childPid = child.pid;
+        (run as any).processGroupId = child.pid;
+
+        const status = await runs.cancel(run);
+
+        expect(status.status).toBe('canceled');
+        expect(status.childPid).toBe(child.pid);
+        expect(status.processGroupId).toBe(child.pid);
+        expect(status.childExited).toBe(true);
+        expect(status.signal).toBe('SIGKILL');
+        await expectPidGone(payload.childPid);
+      } finally {
+        try {
+          if (typeof child.pid === 'number') process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          // already gone
+        }
+      }
+    });
+  });
+
 
 
   it('stores effective media execution policy on run status bodies', () => {

@@ -9,6 +9,7 @@ import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
+  fetchProjectFileText: vi.fn(),
   updateDesignSystemDraft: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    fetchProjectFileText: registryMocks.fetchProjectFileText,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
   };
 });
@@ -93,6 +95,179 @@ function todoWrite(
 }
 
 describe('FileWorkspace design-system project surface', () => {
+  it('uses design-system card manifest labels and preview density when available', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/type-display.html',
+          group: 'Brand',
+          name: 'Display & Headings',
+          subtitle: 'Tahoma bold, tight — display 52 to H3 24',
+        },
+        {
+          path: 'ui_kits/website/index.html',
+          group: 'UI Kit — Website',
+          name: 'Website — Home (UI Kit)',
+          subtitle: 'Full passivebook.com home recreation',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const items = Array.from(container.querySelectorAll('.ds-project-review-item'));
+    const itemByTitle = (title: string) => items.find((item) =>
+      item.querySelector('.ds-project-section-title strong')?.textContent === title,
+    );
+    const typeCard = itemByTitle('Display & Headings');
+    const uiKitCard = itemByTitle('Website — Home (UI Kit)');
+
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json');
+    expect(container.textContent).not.toContain('type-display');
+    expect(typeCard?.textContent).toContain('Tahoma bold, tight');
+    expect(typeCard?.classList.contains('ds-project-review-item--specimen')).toBe(true);
+    expect(uiKitCard?.textContent).toContain('Full passivebook.com home recreation');
+    expect(uiKitCard?.classList.contains('ds-project-review-item--ui-kit')).toBe(true);
+  });
+
+  it('does not duplicate the first review card above the grouped gallery after generation', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/text-highlight.html',
+          group: 'Brand',
+          name: 'Text Highlighting',
+          subtitle: 'Knockout box + highlighter marker',
+        },
+        {
+          path: 'preview/type-display.html',
+          group: 'Brand',
+          name: 'Display & Headings',
+          subtitle: 'Tahoma bold, tight',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/text-highlight.html'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const titles = Array.from(container.querySelectorAll('.ds-project-section-title strong'))
+      .map((node) => node.textContent);
+    expect(titles.filter((title) => title === 'Text Highlighting')).toHaveLength(1);
+  });
+
+  it('inlines local React design-system preview files before sandboxing', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === '_ds_manifest.json') {
+        return Promise.resolve(JSON.stringify({
+          cards: [
+            {
+              path: 'ui_kits/website/index.html',
+              group: 'UI Kit — Website',
+              name: 'Website — Home (UI Kit)',
+              subtitle: 'Full Passive Book page',
+            },
+          ],
+        }));
+      }
+      if (name === 'ui_kits/website/index.html') {
+        return Promise.resolve(`
+          <!doctype html>
+          <html>
+            <head>
+              <link rel="stylesheet" href="../../colors_and_type.css">
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="text/babel" src="Widget.jsx"></script>
+              <script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<Widget />);</script>
+            </body>
+          </html>
+        `);
+      }
+      if (name === 'ui_kits/website/Widget.jsx') {
+        return Promise.resolve('function Widget(){ return <strong>Passive Book loaded</strong>; }');
+      }
+      if (name === 'colors_and_type.css') {
+        return Promise.resolve('@font-face { font-family: Passive; src: url("./fonts/brand.woff2"); } :root { --pb-green: #00d07e; }');
+      }
+      return Promise.resolve(null);
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('colors_and_type.css'),
+          workspaceFile('ui_kits/website/index.html'),
+          workspaceFile('ui_kits/website/Widget.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const iframe = container.querySelector<HTMLIFrameElement>('.ds-project-review-item iframe');
+    expect(iframe?.getAttribute('srcdoc')).toContain('function Widget()');
+    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="Widget.jsx"');
+    expect(iframe?.getAttribute('srcdoc')).toContain('data-od-inline-asset="../../colors_and_type.css"');
+    expect(iframe?.getAttribute('srcdoc')).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
+    expect(iframe?.getAttribute('srcdoc')).not.toContain('src="Widget.jsx"');
+  });
+
   it('keeps project-backed design systems inside the normal workspace tabs with inline preview cards', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

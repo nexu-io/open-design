@@ -2288,6 +2288,58 @@ describe('FileViewer SVG artifacts', () => {
     expect(downloadItems).not.toContain('Export as Markdown');
   });
 
+  it('does not show an export-started toast when desktop PDF export is canceled', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.pathname
+          : typeof (input as { url?: unknown })?.url === 'string'
+            ? (input as { url: string }).url
+            : '';
+      if (url === '/api/projects/project-1/export/pdf') {
+        return new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects/project-1/export/pdf',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('Export started')).toBeNull();
+  });
+
   it('disables share link actions while the artifact is still streaming', async () => {
     const file = baseFile({
       name: 'index.html',

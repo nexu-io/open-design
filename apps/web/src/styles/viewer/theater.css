@@ -789,6 +789,11 @@
   border-bottom: 1px solid var(--border-soft);
   box-shadow: var(--shadow-sm);
 }
+.prompt-templates-panel > .tab-panel-toolbar > .prompt-templates-toolbar-control {
+  width: auto;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
 .prompt-templates-count {
   margin-left: auto;
   color: var(--text-muted);

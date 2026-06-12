@@ -220,7 +220,7 @@ export function signDesktopImportToken(
 
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
-// Minimum time the white splash window stays on screen before we reveal the main
+// Minimum time the light splash window stays on screen before we reveal the main
 // window. It is sized to outlast the ~1.7s clip so the brand animation always
 // plays through. The splash is shown immediately and in parallel with the
 // daemon/web boot (see the packaged entry), so this time overlaps startup rather
@@ -791,7 +791,7 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// White-background startup splash shown while the web runtime boots. It plays
+// Light-background startup splash shown while the web runtime boots. It plays
 // the brand intro clip once and then holds on its final settled logo frame until
 // the main window is ready. The clip is embedded as a base64 data URL so it
 // renders identically in dev and in packaged builds (see `splash-video.ts`).
@@ -804,7 +804,7 @@ function createPendingHtml(): string {
     <style>
       html,
       body {
-        background: #ffffff;
+        background: #f2f4f5;
         height: 100%;
         margin: 0;
         overflow: hidden;
@@ -815,7 +815,7 @@ function createPendingHtml(): string {
         justify-content: center;
       }
       video {
-        background: #ffffff;
+        background: #f2f4f5;
         height: auto;
         max-height: 100%;
         max-width: 100%;
@@ -863,7 +863,7 @@ export type SplashWindowHandle = {
 };
 
 /**
- * Create and immediately show the white brand-splash window. The packaged entry
+ * Create and immediately show the light brand-splash window. The packaged entry
  * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
  * whole cold boot (no black no-window gap); the desktop runtime then adopts it
  * via `DesktopRuntimeOptions.splashWindow` + `splashStartedAt` and closes it
@@ -875,7 +875,7 @@ export function createSplashWindow(): SplashWindowHandle {
   const startedAt = Date.now();
   const splash = new BrowserWindow({
     autoHideMenuBar: true,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f2f4f5",
     frame: false,
     height: 900,
     resizable: false,
@@ -1288,6 +1288,27 @@ async function reportRendererCrash(
   }
 }
 
+/**
+ * Native directory picker, parented to the renderer window that initiated
+ * the IPC call. Parenting makes the dialog window-modal and hands it
+ * keyboard focus (most visibly on Windows): without a parent the focus
+ * stays on the Electron window, so pressing Esc falls through to the web
+ * app and closes the in-app modal *behind* the still-open native picker.
+ * With a parent the picker owns Esc and cancels itself.
+ */
+async function showDirectoryPickerForSender(
+  sender: Electron.WebContents,
+): Promise<Electron.OpenDialogReturnValue> {
+  const parent =
+    BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
+  const pickerOptions: Electron.OpenDialogOptions = {
+    properties: ["openDirectory", "createDirectory"],
+  };
+  return parent
+    ? dialog.showOpenDialog(parent, pickerOptions)
+    : dialog.showOpenDialog(pickerOptions);
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
@@ -1332,7 +1353,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (_event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -1355,7 +1376,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+      const result = await showDirectoryPickerForSender(event.sender);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1384,7 +1405,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // POST are a single main-process transaction.
   ipcMain.handle(
     "dialog:pick-and-replace-working-dir",
-    async (_event, init?: { projectId?: string }) => {
+    async (event, init?: { projectId?: string }) => {
       if (options.desktopAuthSecret == null) {
         return { ok: false, reason: "desktop auth secret not registered" };
       }
@@ -1398,7 +1419,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (!apiBaseUrl) {
         return { ok: false, reason: "daemon API URL not available" };
       }
-      const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+      const result = await showDirectoryPickerForSender(event.sender);
       if (result.canceled || result.filePaths.length === 0) {
         return { ok: false, canceled: true };
       }
@@ -1421,11 +1442,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // spends the token on POST /api/projects/:id/working-dir once the project
   // exists. Main remains the single source of filesystem paths crossing into
   // the daemon (same trust boundary as dialog:pick-and-replace-working-dir).
-  ipcMain.handle("dialog:pick-working-dir", async () => {
+  ipcMain.handle("dialog:pick-working-dir", async (event) => {
     if (options.desktopAuthSecret == null) {
       return { ok: false, reason: "desktop auth secret not registered" };
     }
-    const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    const result = await showDirectoryPickerForSender(event.sender);
     if (result.canceled || result.filePaths.length === 0) {
       return { ok: false, canceled: true };
     }
@@ -1797,7 +1818,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void persistRendererEntry(entry);
   });
 
-  // The splash window carries the white brand animation. In packaged builds the
+  // The splash window carries the light brand animation. In packaged builds the
   // entry hands us one it created BEFORE the sidecars booted (so it overlaps the
   // whole cold start); otherwise we create our own. The main window above stays
   // hidden behind it until the real app has mounted.

@@ -39,6 +39,9 @@ describe('redactSecrets', () => {
     expect(redactSecrets('GMAPS=AIzaSyD-Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1')).toBe(
       'GMAPS=[REDACTED:google_api_key]',
     );
+    expect(
+      redactSecrets('GEMINI=AQ.TestKeyForUnitTests01234567890123456789012'),
+    ).toBe('GEMINI=[REDACTED:google_api_key]');
   });
 
   it('redacts Slack and Stripe tokens', () => {

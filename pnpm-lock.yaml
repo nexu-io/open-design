@@ -193,6 +193,12 @@ importers:
       astro:
         specifier: 6.3.5
         version: 6.3.5(@types/node@20.19.39)(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.2)(tsx@4.22.3)(yaml@2.9.0)
+      cobe:
+        specifier: 2.0.1
+        version: 2.0.1
+      matter-js:
+        specifier: 0.20.0
+        version: 0.20.0
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -203,6 +209,9 @@ importers:
       '@astrojs/check':
         specifier: 0.9.9
         version: 0.9.9(prettier@3.8.3)(typescript@5.9.3)
+      '@types/matter-js':
+        specifier: 0.19.8
+        version: 0.19.8
       '@types/node':
         specifier: 20.19.39
         version: 20.19.39
@@ -706,8 +715,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.0.13
-        version: 0.0.13
+        specifier: 0.0.16
+        version: 0.0.16
 
   tools/serve:
     dependencies:
@@ -1845,33 +1854,33 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.13':
-    resolution: {integrity: sha512-/RfnxaW9aRsCMZ7GwpDK6uSRRvfbLu89qlv+BFBqJV13n+3Pu4d0H7pEaK/6vtAQdHBsQqU5MB/z3N51SWavWw==}
+  '@powerformer/vela-cli-darwin-arm64@0.0.16':
+    resolution: {integrity: sha512-LlJwirtSa8RbN14+YGgT2/LzjGaS2J1sxpoBLVF/bAPWB2LUYH1Eg9lxLMGOSEVIOU3ySmcHbeSkhAaz7oXlUw==}
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-x64@0.0.13':
-    resolution: {integrity: sha512-dKgelyjmTK5BvatQAjn5mC5puRX0jMBVjYV63tGrmZHjCUSE8B4AduZkk0rkRmcrFrz2QJ0IGfTrCzybFA1MsA==}
+  '@powerformer/vela-cli-darwin-x64@0.0.16':
+    resolution: {integrity: sha512-41q8UuxGADtxhnj7fbq/hta/0rG1O60jFHLEOhoTlVfXeWG3DwvBeuQg5/R677g9WViHMlHqnq3N6Kq/gKJ9BQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@powerformer/vela-cli-linux-arm64@0.0.13':
-    resolution: {integrity: sha512-HLByJGZedRYCFf5fUu1iStZP8BrNaLuBWj2NHQG1GM9pYTWIrDIn8XYBwupePT/p6gKQmsA7Rv4tWS2k0aGDXA==}
+  '@powerformer/vela-cli-linux-arm64@0.0.16':
+    resolution: {integrity: sha512-69c5M9da56x1Fy6dNdLcBj36LVrbc2N8QissOmd0nOeze2M2YKyauQ86rEB6Kx7Ez72hyBfAX8uz6jkq8IX4Xg==}
     cpu: [arm64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-x64@0.0.13':
-    resolution: {integrity: sha512-YTgLFKlr0onbFKwsJT4DwzMfi7/Af5S/4iNAmq+hBEtmBxsgNnVEQZ1wD6JaiLtqsbwRhZYFpBNlxP2KRtnT2g==}
+  '@powerformer/vela-cli-linux-x64@0.0.16':
+    resolution: {integrity: sha512-b+sw+OBiv6Ll20OcPnU9hKu29WGGSGgvFQS6YLf/xLHSrO0Qk5Vj5fAJb/q04jwCYD9sJBemsRiZZPj2UfZpZA==}
     cpu: [x64]
     os: [linux]
 
-  '@powerformer/vela-cli-win32-x64@0.0.13':
-    resolution: {integrity: sha512-vfnDc58qY5918SXBcdNdt8wIkdIDFOUXnGmTgLYQsU77QK6sR71rspuA1TRpjIOTZD/OkMADQfLePqvimI37hQ==}
+  '@powerformer/vela-cli-win32-x64@0.0.16':
+    resolution: {integrity: sha512-2vIoW/HX9Z0cwnYTtG5AxK9EdNXPi28fxeXUjd46EJ8XmcdXPIRbMi4WGUPNxr04Ld248wAdwut7gD2PwcfHpw==}
     cpu: [x64]
     os: [win32]
 
-  '@powerformer/vela-cli@0.0.13':
-    resolution: {integrity: sha512-Z8+DrsaWo9rUhjOvvCnSXzxW6832b/yQG27HwA60oW09evK3kaA41Eg1Ca1meujktoEaxAfn5u5M1toJVHV6Ig==}
+  '@powerformer/vela-cli@0.0.16':
+    resolution: {integrity: sha512-07VuABihm7XLoNkGNTFQj/aAcVE9KZNIdZrwmjk7JqOuFj1tSp9YgXNpSuXwDM729K26z7cDgEurAGmzADLdtw==}
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -2294,6 +2303,9 @@ packages:
 
   '@types/keyv@3.1.4':
     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
+
+  '@types/matter-js@0.19.8':
+    resolution: {integrity: sha512-W2ZWG58Lijv/4v768NgpeyFqqiOyslmAU7qqM1Lhz4XBoUgGtZtPz4CjcOKYtqHIak14dvPldslQhltqLTWwsw==}
 
   '@types/mdast@4.0.4':
     resolution: {integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA==}
@@ -2740,6 +2752,9 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  cobe@2.0.1:
+    resolution: {integrity: sha512-aaa6vcIlaC8C1SF50LDH0Anybo/EAXnrxqe+bwvr4+YUtZydqjeBjTTD7ziCCkbRrRGSns3I3F6cZsf3W+L+ag==}
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -3737,6 +3752,9 @@ packages:
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
+
+  matter-js@0.20.0:
+    resolution: {integrity: sha512-iC9fYR7zVT3HppNnsFsp9XOoQdQN2tUyfaKg4CHLH8bN+j6GT4Gw7IH2rP0tflAebrHFw730RR3DkVSZRX8hwA==}
 
   mdast-util-definitions@6.0.0:
     resolution: {integrity: sha512-scTllyX6pnYNZH/AIp/0ePz6s4cZtARxImwoPJ7kS42n+MnVsI4XbnG6d4ibehRIldYMWM2LD7ImQblVhUejVQ==}
@@ -6560,28 +6578,28 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.13':
+  '@powerformer/vela-cli-darwin-arm64@0.0.16':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.0.13':
+  '@powerformer/vela-cli-darwin-x64@0.0.16':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.0.13':
+  '@powerformer/vela-cli-linux-arm64@0.0.16':
     optional: true
 
-  '@powerformer/vela-cli-linux-x64@0.0.13':
+  '@powerformer/vela-cli-linux-x64@0.0.16':
     optional: true
 
-  '@powerformer/vela-cli-win32-x64@0.0.13':
+  '@powerformer/vela-cli-win32-x64@0.0.16':
     optional: true
 
-  '@powerformer/vela-cli@0.0.13':
+  '@powerformer/vela-cli@0.0.16':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.13
-      '@powerformer/vela-cli-darwin-x64': 0.0.13
-      '@powerformer/vela-cli-linux-arm64': 0.0.13
-      '@powerformer/vela-cli-linux-x64': 0.0.13
-      '@powerformer/vela-cli-win32-x64': 0.0.13
+      '@powerformer/vela-cli-darwin-arm64': 0.0.16
+      '@powerformer/vela-cli-darwin-x64': 0.0.16
+      '@powerformer/vela-cli-linux-arm64': 0.0.16
+      '@powerformer/vela-cli-linux-x64': 0.0.16
+      '@powerformer/vela-cli-win32-x64': 0.0.16
     optional: true
 
   '@preact/signals-core@1.14.2': {}
@@ -6967,6 +6985,8 @@ snapshots:
   '@types/keyv@3.1.4':
     dependencies:
       '@types/node': 24.12.2
+
+  '@types/matter-js@0.19.8': {}
 
   '@types/mdast@4.0.4':
     dependencies:
@@ -7594,6 +7614,8 @@ snapshots:
       mimic-response: 1.0.1
 
   clsx@2.1.1: {}
+
+  cobe@2.0.1: {}
 
   color-convert@2.0.1:
     dependencies:
@@ -8731,6 +8753,8 @@ snapshots:
     optional: true
 
   math-intrinsics@1.1.0: {}
+
+  matter-js@0.20.0: {}
 
   mdast-util-definitions@6.0.0:
     dependencies:

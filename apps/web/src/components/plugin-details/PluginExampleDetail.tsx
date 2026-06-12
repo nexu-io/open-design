@@ -14,18 +14,22 @@ import {
   fetchPluginPreviewHtml,
   type SkillExampleResult,
 } from '../../providers/registry';
-import { PreviewModal } from '../PreviewModal';
+import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
 import { buildPluginShareUrl } from './PluginShareMenu';
 import { PluginMetaSections } from './PluginMetaSections';
+import { buildPluginUseMenu, pluginUsePrimaryAction } from './pluginUseMenu';
+import type { PluginUseAction } from '../plugins-home/useActions';
 
 interface Props {
   record: InstalledPluginRecord;
   /** When set, fetch this specific example stem; otherwise hit /preview. */
   exampleStem?: string | null;
   onClose: () => void;
-  onUse: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
+  // Analytics — forwarded to PreviewModal's share popover.
+  onSharePopoverItemClick?: (item: PreviewSharePopoverItem) => void;
 }
 
 export function PluginExampleDetail({
@@ -35,6 +39,7 @@ export function PluginExampleDetail({
   onUse,
   isApplying,
   hideUseAction,
+  onSharePopoverItemClick,
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
@@ -144,13 +149,15 @@ export function PluginExampleDetail({
       primaryAction={hideUseAction
         ? undefined
         : {
-            label: 'Use plugin',
-            onClick: () => onUse(record),
+            label: pluginUsePrimaryAction(record, t).label,
+            onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
+            menu: buildPluginUseMenu(record, onUse, t),
           }}
       hideSidebarToggle
+      onSharePopoverItemClick={onSharePopoverItemClick}
     />
   );
 }

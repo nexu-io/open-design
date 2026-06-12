@@ -137,7 +137,7 @@ describe('SettingsDialog API protocol switching', () => {
       apiProtocol: 'google',
       apiKey: '',
       baseUrl: 'https://generativelanguage.googleapis.com',
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3.5-flash',
       apiProviderBaseUrl: 'https://generativelanguage.googleapis.com',
     });
   });

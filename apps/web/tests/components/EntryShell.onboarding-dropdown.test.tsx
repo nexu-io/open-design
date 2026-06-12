@@ -87,7 +87,59 @@ describe('OnboardingDropdown', () => {
     fireEvent.click(screen.getByRole('button', { name: /Very long Windows model option 1/ }));
 
     const listbox = screen.getByRole('listbox', { name: 'Model' });
-    expect(listbox.parentElement?.getAttribute('data-placement')).toBe('top');
-    expect(listbox.style.getPropertyValue('--onboarding-select-menu-max-height')).toBe('240px');
+    const field = listbox.closest('.onboarding-view__select-field');
+    const menu = listbox.closest('.onboarding-view__select-menu') as HTMLElement | null;
+    expect(field?.getAttribute('data-placement')).toBe('top');
+    expect(menu?.style.getPropertyValue('--onboarding-select-menu-max-height')).toBe('240px');
+  });
+
+  it('lets Escape close the searchable menu', () => {
+    render(
+      <OnboardingDropdown
+        label="Model"
+        placeholder="Select a model"
+        value="model-1"
+        options={[
+          { value: 'model-1', label: 'Claude Sonnet 4.5' },
+          { value: 'model-2', label: 'GPT-5' },
+        ]}
+        onChange={vi.fn()}
+        searchable
+        searchPlaceholder="Search models"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Claude Sonnet 4.5/ }));
+    const search = screen.getByRole('searchbox', { name: 'Search models' });
+    expect(screen.getByRole('listbox', { name: 'Model' })).toBeTruthy();
+
+    fireEvent.keyDown(search, { key: 'Escape' });
+
+    expect(screen.queryByRole('listbox', { name: 'Model' })).toBeNull();
+  });
+
+  it('uses generic no-match copy for searchable dropdown filters', () => {
+    render(
+      <OnboardingDropdown
+        label="Provider"
+        placeholder="Custom provider"
+        value=""
+        options={[
+          { value: 'anthropic', label: 'Anthropic' },
+          { value: 'openai', label: 'OpenAI' },
+        ]}
+        onChange={vi.fn()}
+        searchable
+        searchPlaceholder="Provider"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Custom provider/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Provider' }), {
+      target: { value: 'missing provider' },
+    });
+
+    expect(screen.getByText('No matches')).toBeTruthy();
+    expect(screen.queryByText('No compatible text models were returned.')).toBeNull();
   });
 });

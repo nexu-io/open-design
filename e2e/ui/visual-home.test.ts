@@ -71,8 +71,12 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
   await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
-  await expect(page.locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker select')).toHaveValue(
-    'deepseek-v4-flash',
+  await expect(
+    page
+      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
+      .getByRole('button'),
+  ).toContainText(
+    'DeepSeek V4 Flash',
   );
   await waitForVisualFonts(page);
 
@@ -101,7 +105,11 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   // unambiguous.
   const home = page.getByTestId('entry-view-home');
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
+  const community = home.getByTestId('plugins-home-section');
+  await expect(community).toBeVisible();
+  await community.scrollIntoViewIfNeeded();
+  await expect(home.locator('article.plugins-home__card--gallery').first()).toBeVisible();
+  await expect(home.getByTestId('plugins-home-search')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });
@@ -198,10 +206,18 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   await home.getByTestId('plugins-home-pill-category-deck').click();
   const card = home.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
   await expect(card).toBeVisible();
-  await card.hover();
-  await home.getByTestId('plugins-home-use-menu-visual-deck-writer').click({ force: true });
-  await home.getByTestId('plugins-home-use-with-query-visual-deck-writer').click();
-  await expect(page.getByTestId('home-hero-input')).toContainText('Draft a {{topic}} deck.');
+  // Community gallery tiles carry no inline Use actions — use-with-query
+  // lives behind the detail modal's split Use button.
+  await home.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
+  // Deck Writer ships a previewEntry, so its detail surface is the
+  // PreviewModal (aria-label "Deck Writer preview"), not the scenario
+  // detail's "... details" dialog. Match on the plugin name only.
+  await expect(page.getByRole('dialog', { name: /Deck Writer/i })).toBeVisible();
+  await page.getByTestId('plugin-details-use-visual-deck-writer-menu').click();
+  await page.getByTestId('plugin-details-use-with-query-visual-deck-writer').click();
+  // use-with-query now seeds the rendered preset text (placeholders filled in),
+  // not the raw `{{...}}` query — matching the example-prompt card path.
+  await expect(page.getByTestId('home-hero-input')).toContainText('Draft a topic deck.');
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');
 });
@@ -460,6 +476,29 @@ test('[P2] captures the avatar menu surface', async ({ page }) => {
   await expect(menu.locator('.avatar-item').first()).toBeVisible();
 
   await captureVisual(page, 'visual-avatar-menu');
+});
+
+test('[P1] Avatar menu exposes the AMR account wallet entry for the active AMR agent', async ({ page }) => {
+  await configureVisualPage(page, {
+    agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
+    config: {
+      mode: 'daemon',
+      agentId: 'amr',
+      agentModels: { amr: { model: 'deepseek-v4-flash', reasoning: 'default' } },
+      agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+    },
+  });
+  await gotoVisualHome(page);
+  await gotoVisualWorkspace(page);
+
+  const menu = await openAvatarMenu(page);
+  const amrAccount = menu.locator('.avatar-amr-account-link');
+  await expect(amrAccount).toContainText('AMR account');
+  await expect(amrAccount).toContainText('Balance & recharge');
+  await expect(amrAccount).toHaveAttribute(
+    'href',
+    'https://vela.powerformer.net/wallet?source=open_design',
+  );
 });
 
 test('[P2] captures the avatar local agent list surface', async ({ page }) => {

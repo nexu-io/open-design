@@ -903,22 +903,6 @@
 .chat-composer-fixed-layer .composer {
   pointer-events: auto;
 }
-/* Elevation kicks in only when a pinned todo card is sitting directly
- * above the composer. Without the card the chat scroll already provides
- * its own visual edge; the shadow would just darken empty whitespace. */
-.chat-pinned-todo + .composer {
-  box-shadow: 0 -10px 22px -10px rgba(0, 0, 0, 0.22);
-}
-/* Dark mode: the same alpha disappears against the dark panel, so push
- * it harder and let it spread a bit further. */
-[data-theme="dark"] .chat-pinned-todo + .composer {
-  box-shadow: 0 -14px 28px -12px rgba(0, 0, 0, 0.65);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .chat-pinned-todo + .composer {
-    box-shadow: 0 -14px 28px -12px rgba(0, 0, 0, 0.65);
-  }
-}
 .composer-shell {
   container-type: inline-size;
   border: 1px solid var(--bg-fill-secondary);
@@ -1173,6 +1157,49 @@
   margin-top: 0;
   padding-top: 8px;
   border-top: 1px solid var(--border-soft);
+  /* Anchors the standalone design-toolbox popover (opened from the assistant
+     next-step card) above this toolbar row. */
+  position: relative;
+}
+
+/* Standalone design-toolbox popover. The toolbox left the "+" menu; it now
+   opens here, floating above the composer toolbar, triggered from the
+   assistant "next step" card's "More" affordance. `display: contents` keeps
+   the wrapper out of the flex flow so the backdrop + popup anchor cleanly. */
+.composer-toolbox-standalone {
+  display: contents;
+}
+.composer-toolbox-standalone-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+}
+.composer-row .composer-toolbox-standalone-popup {
+  position: absolute;
+  left: 8px;
+  right: auto;
+  top: auto;
+  bottom: calc(100% + 8px);
+  z-index: 90;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  animation: composer-toolbox-pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes composer-toolbox-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .composer-row .icon-btn {
   box-sizing: border-box;

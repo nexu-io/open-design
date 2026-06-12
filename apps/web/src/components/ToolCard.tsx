@@ -12,16 +12,8 @@ import { useState } from 'react';
 import { useT } from '../i18n';
 import { isTodoWriteToolName, parseTodoWriteInput } from '../runtime/todos';
 import { getToolRenderer, toRenderProps } from '../runtime/tool-renderers';
-import {
-  parseAskUserQuestionInput,
-  parsePartialAskUserQuestion,
-} from '../runtime/ask-user-question';
 import type { AgentEvent } from '../types';
 import { Icon } from './Icon';
-
-export function isAskUserQuestionName(name: string): boolean {
-  return name === 'AskUserQuestion' || name === 'ask_user_question';
-}
 
 interface Props {
   use: Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -40,21 +32,6 @@ interface Props {
   // Lifts a basename up to ProjectView so it can focus the matching tab
   // in FileWorkspace.
   onRequestOpenFile?: (name: string) => void;
-  // True only for tool calls inside the most recent assistant message.
-  // Older AskUserQuestion cards lock to a read-only summary so the user
-  // cannot re-answer a stale question.
-  isLast?: boolean;
-  // Submit handler for interactive tool cards (currently AskUserQuestion).
-  // Opaque to ToolCard. ChatPane / ProjectView wire it into the normal
-  // chat send pipeline so the answer flows back to the model as the next
-  // user message. Used as a fallback when no live `onAnswerToolUse` route
-  // is available.
-  onSubmitForm?: (text: string) => void;
-  // When set, AskUserQuestion cards route the user's pick directly back to
-  // the still-open stream-json child via /api/runs/:id/tool-result instead
-  // of sending it as a fresh user message. AssistantMessage derives it
-  // from `message.runId` so each assistant turn targets its own run.
-  onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }
 
 export function ToolCard({
@@ -64,9 +41,6 @@ export function ToolCard({
   runSucceeded,
   projectFileNames,
   onRequestOpenFile,
-  isLast,
-  onSubmitForm,
-  onAnswerToolUse,
 }: Props) {
   const name = use.name;
   const isStreaming = runStreaming ?? false;
@@ -85,19 +59,6 @@ export function ToolCard({
     }
   }
   const ctx: FileToolCtx = { projectFileNames, onRequestOpenFile };
-  if (isAskUserQuestionName(name))
-    return (
-      <AskUserQuestionCard
-        toolUseId={use.id}
-        input={use.input}
-        result={result}
-        runStreaming={isStreaming}
-        runSucceeded={isSucceeded}
-        isLast={isLast ?? false}
-        onSubmitForm={onSubmitForm}
-        onAnswerToolUse={onAnswerToolUse}
-      />
-    );
   if (isTodoWriteToolName(name)) return <TodoCard input={use.input} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'Write' || name === 'write' || name === 'create_file')
     return <FileWriteCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} ctx={ctx} />;
@@ -110,7 +71,118 @@ export function ToolCard({
   if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (isAskUserQuestionName(name))
+    return <LegacyAskUserQuestionCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+}
+
+// The interactive `AskUserQuestion` mechanism was retired in favor of the
+// unified `<question-form>` flow, but chat history survives app upgrades, so
+// existing projects still carry persisted `AskUserQuestion` tool_use events.
+// Without a dedicated renderer they fall through to GenericCard and surface
+// the raw `{"questions":[...]}` JSON payload under an "AskUserQuestion" title.
+// This read-only card renders those historical turns as an inert question
+// summary — no submit path, no interactive answer route — so old history stays
+// legible after the cleanup.
+export function isAskUserQuestionName(name: string): boolean {
+  return name === 'AskUserQuestion' || name === 'ask_user_question';
+}
+
+type LegacyAuqQuestion = { question: string; header?: string; options: string[] };
+
+// Minimal, defensive parse of the legacy AUQ input shape
+// `{ questions: [{ question, header, options: [{ label }] | [string] }] }`.
+// Kept inline (the dedicated parser module was deleted with the mechanism);
+// this only needs enough to render a read-only summary.
+function parseLegacyAskUserQuestion(input: unknown): LegacyAuqQuestion[] {
+  const obj = (input ?? {}) as { questions?: unknown };
+  if (!Array.isArray(obj.questions)) return [];
+  const out: LegacyAuqQuestion[] = [];
+  for (const raw of obj.questions) {
+    if (!raw || typeof raw !== 'object') continue;
+    const q = raw as Record<string, unknown>;
+    const question = typeof q.question === 'string' ? q.question : '';
+    if (!question) continue;
+    const header = typeof q.header === 'string' && q.header.trim() ? q.header.trim() : undefined;
+    const options: string[] = [];
+    if (Array.isArray(q.options)) {
+      for (const opt of q.options) {
+        if (typeof opt === 'string') {
+          if (opt) options.push(opt);
+          continue;
+        }
+        if (opt && typeof opt === 'object' && typeof (opt as { label?: unknown }).label === 'string') {
+          const label = (opt as { label: string }).label;
+          if (label) options.push(label);
+        }
+      }
+    }
+    out.push(header ? { question, header, options } : { question, options });
+  }
+  return out;
+}
+
+// Recover the user's persisted answer from a completed AUQ `tool_result`. The
+// retired interactive card serialized answers as one `${question}\n${answer}`
+// block per question, blocks joined by a blank line, with multi-select answers
+// written as `- option` bullet lines. Surfacing it keeps old conversations
+// auditable — two different answers no longer render identically.
+function parseLegacyAuqAnswer(content: string | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!content) return map;
+  for (const block of content.split('\n\n')) {
+    const nl = block.indexOf('\n');
+    if (nl === -1) continue;
+    const q = block.slice(0, nl).trim();
+    const a = block
+      .slice(nl + 1)
+      .split('\n')
+      .map((s) => s.replace(/^- /, '').trim())
+      .filter(Boolean)
+      .join(', ');
+    if (q && a) map.set(q, a);
+  }
+  return map;
+}
+
+function LegacyAskUserQuestionCard({
+  input,
+  result,
+  runStreaming,
+  runSucceeded,
+}: {
+  input: unknown;
+  result?: Props['result'];
+  runStreaming: boolean;
+  runSucceeded: boolean;
+}) {
+  const questions = parseLegacyAskUserQuestion(input);
+  const first = questions[0];
+  // Unparseable payload → defer to the generic card rather than inventing UI.
+  if (!first)
+    return <GenericCard name="AskUserQuestion" input={input} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
+  // Title + summary are model-authored text (already in the user's locale), so
+  // no new i18n keys are needed for this historical-only surface.
+  const title = first.header ?? truncate(first.question, 60);
+  const answers = result && !result.isError ? parseLegacyAuqAnswer(result.content) : new Map<string, string>();
+  // Surface the persisted pick(s) so completed history shows the actual answer,
+  // not just the prompt. Falls back to the bare prompt when no answer is stored.
+  const summary = questions
+    .map((q) => {
+      const answer = answers.get(q.question);
+      return answer ? `${q.question} → ${answer}` : q.question;
+    })
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <div className="op-card op-generic">
+      <div className="op-card-head">
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <span className="op-title">{title}</span>
+        {summary ? <span className="op-meta">{truncate(summary, 240)}</span> : null}
+      </div>
+    </div>
+  );
 }
 
 interface FileToolCtx {
@@ -136,294 +208,6 @@ function OpenInTabButton({ filePath, ctx }: { filePath: string; ctx: FileToolCtx
     >
       {t('tool.open')}
     </button>
-  );
-}
-
-// Inline rendering of Claude's `AskUserQuestion` tool. The tool ships as
-// part of the Claude Agent SDK (no daemon-side execution); when the model
-// calls it the host is expected to collect the user's selection and feed
-// it back as the tool result. We hijack the same `onSubmitForm` channel
-// QuestionFormView uses, which ChatPane / ProjectView route into a normal
-// chat send, so the answer arrives at the next turn as a user message.
-//
-// Input shape (per the SDK):
-//   { questions: [{ question, header, options: [{ label, description }],
-//     multiSelect }, ...] }
-// We accept either array of objects or array of plain strings for `options`
-// to stay tolerant of small protocol drift. Parsing lives in
-// `../runtime/ask-user-question` (strict for finished input, lenient +
-// truncation-tolerant for the streaming pass).
-
-/**
- * Read-only AskUserQuestion card rendered from the still-streaming raw JSON
- * input (the daemon's accumulated `tool_input_delta` for this tool id). It
- * grows token-by-token via the tolerant parser and plays the reveal; once the
- * full `tool_use` lands, the id leaves `liveToolInput` and the interactive
- * card (the persisted block) takes over.
- */
-export function StreamingAskUserQuestionCard({ raw }: { raw: string }) {
-  const t = useT();
-  const questions = parsePartialAskUserQuestion(raw);
-  if (questions.length === 0) {
-    // Frame-only: the questions array hasn't produced a prompt yet.
-    return (
-      <div className="op-card op-ask-question op-ask-question-locked op-ask-question-streaming" data-testid="ask-user-question" aria-busy>
-        <div className="op-card-head">
-          <span className="op-icon" aria-hidden>?</span>
-          <span className="op-title">{t('tool.askQuestion')}</span>
-          <span className="op-ask-question-typing" aria-hidden><i /><i /><i /></span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="op-card op-ask-question op-ask-question-locked op-ask-question-streaming"
-      data-testid="ask-user-question"
-      aria-busy
-    >
-      <div className="op-card-head">
-        <span className="op-icon" aria-hidden>?</span>
-        <span className="op-title">{t('tool.askQuestion')}</span>
-        <span className="op-ask-question-typing" aria-hidden><i /><i /><i /></span>
-      </div>
-      <div className="op-ask-question-body">
-        {/* Positional keys: the prompt/label strings are themselves growing
-            token-by-token, so keying on them would remount each field/option
-            every delta and replay the reveal. Questions and options only
-            append during streaming, so the index is stable and each node
-            mounts once and updates its text in place. */}
-        {questions.map((q, qi) => (
-          <div key={qi} className="qf-field">
-            <label className="qf-label">
-              <span>{q.question}</span>
-            </label>
-            {q.header ? <div className="qf-help">{q.header}</div> : null}
-            <div className="qf-options">
-              {q.options.map((opt, oi) => (
-                <label key={`${qi}:${oi}`} className="qf-chip" title={opt.description}>
-                  <input type={q.multiSelect ? 'checkbox' : 'radio'} disabled aria-label={opt.label} />
-                  <span className="qf-chip-copy">
-                    {opt.label}
-                    {opt.description ? (
-                      <span className="qf-chip-desc">{opt.description}</span>
-                    ) : null}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AskUserQuestionCard({
-  toolUseId,
-  input,
-  result,
-  runStreaming,
-  runSucceeded,
-  isLast,
-  onSubmitForm,
-  onAnswerToolUse,
-}: {
-  toolUseId: string;
-  input: unknown;
-  result?: Props['result'];
-  runStreaming: boolean;
-  runSucceeded: boolean;
-  isLast: boolean;
-  onSubmitForm?: (text: string) => void;
-  onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
-}) {
-  const t = useT();
-  const questions = parseAskUserQuestionInput(input);
-  // Initial selections: empty string per question for single-select, empty
-  // array for multi-select. Indexing by question text keeps things simple
-  // because the SDK does not assign explicit ids.
-  const [selections, setSelections] = useState<Record<string, string | string[]>>(() => {
-    const seed: Record<string, string | string[]> = {};
-    for (const q of questions) seed[q.question] = q.multiSelect ? [] : '';
-    return seed;
-  });
-  // Track local submission so the card locks immediately on Submit. We
-  // cannot rely on `result` alone because `claude-code -p` ships an auto
-  // error tool_result that does not represent a real answer.
-  const [submitted, setSubmitted] = useState(false);
-  if (questions.length === 0) {
-    return <GenericCard name="AskUserQuestion" input={input} result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
-  }
-  // Real answer == non-error upstream tool_result OR our local submit
-  // flag. Headless mode's auto error never lands in this bucket.
-  const hasRealAnswer = (!!result && !result.isError) || submitted;
-  // After a page reload the locally-held `selections` is empty because
-  // useState resets, so the card would render its locked summary with no
-  // chips highlighted. The persisted answer lives on `result.content`
-  // (the tool_result the daemon wrote back into the run); parse it so the
-  // user's pick stays visible across reloads. Multi-select answers are
-  // serialized as a `- ` bullet list (one option per line) so labels
-  // containing commas round-trip exactly.
-  const answeredSelections = (() => {
-    if (!result || result.isError || !result.content) return null;
-    const out: Record<string, string | string[]> = {};
-    const pairs = result.content.split('\n\n');
-    for (const pair of pairs) {
-      const newlineIdx = pair.indexOf('\n');
-      if (newlineIdx === -1) continue;
-      const q = pair.slice(0, newlineIdx).trim();
-      const a = pair.slice(newlineIdx + 1).trim();
-      if (!q) continue;
-      const question = questions.find((qq) => qq.question === q);
-      if (!question) continue;
-      out[q] = question.multiSelect
-        ? a.split('\n').map((s) => s.replace(/^- /, '').trim()).filter(Boolean)
-        : a;
-    }
-    return out;
-  })();
-  // While the user is actively picking (card not yet locked), the local
-  // `selections` is authoritative. Once locked, prefer the persisted
-  // answer if available so reloads / cached messages still highlight.
-  const effectiveSelections = hasRealAnswer && answeredSelections
-    ? answeredSelections
-    : selections;
-  // We need at least one viable submit channel to be interactive: the live
-  // `onAnswerToolUse` (preferred — feeds the tool_result back into the
-  // open stream-json child) or the legacy `onSubmitForm` (fallback that
-  // sends the answer as a fresh user message).
-  const canSubmit = !!onAnswerToolUse || !!onSubmitForm;
-  const locked = hasRealAnswer || !isLast || !canSubmit;
-  const ready = questions.every((q) => {
-    const v = selections[q.question];
-    return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
-  });
-  function pickSingle(question: string, label: string) {
-    if (locked) return;
-    setSelections((prev) => ({ ...prev, [question]: label }));
-  }
-  function toggleMulti(question: string, label: string) {
-    if (locked) return;
-    setSelections((prev) => {
-      const current = Array.isArray(prev[question]) ? (prev[question] as string[]) : [];
-      const next = current.includes(label)
-        ? current.filter((v) => v !== label)
-        : [...current, label];
-      return { ...prev, [question]: next };
-    });
-  }
-  async function handleSubmit() {
-    if (locked || !ready) return;
-    const lines = questions.map((q) => {
-      const v = selections[q.question];
-      const answer = Array.isArray(v) ? v.map((s) => `- ${s}`).join('\n') : (v ?? '');
-      return `${q.question}\n${answer}`;
-    });
-    const formatted = lines.join('\n\n');
-    // Prefer the direct tool-result route: keeps the answer scoped to the
-    // open stream-json child so claude-code's `AskUserQuestion` returns
-    // without an auto error. Fall back to onSubmitForm only if no run is
-    // wired up (e.g. older messages where the run already terminated).
-    if (onAnswerToolUse) {
-      setSubmitted(true);
-      try {
-        const ok = await onAnswerToolUse(toolUseId, formatted);
-        if (ok === false) {
-          // Live route failed (run gone, stdin closed). Revert the local
-          // lock and try the legacy fallback so the user is not stuck.
-          setSubmitted(false);
-          onSubmitForm?.(formatted);
-        }
-      } catch {
-        setSubmitted(false);
-        onSubmitForm?.(formatted);
-      }
-      return;
-    }
-    if (onSubmitForm) {
-      setSubmitted(true);
-      onSubmitForm(formatted);
-    }
-  }
-  // Status pill driven by our own answered/pending state, not the upstream
-  // tool_result. claude-code's headless auto-error would otherwise surface
-  // as a misleading `error` badge on what is really an open question. When
-  // the card is locked because the user moved past it without a real
-  // answer, drop the pill entirely.
-  const statusLabel = hasRealAnswer
-    ? t('tool.askQuestionAnswered')
-    : !locked
-      ? t('tool.askQuestionPending')
-      : null;
-  // Use the awaiting variant instead of `op-status-running`: pending input
-  // is a steady waiting state, not active work, so the global pulsing
-  // animation on `op-status-running` is misleading and noisy.
-  const statusClass = hasRealAnswer ? 'op-status-ok' : 'op-status-awaiting';
-  return (
-    <div className={`op-card op-ask-question${locked ? ' op-ask-question-locked' : ''}`} data-testid="ask-user-question">
-      <div className="op-card-head">
-        <span className="op-icon" aria-hidden>?</span>
-        <span className="op-title">{t('tool.askQuestion')}</span>
-        {statusLabel ? (
-          <span className={`op-status ${statusClass}`}>{statusLabel}</span>
-        ) : null}
-      </div>
-      <div className="op-ask-question-body">
-        {questions.map((q, qi) => {
-          const selected = effectiveSelections[q.question];
-          return (
-            <div key={q.question} className="qf-field">
-              <label className="qf-label">
-                <span>{q.question}</span>
-              </label>
-              {q.header ? <div className="qf-help">{q.header}</div> : null}
-              <div className="qf-options">
-                {q.options.map((opt) => {
-                  const isOn = Array.isArray(selected)
-                    ? selected.includes(opt.label)
-                    : selected === opt.label;
-                  return (
-                    <label
-                      key={opt.label}
-                      className={`qf-chip${isOn ? ' qf-chip-on' : ''}`}
-                      title={opt.description}
-                    >
-                      <input
-                        type={q.multiSelect ? 'checkbox' : 'radio'}
-                        name={`auq-${toolUseId}-q${qi}`}
-                        checked={isOn}
-                        disabled={locked}
-                        aria-label={opt.label}
-                        onChange={() => (q.multiSelect ? toggleMulti(q.question, opt.label) : pickSingle(q.question, opt.label))}
-                      />
-                      <span className="qf-chip-copy">
-                        {opt.label}
-                        {opt.description ? (
-                          <span className="qf-chip-desc">{opt.description}</span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {!locked ? (
-        <div className="op-ask-question-foot">
-          <button
-            type="button"
-            className="op-ask-question-submit"
-            disabled={!ready}
-            onClick={handleSubmit}
-          >
-            {t('tool.askQuestionSubmit')}
-          </button>
-        </div>
-      ) : null}
-    </div>
   );
 }
 

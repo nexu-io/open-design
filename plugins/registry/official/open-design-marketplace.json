@@ -12,7 +12,7 @@
     "description": "Official Open Design plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
     "version": "0.1.0",
     "generatedFrom": "plugins/_official",
-    "bundledPreinstallCount": 402
+    "bundledPreinstallCount": 414
   },
   "plugins": [
     {
@@ -10714,331 +10714,6 @@
       "taskKind": "new-generation"
     },
     {
-      "name": "open-design/video-template-hyperframes-app-showcase-three-phones",
-      "title": "HyperFrames: 12-Second App Showcase — Three Floating Phones",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-app-showcase-three-phones",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 12-second 16:9 app showcase composition — three floating iPhone screens hover in 3D space, each rotating in turn to surface a different feature, beat-synced label callouts, end logo lockup. Built directly on the HyperFrames `app-showcase` catalog block.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "product",
-        "hyperframes",
-        "app-showcase",
-        "3d",
-        "mobile"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-brand-sizzle-reel",
-      "title": "HyperFrames: 30-Second Brand Sizzle Reel",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-brand-sizzle-reel",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 30-second 16:9 HyperFrames sizzle reel — fast cuts, beat-synced kinetic typography, audio-reactive scale on display words, shader transitions between five scenes, end-card with logo bloom. Modelled on the aisoc-hype archetype from the student kit.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "marketing",
-        "hyperframes",
-        "sizzle",
-        "kinetic-typography",
-        "audio-reactive",
-        "brand"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-data-bar-chart-race",
-      "title": "HyperFrames: Animated Bar-Chart Race (NYT-style)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-data-bar-chart-race",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 12-second 16:9 data infographic — animated bar + line chart with staggered category reveal, NYT-style serif headline, footnote source, kinetic value labels. Built directly on the HyperFrames `data-chart` catalog block.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "data",
-        "hyperframes",
-        "data-viz",
-        "chart",
-        "infographic",
-        "editorial"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-flight-map-route",
-      "title": "HyperFrames: Apple-Style Flight Map (Origin → Destination)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-flight-map-route",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "An 8-second 16:9 cinematic flight-route map — realistic terrain zoom, animated plane gliding from origin to destination along a curved path, labelled cities, kinetic distance counter. Built directly on the HyperFrames `nyc-paris-flight` catalog block, repurposable for any city pair.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "travel",
-        "hyperframes",
-        "map",
-        "route",
-        "cinematic"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-logo-outro-cinematic",
-      "title": "HyperFrames: 4-Second Cinematic Logo Outro",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-logo-outro-cinematic",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 4-second 16:9 logo outro — piece-by-piece wordmark assembly with bloom, shimmer sweep across the final lockup, soft grain overlay, single-line CTA. Built on the HyperFrames `logo-outro`, `shimmer-sweep`, and `grain-overlay` blocks.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "branding",
-        "hyperframes",
-        "logo",
-        "outro",
-        "endcard"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-money-counter-hype",
-      "title": "HyperFrames: $0 → $10K Money Counter Hype (9:16)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-money-counter-hype",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 6-second vertical 1080×1920 HyperFrames hype clip — Apple-style $0 → $10,000 counter with green flash, money burst particles, cash-stack icon, kicker headline. Built on the HyperFrames `apple-money-count` catalog block.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "short-form",
-        "hyperframes",
-        "vertical",
-        "hype",
-        "counter",
-        "money"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-product-reveal-minimal",
-      "title": "HyperFrames: 5-Second Minimal Product Reveal",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-product-reveal-minimal",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 5-second HyperFrames composition for a high-end product reveal — dark canvas, single warm accent, slow push-in title card, kinetic kicker line, restrained motion. The agent renders MP4 from HTML+GSAP via puppeteer; no stock footage needed.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "cinematic",
-        "hyperframes",
-        "product",
-        "minimal",
-        "title-card"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-saas-product-promo-30s",
-      "title": "HyperFrames: 30-Second SaaS Product Promo (Linear-style)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-saas-product-promo-30s",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 30-second HyperFrames composition modelled on Linear/ClickUp-style product films — UI 3D reveals, beat-synced kinetic typography, animated UI screenshots, end-card with logo outro. Built from HF catalog blocks (ui-3d-reveal, app-showcase, logo-outro) plus shader transitions between scenes.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "marketing",
-        "hyperframes",
-        "product-promo",
-        "saas",
-        "linear-style",
-        "kinetic-typography"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-social-overlay-stack",
-      "title": "HyperFrames: 9:16 Social Overlay Stack (X · Reddit · Spotify · Instagram)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-social-overlay-stack",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 15-second vertical 1080×1920 HyperFrames composition that stacks four animated social cards over a face-cam loop — an X post, a Reddit reaction, a Spotify now-playing card, and an Instagram-follow CTA at the end. Each card is a HyperFrames catalog block; the choreography is the value-add.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "short-form",
-        "hyperframes",
-        "vertical",
-        "social",
-        "overlay",
-        "tiktok"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-tiktok-karaoke-talking-head",
-      "title": "HyperFrames: 9:16 TikTok Talking-Head with Karaoke Captions",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-tiktok-karaoke-talking-head",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A vertical 1080×1920 HyperFrames short — TTS-narrated talking-head over a face-cam loop, with karaoke-style word-synced captions, animated lower third, and a tiktok-follow overlay at the end. Mirrors the may-shorts-19 archetype from the HyperFrames student kit.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "short-form",
-        "hyperframes",
-        "vertical",
-        "tiktok",
-        "captions",
-        "karaoke",
-        "tts"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
-      "name": "open-design/video-template-hyperframes-website-to-video-promo",
-      "title": "HyperFrames: Website-to-Video Pipeline (15-Second Marketing Cut)",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/hyperframes-website-to-video-promo",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject",
-        "media:video-generate"
-      ],
-      "description": "A 15-second 16:9 HyperFrames composition that captures a live website at three viewport sizes, then animates between them with a chromatic radial split between scenes. Mirrors the hyperframes-sizzle student-kit archetype where the site is the source asset.",
-      "tags": [
-        "video-template",
-        "first-party",
-        "video",
-        "marketing",
-        "hyperframes",
-        "website-to-video",
-        "pipeline"
-      ],
-      "homepage": "https://github.com/heygen-com/hyperframes",
-      "license": "Apache-2.0",
-      "mode": "video",
-      "taskKind": "new-generation"
-    },
-    {
       "name": "open-design/video-template-live-action-anime-adaptation-water-vs-thunder-breathing-duel",
       "title": "Live-Action Anime Adaptation: Water vs. Thunder Breathing Duel",
       "version": "0.1.0",
@@ -11574,6 +11249,812 @@
       ],
       "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
       "license": "CC-BY-4.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-bold-poster",
+      "title": "Bold Poster Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-bold-poster",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "A 1970s European editorial poster in motion — a red rule draws across, a giant tilted figure drops in, a three-line headline rises line-by-line, an italic serif standfirst fades.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "poster",
+        "editorial",
+        "bold",
+        "serif",
+        "red",
+        "print",
+        "manifesto",
+        "tilted",
+        "high-impact",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-bold-poster",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-bold-signal",
+      "title": "Bold Signal Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-bold-signal",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Bold colored card on a dark gradient — big section number, nav breadcrumb, orange card sliding in, title rising.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "bold",
+        "card",
+        "dark",
+        "orange",
+        "section",
+        "signal",
+        "high-impact",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-bold-signal",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-build-minimal",
+      "title": "Build Minimal Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-build-minimal",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Luxury-minimal whitespace hero — single word reveals letter by letter, warm-gold hairline, breathing indicators.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "minimal",
+        "luxury",
+        "whitespace",
+        "hero",
+        "gold",
+        "build",
+        "thin",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-build-minimal",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-creative-voltage",
+      "title": "Creative Voltage Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-creative-voltage",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Electric split with hand-drawn script — offset panels slide in, display title rises with an outlined word, script strokes itself in.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "split-panel",
+        "electric",
+        "script",
+        "retro-modern",
+        "voltage",
+        "energetic",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-creative-voltage",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-data-chart-nyt",
+      "title": "NYT-Style Data Chart Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-data-chart-nyt",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "chart",
+        "bar",
+        "data",
+        "nyt",
+        "journalism",
+        "number-counter",
+        "data-viz"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-data-chart-nyt",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-data-rollup",
+      "title": "Data Rollup Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-data-rollup",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "A native Remotion data frame — bars grow from zero by real data via spring physics while the figures roll 0→target in sync.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "remotion",
+        "data",
+        "chart",
+        "bar",
+        "rollup",
+        "count-up",
+        "native",
+        "animated",
+        "kpi",
+        "data-viz"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-data-rollup",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-decision-tree",
+      "title": "Decision Tree",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-decision-tree",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Animated flowchart with branching paths",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "explainer",
+        "flowchart",
+        "decision",
+        "branching",
+        "diagram"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-decision-tree",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-electric-studio",
+      "title": "Electric Studio Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-electric-studio",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Two-panel split with quote as hero — white/blue panels open from center, accent bar grows, quote reveals line by line.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "split-panel",
+        "quote",
+        "blue",
+        "high-contrast",
+        "studio",
+        "editorial",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-electric-studio",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-glitch-title",
+      "title": "Glitch Title Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-glitch-title",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Digital glitch, chromatic offset, and data-corruption title frame for video transitions or cyberpunk heroes.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "title",
+        "glitch",
+        "cyberpunk",
+        "rgb-shift",
+        "tech",
+        "scanline",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-glitch-title",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-kinetic-type",
+      "title": "Kinetic Type",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-kinetic-type",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Bold kinetic typography promo",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "kinetic",
+        "typography",
+        "promo",
+        "bold",
+        "motion-text",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-kinetic-type",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-light-leak-cinema",
+      "title": "Light-Leak Cinematic Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-light-leak-cinema",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "cinema",
+        "light-leak",
+        "film",
+        "35mm",
+        "grain",
+        "lens-flare",
+        "ambient"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-light-leak-cinema",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-liquid-bg-hero",
+      "title": "Liquid Background Hero",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-liquid-bg-hero",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "hero",
+        "liquid",
+        "gradient",
+        "mesh",
+        "editorial",
+        "cover",
+        "marketing"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-liquid-bg-hero",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-logo-outro",
+      "title": "Logo Outro Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-logo-outro",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "logo",
+        "outro",
+        "branding",
+        "end-card",
+        "frame",
+        "glow",
+        "intro-outro"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-logo-outro",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-nyt-graph",
+      "title": "NYT Graph",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-nyt-graph",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Animated data chart in print editorial style",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "data",
+        "chart",
+        "editorial",
+        "nyt",
+        "line-graph",
+        "data-viz"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-nyt-graph",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-pentagram-stat",
+      "title": "Pentagram Stat Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-pentagram-stat",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Swiss-grid statistic anchor — giant number, red accent, growing bars, black data bar. Rational and editorial.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "stat",
+        "swiss-grid",
+        "editorial",
+        "data",
+        "pentagram",
+        "number",
+        "benchmark",
+        "data-viz"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-pentagram-stat",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-play-mode",
+      "title": "Play Mode",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-play-mode",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Playful elastic animations",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "playful",
+        "elastic",
+        "fun",
+        "bouncy",
+        "social",
+        "social-shorts"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-play-mode",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-product-promo",
+      "title": "Product Promo",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Multi-scene product showcase with SVG assets",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "product",
+        "promo",
+        "multi-scene",
+        "showcase",
+        "svg",
+        "product-demo"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-product-promo",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-product-promo-30s",
+      "title": "Product Promo · 30s",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo-30s",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Multi-scene 30-second product promo: problem-type intro, brand reveal, benefits flowchart, product surfaces, value pillars, foundation, CTA outro. Forked from Nate Herk's hyperframes-student-kit (linear-promo-30s); brand-specific copy + assets replaced with generic placeholders.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "product",
+        "promo",
+        "multi-scene",
+        "30s",
+        "benefits",
+        "flowchart",
+        "sfx",
+        "product-demo"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-product-promo-30s",
+      "license": "MIT",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-swiss-grid",
+      "title": "Swiss Grid",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-swiss-grid",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Structured grid layout",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "swiss",
+        "grid",
+        "minimal",
+        "corporate",
+        "typography",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-swiss-grid",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-takram-organic",
+      "title": "Takram Organic Frame",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-takram-organic",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Soft-tech radial node graph as art — frosted rounded card, curved links drawing in, nodes popping outward, gentle float.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "organic",
+        "soft-tech",
+        "radial",
+        "node-graph",
+        "takram",
+        "beige",
+        "diagram",
+        "explainer"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-takram-organic",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-vignelli",
+      "title": "Vignelli",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-vignelli",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Bold typography with red accents",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "vignelli",
+        "red",
+        "bold",
+        "portrait",
+        "9:16",
+        "social-shorts"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-vignelli",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-frame-warm-grain",
+      "title": "Warm Grain",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/frame-warm-grain",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Cream aesthetic with grain texture",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "lifestyle",
+        "warm",
+        "grain",
+        "cream",
+        "editorial",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-warm-grain",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/video-template-vfx-text-cursor",
+      "title": "VFX Text Cursor",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/video-templates/vfx-text-cursor",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write",
+        "media:video-generate"
+      ],
+      "description": "Cursor light trail, chromatic rays, and directional flares for word-by-word quote reveals in video intros.",
+      "tags": [
+        "video-template",
+        "first-party",
+        "video",
+        "hyperframes",
+        "html-video",
+        "motion",
+        "text",
+        "typewriter",
+        "cursor",
+        "terminal",
+        "code",
+        "reveal",
+        "presentation"
+      ],
+      "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/vfx-text-cursor",
+      "license": "Apache-2.0",
       "mode": "video",
       "taskKind": "new-generation"
     }

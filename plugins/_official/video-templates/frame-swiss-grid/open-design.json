@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-swiss-grid",
+  "title": "Swiss Grid",
+  "title_i18n": {
+    "en": "Swiss Grid",
+    "zh-CN": "瑞士网格"
+  },
+  "version": "0.1.0",
+  "description": "Structured grid layout",
+  "description_i18n": {
+    "en": "Structured grid layout",
+    "zh-CN": "瑞士国际主义网格排版动效，严谨的栏位与无衬线大字，适合企业与发布场景。"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-swiss-grid",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "swiss",
+    "grid",
+    "minimal",
+    "corporate",
+    "typography",
+    "presentation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-swiss-grid/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-swiss-grid/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Swiss Grid HyperFrames template to create a 10s presentation video. Replace the sample copy with real content, preserve the template's motion signature, and render to MP4.",
+        "zh-CN": "使用「瑞士网格」HyperFrames 模板创建一段约 10 秒的presentation动效视频。把示例文案替换为真实内容，保留模板的动效签名，并渲染为 MP4。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 10
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "attribution": [
+      {
+        "name": "hyperframes registry/examples/swiss-grid",
+        "license": "Apache-2.0",
+        "author": "heygen-com / Hyperframes",
+        "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/swiss-grid"
+      }
+    ]
+  }
+}

@@ -101,6 +101,51 @@ test('[P1] quick switcher arrow keys move selection before opening a file', asyn
   await expect(tabBySuffix(page, selectedFileName)).toHaveAttribute('aria-selected', 'true');
 });
 
+test('[P0] workspace tab launcher creates a Browser tab on the reference board home', async ({ page }) => {
+  await gotoEntryHome(page);
+  await createProject(page, 'Workspace launcher browser tab');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('workspace-add-tab').click();
+  await expect(page.getByTestId('tab-launcher-menu')).toBeVisible();
+  await expect(page.getByTestId('tab-launcher-search')).toBeFocused();
+  await page.getByRole('button', { name: /New Browser/i }).click();
+
+  const browserTab = page.getByTestId('file-workspace').getByRole('tab', { name: /^Browser\b/i });
+  await expect(browserTab).toBeVisible();
+  await expect(browserTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: /Design Browser/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Reference Board/i })).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: /Search references/i })).toBeVisible();
+});
+
+test('[P1] workspace tab launcher searches files and opens the selected file preview', async ({ page }) => {
+  await gotoEntryHome(page);
+  await createProject(page, 'Workspace launcher file search');
+  await expectWorkspaceReady(page);
+
+  const projectId = currentProjectId(page);
+  await seedProjectFile(page, projectId, 'launcher-alpha.png', TINY_PNG_B64, 'base64');
+  await seedProjectFile(page, projectId, 'launcher-beta.png', TINY_PNG_B64, 'base64');
+  await page.reload();
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('design-files-tab').click();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByTestId('workspace-add-tab').click();
+  const launcher = page.getByTestId('tab-launcher-menu');
+  await expect(launcher).toBeVisible();
+  await page.getByTestId('tab-launcher-search').fill('launcher-beta');
+  const result = page.getByTestId('tab-launcher-result').filter({ hasText: 'launcher-beta.png' });
+  await expect(result).toBeVisible();
+  await result.click();
+
+  await expect(launcher).toHaveCount(0);
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expect(tabBySuffix(page, 'launcher-beta.png')).toHaveAttribute('aria-selected', 'true');
+});
+
 test('[P1] keyboard chat panel resize persists after reload', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Chat panel resize persistence');
@@ -432,16 +477,33 @@ async function uploadTinyPng(
   page: Page,
   name: string,
 ) {
-  const pngBytes = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
-    'base64',
-  );
+  const pngBytes = Buffer.from(TINY_PNG_B64, 'base64');
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name,
     mimeType: 'image/png',
     buffer: pngBytes,
   });
   await expect(tabBySuffix(page, name)).toBeVisible();
+}
+
+const TINY_PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
+
+async function seedProjectFile(
+  page: Page,
+  projectId: string,
+  name: string,
+  content: string,
+  encoding?: 'base64',
+) {
+  const response = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: {
+      name,
+      content,
+      ...(encoding ? { encoding } : {}),
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 async function listProjectFiles(page: Page, projectId: string) {
@@ -492,7 +554,7 @@ async function sendPrompt(page: Page, prompt: string) {
 }
 
 function tabBySuffix(page: Page, name: string): Locator {
-  return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') });
+  return page.getByTestId('file-workspace').getByRole('tab', { name: new RegExp(escapeRegExp(name), 'i') });
 }
 
 function currentProjectId(page: Page): string {

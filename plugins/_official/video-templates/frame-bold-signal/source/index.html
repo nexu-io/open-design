@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="fonts.css" />
+<meta charset="UTF-8" />
+<title>Bold Signal · Colored Card on Dark</title>
+
+<style>
+  /*
+   * frame-bold-signal — bold colored card on a dark gradient.
+   * Visual style distilled from the frontend-slides "Bold Signal" preset (MIT, © Zara Zhang).
+   * Rebuilt as a self-contained CSS @keyframes timeline for html-video / Hyperframes.
+   * Timeline (4s @ 60fps): dark stage -> big section number rolls in -> nav breadcrumb fades
+   * -> orange card slides in from right -> title rises -> footer marks fade.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #1a1a1a;
+    background-image: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+    color: #fff; font-family: 'Space Grotesk', sans-serif; position: relative;
+  }
+
+  /* big section number, top-left */
+  .section-no { position: absolute; top: 88px; left: 96px; font-family: 'Archivo Black', sans-serif;
+    font-size: 96px; line-height: 1; color: #fff; opacity: 0; transform: translateY(-30px);
+    animation: rollIn 0.7s cubic-bezier(0.16,1,0.3,1) 0.2s forwards; }
+  .section-no .dim { opacity: 0.3; }
+  @keyframes rollIn { to { opacity: 1; transform: translateY(0); } }
+
+  /* nav breadcrumb, top-right */
+  .nav { position: absolute; top: 104px; right: 96px; display: flex; gap: 28px;
+    font-size: 18px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; }
+  .nav span { opacity: 0; animation: fade 0.5s ease-out forwards; color: #fff; }
+  .nav span.dim { opacity: 0; }
+  .nav span.active { color: #FF5722; }
+  @keyframes fade { to { opacity: 0.35; } }
+  @keyframes fadeActive { to { opacity: 1; } }
+  .nav span.active { animation: fadeActive 0.5s ease-out forwards; }
+
+  /* the orange focal card */
+  .card { position: absolute; right: 0; top: 240px; width: 1180px; height: 600px;
+    background: #FF5722; color: #1a1a1a; border-radius: 36px 0 0 36px;
+    padding: 96px 110px; display: flex; flex-direction: column; justify-content: flex-end;
+    transform: translateX(110%); animation: cardSlide 0.9s cubic-bezier(0.16,1,0.3,1) 0.6s forwards;
+    box-shadow: -40px 30px 90px rgba(255,87,34,0.18); }
+  @keyframes cardSlide { to { transform: translateX(0); } }
+  .card-label { font-size: 20px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+    opacity: 0; animation: fadeUp 0.6s ease-out 1.15s forwards; }
+  .card-title { font-family: 'Archivo Black', sans-serif; font-size: 130px; line-height: 0.94;
+    letter-spacing: -2px; margin-top: 28px; opacity: 0;
+    animation: fadeUp 0.8s cubic-bezier(0.16,1,0.3,1) 1.3s forwards; }
+  @keyframes fadeUp { 0%{opacity:0;transform:translateY(28px)} 100%{opacity:1;transform:translateY(0)} }
+
+  /* footer marks */
+  .footer { position: absolute; bottom: 80px; left: 96px; display: flex; gap: 16px; align-items: center;
+    font-size: 16px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: #fff;
+    opacity: 0; animation: fade 0.6s ease-out 1.6s forwards; }
+  .footer .tick { width: 40px; height: 3px; background: #FF5722; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .section-no{opacity:1;transform:none}.nav span{opacity:0.35}.nav span.active{opacity:1}
+    .card{transform:translateX(0)}.card-label,.card-title{opacity:1;transform:none}.footer{opacity:1}
+  }
+</style>
+</head>
+<body>
+  <div class="section-no">01<span class="dim">/04</span></div>
+
+  <div class="nav">
+    <span class="active" style="animation-delay:.4s">Signal</span>
+    <span class="dim" style="animation-delay:.5s">Build</span>
+    <span class="dim" style="animation-delay:.6s">Ship</span>
+    <span class="dim" style="animation-delay:.7s">Scale</span>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Launch · 2026</div>
+    <div class="card-title">Bring your<br>own agent.</div>
+  </div>
+
+  <div class="footer"><span class="tick"></span> html-video · Bold Signal</div>
+</body>
+</html>

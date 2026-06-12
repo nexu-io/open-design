@@ -133,6 +133,26 @@ const sample: InstalledPluginRecord[] = [
   makePlugin({ id: 'hidden-atom', mode: 'prototype', tags: ['dashboard'], kind: 'atom' }),
 ];
 
+describe('PluginsHomeSection (community gallery)', () => {
+  it('keeps gallery tiles free of inline Use actions — Use lives in the detail modal', () => {
+    renderSection(sample, { cardLayout: 'gallery' });
+
+    // The tile itself stays a pure preview: name button opens details,
+    // ↗ opens the example page. Use / Use with query are detail-modal
+    // affordances only.
+    expect(screen.getByTestId('plugins-home-details-prototype-dashboard')).toBeTruthy();
+    expect(screen.queryByTestId('plugins-home-use-prototype-dashboard')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-use-menu-prototype-dashboard')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-use-with-query-prototype-dashboard')).toBeNull();
+  });
+
+  it('keeps the inline Use menu on the rich management layout (PluginsView)', () => {
+    renderSection(sample, { cardLayout: 'rich' });
+
+    expect(screen.getByTestId('plugins-home-use-prototype-dashboard')).toBeTruthy();
+  });
+});
+
 describe('PluginsHomeSection (category bar)', () => {
   it('frames the home shelf as community and can jump to registry', () => {
     const onBrowseRegistry = vi.fn();

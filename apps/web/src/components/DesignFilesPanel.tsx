@@ -154,12 +154,26 @@ function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
   );
 }
 
-// Useful-info tips that rotate one at a time in the panel footer.
-const USEFUL_TIP_KEYS = [
-  'designFiles.usefulInfoTip',
-  'designFiles.usefulInfoTip2',
-  'designFiles.usefulInfoTip3',
-] as const;
+// Useful-info tips that rotate one at a time in the panel footer, ordered as
+// a loose journey: file basics → feeding context → generating → iterating →
+// exporting/sharing → community. A tip with a `url` renders its typed line as
+// a link to that destination.
+const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
+  { key: 'designFiles.usefulInfoTip' },
+  { key: 'designFiles.usefulInfoTip2' },
+  { key: 'designFiles.usefulInfoTip9' },
+  { key: 'designFiles.usefulInfoTip10' },
+  { key: 'designFiles.usefulInfoTip4' },
+  { key: 'designFiles.usefulInfoTip11' },
+  { key: 'designFiles.usefulInfoTip12' },
+  { key: 'designFiles.usefulInfoTip13' },
+  { key: 'designFiles.usefulInfoTip14' },
+  { key: 'designFiles.usefulInfoTip15' },
+  { key: 'designFiles.usefulInfoTip5' },
+  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
+  { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
+  { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/nexudotio' },
+];
 const TIP_TYPE_MS = 32; // per-character typing speed
 const TIP_HOLD_MS = 3800; // pause on a fully-typed tip before advancing
 
@@ -182,7 +196,7 @@ function RotatingTip() {
   // depends only on `index` — depending on the (re-created) array would reset
   // the typewriter on every render and never advance.
   const tipsRef = useRef<string[]>([]);
-  tipsRef.current = USEFUL_TIP_KEYS.map((key) => t(key));
+  tipsRef.current = USEFUL_TIPS.map(({ key }) => t(key));
 
   useEffect(() => {
     const tips = tipsRef.current;
@@ -224,7 +238,13 @@ function RotatingTip() {
         <span className="df-useful-info-label">{t('designFiles.usefulInfoLabel')}</span>
       </div>
       <span className="df-useful-info-tip">
-        {typed}
+        {USEFUL_TIPS[index]?.url ? (
+          <a className="df-tip-link" href={USEFUL_TIPS[index].url} target="_blank" rel="noreferrer">
+            {typed}
+          </a>
+        ) : (
+          typed
+        )}
         <span className="df-tip-caret" aria-hidden />
       </span>
     </div>

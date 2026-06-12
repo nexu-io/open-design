@@ -39,6 +39,10 @@ import {
 } from '../analytics/events';
 import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
 import {
+  beginAmrAuthTracking,
+  resolveAmrAuthTracking,
+} from '../analytics/amr-auth';
+import {
   clearOnboardingSessionId,
   getOrCreateOnboardingSessionId,
 } from '../analytics/onboarding-session';
@@ -130,7 +134,7 @@ import {
 } from './amrLoginPolling';
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
-import { renderModelOptions } from './modelOptions';
+import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import {
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -162,6 +166,7 @@ function writeStoredRailOpen(open: boolean): void {
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/nexudotio';
+const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -291,6 +296,11 @@ interface Props {
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
+  // True while the cold-start agent detection stream is still in flight
+  // (`fetchAgentsStream` has not reached its terminal `done`). Onboarding
+  // uses this to show the AMR cloud card in a detecting/skeleton state
+  // instead of hiding it during the seconds AMR's probe takes to settle.
+  agentsLoading?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -410,6 +420,7 @@ export function EntryShell({
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
+  agentsLoading = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -516,12 +527,7 @@ export function EntryShell({
     const frame = window.requestAnimationFrame(() => {
       const scrollContainer = entryMainScrollRef.current;
       if (!scrollContainer) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-        return;
-      }
-      scrollContainer.scrollTop = 0;
-      scrollContainer.scrollLeft = 0;
+      smoothScrollToTop(scrollContainer);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [homePromptHandoff?.id, view]);
@@ -644,6 +650,13 @@ export function EntryShell({
       config={config}
       onThemeChange={onThemeChange}
       onOpenSettings={onOpenSettings}
+      onTrackTriggerClick={() => {
+        trackHomeToolbarClick(analytics.track, {
+          page_name: 'home',
+          area: 'toolbar',
+          element: 'settings',
+        });
+      }}
     />
   );
 
@@ -655,6 +668,7 @@ export function EntryShell({
           <OnboardingView
             config={config}
             agents={agents}
+            agentsLoading={agentsLoading}
             providerModelsCache={activeProviderModelsCache}
             onProviderModelsCacheChange={activeSetProviderModelsCache}
             daemonLive={daemonLive}
@@ -896,6 +910,7 @@ function OnboardingView({
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
+  agentsLoading = false,
   daemonLive,
   onModeChange,
   onAgentChange,
@@ -910,6 +925,7 @@ function OnboardingView({
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
+  agentsLoading?: boolean;
   daemonLive: boolean;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
@@ -930,6 +946,11 @@ function OnboardingView({
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
+  // True while the one-shot AMR re-probe (fired when the cold-start stream
+  // settled without surfacing AMR) is in flight. Combined with
+  // `agentsLoading`, this is the full window during which AMR availability
+  // is still undecided — and the AMR cloud card renders its skeleton.
+  const [amrRefreshPending, setAmrRefreshPending] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
   const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
@@ -1023,7 +1044,13 @@ function OnboardingView({
     (agent) => agent.available && agent.id !== 'amr' && visibleAgentIds.includes(agent.id),
   );
   const amrAgent = agents.find((agent) => agent.id === 'amr' && agent.available) ?? null;
-  const showAmrCloudOption = amrAgent !== null || agents.length === 0;
+  // AMR availability is still undecided while the cold-start stream runs or
+  // the one-shot re-probe is in flight. During that window we show the AMR
+  // cloud card in a skeleton state rather than hiding it (the gap users hit
+  // today: card absent for several seconds, then it pops in). Once detection
+  // settles, the card is either real (amrAgent) or omitted.
+  const amrDetecting = !amrAgent && (agentsLoading || amrRefreshPending);
+  const showAmrCloudOption = amrAgent !== null;
   const amrSignedIn = amrStatus?.loggedIn === true;
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const amrAgentChoice = config.agentModels?.amr ?? {};
@@ -1063,10 +1090,16 @@ function OnboardingView({
   }, [amrAgent, onAgentChange, onModeChange, runtime]);
 
   useEffect(() => {
-    if (amrAgent || amrAgentRefreshAttemptedRef.current) return;
+    // The cold-start stream finished without AMR. Re-probe once before we
+    // conclude AMR is unavailable, and keep the card in its skeleton state
+    // for the duration so it doesn't flash out-and-back-in.
+    if (amrAgent || amrAgentRefreshAttemptedRef.current || agentsLoading) return;
     amrAgentRefreshAttemptedRef.current = true;
-    void Promise.resolve(onRefreshAgents()).catch(() => undefined);
-  }, [amrAgent, onRefreshAgents]);
+    setAmrRefreshPending(true);
+    void Promise.resolve(onRefreshAgents())
+      .catch(() => undefined)
+      .finally(() => setAmrRefreshPending(false));
+  }, [amrAgent, agentsLoading, onRefreshAgents]);
 
   useEffect(() => {
     if (!amrAgent) return;
@@ -1135,6 +1168,10 @@ function OnboardingView({
   // PR #2453 follow-up).
   const onboardingStartedAtRef = useRef<number>(Date.now());
   const lifecycleReportedRef = useRef(false);
+  // Guards `about_you_submit` to exactly one emit per onboarding session,
+  // independent of how many times the user crosses the About-you step via
+  // the clickable stepper or Back/Continue.
+  const aboutYouReportedRef = useRef(false);
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
@@ -1410,16 +1447,17 @@ function OnboardingView({
       return;
     }
     if (isLastStep) {
-      // Emit the About-you survey snapshot FIRST, before the
-      // continue/complete pair. This is the bombproof carrier for the
-      // user's role / org size / use case / discovery source picks:
-      // per-dropdown clicks are racy on a fast Finish-setup (the user
-      // can pick all four dropdowns and click Finish inside one ~3s
-      // window, and PostHog's posthog-js client may not flush the
-      // individual rows before the route change unmounts the analytics
-      // provider). The snapshot click + the survey fields on
+      // Emit the About-you survey snapshot on the completion path, before
+      // the continue/complete pair. Reading `profileRef` captures the
+      // user's final role / org size / use case / discovery source picks
+      // even on a fast Finish. Gating it here — rather than when the user
+      // leaves the About-you step — keeps it exactly-once no matter how the
+      // final step was reached: primary CTA, Back-then-Continue, or a
+      // forward jump via the clickable stepper. `emitAboutYouSubmit` is
+      // additionally idempotent per session (see its `aboutYouReportedRef`
+      // guard). The snapshot click + the survey fields on
       // `onboarding_complete_result` give the funnel two independent
-      // paths for the same data.
+      // carriers for the same data.
       emitAboutYouSubmit();
       const newsletterEmail = profileRef.current.email;
       const shouldSubmitNewsletter =
@@ -1458,8 +1496,10 @@ function OnboardingView({
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
+      beginAmrAuthTracking(attribution);
       const loginResult = await startVelaLogin(attribution);
       if (amrLoginPollCancelledRef.current) {
+        resolveAmrAuthTracking(analytics.track, 'cancelled');
         if (loginResult.ok || loginResult.alreadyRunning) {
           const cancelResult = await cancelVelaLogin();
           closeAmrActivationWindowBestEffort();
@@ -1472,6 +1512,7 @@ function OnboardingView({
         return;
       }
       if (!loginResult.ok && !loginResult.alreadyRunning) {
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         setAmrLoginError(loginResult.error || t('settings.amrLoginErrorCompact'));
         return;
       }
@@ -1486,6 +1527,7 @@ function OnboardingView({
   async function handleCancelAmrLogin() {
     if (!amrLoginPending || amrLoginCancelPending) return;
     amrLoginPollCancelledRef.current = true;
+    resolveAmrAuthTracking(analytics.track, 'cancelled');
     setAmrLoginError(null);
     setAmrLoginCancelPending(true);
     setAmrStatus((current) => (
@@ -1514,9 +1556,20 @@ function OnboardingView({
       const nextStatus = await fetchVelaLoginStatus();
       if (nextStatus) setAmrStatus(nextStatus);
       const outcome = amrLoginPollOutcome(nextStatus, startedAt);
-      if (outcome === 'signed-in') return true;
+      if (outcome === 'signed-in') {
+        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+          signedInUserId: nextStatus?.user?.id ?? null,
+        });
+        notifyAmrLoginStatusChanged();
+        return true;
+      }
       if (outcome === 'stopped' || outcome === 'timed-out') {
-        if (outcome === 'timed-out') void cancelVelaLogin();
+        if (outcome === 'timed-out') {
+          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
+          void cancelVelaLogin();
+        } else {
+          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+        }
         setAmrLoginError(t('settings.amrLoginErrorCompact'));
         return false;
       }
@@ -1530,9 +1583,26 @@ function OnboardingView({
   // the latest state. `'unknown'` covers an untouched field on the
   // About-you step (the spec keeps the wire type open-string so a new
   // role / use-case option doesn't force a contract bump).
+  //
+  // This now fires from the completion path (the final Newsletter step),
+  // so it stamps the About-you step coordinates explicitly instead of
+  // reading the live `step` via `emitOnboardingClick`: the event describes
+  // the About-you submission, not whatever step the user finished on. The
+  // `aboutYouReportedRef` guard keeps it exactly-once per session.
   function emitAboutYouSubmit(): void {
+    if (aboutYouReportedRef.current) return;
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
-    emitOnboardingClick('about_you_submit', 'continue', {
+    trackOnboardingClick(analytics.track, {
+      page_name: 'onboarding',
+      area: 'about_you',
+      element: 'about_you_submit',
+      action: 'continue',
+      step_index: '2',
+      step_name: 'about_you',
+      onboarding_session_id: onboardingSessionId,
       role: snapshot.role || 'unknown',
       organization_size: snapshot.orgSize || 'unknown',
       use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
@@ -1540,7 +1610,7 @@ function OnboardingView({
     });
   }
 
-  // Optional newsletter signup captured on the About-you step. The last-step
+  // Optional newsletter signup captured on the Newsletter step. The last-step
   // button shows loading while this settles; failures are swallowed so
   // onboarding completion never depends on the marketing site. A blank or
   // malformed email is simply skipped. Only a boolean opt-in is tracked — the
@@ -1742,8 +1812,6 @@ function OnboardingView({
     ? t('settings.amrSigningIn')
     : step === 0 && amrSelectedAndSignedOut
       ? t('settings.amrSignInToContinue')
-    : step === 1
-      ? t('settings.onboardingContinue')
     : isLastStep
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
@@ -1822,6 +1890,8 @@ function OnboardingView({
                       }}
                     />
                   </div>
+                ) : amrDetecting ? (
+                  <OnboardingAmrCloudSkeleton />
                 ) : null}
                 <div className="onboarding-view__alternatives">
                   {runtimeItems.map((item) => (
@@ -1979,7 +2049,7 @@ function OnboardingView({
           ) : null}
 
           {step === 2 ? (
-            <div className="onboarding-view__panel">
+            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
               <OnboardingPanelHeader
                 title={t('settings.onboardingNewsletterTitle')}
                 body={t('settings.onboardingNewsletterBody')}
@@ -2130,6 +2200,8 @@ function OnboardingCliSetupPanel({
           value={selectedModel}
           options={modelOptions}
           onChange={onSelectModel}
+          searchable
+          searchPlaceholder={t('newproj.modelSearch')}
         />
       ) : null}
     </div>
@@ -2150,35 +2222,26 @@ function OnboardingAmrModelSelect({
   const t = useT();
   const modelSource = modelsSource ?? 'fallback';
   const displayModels = models.map((model) => ({
-    ...model,
+    value: model.id,
     label: formatOnboardingAmrModelLabel(model),
   }));
   const modelSourceLabel = t('settings.onboardingAmrModelSourceLabel');
   return (
-    <label
+    <div
       className="onboarding-view__model-picker"
       onClick={(event) => event.stopPropagation()}
     >
-      <span className="onboarding-view__model-label">
-        {t('settings.modelPicker')}
-        <span className={`onboarding-view__model-source ${modelSource}`}>
-          {modelSourceLabel}
-        </span>
-      </span>
-      <span className="onboarding-view__model-select-wrap">
-        <select
-          value={selectedModel}
-          onChange={(event) => onSelectModel(event.target.value)}
-        >
-          {renderModelOptions(displayModels)}
-        </select>
-        <Icon
-          name="chevron-down"
-          size={12}
-          className="onboarding-view__model-select-chevron"
-        />
-      </span>
-    </label>
+      <OnboardingDropdown
+        label={`${t('settings.modelPicker')} · ${modelSourceLabel}`}
+        placeholder={t('settings.modelSourceFallback')}
+        value={selectedModel}
+        options={displayModels}
+        onChange={onSelectModel}
+        searchable
+        searchPlaceholder={t('newproj.modelSearch')}
+        sourceTone={modelSource}
+      />
+    </div>
   );
 }
 
@@ -2325,6 +2388,8 @@ function OnboardingByokSetupPanel({
         value={selectedProvider?.baseUrl ?? ''}
         options={providerOptions}
         onChange={onProviderChange}
+        searchable
+        searchPlaceholder={t('settings.quickFillProvider')}
       />
       <label className="onboarding-view__inline-field">
         <span>{t('settings.apiKey')}</span>
@@ -2359,6 +2424,8 @@ function OnboardingByokSetupPanel({
             options={modelOptions}
             onChange={onModelChange}
             placement="top"
+            searchable
+            searchPlaceholder={t('newproj.modelSearch')}
           />
         ) : (
           <label className="onboarding-view__inline-field">
@@ -2535,6 +2602,9 @@ type OnboardingDropdownBaseProps = {
   placeholder: string;
   options: Array<{ value: string; label: string }>;
   placement?: 'bottom' | 'top';
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  sourceTone?: string;
 };
 
 type OnboardingDropdownProps =
@@ -2550,6 +2620,7 @@ type OnboardingDropdownProps =
     });
 
 export function OnboardingDropdown(props: OnboardingDropdownProps) {
+  const t = useT();
   const {
     label,
     placeholder,
@@ -2557,11 +2628,16 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     options,
     placement = 'bottom',
     multiple = false,
+    searchable = false,
+    searchPlaceholder,
+    sourceTone,
   } = props;
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [resolvedPlacement, setResolvedPlacement] = useState(placement);
   const [menuMaxHeight, setMenuMaxHeight] = useState(240);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const dropdownIdRef = useRef(`onboarding-dropdown-${Math.random().toString(36).slice(2)}`);
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
   const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
   const selectedOption = selectedOptions[0];
@@ -2570,6 +2646,14 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     ? selectedOptions.map((option) => option.label).join(', ')
     : selectedOption?.label;
   const triggerLabel = selectedLabel || placeholder;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions =
+    searchable && normalizedQuery
+      ? options.filter((option) =>
+          `${option.label} ${option.value}`.toLowerCase().includes(normalizedQuery),
+        )
+      : options;
+  const emptyMessage = searchable ? t('homeHero.footer.noMatches') : t('settings.fetchModelsEmpty');
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -2623,6 +2707,39 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    function handlePeerOpen(event: Event) {
+      if ((event as CustomEvent<string>).detail !== dropdownIdRef.current) {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener(ONBOARDING_DROPDOWN_OPEN_EVENT, handlePeerOpen);
+    return () => {
+      window.removeEventListener(ONBOARDING_DROPDOWN_OPEN_EVENT, handlePeerOpen);
+    };
+  }, []);
+
+  function toggleOpen() {
+    setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        window.dispatchEvent(
+          new CustomEvent(ONBOARDING_DROPDOWN_OPEN_EVENT, {
+            detail: dropdownIdRef.current,
+          }),
+        );
+      }
+      return nextOpen;
+    });
+  }
+
   return (
     <div
       className="onboarding-view__select-field"
@@ -2630,7 +2747,12 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
       data-open={open || undefined}
       ref={rootRef}
     >
-      <span className="onboarding-view__select-label">{label}</span>
+      <span
+        className="onboarding-view__select-label"
+        data-source-tone={sourceTone || undefined}
+      >
+        {label}
+      </span>
       <button
         type="button"
         className={`onboarding-view__select-trigger${open ? ' is-open' : ''}${
@@ -2639,7 +2761,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
         aria-haspopup="listbox"
         aria-expanded={open}
         title={triggerLabel}
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
       >
         <span>{triggerLabel}</span>
         <Icon name="chevron-down" size={16} />
@@ -2647,40 +2769,116 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
       {open ? (
         <div
           className="onboarding-view__select-menu"
-          role="listbox"
-          aria-label={label}
-          aria-multiselectable={multiple || undefined}
+          data-searchable={searchable || undefined}
           style={{ '--onboarding-select-menu-max-height': `${menuMaxHeight}px` } as CSSProperties}
         >
-          {options.map((option) => {
-            const selected = selectedValues.includes(option.value);
-            return (
-              <button
-                key={option.value}
-                type="button"
-                className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
-                role="option"
-                aria-selected={selected}
-                onClick={() => {
-                  if (props.multiple) {
-                    props.onChange(
-                      selected
-                        ? selectedValues.filter((selectedValue) => selectedValue !== option.value)
-                        : [...selectedValues, option.value],
-                    );
-                    return;
+          {searchable ? (
+            <label
+              className="onboarding-view__select-search"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Icon name="search" size={14} />
+              <input
+                type="search"
+                value={query}
+                placeholder={searchPlaceholder || placeholder}
+                aria-label={searchPlaceholder || label}
+                autoFocus
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') {
+                    event.stopPropagation();
                   }
-                  props.onChange(option.value);
-                  setOpen(false);
                 }}
-              >
-                <span>{option.label}</span>
-                {selected ? <Icon name="check" size={15} /> : null}
-              </button>
-            );
-          })}
+              />
+            </label>
+          ) : null}
+          <div
+            className="onboarding-view__select-options"
+            role="listbox"
+            aria-label={label}
+            aria-multiselectable={multiple || undefined}
+          >
+            {visibleOptions.map((option) => {
+              const selected = selectedValues.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => {
+                    if (props.multiple) {
+                      props.onChange(
+                        selected
+                          ? selectedValues.filter((selectedValue) => selectedValue !== option.value)
+                          : [...selectedValues, option.value],
+                      );
+                      return;
+                    }
+                    props.onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {selected ? <Icon name="check" size={15} /> : null}
+                </button>
+              );
+            })}
+            {visibleOptions.length === 0 ? (
+              <div className="onboarding-view__select-empty">{emptyMessage}</div>
+            ) : null}
+          </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Placeholder for the AMR cloud card shown while AMR availability is still
+// being probed (the cold-start detection stream / one-shot re-probe). It
+// mirrors the real card's footprint exactly — same featured/amr grid, same
+// 246px min-height — so resolving to the real card causes no layout jump.
+// The AMR brand (icon + name) is known up-front and rendered solid; only the
+// version meta, benefit list, and model picker — the parts that depend on the
+// probe result — shimmer. Non-interactive and announced via role="status".
+function OnboardingAmrCloudSkeleton() {
+  const t = useT();
+  return (
+    <div className="onboarding-view__amr-cloud-card">
+      <div
+        className="onboarding-view__card onboarding-view__card--featured onboarding-view__card--amr onboarding-view__card--benefit-aside onboarding-view__card--skeleton"
+        role="status"
+        aria-busy="true"
+        aria-label={t('common.loading')}
+      >
+        <span className="onboarding-view__identity">
+          <span className="onboarding-view__icon onboarding-view__icon--asset">
+            <AgentIcon id="amr" size={52} className="onboarding-view__agent-logo" />
+          </span>
+          <span className="onboarding-view__card-copy">
+            <span className="onboarding-view__card-top">
+              <strong>{t('settings.amrCloud')}</strong>
+            </span>
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--meta" />
+          </span>
+        </span>
+        <span className="onboarding-view__benefit-aside" aria-hidden="true">
+          <span className="onboarding-view__benefit-stack onboarding-view__benefit-stack--skeleton">
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+            <span className="onboarding-view__skeleton-line onboarding-view__skeleton-line--benefit" />
+          </span>
+        </span>
+        <span className="onboarding-view__card-model" aria-hidden="true">
+          <span className="onboarding-view__skeleton-model">
+            <span className="onboarding-view__skeleton-model-label" />
+            <span className="onboarding-view__skeleton-model-bar" />
+          </span>
+        </span>
+      </div>
     </div>
   );
 }

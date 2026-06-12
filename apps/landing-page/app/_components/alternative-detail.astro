@@ -1,0 +1,315 @@
+---
+/*
+ * Shared renderer for /alternatives/<slug>/ comparison pages.
+ *
+ * Each route is a thin wrapper that passes `slug` (and the competitor's
+ * display name for the flat-fallback table header). When the alternative
+ * copy carries a `rich` payload this renders the industrial long-form
+ * layout (hero CTA + warm-paper hero illustration + sectioned blocks +
+ * FAQ), matching the agent detail pages; otherwise it falls back to the
+ * compact comparison layout. Copy is honest about where the competitor
+ * wins and carries a not-affiliated note.
+ */
+import Layout from './sub-page-layout.astro';
+import { getInfoPageCopy, getAlternativeCopy } from '../info-page-i18n';
+import { localeFromPath, localizedHref } from '../i18n';
+
+interface Props {
+  slug: string;
+  competitorName: string;
+}
+const { slug, competitorName } = Astro.props;
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const common = getInfoPageCopy(locale).common;
+// en always supplies each slug, so the fallback in getAlternativeCopy
+// guarantees a value here.
+const page = getAlternativeCopy(locale, slug)!;
+const rich = page.rich;
+
+const title = page.title;
+const description = page.description;
+const features = page.features;
+
+const ctaHref = (a: { href: string; external?: boolean }) =>
+  a.external ? a.href : href(a.href);
+
+const faqEntries = (rich?.faq ?? page.faq).map(({ name, text }) => ({ name, text }));
+
+const homeUrl = new URL(href('/'), SITE).toString();
+const compareUrl = new URL(href('/compare/'), SITE).toString();
+const pageUrl = new URL(Astro.url.pathname, SITE).toString();
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 2, name: 'Compare', item: compareUrl },
+      { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: title,
+    description,
+    url: pageUrl,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqEntries.map(({ name, text }) => ({
+      '@type': 'Question',
+      name,
+      acceptedAnswer: { '@type': 'Answer', text },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/compare/')}>Compare</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class={`info-page${rich ? ' solution-page agent-rich' : ''}`}>
+    {rich ? (
+      <>
+        <header class="catalog-head agent-rich-head">
+          <span class="label">{page.label}</span>
+          <h1 class="display">{page.heading}</h1>
+          <p class="lead">{page.lead}</p>
+          <div class="solution-hero-cta">
+            {rich.heroCtaActions.map((a) => (
+              <a
+                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
+                href={ctaHref(a)}
+                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+              >{a.label}</a>
+            ))}
+          </div>
+        </header>
+
+        {rich.heroImage ? (
+          <figure class="agent-hero-banner">
+            <img src={rich.heroImage.src} alt={rich.heroImage.alt} loading="eager" decoding="async" width={1280} height={720} />
+          </figure>
+        ) : null}
+
+        <div class="agent-intro">
+          <p class="agent-hero-lead">{rich.heroCtaLead}</p>
+          {rich.intro.map((p) => (<p>{p}</p>))}
+        </div>
+
+        <nav class="info-toc" aria-label={rich.tocLabel}>
+          <span>{rich.tocLabel}</span>
+          {rich.toc.map((t) => (<a href={`#${t.id}`}>{t.label}</a>))}
+        </nav>
+
+        {rich.sections.map((section) => (
+          <section class="info-section" id={section.id}>
+            <h2>{section.heading}</h2>
+            {section.blocks.map((block) => {
+              if (block.kind === 'p') return <p>{block.text}</p>;
+              if (block.kind === 'ul') return <ul>{block.items.map((i) => (<li>{i}</li>))}</ul>;
+              if (block.kind === 'ol') return <ol>{block.items.map((i) => (<li>{i}</li>))}</ol>;
+              if (block.kind === 'steps')
+                return (
+                  <ul class="agent-steps">
+                    {block.items.map((i) => (<li><strong>{i.label}:</strong> {i.body}</li>))}
+                  </ul>
+                );
+              if (block.kind === 'code')
+                return (<pre class="agent-code"><code>{block.code}</code></pre>);
+              if (block.kind === 'image')
+                return (
+                  <figure class="agent-section-img">
+                    <img src={block.src} alt={block.alt} loading="lazy" decoding="async" />
+                    {block.caption ? <figcaption>{block.caption}</figcaption> : null}
+                  </figure>
+                );
+              if (block.kind === 'table')
+                return (
+                  <div class="compare-table-wrap">
+                    <table class="compare-table">
+                      <thead>
+                        <tr>{block.columns.map((c) => (<th>{c}</th>))}</tr>
+                      </thead>
+                      <tbody>
+                        {block.rows.map((row) => (
+                          <tr>
+                            {row.map((cell, ci) => (
+                              ci === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              return null;
+            })}
+          </section>
+        ))}
+
+        <section class="info-section" id="faq">
+          <h2>{rich.faqTitle}</h2>
+          <ol class="faq-list">
+            {faqEntries.map(({ name, text }, idx) => (
+              <li class="faq-item">
+                <details>
+                  <summary>
+                    <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                    <span class="faq-q">{name}</span>
+                    <span class="faq-toggle" aria-hidden="true">+</span>
+                  </summary>
+                  <p class="faq-a">{text}</p>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="info-cta" aria-label="Open Design call to action">
+          <div>
+            <h2>{rich.ctaTitle}</h2>
+            <p>{rich.ctaBody}</p>
+          </div>
+          <div class="info-cta-actions">
+            {rich.ctaActions.map((a) => (
+              <a
+                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
+                href={ctaHref(a)}
+                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+              >{a.label}</a>
+            ))}
+          </div>
+          <div class="info-cta-meta">
+            <span class="stamp">● {common.apache}</span>
+            <span>{common.localFirst} · {common.byok}</span>
+            <span><a class="inline-link" href={href('/compare/')}>{rich.hubLinkLabel}</a></span>
+          </div>
+        </section>
+      </>
+    ) : (
+      <>
+        <header class="catalog-head">
+          <span class="label">{page.label}</span>
+          <h1 class="display">{page.heading}</h1>
+          <p class="lead">{page.lead}</p>
+        </header>
+
+        <div class="tldr-card">
+          <h3>{page.tldrTitle}</h3>
+          <p>{page.tldrBody}</p>
+        </div>
+
+        <nav class="info-toc" aria-label={common.onThisPage}>
+          <span>{common.onThisPage}</span>
+          <a href="#why-search">{page.toc[0]}</a>
+          <a href="#local-byok">{page.toc[1]}</a>
+          <a href="#compare">{page.toc[2]}</a>
+          <a href="#who">{page.toc[3]}</a>
+          <a href="#migrate">{page.toc[4]}</a>
+          <a href="#faq">{page.toc[5]}</a>
+        </nav>
+
+        <section class="info-section" id="why-search">
+          <h2>{page.whyTitle}</h2>
+          <p>{page.whyLead}</p>
+          <ol>
+            {page.reasons.map((item) => (
+              <li><strong>{item.label}</strong> {item.body}</li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="info-section" id="local-byok">
+          <h2>{page.localByokTitle}</h2>
+          {page.localByokBody.map((paragraph) => (<p>{paragraph}</p>))}
+        </section>
+
+        <section class="info-section" id="compare">
+          <h2>{page.featureTitle}</h2>
+          <div class="compare-table-wrap">
+            <table class="compare-table">
+              <thead>
+                <tr><th>Feature</th><th>Open Design</th><th>{competitorName}</th></tr>
+              </thead>
+              <tbody>
+                {features.map((f) => (
+                  <tr>
+                    <th scope="row">{f.name}</th>
+                    <td class="yes"><span class="check">●</span>{f.od}</td>
+                    <td>{f.cd}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="info-section" id="who">
+          <h2>{page.whoTitle}</h2>
+          <h3>{page.pickClaudeTitle}</h3>
+          <ul>{page.pickClaude.map((item) => (<li>{item}</li>))}</ul>
+          <h3>{page.pickOpenTitle}</h3>
+          <ul>{page.pickOpen.map((item) => (<li>{item}</li>))}</ul>
+        </section>
+
+        <section class="info-section" id="migrate">
+          <h2>{page.migrateTitle}</h2>
+          <p>{page.migrateLead}</p>
+          <ol>{page.migrateSteps.map((item) => (<li>{item}</li>))}</ol>
+          <p>{page.migrateClosing}</p>
+        </section>
+
+        <section class="info-section" id="faq">
+          <h2>{page.faqTitle}</h2>
+          <ol class="faq-list">
+            {faqEntries.map(({ name, text }, idx) => (
+              <li class="faq-item">
+                <details>
+                  <summary>
+                    <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                    <span class="faq-q">{name}</span>
+                    <span class="faq-toggle" aria-hidden="true">+</span>
+                  </summary>
+                  <p class="faq-a">{text}</p>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="info-cta" aria-label="Open Design call to action">
+          <div>
+            <h2>{page.ctaTitle}</h2>
+            <p>{page.ctaBody}</p>
+          </div>
+          <div class="info-cta-actions">
+            <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+            <a class="btn btn-ghost" href={href('/quickstart/')}>{common.quickstart}</a>
+            <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+          </div>
+          <div class="info-cta-meta">
+            <span class="stamp">● {common.apache}</span>
+            <span>{common.localFirst} · {common.byok}</span>
+            <span><a class="inline-link" href={href('/compare/')}>Compare</a></span>
+          </div>
+        </section>
+      </>
+    )}
+  </article>
+</Layout>
