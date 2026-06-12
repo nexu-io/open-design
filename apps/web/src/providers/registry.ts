@@ -2005,9 +2005,22 @@ export async function openFolderDialog(): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
     if (!resp.ok) return null;
-    const data = await resp.json();
-    return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
-  } catch {
+    const data = await resp.json() as { path?: string | null; mode?: string };
+    // Native dialog returned a path.
+    if (typeof data.path === 'string' && data.path.length > 0) return data.path;
+    // Browse mode (headless Docker) — the daemon returned a root path.
+    if (data.mode === 'browse' && typeof data.path === 'string' && data.path.length > 0) {
+      return data.path;
+    }
+    // Unavailable — no native dialog and no OD_WORKING_DIR.
+    if (data.mode === 'unavailable') {
+      const reason = (data as any).reason || '';
+      throw new Error(reason || 'Folder picker unavailable. Set OD_WORKING_DIR to a mounted directory.');
+    }
+    return null;
+  } catch (err) {
+    // Re-throw explicit errors (unavailable mode) so the UI can surface them.
+    if (err instanceof Error && err.message) throw err;
     return null;
   }
 }

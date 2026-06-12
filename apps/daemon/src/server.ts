@@ -5051,7 +5051,12 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/api\/connectors\/composio\/config$|^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/api\/connectors\/composio\/config$|^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/api\/asset-cache$/;
+
+  // Public read-only GET routes that must work during daemon startup
+  // (before resolvedPort is set). These expose only non-secret metadata.
+  const _PUBLIC_SAFE_GET_RE =
+    /^\/api\/connectors\/composio\/config$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -5065,6 +5070,11 @@ export async function startServer({
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
+
+    // Public safe-read routes: allow before resolvedPort is available.
+    if (req.method === 'GET' && _PUBLIC_SAFE_GET_RE.test(req.path)) {
+      return next();
+    }
 
     // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
     // routes that set their own CORS headers for canvas drawing.
@@ -7981,7 +7991,7 @@ export async function startServer({
       }
       res.setHeader(
         'Content-Security-Policy',
-        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'",
+        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'",
       );
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(contentPath).toLowerCase();
@@ -8035,21 +8045,39 @@ export async function startServer({
 
   function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
     if (typeof html !== 'string' || html.length === 0) return html;
+    const { isCacheableExternalUrl, assetCacheRewriteUrl, isGoogleFontsCssUrl } = (globalThis as any).__pluginAssetCacheHelpers ?? {};
+    const cacheable = isCacheableExternalUrl ?? ((v: unknown) => {
+      if (typeof v !== 'string') return false;
+      return /\.(?:png|jpe?g|webp|gif|avif|svg|mp4|webm|mov|m4v|ogg|mp3|wav|woff2?|ttf|otf|css|js|mjs)(?:$|[?#])/i.test(v.split(/[?#]/)[0] ?? v);
+    });
+    const rewrite = assetCacheRewriteUrl ?? ((raw: string) => `/api/asset-cache?url=${encodeURIComponent(raw.trim())}`);
+    const isGoogleFonts = isGoogleFontsCssUrl ?? ((raw: string) => {
+      try { return new URL(raw).hostname === 'fonts.googleapis.com'; } catch { return false; }
+    });
     const safeBase = baseDir === '.' ? '' : baseDir;
     const withAttrs = html.replace(
       /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
       (match, attr, quote, rawValue, closeQuote) => {
         const value = String(rawValue).trim();
-        // External media (cross-border CDN images/videos) is blocked by the
-        // sandbox CSP and is slow; route src/poster through the same-origin
-        // asset cache. href stays untouched (anchors + external stylesheets).
-        if (
+        // Rewrite external URLs for stylesheets, scripts, media, and fonts
+        // through the same-origin asset cache. Skip anchors and other href
+        // uses that aren't resource loads.
+        const isResourceUrl =
           /^https?:\/\//i.test(value) &&
-          !/\bhref\b/i.test(String(attr)) &&
-          isCacheableExternalUrl(value)
-        ) {
-          return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
+          (cacheable(value) || isGoogleFonts(value));
+        if (!isResourceUrl) {
+          // Skip external URLs that aren't cacheable preview assets.
+          const isHref = /\bhref\b/i.test(String(attr));
+          // For href: only rewrite if it's a stylesheet or Google Fonts.
+          // For src/poster: all external cacheable URLs get rewritten.
+          if (isHref && isGoogleFonts(value)) {
+            return `${attr}${quote}${rewrite(value)}${closeQuote}`;
+          }
+        } else if (!/\bhref\b/i.test(String(attr))) {
+          // src or poster — rewrite all cacheable external URLs.
+          return `${attr}${quote}${rewrite(value)}${closeQuote}`;
         }
+        // Relative asset → rewrite to plugin asset route.
         if (
           !value ||
           value.startsWith('#') ||
@@ -8080,24 +8108,24 @@ export async function startServer({
     // `background-image: url(...)`, and — most commonly in these templates —
     // JS string constants like `const HERO = 'https://cdn/.../bg.png'` that get
     // assigned to `style.backgroundImage` at runtime. Rewrite any quoted
-    // absolute media URL (covers JS literals + quoted CSS url() + quoted attrs)
-    // and any unquoted `url(...)`. Gating on a media extension keeps this from
-    // touching scripts, stylesheets, or fonts. URLs already rewritten by the
-    // attribute pass are percent-encoded inside `?url=` and no longer match.
+    // absolute cacheable URL (covers JS literals + quoted CSS url() + quoted attrs)
+    // and any unquoted `url(...)`. Gating on cacheable keeps this from
+    // touching unsupported URLs. URLs already rewritten by the attribute pass
+    // are percent-encoded inside `?url=` and no longer match.
     const withQuoted = withAttrs.replace(
       /(['"])(https?:\/\/[^'"]+)\1/g,
       (match, quote, rawValue) => {
         const value = String(rawValue).trim();
-        if (!isCacheableExternalUrl(value)) return match;
-        return `${quote}${assetCacheRewriteUrl(value)}${quote}`;
+        if (!cacheable(value) && !isGoogleFonts(value)) return match;
+        return `${quote}${rewrite(value)}${quote}`;
       },
     );
     return withQuoted.replace(
       /url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi,
       (match, rawValue) => {
         const value = String(rawValue).trim();
-        if (!isCacheableExternalUrl(value)) return match;
-        return `url(${assetCacheRewriteUrl(value)})`;
+        if (!cacheable(value) && !isGoogleFonts(value)) return match;
+        return `url(${rewrite(value)})`;
       },
     );
   }
@@ -8303,11 +8331,12 @@ export async function startServer({
       } catch {
         return res.status(404).json({ error: 'asset not found' });
       }
-      // §9.2 preview CSP — sandboxed iframes get only inline script + style;
-      // no network, no external resources, no document-level forms.
+      // §9.2 preview CSP — sandboxed iframes get same-origin proxied resources
+      // through /api/asset-cache. Direct external network access is blocked
+      // by default; connect-src 'self' allows same-origin cache/config fetches.
       res.setHeader(
         'Content-Security-Policy',
-        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'",
+        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'",
       );
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(resolved).toLowerCase();
@@ -10613,12 +10642,97 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
+      // Try the native OS dialog first (macOS osascript, Linux zenity, Windows PowerShell).
       const selected = await openNativeFolderDialog();
-      res.json({ path: selected });
+      if (selected) {
+        res.json({ path: selected, mode: 'native' });
+        return;
+      }
+      // Native dialog unavailable (headless Docker / VPS). Fall back to
+      // browse mode rooted at OD_WORKING_DIR.
+      const workingDirEnv = process.env.OD_WORKING_DIR?.trim();
+      if (workingDirEnv) {
+        const resolved = await (async () => {
+          try {
+            const { realpath } = await import('node:fs/promises');
+            return await realpath(workingDirEnv);
+          } catch {
+            return null;
+          }
+        })();
+        if (resolved) {
+          res.json({
+            path: resolved,
+            mode: 'browse',
+            roots: [{ id: 'od-working-dir', label: 'Working directory', path: resolved }],
+          });
+          return;
+        }
+      }
+      // No native dialog and no OD_WORKING_DIR configured.
+      res.json({
+        path: null,
+        mode: 'unavailable',
+        reason: 'No native folder dialog available and OD_WORKING_DIR is not configured. Set OD_WORKING_DIR to a mounted directory in docker-compose.yml.',
+      });
     } catch (err) {
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  // Browse child directories within an allowed root. Used by the web UI
+  // folder picker in headless/Docker deployments.
+  app.get('/api/dialog/folder-children', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const rawPath = typeof req.query.path === 'string' ? req.query.path : '';
+      if (!rawPath) {
+        return res.status(400).json({ error: 'path query parameter required' });
+      }
+      const { realpath, readdir } = await import('node:fs/promises');
+      const pathMod = await import('node:path');
+      // Resolve the requested path.
+      let canonical: string;
+      try {
+        canonical = await realpath(rawPath);
+      } catch {
+        return res.status(400).json({ error: 'path not found' });
+      }
+      // Build allowed roots from OD_WORKING_DIR.
+      const workingDirEnv = process.env.OD_WORKING_DIR?.trim();
+      const roots: string[] = [];
+      if (workingDirEnv) {
+        try {
+          const rootCanonical = await realpath(workingDirEnv);
+          roots.push(rootCanonical);
+        } catch {
+          // root not available
+        }
+      }
+      // Containment check: path must equal or be a descendant of a root.
+      const isContained = roots.some((root) => {
+        const rootWithSep = root.endsWith(pathMod.sep) ? root : `${root}${pathMod.sep}`;
+        return canonical === root || canonical.startsWith(rootWithSep);
+      });
+      if (!isContained) {
+        return res.status(400).json({ error: 'path is outside allowed roots' });
+      }
+      // List child directories.
+      const entries = await readdir(canonical, { withFileTypes: true });
+      const children = entries
+        .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+        .map((e) => ({
+          name: e.name,
+          path: pathMod.join(canonical, e.name),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      res.json({ path: canonical, children });
+    } catch (err) {
+      res.status(500).json({ error: String(err && err.message ? err.message : err) });
     }
   });
 
