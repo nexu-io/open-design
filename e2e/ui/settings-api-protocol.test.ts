@@ -420,6 +420,207 @@ test('[P0] @critical BYOK fetched models are searchable inside the Settings mode
   await expect(popover.getByRole('option', { name: 'BB Nightly Model (bb-nightly-model)' })).toHaveCount(0);
 });
 
+test('[P1] BYOK model fetch failure keeps the current model and recovers after key update', async ({ page }) => {
+  const providerModelRequests: Array<Record<string, unknown>> = [];
+  await page.route('**/api/provider/models', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    providerModelRequests.push(payload);
+    if (providerModelRequests.length === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'provider temporarily unavailable' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 12,
+        models: [
+          { id: 'retry-nightly-model', label: 'Retry Nightly Model' },
+          { id: 'stable-nightly-model', label: 'Stable Nightly Model' },
+        ],
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const modelSelect = modelCombobox(dialog);
+  await dialog.getByLabel('API key').fill('sk-openai-test');
+  await dialog.getByLabel('API key').blur();
+
+  await expect(dialog.getByText(/Could not fetch models: provider temporarily unavailable/i)).toBeVisible();
+  await expectModelComboboxText(dialog, /gpt-4o/i);
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+
+  await dialog.getByLabel('API key').fill('sk-openai-retry');
+  await dialog.getByLabel('API key').blur();
+  await expect(dialog.getByText('Loaded 2 models from your account.')).toBeVisible();
+  await expect.poll(() => providerModelRequests.length).toBe(2);
+
+  await modelSelect.click();
+  await page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'Retry Nightly Model (retry-nightly-model)' }).click();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    model: 'retry-nightly-model',
+  });
+});
+
+test('[P1] Settings autosave failure surfaces an error instead of reporting saved changes', async ({ page }) => {
+  const config = {
+    mode: 'api',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  const putBodies: Array<Record<string, unknown>> = [];
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config } });
+      return;
+    }
+    if (route.request().method() === 'PUT') {
+      putBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'daemon unavailable' }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Base URL').fill('https://proxy.example.com/v1');
+  await dialog.getByLabel('Base URL').blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(0);
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toBeVisible();
+  await expect(dialog.getByText('All changes saved')).toHaveCount(0);
+});
+
+test('[P1] Settings autosave recovers after a later successful daemon sync', async ({ page }) => {
+  const config = {
+    mode: 'api',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  const putBodies: Array<Record<string, unknown>> = [];
+  let daemonSyncRecovered = false;
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config } });
+      return;
+    }
+    if (route.request().method() === 'PUT') {
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      putBodies.push(payload);
+      if (!daemonSyncRecovered) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'daemon unavailable' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: payload }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
+
+  const dialog = page.getByRole('dialog');
+  const baseUrl = dialog.getByLabel('Base URL');
+  await baseUrl.fill('https://proxy.example.com/v1');
+  await baseUrl.blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(0);
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toBeVisible();
+  const failureRequestCount = putBodies.length;
+
+  daemonSyncRecovered = true;
+  await baseUrl.fill('https://proxy-recovered.example.com/v1');
+  await baseUrl.blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(failureRequestCount);
+  await expect(dialog.getByText('All changes saved')).toBeVisible();
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toHaveCount(0);
+});
+
 test('[P0] @critical saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
   test.setTimeout(60_000);
   await openExecutionSettingsWithAgents(

@@ -955,6 +955,25 @@ export function DesignBrowserPanel({
     if (nextUrl !== EMPTY_URL) loadWebviewUrl(nextUrl);
   }, [commitHistory, loadWebviewUrl, recordNavigation]);
 
+  const syncFromFallbackFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    if (!frame || loadUrl === EMPTY_URL) return;
+    let nextUrl = loadUrl;
+    let nextTitle = '';
+    try {
+      nextUrl = frame.contentWindow?.location.href || loadUrl;
+      nextTitle = frame.contentDocument?.title?.trim() || '';
+    } catch {
+      // Cross-origin iframe content is expected to reject here. Keep the URL
+      // context and let the display fall back to labelFromUrl().
+    }
+    setCurrentUrl(nextUrl);
+    if (!addressEditing) setAddressValue(nextUrl);
+    commitHistory(nextUrl, { title: nextTitle }, { countVisit: false });
+    recordNavigation(nextUrl, nextTitle, { replacePendingTarget: true });
+    updateCurrentNavigationTitle(nextTitle);
+    setIsLoading(false);
+  }, [addressEditing, commitHistory, loadUrl, recordNavigation, updateCurrentNavigationTitle]);
+
   const updateLoadingState = useCallback((node: WebviewElement | null = webviewNode) => {
     if (!node) {
       setIsLoading(false);
@@ -1971,7 +1990,11 @@ export function DesignBrowserPanel({
               />
             ) : (
               <div className="db-fallback">
-                <iframe title={pageTitle} src={loadUrl} />
+                <iframe
+                  title={pageTitle}
+                  src={loadUrl}
+                  onLoad={(event) => syncFromFallbackFrame(event.currentTarget)}
+                />
               </div>
             )}
             {commentComposer}
