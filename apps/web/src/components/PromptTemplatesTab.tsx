@@ -100,11 +100,16 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
     <div className="tab-panel prompt-templates-panel">
       <div className="tab-panel-toolbar">
         <Input
+          className="prompt-templates-toolbar-control"
           placeholder={t('promptTemplates.searchPlaceholder')}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+        <Select
+          className="prompt-templates-toolbar-control"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
           {categories.map((c) => (
             <option key={c} value={c}>
               {c === 'All' ? t('common.all') : localizePromptTemplateCategory(locale, c)}
@@ -113,6 +118,7 @@ export function PromptTemplatesTab({ surface, templates, onPreview }: Props) {
         </Select>
         {sources.length > 2 ? (
           <Select
+            className="prompt-templates-toolbar-control"
             value={source}
             onChange={(e) => setSource(e.target.value)}
             aria-label={t('promptTemplates.sourceFilterAria')}
