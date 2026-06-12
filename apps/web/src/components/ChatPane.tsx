@@ -859,11 +859,12 @@ export function ChatPane({
     failedRunErrorEvent?.auth?.kind === 'terminal-auth'
       ? failedRunErrorEvent.auth
       : null;
+  const canLaunchTerminalAuth = terminalAuth !== null && Boolean(onLaunchTerminalAuth);
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
   const runFailureUi = retryAssistant
     ? resolveRunFailureUi(failedRunErrorEvent?.code, retryAssistant.agentId, {
-        hasTerminalAuth: terminalAuth !== null,
+        hasTerminalAuth: canLaunchTerminalAuth,
       })
     : null;
   // Offer Continue (resume) when the failed run is resumable AND the active
