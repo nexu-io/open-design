@@ -197,6 +197,67 @@ test('gemini stream emits init text and usage events', () => {
   ]);
 });
 
+test('kimi stream emits OpenAI-style tool calls, tool results, and assistant text', () => {
+  const { events, handler } = collectEvents('kimi');
+
+  handler.feed(
+    JSON.stringify({
+      role: 'assistant',
+      tool_calls: [
+        {
+          type: 'function',
+          id: 'tool-1',
+          function: {
+            name: 'Write',
+            arguments: '{"path":"index.html","content":"<html></html>"}',
+          },
+        },
+      ],
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'tool',
+      tool_call_id: 'tool-1',
+      content: 'Wrote 13 bytes to index.html',
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'assistant',
+      content: 'Done.',
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'meta',
+      type: 'session.resume_hint',
+      session_id: 'session-1',
+      content: 'To resume this session: kimi -r session-1',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'tool-1',
+      name: 'Write',
+      input: {
+        path: 'index.html',
+        content: '<html></html>',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'tool-1',
+      content: 'Wrote 13 bytes to index.html',
+      isError: false,
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.',
+    },
+  ]);
+});
+
 test('gemini stream handles real stream-json user, tool, and error frames', () => {
   const { events, handler } = collectEvents('gemini');
 
