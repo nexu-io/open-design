@@ -7,6 +7,10 @@
 // surface by lifting its plugin orchestration up here so the prompt
 // textarea can live centered in the hero.
 
+// localStorage key for persisting the home prompt draft across workspace-tab
+// switches. The draft is saved on every keystroke and cleared on submit.
+const HOME_PROMPT_DRAFT_KEY = 'od:home-prompt-draft';
+
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   ApplyResult,
@@ -296,7 +300,13 @@ export function HomeView({
   }, []);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(() => {
+    try {
+      return window.localStorage.getItem(HOME_PROMPT_DRAFT_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [promptEditedByUser, setPromptEditedByUser] = useState(false);
   const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
   const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
@@ -1061,6 +1071,16 @@ export function HomeView({
   function handlePromptChange(nextPrompt: string) {
     setPrompt(nextPrompt);
     setPromptEditedByUser(true);
+    // Persist the draft so it survives workspace-tab switches.
+    try {
+      if (nextPrompt) {
+        window.localStorage.setItem(HOME_PROMPT_DRAFT_KEY, nextPrompt);
+      } else {
+        window.localStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+      }
+    } catch {
+      // Storage may be unavailable in privacy modes.
+    }
     if (!active?.queryTemplate) return;
     const extracted = extractPluginInputsFromPrompt(
       active.queryTemplate,
@@ -1190,6 +1210,12 @@ export function HomeView({
     setPendingChipId(null);
     setPrompt('');
     setPromptEditedByUser(false);
+    // Clear persisted draft when resetting the composer.
+    try {
+      window.localStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+    } catch {
+      // Storage may be unavailable in privacy modes.
+    }
   }
 
   function clearActiveChipSelection() {
@@ -1559,6 +1585,12 @@ export function HomeView({
     setSelectedPluginContexts([]);
     setSelectedMcpContexts([]);
     setSelectedConnectorContexts([]);
+    // Clear persisted draft after successful submit.
+    try {
+      window.localStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+    } catch {
+      // Storage may be unavailable in privacy modes.
+    }
   }
 
   return (
