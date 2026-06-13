@@ -66,6 +66,7 @@ export function createChatRunService({
         typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
       mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
       toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
+      browserUse: meta.browserUse && typeof meta.browserUse === 'object' ? meta.browserUse : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -168,6 +169,7 @@ export function createChatRunService({
     eventsLogPath: run.eventsLogPath ?? null,
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
+    ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
