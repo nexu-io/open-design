@@ -28,16 +28,15 @@
 # pnpm version note:
 #   `package.json` declares `engines.pnpm` and pnpm enforces it on
 #   `pnpm install` (regardless of `engine-strict`). The nixpkgs
-#   default `pnpm` is generally incompatible with that constraint —
-#   it ships a version that is either older than the floor, newer
-#   than the ceiling, or both, depending on which nixpkgs the
-#   consuming flake is following. The flake overrides `pkgs.pnpm_10`
-#   to fetch the exact tarball pinned by `packageManager` — see
-#   flake.nix for the override and how to bump the hash when
-#   `packageManager` advances. This derivation then threads that
-#   pinned pnpm_10 into both `fetchPnpmDeps` (the dep-fetch phase)
-#   and `pnpmConfigHook` (the install phase) so neither falls back
-#   to the nixpkgs default `pnpm`.
+#   default `pnpm` is generally incompatible — older than the
+#   floor or newer than the ceiling depending on which nixpkgs
+#   the consumer follows. The flake overrides `pkgs.pnpm_10` to
+#   the exact tarball pinned by `packageManager` (see flake.nix
+#   for the override + hash bump). This derivation uses
+#   `pnpm_10` for both phases: in `nativeBuildInputs` so the
+#   install-phase `pnpmConfigHook` resolves it from PATH, and
+#   `pnpm = pnpm_10` to `fetchPnpmDeps` to override its
+#   `pkgs.pnpm` default.
 #
 # Workspace siblings the daemon depends on are built in dependency order
 # before the daemon itself; tsc emits each package's dist/, which is what
@@ -57,21 +56,7 @@ in
     nativeBuildInputs = [
       nodejs
       pnpm_10
-      # Override pnpmConfigHook's propagatedBuildInputs to use the
-      # flake's pinned pnpm_10. The upstream hook hardcodes
-      # `propagatedBuildInputs = [ pnpm … ]` (the nixpkgs default
-      # pnpm attribute plus writable-tmpdir-as-home-hook and friends
-      # depending on nixpkgs version), which is what puts the wrong
-      # pnpm binary on PATH during the install phase and trips the
-      # package's engines.pnpm gate. Append pnpm_10 to the existing
-      # list rather than replacing it, so the upstream's
-      # writable-tmpdir-as-home-hook (which sets $HOME in the build
-      # sandbox) survives the override.
-      (pnpmConfigHook.overrideAttrs (old: {
-        propagatedBuildInputs =
-          (old.propagatedBuildInputs or [])
-          ++ [pnpm_10];
-      }))
+      pnpmConfigHook
       makeWrapper
       # Required to rebuild better-sqlite3's native binding from source.
       # node-gyp drives this via Python; gnumake/pkg-config + the C++
@@ -81,16 +66,8 @@ in
       pkg-config
     ];
 
-    # Force every pnpm invocation in this build (deps fetch + install
-    # phase) to use the flake's pinned pnpm_10, not whatever
-    # `pkgs.pnpm` happens to be on the consuming flake's nixpkgs. The
-    # nixpkgs default pnpm moves independently of package.json's
-    # engines.pnpm, and pnpm enforces that gate on `pnpm install`.
-    # We override pnpmConfigHook in nativeBuildInputs above to carry
-    # pnpm_10 instead of the default `pnpm`, and we pass
-    # `pnpm = pnpm_10` explicitly to fetchPnpmDeps so the dep-fetch
-    # derivation uses the same version (fetchPnpmDeps' default is
-    # `pkgs.pnpm`).
+    # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
+    # `pnpm_10` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
