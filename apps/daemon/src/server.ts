@@ -15051,13 +15051,16 @@ export async function startServer({
     const project = run.projectId ? getProject(db, run.projectId) : null;
     let files: any[] = [];
     if (project) {
+      const packageMetadata = run.projectMetadata ?? null;
       try {
-        const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
-        const projectRootStat = await fs.promises.stat(projectRoot);
-        if (!projectRootStat.isDirectory()) {
-          throw new Error('workspace root is not a directory');
+        if (status.workspace?.storage?.kind === 'folder-backed') {
+          const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, packageMetadata);
+          const projectRootStat = await fs.promises.stat(projectRoot);
+          if (!projectRootStat.isDirectory()) {
+            throw new Error('workspace root is not a directory');
+          }
         }
-        files = await listFiles(PROJECTS_DIR, project.id, { metadata: project.metadata });
+        files = await listFiles(PROJECTS_DIR, project.id, { metadata: packageMetadata });
       } catch (err) {
         return sendApiError(
           res,

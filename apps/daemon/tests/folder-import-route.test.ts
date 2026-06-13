@@ -378,6 +378,107 @@ describe('POST /api/import/folder', () => {
     expect(body.error?.message).toMatch(/ENOENT|no such file/i);
   });
 
+  it('returns an empty result-package for an od-owned run before files exist', async () => {
+    const projectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: `tmp-${Date.now()}`,
+        name: 'Empty OD-owned project',
+        metadata: { kind: 'prototype' },
+      }),
+    });
+    expect(projectResp.status).toBe(200);
+    const { project } = (await projectResp.json()) as { project: { id: string } };
+
+    const runResp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'missing-agent',
+        projectId: project.id,
+        message: 'Inspect the empty project.',
+      }),
+    });
+    expect(runResp.status).toBe(202);
+    const runBody = (await runResp.json()) as { runId?: string };
+
+    const resultPackageResp = await fetch(
+      `${baseUrl}/api/runs/${runBody.runId}/result-package`,
+    );
+    expect(resultPackageResp.status).toBe(200);
+    const resultPackage = (await resultPackageResp.json()) as {
+      workspace?: { storage?: { kind?: string; baseDir?: string | null } };
+      project?: { fileCount?: number };
+      artifacts?: unknown[];
+    };
+    expect(resultPackage.workspace?.storage).toEqual({
+      kind: 'od-owned',
+      baseDir: null,
+    });
+    expect(resultPackage.project?.fileCount).toBe(0);
+    expect(resultPackage.artifacts).toEqual([]);
+  });
+
+  it('keeps result-package files aligned with the run workspace snapshot after working-dir swaps', async () => {
+    const scratchFolder = makeFolder();
+    await writeFile(path.join(scratchFolder, 'index.html'), '<!doctype html><p>scratch</p>');
+    const importResp = await importFolder({
+      baseDir: scratchFolder,
+      orchestratorWorkspace: {
+        kind: 'scratch',
+        sourceRef: 'main@abc123',
+        writeback: 'external',
+      },
+    });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const runResp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'missing-agent',
+        projectId: project.id,
+        message: 'Inspect the scratch workspace.',
+      }),
+    });
+    expect(runResp.status).toBe(202);
+    const runBody = (await runResp.json()) as { runId?: string };
+
+    const localFolder = makeFolder();
+    await writeFile(path.join(localFolder, 'local-only.html'), '<!doctype html><p>local</p>');
+    const replaceResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseDir: localFolder }),
+    });
+    expect(replaceResp.status).toBe(200);
+
+    const resultPackageResp = await fetch(
+      `${baseUrl}/api/runs/${runBody.runId}/result-package`,
+    );
+    expect(resultPackageResp.status).toBe(200);
+    const resultPackage = (await resultPackageResp.json()) as {
+      workspace?: {
+        storage?: { kind?: string; baseDir?: string };
+        provenance?: { kind?: string; sourceRef?: string };
+      };
+      artifacts?: Array<{ file?: string }>;
+    };
+    expect(resultPackage.workspace).toMatchObject({
+      storage: {
+        kind: 'folder-backed',
+        baseDir: await realpath(scratchFolder),
+      },
+      provenance: {
+        kind: 'orchestrator-scratch',
+        sourceRef: 'main@abc123',
+      },
+    });
+    expect(resultPackage.artifacts?.map((artifact) => artifact.file)).toEqual(['index.html']);
+  });
+
   it('rejects sandbox runs for imported folders before creating a run', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
