@@ -3919,14 +3919,26 @@ async function fetchDesignSystemPreviewRelativeText(
   return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
 }
 
+type DesignSystemPreviewAssetPath = {
+  filePath: string;
+  suffix: string;
+};
+
 function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
+  return resolveDesignSystemPreviewAssetPath(ownerFileName, assetRef)?.filePath ?? null;
+}
+
+function resolveDesignSystemPreviewAssetPath(ownerFileName: string, assetRef: string): DesignSystemPreviewAssetPath | null {
   const ref = assetRef.trim();
   if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
   if (isDesignSystemPreviewAppRootRef(ref)) return null;
   try {
     const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
     if (url.origin !== 'https://od.local') return null;
-    return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    return {
+      filePath: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
+      suffix: `${url.search}${url.hash}`,
+    };
   } catch {
     return null;
   }
@@ -3946,9 +3958,9 @@ function isDesignSystemPreviewAppRootRef(ref: string): boolean {
 function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
   return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
     const ref = rawRef.trim();
-    const filePath = resolveDesignSystemPreviewRelativePath(stylesheetFileName, ref);
-    if (!filePath) return match;
-    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, filePath))}")`;
+    const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
+    if (!assetPath) return match;
+    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
   });
 }
 
@@ -3975,8 +3987,8 @@ function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string
 }
 
 function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
-  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, ref.trim());
-  return filePath ? projectRawUrl(projectId, filePath) : ref;
+  const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
+  return assetPath ? projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
 }
 
 function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
