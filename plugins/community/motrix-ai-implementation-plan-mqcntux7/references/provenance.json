@@ -1,0 +1,19 @@
+{
+  "candidateId": "d23f8c31-3812-4f9a-b1b2-913ddec265fa",
+  "projectId": "motrix-ai-gui",
+  "runId": "a844b5e9-c030-4e93-9ebc-502ed4446731",
+  "conversationId": "13573ee0-f621-4273-b8b1-12e37cc49ba5",
+  "provenance": {
+    "summary": "Detected from docs/superpowers/plans/2026-06-12-motrix-ai.md after a successful run.",
+    "detectedAt": 1781373005411
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "docs/superpowers/plans/2026-06-12-motrix-ai.md",
+      "label": "docs/superpowers/plans/2026-06-12-motrix-ai.md",
+      "size": 10655,
+      "copied": true
+    }
+  ]
+}
