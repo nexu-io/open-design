@@ -7,6 +7,7 @@ import {
   type DragEvent as ReactDragEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
@@ -477,6 +478,22 @@ export function FileWorkspace({
   const [uploadDir, setUploadDir] = useState<string>('');
   const [sketches, setSketches] = useState<Record<string, SketchState>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  // The quick switcher overlay is a fixed, full-viewport modal. Rendered inline
+  // it lives inside `.workspace`, which becomes a stacking context whenever it
+  // gets `contain: paint` (chat resize / focus mode) — that traps the overlay's
+  // z-index below the body-portaled chat composer, so the composer paints over
+  // the dimming backdrop and looks highlighted (#4148). Portal the overlay to
+  // <body> so it sits in the top-level stacking context. The portal wraps the
+  // whole AnimatePresence (not just the overlay) so exit animations keep
+  // working — AnimatePresence must own the exiting node in its own subtree.
+  // Resolve the target in an effect (mirrors the chat composer's portal): on
+  // the server / static-markup render the target stays null and we render
+  // inline, since react-dom's server renderer throws on portals.
+  const [overlayPortalTarget, setOverlayPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setOverlayPortalTarget(document.body);
+  }, []);
   const [projectFolders, setProjectFolders] = useState<ProjectFolder[]>(EMPTY_PROJECT_FOLDERS);
   // Reset the folder list during render — NOT in an effect — when the project
   // changes. DesignFilesPanel is keyed by `projectId`, so an effect-based reset
@@ -2312,24 +2329,29 @@ export function FileWorkspace({
           />
         ) : null}
       </AnimatePresence>
-      <AnimatePresence>
-        {quickSwitcherOpen ? (
-          <QuickSwitcher
-            projectId={projectId}
-            files={visibleFiles}
-            workspaceContexts={workspaceContexts}
-            onOpenFile={(name) => {
-              openFile(name);
-              setQuickSwitcherOpen(false);
-            }}
-            onOpenTab={(tabId) => {
-              focusWorkspaceTab(tabId);
-              setQuickSwitcherOpen(false);
-            }}
-            onClose={() => setQuickSwitcherOpen(false)}
-          />
-        ) : null}
-      </AnimatePresence>
+      {overlayPortalTarget
+        ? createPortal(
+            <AnimatePresence>
+              {quickSwitcherOpen ? (
+                <QuickSwitcher
+                  projectId={projectId}
+                  files={visibleFiles}
+                  workspaceContexts={workspaceContexts}
+                  onOpenFile={(name) => {
+                    openFile(name);
+                    setQuickSwitcherOpen(false);
+                  }}
+                  onOpenTab={(tabId) => {
+                    focusWorkspaceTab(tabId);
+                    setQuickSwitcherOpen(false);
+                  }}
+                  onClose={() => setQuickSwitcherOpen(false)}
+                />
+              ) : null}
+            </AnimatePresence>,
+            overlayPortalTarget,
+          )
+        : null}
     </div>
   );
 }
