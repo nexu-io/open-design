@@ -9,7 +9,7 @@ import {
   type InlineAssetReader,
 } from './inline-assets.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
-import { normalizeOrchestratorWorkspace } from './workspace-contract.js';
+import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -111,8 +111,17 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const normalizedOrchestratorWorkspace =
-        normalizeOrchestratorWorkspace(orchestratorWorkspace);
+      const parsedOrchestratorWorkspace =
+        parseOrchestratorWorkspace(orchestratorWorkspace);
+      if (!parsedOrchestratorWorkspace.ok) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          parsedOrchestratorWorkspace.message,
+        );
+      }
+      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -180,24 +189,25 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
-      const sandboxReason = sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      const sandboxReason = normalizedOrchestratorWorkspace
+        ? null
+        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
       if (sandboxReason) {
         return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
-      const nextOrchestratorWorkspace =
-        normalizedOrchestratorWorkspace ??
-        normalizeOrchestratorWorkspace(existingMeta.orchestratorWorkspace);
+      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
+        existingMeta;
       const nextMeta = {
-        ...existingMeta,
+        ...preservedMeta,
         kind: existingMeta.kind ?? 'prototype',
         baseDir: normalizedPath,
         importedFrom: 'folder' as const,
         entryFile,
-        ...(nextOrchestratorWorkspace
-          ? { orchestratorWorkspace: nextOrchestratorWorkspace }
+        ...(normalizedOrchestratorWorkspace
+          ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
           : {}),
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
@@ -223,8 +233,17 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const normalizedOrchestratorWorkspace =
-        normalizeOrchestratorWorkspace(orchestratorWorkspace);
+      const parsedOrchestratorWorkspace =
+        parseOrchestratorWorkspace(orchestratorWorkspace);
+      if (!parsedOrchestratorWorkspace.ok) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          parsedOrchestratorWorkspace.message,
+        );
+      }
+      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -304,7 +323,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
-      const sandboxReason = sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      const sandboxReason = normalizedOrchestratorWorkspace
+        ? null
+        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
       if (sandboxReason) {
         return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
       }
