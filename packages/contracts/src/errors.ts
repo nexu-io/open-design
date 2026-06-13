@@ -71,6 +71,9 @@ export const API_ERROR_CODES = [
   'TOOL_TOKEN_EXPIRED',
   'TOOL_ENDPOINT_DENIED',
   'TOOL_OPERATION_DENIED',
+  'MEDIA_EXECUTION_DISABLED',
+  'MEDIA_SURFACE_DENIED',
+  'MEDIA_MODEL_DENIED',
   // Live artifact validation, storage, preview, and refresh failures.
   'LIVE_ARTIFACT_NOT_FOUND',
   'LIVE_ARTIFACT_INVALID',

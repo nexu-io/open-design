@@ -175,7 +175,15 @@ export interface McpRunCreateRequest {
   toolBundle?: RunScopedToolBundle;
 }
 
-export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export const CHAT_RUN_STATUSES = [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'canceled',
+] as const;
+
+export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
 

@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
 import {
@@ -825,7 +826,7 @@ function buildProjectExportManifestResponse({
   note(entryFile, 'project-entry-file');
 
   return {
-    schema: 'open-design.project-export-manifest.v1',
+    schema: PROJECT_EXPORT_MANIFEST_SCHEMA,
     projectId,
     projectName: typeof project?.name === 'string' ? project.name : null,
     generatedAt: new Date().toISOString(),
