@@ -1,14 +1,7 @@
 ---
 name: orbit-github
 description: |
-  Open Orbit briefing skill — selected by the Orbit pipeline when
-  GitHub is the user's only connected connector, or when the user
-  explicitly scopes their daily digest to GitHub. Pulls the past 24
-  hours of PRs, review requests, issues, CI runs, and merges from the
-  user's authenticated GitHub connection and renders them in a layout
-  that mirrors GitHub's native Notifications + PR-diff visual language.
-  This skill should not be triggered manually — it is invoked by
-  Orbit's daily-digest scheduler against live GitHub data.
+  Open Orbit brifing becerisi — GitHub kullanıcının tek bağlı bağlayıcısı olduğunda veya kullanıcı günlük özetini açıkça GitHub ile sınırlandırdığında Orbit pipeline'ı tarafından seçilir. Kimliği doğrulanmış GitHub bağlantısından son 24 saatlik PR'ları, inceleme isteklerini, sorunları, CI çalışmalarını ve birleştirmeleri çeker ve bunları GitHub'ın yerel Bildirimler + PR farkı görsel dilini yansıtan bir düzende sunar. Bu beceri manuel olarak tetiklenmemelidir — canlı GitHub verilerine karşı Orbit'in günlük özet zamanlayıcısı tarafından çağrılır.
 triggers:
   - "github briefing"
   - "github digest"

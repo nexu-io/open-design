@@ -1,15 +1,7 @@
 ---
 name: orbit-gmail
 description: |
-  Open Orbit briefing skill — selected by the Orbit pipeline when
-  Gmail is the user's only connected connector, or when the user
-  explicitly scopes their daily digest to Gmail. Pulls the past 24
-  hours of inbox activity (replies awaited, mentions, cc, auto-
-  categorized bulk) from the user's authenticated Gmail connection
-  and renders the digest as the Orbit Daily Digest email opened
-  inside Gmail's reading view. This skill should not be triggered
-  manually — it is invoked by Orbit's daily-digest scheduler against
-  live Gmail data.
+  Open Orbit brifing becerisi — Gmail kullanıcının tek bağlı bağlayıcısı olduğunda veya kullanıcı günlük özetini açıkça Gmail ile sınırlandırdığında Orbit pipeline'ı tarafından seçilir. Kimliği doğrulanmış Gmail bağlantısından son 24 saatlik gelen kutusu etkinliğini (yanıt beklenenler, bahsetmeler, cc, otomatik kategorize edilmiş toplu e-postalar) çeker ve özeti Gmail'in okuma görünümünde açılmış bir Orbit Günlük Özeti e-postası olarak sunar. Bu beceri manuel olarak tetiklenmemelidir — canlı Gmail verilerine karşı Orbit'in günlük özet zamanlayıcısı tarafından çağrılır.
 triggers:
   - "gmail briefing"
   - "inbox digest"

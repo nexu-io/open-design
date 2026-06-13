@@ -1,17 +1,7 @@
 ---
 name: orbit-general
 description: |
-  Open Orbit briefing skill — selected by the Orbit pipeline when the
-  user has two or more connectors connected. Pulls the past 24 hours of
-  activity from every authenticated connector (GitHub, Linear, Notion,
-  Slack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and renders a
-  single adaptive bento-grid dashboard at the top of "我的设计". Each
-  connector module picks its own UI form (list, avatar stack, status
-  ring, heatmap, file grid, alert card, …) based on the data shape it
-  returns, so the layout scales as Orbit's connector ecosystem grows.
-  This skill should not be triggered manually — it is invoked by
-  Orbit's daily-digest scheduler against the user's live connector
-  data.
+  Open Orbit brifing becerisi — Kullanıcının iki veya daha fazla bağlı bağlayıcısı olduğunda Orbit pipeline'ı tarafından seçilir. Kimliği doğrulanmış her bağlayıcıdan (GitHub, Linear, Notion, Slack, 飞书, Takvim, Gmail, Drive, Sentry, Vercel, …) son 24 saatlik etkinliği çeker ve "Tasarımlarım"ın üstünde tek bir uyarlanabilir bento-ızgara paneli oluşturur. Her bağlayıcı modülü, döndürdüğü veri yapısına bağlı olarak kendi kullanıcı arayüzü formunu (liste, avatar yığını, durum halkası, ısı haritası, dosya ızgarası, uyarı kartı, …) seçer, böylece düzen Orbit'in bağlayıcı ekosistemi büyüdükçe ölçeklenir. Bu beceri manuel olarak tetiklenmemelidir — kullanıcının canlı bağlayıcı verilerine karşı Orbit'in günlük özet zamanlayıcısı tarafından çağrılır.
 triggers:
   - "orbit"
   - "daily digest"

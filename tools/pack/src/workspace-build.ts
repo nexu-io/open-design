@@ -251,11 +251,13 @@ async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void
     const target = join(pnpmRoot, match, "node_modules", pkg);
     if (!(await pathExists(target))) continue;
     const relativeTarget = relative(dirname(linkPath), target);
+    const useJunction = process.platform === "win32";
+    const symlinkTarget = useJunction ? target : relativeTarget;
     // Idempotent re-run: drop any pre-existing entry (stale symlink
     // from a previous build with different react/react-dom versions)
     // before recreating, so repeated invocations don't EEXIST.
     if (existing) await unlink(linkPath).catch(() => undefined);
-    await symlink(relativeTarget, linkPath);
+    await symlink(symlinkTarget, linkPath, useJunction ? "junction" : undefined);
   }
 }
 

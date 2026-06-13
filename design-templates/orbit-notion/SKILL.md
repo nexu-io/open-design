@@ -1,14 +1,7 @@
 ---
 name: orbit-notion
 description: |
-  Open Orbit briefing skill — selected by the Orbit pipeline when
-  Notion is the user's only connected connector, or when the user
-  explicitly scopes their daily digest to Notion. Pulls the past 24
-  hours of document edits, comments, mentions, and database row changes
-  from the user's authenticated Notion connection and renders the
-  digest as a native Notion page (callout / toggle / database table
-  primitives). This skill should not be triggered manually — it is
-  invoked by Orbit's daily-digest scheduler against live Notion data.
+  Open Orbit brifing becerisi — Notion kullanıcının tek bağlı bağlayıcısı olduğunda veya kullanıcı günlük özetini açıkça Notion ile sınırlandırdığında Orbit pipeline'ı tarafından seçilir. Kimliği doğrulanmış Notion bağlantısından son 24 saatlik belge düzenlemelerini, yorumları, bahsetmeleri ve veri tabanı satır değişikliklerini çeker ve özeti yerel bir Notion sayfası (açıklama kutusu / açılır kutu / veri tabanı tablosu temel bileşenleri) olarak sunar. Bu beceri manuel olarak tetiklenmemelidir — canlı Notion verilerine karşı Orbit'in günlük özet zamanlayıcısı tarafından çağrılır.
 triggers:
   - "notion briefing"
   - "notion digest"

@@ -1,14 +1,7 @@
 ---
 name: orbit-linear
 description: |
-  Open Orbit briefing skill — selected by the Orbit pipeline when
-  Linear is the user's only connected connector, or when the user
-  explicitly scopes their daily digest to Linear. Pulls the past 24
-  hours of issue movement, status changes, assignments, and cycle
-  progress from the user's authenticated Linear connection and renders
-  the digest in Linear's native Inbox + cycle-progress visual language.
-  This skill should not be triggered manually — it is invoked by
-  Orbit's daily-digest scheduler against live Linear data.
+  Open Orbit brifing becerisi — Linear kullanıcının tek bağlı bağlayıcısı olduğunda veya kullanıcı günlük özetini açıkça Linear ile sınırlandırdığında Orbit pipeline'ı tarafından seçilir. Kimliği doğrulanmış Linear bağlantısından son 24 saatlik sorun hareketlerini, durum değişikliklerini, atamaları ve döngü ilerlemelerini çeker ve özeti Linear'ın yerel Gelen Kutusu + döngü ilerlemesi görsel dilinde sunar. Bu beceri manuel olarak tetiklenmemelidir — canlı Linear verilerine karşı Orbit'in günlük özet zamanlayıcısı tarafından çağrılır.
 triggers:
   - "linear briefing"
   - "linear digest"

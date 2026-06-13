@@ -112,31 +112,20 @@ function readDesktopHostOsLocale(): string | undefined {
 // Exported so tests can pin the priority chain without spinning up the
 // full I18nProvider.
 export function detectInitialLocale(): Locale {
-  if (typeof window === 'undefined') return 'en';
+  if (typeof window === 'undefined') return 'tr';
   let storedLocale: string | null = null;
-  let storedSource: string | null = null;
   try {
     storedLocale = window.localStorage.getItem(LS_KEY);
-    storedSource = window.localStorage.getItem(LS_SOURCE_KEY);
   } catch {
     /* ignore */
   }
   if (
-    storedSource === MANUAL_LOCALE_SOURCE &&
     storedLocale &&
     (LOCALES as string[]).includes(storedLocale)
   ) {
     return storedLocale as Locale;
   }
-  const hostOsLocale = readDesktopHostOsLocale();
-  if (hostOsLocale) {
-    const fromHost = resolveSystemLocale([hostOsLocale]);
-    if (fromHost) return fromHost;
-  }
-  const detected = resolveSystemLocale(
-    navigator.languages?.length ? navigator.languages : [navigator.language],
-  );
-  return detected ?? 'en';
+  return 'tr';
 }
 
 interface I18nContextValue {
@@ -204,14 +193,14 @@ export function I18nProvider({ initial, children }: ProviderProps) {
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) {
-    // Fall back to a stand-alone English translator when no provider is
+    // Fall back to a stand-alone Turkish translator when no provider is
     // mounted (e.g. an isolated test). This keeps the API safe to call
     // without requiring every callsite to wrap in a provider.
     return {
-      locale: 'en',
+      locale: 'tr',
       setLocale: () => { },
       t: (key, vars) => {
-        const raw = en[key] ?? key;
+        const raw = tr[key] ?? en[key] ?? key;
         if (!vars) return raw;
         return raw.replace(/\{(\w+)\}/g, (_, n: string) => {
           const v = vars[n];

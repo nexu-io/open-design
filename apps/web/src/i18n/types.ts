@@ -1490,6 +1490,18 @@ export interface Dict {
   'automations.tpl.orbitDaily.desc': string;
   'automations.tpl.liveStatusBoard.title': string;
   'automations.tpl.liveStatusBoard.desc': string;
+  'automations.tpl.ingestSourceMemoryTree.title'?: string;
+  'automations.tpl.ingestSourceMemoryTree.desc'?: string;
+  'automations.tpl.extractDesignSystem.title'?: string;
+  'automations.tpl.extractDesignSystem.desc'?: string;
+  'automations.tpl.crystallizeRunIntoSkill.title'?: string;
+  'automations.tpl.crystallizeRunIntoSkill.desc'?: string;
+  'automations.tpl.connectorDigestDesignContext.title'?: string;
+  'automations.tpl.connectorDigestDesignContext.desc'?: string;
+  'automations.tpl.compressProjectContext.title'?: string;
+  'automations.tpl.compressProjectContext.desc'?: string;
+  'automations.tpl.promoteArtifactStyle.title'?: string;
+  'automations.tpl.promoteArtifactStyle.desc'?: string;
   // Design systems manager tab (DesignSystemsTab)
   'dsManager.areaAria': string;
   'dsManager.tabDesignSystem': string;

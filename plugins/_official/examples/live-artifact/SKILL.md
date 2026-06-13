@@ -1,8 +1,8 @@
 ---
 name: live-artifact
 description: |
-  Create refreshable, auditable Open Design artifacts backed by connector or local data.
-  Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.
+  Bağlayıcı veya yerel verilerle desteklenen, yenilenebilir ve denetlenebilir Open Design yapıları oluşturur.
+  Kullanıcı canlı panolar, yenilenebilir raporlar, senkronize görünümler veya yeniden kullanılabilir veri destekli yapılar istediğinde tetiklenir.
 triggers:
   - "live artifact"
   - "live dashboard"

@@ -279,16 +279,40 @@ function automationTemplatePrompt(template: ContractAutomationTemplate): string 
 
 function templateFromAutomationCatalog(
   template: ContractAutomationTemplate,
+  t: TranslateFn,
 ): AutomationTemplate {
   const category = automationTemplateCategory(template);
+  let title = template.title;
+  let description = template.description;
+
+  if (template.id === 'ingest-source-memory-tree') {
+    title = t('automations.tpl.ingestSourceMemoryTree.title');
+    description = t('automations.tpl.ingestSourceMemoryTree.desc');
+  } else if (template.id === 'extract-design-system') {
+    title = t('automations.tpl.extractDesignSystem.title');
+    description = t('automations.tpl.extractDesignSystem.desc');
+  } else if (template.id === 'crystallize-run-into-skill') {
+    title = t('automations.tpl.crystallizeRunIntoSkill.title');
+    description = t('automations.tpl.crystallizeRunIntoSkill.desc');
+  } else if (template.id === 'connector-digest-design-context') {
+    title = t('automations.tpl.connectorDigestDesignContext.title');
+    description = t('automations.tpl.connectorDigestDesignContext.desc');
+  } else if (template.id === 'compress-project-context') {
+    title = t('automations.tpl.compressProjectContext.title');
+    description = t('automations.tpl.compressProjectContext.desc');
+  } else if (template.id === 'promote-artifact-style') {
+    title = t('automations.tpl.promoteArtifactStyle.title');
+    description = t('automations.tpl.promoteArtifactStyle.desc');
+  }
+
   return {
     id: template.id,
     category,
     kind: 'routine',
     icon: automationTemplateIcon(category),
-    title: template.title,
-    description: template.description,
-    defaultName: template.title,
+    title,
+    description,
+    defaultName: title,
     prompt: automationTemplatePrompt(template),
   };
 }
@@ -315,7 +339,7 @@ function buildAutomationTemplates(
     .map((skill) => templateFromSkill(skill, 'live-artifact'));
 
   return dedupeTemplates([
-    ...automationCatalog.map(templateFromAutomationCatalog),
+    ...automationCatalog.map((tmpl) => templateFromAutomationCatalog(tmpl, t)),
     ...(orbit.length > 0 ? orbit : [fallbackOrbitTemplate(t)]),
     ...(live.length > 0 ? live : [fallbackLiveTemplate(t)]),
     ...buildStaticTemplates(t),

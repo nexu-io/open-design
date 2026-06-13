@@ -363,101 +363,101 @@ function installDesktopMenu(
             {
               label: app.name,
               submenu: [
-                { role: "about" as const },
+                { label: "Hakkında " + app.name, role: "about" as const },
                 { type: "separator" as const },
-                { role: "services" as const },
+                { label: "Servisler", role: "services" as const },
                 { type: "separator" as const },
-                { role: "hide" as const },
-                { role: "hideOthers" as const },
-                { role: "unhide" as const },
+                { label: app.name + " Uygulamasını Gizle", role: "hide" as const },
+                { label: "Diğerlerini Gizle", role: "hideOthers" as const },
+                { label: "Tümünü Göster", role: "unhide" as const },
                 { type: "separator" as const },
-                { role: "quit" as const },
+                { label: "Çıkış", role: "quit" as const },
               ],
             },
           ]
         : [
             {
-              label: "File",
+              label: "Dosya",
               submenu: [
-                { role: "quit" as const },
+                { label: "Çıkış", role: "quit" as const },
               ],
             },
           ]),
       {
-        label: "Edit",
+        label: "Düzenle",
         submenu: [
-          { role: "undo" },
-          { role: "redo" },
+          { label: "Geri Al", role: "undo" },
+          { label: "Yinele", role: "redo" },
           { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
+          { label: "Kes", role: "cut" },
+          { label: "Kopyala", role: "copy" },
+          { label: "Yapıştır", role: "paste" },
+          { label: "Tümünü Seç", role: "selectAll" },
         ],
       },
       {
-        label: "View",
+        label: "Görünüm",
         submenu: [
-          { role: "reload" },
-          { role: "forceReload" },
-          { role: "toggleDevTools" },
+          { label: "Yeniden Yükle", role: "reload" },
+          { label: "Zorla Yeniden Yükle", role: "forceReload" },
+          { label: "Geliştirici Araçlarını Aç/Kapat", role: "toggleDevTools" },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          { label: "Gerçek Boyut", role: "resetZoom" },
+          { label: "Yakınlaştır", role: "zoomIn" },
+          { label: "Uzaklaştır", role: "zoomOut" },
           { type: "separator" },
-          { role: "togglefullscreen" },
+          { label: "Tam Ekran Yap/Çık", role: "togglefullscreen" },
         ],
       },
       ...(developMenuVisible
         ? [
             {
-              label: "Develop",
+              label: "Geliştirme",
               submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile),
             },
           ]
         : []),
       {
-        label: "Window",
+        label: "Pencere",
         submenu: [
-          { role: "minimize" },
-          { role: "zoom" },
+          { label: "Simge Durumuna Küçült", role: "minimize" },
+          { label: "Ekranı Kapla", role: "zoom" },
           ...(process.platform === "darwin"
-            ? [{ type: "separator" as const }, { role: "front" as const }]
-            : [{ role: "close" as const }]),
+            ? [{ type: "separator" as const }, { label: "Tümünü Öne Getir", role: "front" as const }]
+            : [{ label: "Pencereyi Kapat", role: "close" as const }]),
         ],
       },
       {
-        label: "Help",
+        label: "Yardım",
         role: "help",
         submenu: [
           {
-            label: "Documentation",
+            label: "Belgelendirme",
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design#readme");
             },
           },
           { type: "separator" },
           {
-            label: "Contact Us",
+            label: "Bize Ulaşın",
             click() {
               void shell.openExternal("https://x.com/nexudotio");
             },
           },
           {
-            label: "Report Issue",
+            label: "Sorun Bildir",
             click() {
               void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
             },
           },
           {
-            label: "Join Discord",
+            label: "Discord'a Katıl",
             click() {
               void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },
-          { label: "Export Diagnostics…", click: exportDiagnostics },
+          { label: "Hata Verilerini Dışa Aktar…", click: exportDiagnostics },
         ],
       },
     ];
