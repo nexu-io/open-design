@@ -144,6 +144,15 @@ function configFile(dataDir: string): string {
   return path.join(dataDir, 'app-config.json');
 }
 
+export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env.OD_DATA_DIR;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return path.join(projectRoot, '.od');
+  }
+  const expanded = expandHomePrefix(raw.trim());
+  return path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
+}
+
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([

@@ -68,7 +68,7 @@ import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
 import { spawnEnvForAgent } from './agents.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, appConfigDir, readAppConfig } from './app-config.js';
 import {
   ensureProject,
   kindFor,
@@ -935,9 +935,8 @@ function codexImagePrompt(ctx: MediaContext): string {
   return `${prefix} ${prompt}${aspect}`;
 }
 
-async function resolveCodexImagegenEnv(): Promise<NodeJS.ProcessEnv> {
-  const dataDir = process.env.OD_DATA_DIR?.trim();
-  if (!dataDir) return spawnEnvForAgent('codex', process.env);
+async function resolveCodexImagegenEnv(projectRoot: string): Promise<NodeJS.ProcessEnv> {
+  const dataDir = appConfigDir(projectRoot);
   try {
     const appConfig = await readAppConfig(dataDir);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
@@ -1040,7 +1039,7 @@ async function runCodexImagegen(
 }
 
 async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
-  const env = await resolveCodexImagegenEnv();
+  const env = await resolveCodexImagegenEnv(ctx.projectRoot);
   const generatedRoot = codexGeneratedImagesRoot(env);
   await mkdir(generatedRoot, { recursive: true });
   const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);

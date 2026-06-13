@@ -520,6 +520,71 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('uses default app-config Codex CLI env overrides when OD_DATA_DIR is absent', async () => {
+    const dataDir = path.join(projectRoot, '.od');
+    const generatedHome = path.join(root, 'default-codex-home');
+    const codexBin = path.join(root, 'default-codex.mjs');
+    const wrongCodexBin = path.join(root, 'wrong-default-codex.mjs');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: codexBin,
+          CODEX_HOME: generatedHome,
+        },
+      },
+    }), 'utf8');
+    await writeFile(wrongCodexBin, `#!/usr/bin/env node
+process.stderr.write('wrong codex bin used without OD_DATA_DIR');
+process.exit(24);
+`, 'utf8');
+    await chmod(wrongCodexBin, 0o755);
+    await writeFile(codexBin, `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+const pngBase64 = '${PNG_BASE64}';
+const expectedHome = ${JSON.stringify(generatedHome)};
+const args = process.argv.slice(2);
+const addDirIndex = args.indexOf('--add-dir');
+const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
+if (process.env.CODEX_HOME !== expectedHome) {
+  process.stderr.write('default CODEX_HOME override was not forwarded');
+  process.exit(25);
+}
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(26);
+  const threadId = 'default-codex-thread';
+  const outDir = path.join(generatedRoot, threadId);
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    delete process.env.OD_DATA_DIR;
+    process.env.CODEX_BIN = wrongCodexBin;
+    process.env.CODEX_HOME = path.join(root, 'wrong-default-codex-home');
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'codex-default-config.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-default-config.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
   it('preserves Codex custom gateway credentials for subscription image generation', async () => {
     const dataDir = path.join(root, 'app-data');
     const generatedHome = path.join(root, 'gateway-codex-home');
