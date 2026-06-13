@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // @ts-nocheck
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
@@ -4730,10 +4732,8 @@ function normalizeChatSessionModeFlag(value) {
 
 function safeReadJsonFile(p) {
   try {
-    const fs = (require ? require('node:fs') : null);
-    if (!fs) return null;
-    if (p === '-') return JSON.parse(fs.readFileSync(0, 'utf8'));
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
+    return JSON.parse(readFileSync(p, 'utf8'));
   } catch {
     return null;
   }
@@ -5448,12 +5448,10 @@ Common options:
         console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
         process.exit(2);
       }
-      const fs = require('node:fs');
-      const path = require('node:path');
-      const buf = fs.readFileSync(localPath);
+      const buf = readFileSync(localPath);
       const desiredName = typeof flags.as === 'string' && flags.as.length > 0
         ? flags.as
-        : path.basename(localPath);
+        : basename(localPath);
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -5477,10 +5475,9 @@ Common options:
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
-      const fs = require('node:fs');
       let chunks = [];
       try {
-        const stdin = fs.readFileSync(0);
+        const stdin = readFileSync(0);
         chunks = [stdin];
       } catch (err) {
         console.error(`stdin read failed: ${err.message ?? err}`);
