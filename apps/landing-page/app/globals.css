@@ -4798,12 +4798,19 @@ footer .container {
 .foot-masthead-wordmark {
   margin: 0;
   font-weight: 800;
-  /* Fills the 964px column at the 1440px design width and degrades
-     fluidly; the nowrap keeps "Open Design." a single editorial line. */
-  font-size: clamp(52px, 10.4vw, 158px);
+  /* Fills the 964px column at the 1440px design width and degrades fluidly.
+     The lower bound follows the viewport (10.4vw) rather than a fixed 52px
+     floor: "Open Design." is ~5.75em wide here, so the old 52px floor rendered
+     ~299px and overflowed the padded mobile footer box (100vw - 48px ≈ 272px on
+     a 320px phone), where the page's global overflow-x:hidden clipped it.
+     10.4vw always satisfies 10.4vw·5.75 ≤ 100vw-48, so the sign-off fits at
+     every width (≈80px of headroom at 320px). */
+  font-size: clamp(26px, 10.4vw, 158px);
   line-height: 1.04;
   letter-spacing: -0.045em;
   color: var(--ink);
+  /* Desktop keeps the single editorial line; the narrow-breakpoint rule below
+     relaxes this to a no-clip wrap as a safety net. */
   white-space: nowrap;
 }
 .foot-masthead-accent { color: var(--coral); }
@@ -4816,6 +4823,11 @@ footer .container {
   /* Clear the page-bottom GradualBlur band (4rem) so the wordmark
      reads crisp at final scroll on phones. */
   .foot-masthead { margin-top: 40px; padding-bottom: 48px; }
+  /* No-clip safety net on phones: 10.4vw already fits the box with ~80px
+     headroom at 320px, but if a font/locale ever renders the wordmark wider
+     than the box, wrap to a second line rather than clip under
+     overflow-x:hidden. */
+  .foot-masthead-wordmark { white-space: normal; }
 }
 
 /* ---------- scroll-reveal motion ----------
