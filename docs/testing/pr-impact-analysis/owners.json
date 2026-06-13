@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "roles": [
+    {
+      "id": "p0-ui-qa",
+      "displayName": "P0 UI QA",
+      "description": "Manual validation owner for high-impact P0 UI flows.",
+      "githubHandles": []
+    },
+    {
+      "id": "repo-validation",
+      "displayName": "Repository validation",
+      "description": "Validation owner for workspace, dependency, sidecar, and platform-wide risk signals.",
+      "githubHandles": []
+    }
+  ],
+  "capabilityOwners": [
+    {
+      "capabilityId": "composer-menu-actions",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Composer menu regressions are user-visible and often depend on focus, keyboard, and navigation timing." },
+      "checklist": ["Open Home and project composers.", "Open/close menu actions with mouse and keyboard.", "Apply actions and confirm visible state updates without stale selection.", "Navigate/reload and confirm no stuck menu or prompt loss."]
+    },
+    {
+      "capabilityId": "composer-attachment-staging",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Attachment staging combines visible composer state, upload intent, and submit payload behavior." },
+      "checklist": ["Stage an attachment from the composer.", "Confirm the visible chip/state matches the selected file.", "Submit and confirm the run request includes the intended attachment context.", "Reload or navigate away/back and confirm no stale attachment remains."]
+    },
+    {
+      "capabilityId": "composer-inline-mentions",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Mention parsing defects can silently change the context sent to a run." },
+      "checklist": ["Type and select inline @ mentions.", "Remove and re-add selected mentions.", "Submit and confirm visible mentions match the request context.", "Check edge cases around empty prompt, cursor position, and duplicated selections."]
+    },
+    {
+      "capabilityId": "composer-plugin-skill-insertion",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Plugin/skill insertion bridges registry metadata, required inputs, visible state, and run creation." },
+      "checklist": ["Insert a plugin or skill from the composer flow.", "Confirm required input prompts appear when applicable.", "Remove/reselect the inserted entry and confirm state stays consistent.", "Submit and confirm the intended plugin/skill is used."]
+    },
+    {
+      "capabilityId": "composer-run-payload-assembly",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Payload assembly bugs can make the submitted run differ from the visible composer state." },
+      "checklist": ["Set prompt text plus one selected entry or attachment.", "Submit from the composer.", "Confirm the run starts with the visible prompt/context.", "Verify no hidden stale selection is included after editing or clearing state."]
+    },
+    {
+      "capabilityId": "runtime-run-lifecycle",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Run lifecycle regressions affect core task execution and status reconciliation." },
+      "checklist": ["Start a run from the UI.", "Observe queued/running/completed or failed state transitions.", "Confirm conversation state and artifacts reconcile after completion.", "Check browser console and daemon logs for unhandled errors."]
+    },
+    {
+      "capabilityId": "runtime-stream-reattach",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Stream reattach defects can duplicate, drop, or reorder messages after reload/reconnect." },
+      "checklist": ["Start a streaming run.", "Reload or reconnect while the run is active when practical.", "Confirm messages/artifacts reattach without duplication or loss.", "Confirm final status matches daemon state."]
+    },
+    {
+      "capabilityId": "runtime-interrupt-stop",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Interrupt/stop behavior is timing-sensitive and hard to prove through deterministic CI alone." },
+      "checklist": ["Start a run and interrupt it from the UI.", "Confirm the stop control disables or transitions correctly.", "Confirm partial output remains coherent and no new chunks arrive after stop.", "Start a follow-up run and confirm the workspace recovers."]
+    },
+    {
+      "capabilityId": "runtime-conversation-persistence",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Conversation persistence defects can make completed work disappear or reappear incorrectly after reload." },
+      "checklist": ["Complete or partially complete a run.", "Reload the workspace.", "Confirm conversation, files, and artifacts restore correctly.", "Switch projects or reopen the project and confirm state remains consistent."]
+    },
+    {
+      "capabilityId": "runtime-local-failure-recovery",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Local runtime failure recovery depends on environment/auth/process timing and needs human confirmation." },
+      "checklist": ["Trigger or simulate a local runtime failure path when practical.", "Confirm the UI shows actionable recovery messaging.", "Recover or relogin and confirm the run can proceed again.", "Check logs for repeated reconnect loops or uncaught errors."]
+    },
+    {
+      "capabilityId": "design-files-upload-manage",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Design Files upload/manage combines file APIs, UI state, and project persistence." },
+      "checklist": ["Create or open a project.", "Add a file through Design Files and confirm it appears in the list.", "Delete or rename a file when applicable.", "Confirm UI and API state remain consistent after reload."]
+    },
+    {
+      "capabilityId": "design-files-working-directory-picker",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Working-directory selection affects both file discovery and subsequent run context." },
+      "checklist": ["Select or change the project working directory.", "Confirm Design Files reflects the chosen location.", "Start a run and confirm it uses the expected project context.", "Reload/reopen and confirm the location persists."]
+    },
+    {
+      "capabilityId": "design-files-preview-tabs",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Preview tab regressions are visual and may depend on active iframe/render mode behavior." },
+      "checklist": ["Open Design Files with multiple files/artifacts.", "Switch between file previews and generated artifacts.", "Toggle relevant preview/render modes when available.", "Confirm active tab and preview content stay aligned."]
+    },
+    {
+      "capabilityId": "design-files-view-state-persistence",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "View-state persistence affects whether users can resume work after reload or project reopen." },
+      "checklist": ["Open a project and select a non-default file/tab.", "Reload the workspace.", "Confirm active tab, file list, and preview restore correctly.", "Reopen the project and confirm the same state is preserved."]
+    },
+    {
+      "capabilityId": "home-entry-selector",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Home entry selection is the first user-visible path before entering a workspace." },
+      "checklist": ["Use the Home @ selector or starter/plugin entry points.", "Confirm selected entries are visible and removable.", "Switch selections and confirm stale entries do not remain.", "Submit only after confirming the intended entry is shown."]
+    },
+    {
+      "capabilityId": "home-required-inputs",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Required-input mistakes can allow invalid runs or block valid Home submissions." },
+      "checklist": ["Select an entry with required inputs when available.", "Confirm missing inputs block or guide submission appropriately.", "Fill inputs and confirm submit becomes possible.", "Edit inputs and confirm the final submitted state matches the UI."]
+    },
+    {
+      "capabilityId": "home-project-transition",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "Home-to-project transition failures break onboarding before users reach the workspace." },
+      "checklist": ["Submit from Home with a selected entry and prompt.", "Confirm navigation into the project succeeds.", "Confirm selected driver and prompt are preserved after transition.", "Reload the new workspace and confirm state remains coherent."]
+    },
+    {
+      "capabilityId": "home-first-run-payload",
+      "manualQa": { "required": true, "role": "p0-ui-qa", "reason": "First-run payload mismatches make the first generated result differ from the user's Home selection." },
+      "checklist": ["Select a Home entry and enter a prompt.", "Submit and observe the first run.", "Confirm the first run uses the selected entry and prompt exactly once.", "Confirm clearing/changing selection before submit affects the payload as expected."]
+    }
+  ],
+  "overridePolicy": {
+    "allowedDuringAdvisoryPhase": true,
+    "requiredEvidence": ["why the mapped P0 flow is not affected", "which validation was run instead", "who accepted the override"],
+    "llmCanOverride": false
+  }
+}

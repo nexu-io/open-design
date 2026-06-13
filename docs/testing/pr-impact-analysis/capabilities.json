@@ -1,0 +1,471 @@
+{
+  "version": 1,
+  "schemaNotes": {
+    "confidence": "How directly the capability currently maps to known P0 test coverage: high, medium, or low.",
+    "pathGlobs.weight": "Relative impact from 1 to 5. A direct P0 component or contract is usually 4-5; helper/state paths are usually 2-3.",
+    "validation": "Capability validation commands live in e2e-coverage.json; global risk signal validation stays here because it is not capability-specific."
+  },
+  "tiers": {
+    "tier-0": {
+      "label": "Low risk",
+      "description": "Docs, comments, or isolated low fan-in changes. Normal CI is enough."
+    },
+    "tier-1": {
+      "label": "Standard risk",
+      "description": "Ordinary product/runtime changes. Recommend targeted validation without manual QA by default."
+    },
+    "tier-2": {
+      "label": "High impact",
+      "description": "P0 capability, cross-surface, or high-fan-in changes. Require mapped P0 E2E and manual QA once the gate is enabled."
+    }
+  },
+  "capabilityGroups": [
+    {
+      "id": "composer-menu-state",
+      "name": "Composer menu/state machine",
+      "summary": "Project and Home composer selection state, menu actions, attachment/mention/plugin insertion, and run payload assembly.",
+      "childCapabilityIds": [
+        "composer-menu-actions",
+        "composer-attachment-staging",
+        "composer-inline-mentions",
+        "composer-plugin-skill-insertion",
+        "composer-run-payload-assembly"
+      ]
+    },
+    {
+      "id": "runtime-recovery-interruption",
+      "name": "Runtime recovery and interruption flow",
+      "summary": "Run lifecycle, stream recovery, interruption, reattach, persistence, and local runtime failure recovery.",
+      "childCapabilityIds": [
+        "runtime-run-lifecycle",
+        "runtime-stream-reattach",
+        "runtime-interrupt-stop",
+        "runtime-conversation-persistence",
+        "runtime-local-failure-recovery"
+      ]
+    },
+    {
+      "id": "design-files-picker",
+      "name": "Design Files folder/file picker",
+      "summary": "Design Files upload/manage UX, workspace file selection, file tabs, previews, and restoration.",
+      "childCapabilityIds": [
+        "design-files-upload-manage",
+        "design-files-working-directory-picker",
+        "design-files-preview-tabs",
+        "design-files-view-state-persistence"
+      ]
+    },
+    {
+      "id": "home-at-selector",
+      "name": "Home @ selector / starter-to-run flow",
+      "summary": "Home selection of skills/plugins/starters/connectors and transition into the first project run.",
+      "childCapabilityIds": [
+        "home-entry-selector",
+        "home-required-inputs",
+        "home-project-transition",
+        "home-first-run-payload"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "composer-menu-actions",
+      "groupId": "composer-menu-state",
+      "name": "Composer menu actions",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web"],
+      "summary": "Opening, closing, keyboarding, and applying composer plus/menu actions without stuck or stale selection state.",
+      "confidence": "high",
+      "reason": "Directly maps to composer UI state and project-workspace P0 coverage.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/*Composer*.tsx", "weight": 5, "reason": "Direct composer component surface." },
+        { "glob": "apps/web/src/components/composer-*.ts", "weight": 4, "reason": "Sibling composer helper modules can directly change menu and flyout positioning." },
+        { "glob": "apps/web/src/components/composer/**/*.tsx", "weight": 4, "reason": "Nested composer input, caret, and keyboard interaction components." },
+        { "glob": "apps/web/src/components/composer/**/*.ts", "weight": 4, "reason": "Nested composer serialization and mention helpers." },
+        { "glob": "apps/web/src/App.tsx", "weight": 1, "reason": "Broad safety-net for top-level composer visibility and transitions; analyzer should prefer direct component matches." }
+      ]
+    },
+    {
+      "id": "composer-attachment-staging",
+      "groupId": "composer-menu-state",
+      "name": "Composer attachment staging",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Attachment staging, file upload intent, visible chips, and preservation through submit/navigation.",
+      "confidence": "medium",
+      "reason": "Covered through broader project workspace and file-upload flows; may need more focused tests later.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/*Composer*.tsx", "weight": 5, "reason": "Attachment UI is staged from composer components." },
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 2, "reason": "Broad safety-net for request shaping that can affect attachment submission." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 4, "reason": "Chat/run contract changes can alter attachment payload shape." }
+      ]
+    },
+    {
+      "id": "composer-inline-mentions",
+      "groupId": "composer-menu-state",
+      "name": "Composer inline mentions",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web"],
+      "summary": "Inline @ mention parsing, display, removal, and conversion into selected run context.",
+      "confidence": "high",
+      "reason": "Mention utility and components directly feed visible composer state and run context.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/**/Mention*.ts", "weight": 5, "reason": "Direct mention UI helper surface, including nested composer components." },
+        { "glob": "apps/web/src/utils/inlineMentions.ts", "weight": 5, "reason": "Core mention parsing and serialization helper." },
+        { "glob": "apps/web/src/runtime/design-toolbox.ts", "weight": 3, "reason": "Mention candidates and toolbox context can affect selection results." }
+      ]
+    },
+    {
+      "id": "composer-plugin-skill-insertion",
+      "groupId": "composer-menu-state",
+      "name": "Composer plugin and skill insertion",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Plugin/skill chooser insertion, tracking, required input handoff, and visible selected-entry state.",
+      "confidence": "medium",
+      "reason": "Plugin and skill insertion has direct helpers but currently shares broader composer and entry coverage.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/utils/pluginInsertionTracking.ts", "weight": 5, "reason": "Core plugin insertion tracking helper." },
+        { "glob": "apps/web/src/utils/pluginRequiredInputs.ts", "weight": 4, "reason": "Required input handoff can alter selected plugin readiness." },
+        { "glob": "apps/web/src/providers/registry.ts", "weight": 3, "reason": "Registry data changes can alter selectable plugins/skills." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 4, "reason": "Run payload contract can affect plugin/skill submission." }
+      ]
+    },
+    {
+      "id": "composer-run-payload-assembly",
+      "groupId": "composer-menu-state",
+      "name": "Composer run payload assembly",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Conversion of visible composer state into chat/run API requests.",
+      "confidence": "high",
+      "reason": "Payload assembly is the final boundary between visible composer state and run creation.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 5, "reason": "Web-to-daemon request construction boundary." },
+        { "glob": "apps/web/src/components/ProjectView.tsx", "weight": 3, "reason": "Broad safety-net for the project chat payload assembly caller; prefer extracting a smaller helper before increasing weight." },
+        { "glob": "apps/web/src/components/composer/serialize.ts", "weight": 5, "reason": "Composer state serialization can change submitted run context." },
+        { "glob": "apps/web/src/components/composer/deserialize.ts", "weight": 3, "reason": "Composer restoration can affect the visible state later submitted." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 5, "reason": "Shared chat/run request and response contract." },
+        { "glob": "apps/daemon/src/server.ts", "weight": 4, "reason": "Canonical POST /api/chat and POST /api/runs handling lives here." },
+        { "glob": "apps/daemon/src/chat-routes.ts", "weight": 2, "reason": "Safety-net for run status/cancel route handling adjacent to submitted run payloads." }
+      ]
+    },
+    {
+      "id": "runtime-run-lifecycle",
+      "groupId": "runtime-recovery-interruption",
+      "name": "Runtime run lifecycle",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Run creation, running/completed/failed state transitions, and UI reconciliation.",
+      "confidence": "high",
+      "reason": "Directly covered by runtime-recovery and real-daemon run flows.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 3, "reason": "Run status events enter the web app through the daemon provider." },
+        { "glob": "apps/web/src/providers/project-events.ts", "weight": 4, "reason": "Project event reconciliation affects run lifecycle rendering." },
+        { "glob": "apps/daemon/src/server.ts", "weight": 4, "reason": "Server lifecycle changes can alter run event behavior." },
+        { "glob": "apps/daemon/src/runs.ts", "weight": 5, "reason": "Run status, replay, and lifecycle mechanics are owned here." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 5, "reason": "Run API contract is the shared lifecycle boundary." }
+      ]
+    },
+    {
+      "id": "runtime-stream-reattach",
+      "groupId": "runtime-recovery-interruption",
+      "name": "Runtime stream reattach",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "SSE/stream parsing, browser reload reattach, and event replay without duplicate or lost messages.",
+      "confidence": "high",
+      "reason": "Stream and reattach regressions are common cross-boundary P0 risks.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/daemon/src/*stream*.ts", "weight": 5, "reason": "Direct daemon stream parsing/emission surface." },
+        { "glob": "apps/daemon/src/runs.ts", "weight": 5, "reason": "Run event replay and Last-Event-ID reattach mechanics are owned here." },
+        { "glob": "apps/daemon/src/runtimes/**", "weight": 4, "reason": "Runtime adapters shape streamed events." },
+        { "glob": "apps/web/src/providers/sse.ts", "weight": 5, "reason": "Browser SSE consumer and parsing helper." },
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 3, "reason": "Web reattach boundary for run streams." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 4, "reason": "Chat/run status contracts affect stream interpretation." },
+        { "glob": "packages/contracts/src/sse/chat.ts", "weight": 5, "reason": "Chat SSE event contract changes directly affect stream reattach." },
+        { "glob": "packages/contracts/src/sse/common.ts", "weight": 4, "reason": "Shared SSE event envelope changes affect stream parsing." }
+      ]
+    },
+    {
+      "id": "runtime-interrupt-stop",
+      "groupId": "runtime-recovery-interruption",
+      "name": "Runtime interrupt/stop",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "User-initiated interruption, stop state propagation, and cleanup after partial output.",
+      "confidence": "medium",
+      "reason": "Interrupt behavior is timing-sensitive and requires manual validation until coverage is more focused.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/App.tsx", "weight": 1, "reason": "Broad safety-net for top-level stop controls and state transitions." },
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 3, "reason": "Interrupt requests and event reconciliation cross this provider." },
+        { "glob": "apps/daemon/src/chat-routes.ts", "weight": 4, "reason": "Daemon run cancel and critique interrupt routes live here." },
+        { "glob": "apps/daemon/src/runs.ts", "weight": 5, "reason": "Run cancel/status mechanics are owned here." },
+        { "glob": "apps/daemon/src/runtimes/**", "weight": 4, "reason": "Runtime adapters implement process/provider cancellation semantics." }
+      ]
+    },
+    {
+      "id": "runtime-conversation-persistence",
+      "groupId": "runtime-recovery-interruption",
+      "name": "Runtime conversation persistence",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Conversation, files, and artifact state restoration after reload or run completion.",
+      "confidence": "high",
+      "reason": "Persistence regressions are directly visible in app restoration and artifact consistency tests.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/state/projects.ts", "weight": 3, "reason": "Project state can affect restored conversation context." },
+        { "glob": "apps/web/src/providers/project-events.ts", "weight": 4, "reason": "Event reconciliation controls restored state." },
+        { "glob": "apps/daemon/src/*project*.ts", "weight": 4, "reason": "Daemon project persistence can alter restored conversations." },
+        { "glob": "packages/contracts/src/api/projects.ts", "weight": 4, "reason": "Project contract changes affect restoration payloads." }
+      ]
+    },
+    {
+      "id": "runtime-local-failure-recovery",
+      "groupId": "runtime-recovery-interruption",
+      "name": "Runtime local failure recovery",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon"],
+      "summary": "Recovery UX when local runtime auth, agent process, or daemon communication fails.",
+      "confidence": "medium",
+      "reason": "AMR recovery coverage exists, but failures are environment-sensitive and should keep manual validation.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 3, "reason": "Local failure surfaces through daemon provider errors." },
+        { "glob": "apps/daemon/src/runtimes/**", "weight": 5, "reason": "Runtime adapter failures drive recovery UX." },
+        { "glob": "apps/daemon/src/server.ts", "weight": 3, "reason": "Server error handling can alter recovery behavior." }
+      ]
+    },
+    {
+      "id": "design-files-upload-manage",
+      "groupId": "design-files-picker",
+      "name": "Design Files upload and manage",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Adding, deleting, renaming, and listing project files through Design Files.",
+      "confidence": "high",
+      "reason": "Directly maps to app-design-files coverage and project file routes.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/DesignFilesPanel.tsx", "weight": 5, "reason": "Direct Design Files panel surface." },
+        { "glob": "apps/daemon/src/project-routes.ts", "weight": 5, "reason": "Project file routes control file operations and listing." },
+        { "glob": "apps/daemon/src/import-export-routes.ts", "weight": 3, "reason": "Import/export routes can affect project file ingestion paths." },
+        { "glob": "packages/contracts/src/api/files.ts", "weight": 5, "reason": "File DTO changes affect the web/daemon file boundary." },
+        { "glob": "packages/contracts/src/api/projects.ts", "weight": 4, "reason": "Project file association changes affect the web/daemon boundary." }
+      ]
+    },
+    {
+      "id": "design-files-working-directory-picker",
+      "groupId": "design-files-picker",
+      "name": "Design Files working-directory picker",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Selecting and persisting the project working directory used by Design Files and runs.",
+      "confidence": "medium",
+      "reason": "Working-directory state spans UI and daemon project persistence; current coverage is broader than this specific capability.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/WorkingDirPicker.tsx", "weight": 5, "reason": "Direct working-directory picker UI used from composer and home entry surfaces." },
+        { "glob": "apps/web/src/components/ProjectLocationsSection.tsx", "weight": 4, "reason": "Settings working-directory section directly changes picker and persistence UX." },
+        { "glob": "apps/web/src/state/project-locations.ts", "weight": 5, "reason": "Core project location state." },
+        { "glob": "apps/web/src/state/projects.ts", "weight": 3, "reason": "Project state persistence can alter selected location." },
+        { "glob": "apps/daemon/src/*project*.ts", "weight": 4, "reason": "Daemon project APIs persist and return working-directory state." },
+        { "glob": "packages/contracts/src/api/projects.ts", "weight": 4, "reason": "Project contract includes location/persistence shape." }
+      ]
+    },
+    {
+      "id": "design-files-preview-tabs",
+      "groupId": "design-files-picker",
+      "name": "Design Files preview tabs",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web"],
+      "summary": "Switching between source previews, generated artifacts, active tabs, and render modes.",
+      "confidence": "high",
+      "reason": "Preview and render-mode changes can break visible P0 workspace file viewing.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/FileViewer.tsx", "weight": 5, "reason": "Direct file preview surface." },
+        { "glob": "apps/web/src/components/file-viewer-render-mode.ts", "weight": 5, "reason": "Preview render-mode decision logic." },
+        { "glob": "apps/web/src/components/DesignFilesPanel.tsx", "weight": 4, "reason": "Design Files panel controls active preview selection." }
+      ]
+    },
+    {
+      "id": "design-files-view-state-persistence",
+      "groupId": "design-files-picker",
+      "name": "Design Files view-state persistence",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Restoring active file, selected tab, and preview state after reload or project reopen.",
+      "confidence": "high",
+      "reason": "There is focused view-state persistence coverage for Design Files.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/state/projects.ts", "weight": 4, "reason": "Project state drives restored active file and tab." },
+        { "glob": "apps/web/src/providers/registry.ts", "weight": 2, "reason": "Registry-driven content can affect restored file context." },
+        { "glob": "apps/daemon/src/*project*.ts", "weight": 4, "reason": "Daemon project persistence controls reload behavior." },
+        { "glob": "packages/contracts/src/api/projects.ts", "weight": 4, "reason": "Project API shape can affect persisted view state." }
+      ]
+    },
+    {
+      "id": "home-entry-selector",
+      "groupId": "home-at-selector",
+      "name": "Home entry selector",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web"],
+      "summary": "Home @ selector, starter/plugin entry browsing, visible selection, and removal before submit.",
+      "confidence": "high",
+      "reason": "Directly maps to entry-onboarding P0 coverage and Home entry components.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/components/Entry*.tsx", "weight": 5, "reason": "Direct entry selector UI surface." },
+        { "glob": "apps/web/src/components/Home*.tsx", "weight": 5, "reason": "Direct Home UI surface." },
+        { "glob": "apps/web/src/components/**/Mention*.ts", "weight": 4, "reason": "Home selector uses mention-like selection helpers." }
+      ]
+    },
+    {
+      "id": "home-required-inputs",
+      "groupId": "home-at-selector",
+      "name": "Home required inputs",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "contracts"],
+      "summary": "Required input collection and readiness validation before a selected Home plugin/starter can submit.",
+      "confidence": "medium",
+      "reason": "Required input logic is covered through entry configuration, but may need more focused tests as plugins grow.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/utils/pluginRequiredInputs.ts", "weight": 5, "reason": "Core required-input helper." },
+        { "glob": "apps/web/src/components/Entry*.tsx", "weight": 4, "reason": "Entry UI collects or validates required inputs." },
+        { "glob": "apps/web/src/providers/registry.ts", "weight": 3, "reason": "Registry data can change required-input metadata." }
+      ]
+    },
+    {
+      "id": "home-project-transition",
+      "groupId": "home-at-selector",
+      "name": "Home project transition",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Submitting from Home creates/opens a project and preserves selected driver and prompt through navigation.",
+      "confidence": "high",
+      "reason": "Home-to-project transition is a P0 onboarding path and crosses project APIs.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/state/projects.ts", "weight": 4, "reason": "Project creation/opening state." },
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 3, "reason": "Project/run creation requests cross the daemon provider." },
+        { "glob": "packages/contracts/src/api/projects.ts", "weight": 5, "reason": "Project API contract for creation/opening." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 4, "reason": "First run contract after project transition." }
+      ]
+    },
+    {
+      "id": "home-first-run-payload",
+      "groupId": "home-at-selector",
+      "name": "Home first-run payload",
+      "priority": "P0",
+      "defaultTierOnMatch": "tier-2",
+      "surface": ["web", "daemon", "contracts"],
+      "summary": "Conversion of Home prompt and selected entry into the first run request.",
+      "confidence": "high",
+      "reason": "First-run payload mismatches break new-user onboarding before workspace usage starts.",
+      "manualQaRequired": true,
+      "ownerRole": "p0-ui-qa",
+      "pathGlobs": [
+        { "glob": "apps/web/src/providers/daemon.ts", "weight": 5, "reason": "Run request construction boundary." },
+        { "glob": "apps/web/src/utils/inlineMentions.ts", "weight": 4, "reason": "Home selected entries may serialize through mention utilities." },
+        { "glob": "packages/contracts/src/api/chat.ts", "weight": 5, "reason": "Shared first-run request contract." },
+        { "glob": "apps/daemon/src/server.ts", "weight": 4, "reason": "Canonical POST /api/runs handling lives here." }
+      ]
+    }
+  ],
+  "globalRiskSignals": [
+    {
+      "id": "contracts-change",
+      "defaultTierOnMatch": "tier-2",
+      "pathGlobs": ["packages/contracts/**"],
+      "reason": "Shared API contracts can affect web, daemon, CLI, and E2E surfaces. Capability-level contract mappings provide more specific validation when possible.",
+      "ownerRole": "p0-ui-qa",
+      "validation": {
+        "required": ["pnpm typecheck", "pnpm guard"],
+        "recommended": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts smoke"],
+        "optional": []
+      }
+    },
+    {
+      "id": "workspace-or-lockfile-change",
+      "defaultTierOnMatch": "tier-2",
+      "pathGlobs": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
+      "reason": "Workspace dependency changes can affect all validation lanes.",
+      "ownerRole": "repo-validation",
+      "validation": {
+        "required": ["pnpm install", "pnpm typecheck", "pnpm guard"],
+        "recommended": [],
+        "optional": ["pnpm nix:update-hash", "nix flake check --print-build-logs --keep-going"]
+      }
+    },
+    {
+      "id": "sidecar-platform-change",
+      "defaultTierOnMatch": "tier-2",
+      "pathGlobs": ["packages/sidecar/**", "packages/sidecar-proto/**", "packages/platform/**"],
+      "reason": "Process, IPC, namespace, and runtime-path changes are cross-boundary.",
+      "ownerRole": "repo-validation",
+      "validation": {
+        "required": ["pnpm --filter @open-design/sidecar-proto build", "pnpm --filter @open-design/sidecar build", "pnpm --filter @open-design/platform build"],
+        "recommended": ["pnpm tools-dev status --json"],
+        "optional": []
+      }
+    },
+    {
+      "id": "global-web-css-change",
+      "defaultTierOnMatch": "tier-2",
+      "pathGlobs": ["apps/web/src/index.css", "apps/web/src/styles/**"],
+      "reason": "Global CSS can regress unrelated UI flows and may require visual/manual validation.",
+      "ownerRole": "p0-ui-qa",
+      "validation": {
+        "required": ["pnpm --filter @open-design/web typecheck"],
+        "recommended": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts smoke"],
+        "optional": []
+      }
+    }
+  ]
+}

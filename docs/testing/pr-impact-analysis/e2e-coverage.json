@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "coverage": [
+    {
+      "id": "composer-menu-actions-ui-p0",
+      "capabilityId": "composer-menu-actions",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Direct composer component changes should run the project-workspace shard.",
+      "pathGlobs": ["apps/web/src/components/*Composer*.tsx", "apps/web/src/components/composer-*.ts", "apps/web/src/components/composer/**/*.tsx", "apps/web/src/components/composer/**/*.ts", "apps/web/src/App.tsx"],
+      "testPathGlobs": ["e2e/ui/app.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/ui/chat-*.test.ts", "e2e/ui/composer-*.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts --grep '\\[P0\\]|conversation'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "composer-menu-actions"
+    },
+    {
+      "id": "composer-attachment-staging-ui-p0",
+      "capabilityId": "composer-attachment-staging",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "Attachment staging is covered by broader project workspace and file-upload assertions.",
+      "pathGlobs": ["apps/web/src/components/*Composer*.tsx", "apps/web/src/providers/daemon.ts", "packages/contracts/src/api/chat.ts"],
+      "testPathGlobs": ["e2e/ui/app.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/ui/chat-*.test.ts", "e2e/ui/composer-*.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts ui/app-restoration.test.ts --grep 'file-upload|attachment|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "composer-attachment-staging"
+    },
+    {
+      "id": "composer-inline-mentions-ui-p0",
+      "capabilityId": "composer-inline-mentions",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Mention parsing and display directly affect selected composer context.",
+      "pathGlobs": ["apps/web/src/components/**/Mention*.ts", "apps/web/src/utils/inlineMentions.ts", "apps/web/src/runtime/design-toolbox.ts"],
+      "testPathGlobs": ["e2e/ui/app.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/ui/chat-*.test.ts", "e2e/ui/composer-*.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts --grep '@|mention|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "composer-inline-mentions"
+    },
+    {
+      "id": "composer-plugin-skill-insertion-ui-p0",
+      "capabilityId": "composer-plugin-skill-insertion",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "Plugin/skill insertion spans composer and entry selection coverage.",
+      "pathGlobs": ["apps/web/src/utils/pluginInsertionTracking.ts", "apps/web/src/utils/pluginRequiredInputs.ts", "apps/web/src/providers/registry.ts", "packages/contracts/src/api/chat.ts"],
+      "testPathGlobs": ["e2e/ui/app.test.ts", "e2e/ui/entry-chrome-flows.test.ts", "e2e/ui/entry-configuration-flows.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts entry-onboarding"],
+        "optional": []
+      },
+      "manualQaChecklistId": "composer-plugin-skill-insertion"
+    },
+    {
+      "id": "composer-run-payload-assembly-ui-p0",
+      "capabilityId": "composer-run-payload-assembly",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Payload assembly is the boundary between visible composer state and run creation.",
+      "pathGlobs": ["apps/web/src/providers/daemon.ts", "apps/web/src/components/ProjectView.tsx", "apps/web/src/components/composer/serialize.ts", "apps/web/src/components/composer/deserialize.ts", "packages/contracts/src/api/chat.ts", "apps/daemon/src/server.ts", "apps/daemon/src/chat-routes.ts"],
+      "testPathGlobs": ["e2e/ui/app.test.ts", "e2e/ui/real-daemon-run.test.ts", "e2e/ui/api-empty-response.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app.test.ts --grep 'run|submit|payload|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "composer-run-payload-assembly"
+    },
+    {
+      "id": "runtime-run-lifecycle-ui-p0",
+      "capabilityId": "runtime-run-lifecycle",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Run lifecycle changes are directly covered by runtime-recovery and real-daemon run flows.",
+      "pathGlobs": ["apps/web/src/providers/daemon.ts", "apps/web/src/providers/project-events.ts", "apps/daemon/src/server.ts", "apps/daemon/src/runs.ts", "packages/contracts/src/api/chat.ts"],
+      "testPathGlobs": ["e2e/ui/real-daemon-run.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/ui/amr-run-failure-recovery.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts runtime-recovery"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/real-daemon-run.test.ts ui/app-restoration.test.ts --grep '\\[P0\\]|run'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "runtime-run-lifecycle"
+    },
+    {
+      "id": "runtime-stream-reattach-ui-p0",
+      "capabilityId": "runtime-stream-reattach",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Stream reattach changes can lose/duplicate messages across reload and reconnect.",
+      "pathGlobs": ["apps/daemon/src/*stream*.ts", "apps/daemon/src/runs.ts", "apps/daemon/src/runtimes/**", "apps/web/src/providers/sse.ts", "apps/web/src/providers/daemon.ts", "packages/contracts/src/api/chat.ts", "packages/contracts/src/sse/chat.ts", "packages/contracts/src/sse/common.ts"],
+      "testPathGlobs": ["e2e/ui/real-daemon-run.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/tests/dialog/artifact-consistency.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts runtime-recovery"],
+        "recommended": ["pnpm --filter @open-design/e2e test -- tests/dialog/artifact-consistency.test.ts"],
+        "optional": []
+      },
+      "manualQaChecklistId": "runtime-stream-reattach"
+    },
+    {
+      "id": "runtime-interrupt-stop-ui-p0",
+      "capabilityId": "runtime-interrupt-stop",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "Interrupt/stop is timing-sensitive and needs both runtime-recovery validation and manual QA.",
+      "pathGlobs": ["apps/web/src/App.tsx", "apps/web/src/providers/daemon.ts", "apps/daemon/src/chat-routes.ts", "apps/daemon/src/runs.ts", "apps/daemon/src/runtimes/**"],
+      "testPathGlobs": ["e2e/ui/real-daemon-run.test.ts", "e2e/ui/app-restoration.test.ts", "e2e/ui/amr-run-failure-recovery.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts runtime-recovery"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/real-daemon-run.test.ts --grep 'stop|interrupt|cancel|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "runtime-interrupt-stop"
+    },
+    {
+      "id": "runtime-conversation-persistence-ui-p0",
+      "capabilityId": "runtime-conversation-persistence",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Conversation and artifact restoration have focused app-restoration/artifact consistency coverage.",
+      "pathGlobs": ["apps/web/src/state/projects.ts", "apps/web/src/providers/project-events.ts", "apps/daemon/src/*project*.ts", "packages/contracts/src/api/projects.ts"],
+      "testPathGlobs": ["e2e/ui/app-restoration.test.ts", "e2e/tests/dialog/artifact-consistency.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts runtime-recovery"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app-restoration.test.ts --grep '\\[P0\\]|restore|reload'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "runtime-conversation-persistence"
+    },
+    {
+      "id": "runtime-local-failure-recovery-ui-p0",
+      "capabilityId": "runtime-local-failure-recovery",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "AMR failure recovery exists but can vary by local runtime/auth state.",
+      "pathGlobs": ["apps/web/src/providers/daemon.ts", "apps/daemon/src/runtimes/**", "apps/daemon/src/server.ts"],
+      "testPathGlobs": ["e2e/ui/amr-run-failure-recovery.test.ts", "e2e/ui/amr-logout-requires-relogin.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts runtime-recovery"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/amr-run-failure-recovery.test.ts ui/amr-logout-requires-relogin.test.ts --grep '\\[P0\\]|recovery|relogin'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "runtime-local-failure-recovery"
+    },
+    {
+      "id": "design-files-upload-manage-ui-p0",
+      "capabilityId": "design-files-upload-manage",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Direct file panel and daemon file API changes should run project-workspace coverage.",
+      "pathGlobs": ["apps/web/src/components/DesignFilesPanel.tsx", "apps/daemon/src/project-routes.ts", "apps/daemon/src/import-export-routes.ts", "packages/contracts/src/api/files.ts", "packages/contracts/src/api/projects.ts"],
+      "testPathGlobs": ["e2e/ui/app-design-files.test.ts", "e2e/ui/design-files-view-state-persist.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app-design-files.test.ts --grep '\\[P0\\]|file'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "design-files-upload-manage"
+    },
+    {
+      "id": "design-files-working-directory-picker-ui-p0",
+      "capabilityId": "design-files-working-directory-picker",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "Working-directory state spans web state and daemon project persistence.",
+      "pathGlobs": ["apps/web/src/components/WorkingDirPicker.tsx", "apps/web/src/components/ProjectLocationsSection.tsx", "apps/web/src/state/project-locations.ts", "apps/web/src/state/projects.ts", "apps/daemon/src/*project*.ts", "packages/contracts/src/api/projects.ts"],
+      "testPathGlobs": ["e2e/ui/app-design-files.test.ts", "e2e/ui/app-restoration.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app-design-files.test.ts ui/app-restoration.test.ts --grep 'directory|location|restore|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "design-files-working-directory-picker"
+    },
+    {
+      "id": "design-files-preview-tabs-ui-p0",
+      "capabilityId": "design-files-preview-tabs",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Preview and render-mode decisions are direct visual P0 workspace risks.",
+      "pathGlobs": ["apps/web/src/components/FileViewer.tsx", "apps/web/src/components/file-viewer-render-mode.ts", "apps/web/src/components/DesignFilesPanel.tsx"],
+      "testPathGlobs": ["e2e/ui/app-design-files.test.ts", "e2e/ui/workspace-keyboard-flows.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/app-design-files.test.ts ui/workspace-keyboard-flows.test.ts --grep 'preview|tab|render|\\[P0\\]|\\[P1\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "design-files-preview-tabs"
+    },
+    {
+      "id": "design-files-view-state-persistence-ui-p0",
+      "capabilityId": "design-files-view-state-persistence",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Focused view-state persistence coverage exists for reload/reopen behavior.",
+      "pathGlobs": ["apps/web/src/state/projects.ts", "apps/web/src/providers/registry.ts", "apps/daemon/src/*project*.ts", "packages/contracts/src/api/projects.ts"],
+      "testPathGlobs": ["e2e/ui/design-files-view-state-persist.test.ts", "e2e/ui/app-restoration.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts project-workspace"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/design-files-view-state-persist.test.ts ui/app-restoration.test.ts --grep 'persist|restore|reload|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "design-files-view-state-persistence"
+    },
+    {
+      "id": "home-entry-selector-ui-p0",
+      "capabilityId": "home-entry-selector",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Direct Home entry selector components map to entry-onboarding coverage.",
+      "pathGlobs": ["apps/web/src/components/Entry*.tsx", "apps/web/src/components/Home*.tsx", "apps/web/src/components/**/Mention*.ts"],
+      "testPathGlobs": ["e2e/ui/entry-chrome-flows.test.ts", "e2e/ui/entry-configuration-flows.test.ts", "e2e/ui/home-hero-rail.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts entry-onboarding"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/entry-chrome-flows.test.ts ui/entry-configuration-flows.test.ts --grep '\\[P0\\]|starter|plugin'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "home-entry-selector"
+    },
+    {
+      "id": "home-required-inputs-ui-p0",
+      "capabilityId": "home-required-inputs",
+      "priority": "P0",
+      "confidence": "medium",
+      "reason": "Required input readiness is covered through entry configuration flows.",
+      "pathGlobs": ["apps/web/src/utils/pluginRequiredInputs.ts", "apps/web/src/components/Entry*.tsx", "apps/web/src/providers/registry.ts"],
+      "testPathGlobs": ["e2e/ui/entry-configuration-flows.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts entry-onboarding"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/entry-configuration-flows.test.ts --grep 'required|input|plugin|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "home-required-inputs"
+    },
+    {
+      "id": "home-project-transition-ui-p0",
+      "capabilityId": "home-project-transition",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "Home-to-project transition is a P0 onboarding flow crossing project APIs.",
+      "pathGlobs": ["apps/web/src/state/projects.ts", "apps/web/src/providers/daemon.ts", "packages/contracts/src/api/projects.ts", "packages/contracts/src/api/chat.ts"],
+      "testPathGlobs": ["e2e/ui/entry-chrome-flows.test.ts", "e2e/ui/amr-onboarding.test.ts", "e2e/ui/api-empty-response.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts entry-onboarding"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/entry-chrome-flows.test.ts ui/amr-onboarding.test.ts --grep 'project|onboarding|run|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "home-project-transition"
+    },
+    {
+      "id": "home-first-run-payload-ui-p0",
+      "capabilityId": "home-first-run-payload",
+      "priority": "P0",
+      "confidence": "high",
+      "reason": "First-run request construction must match visible Home selection and prompt state.",
+      "pathGlobs": ["apps/web/src/providers/daemon.ts", "apps/web/src/utils/inlineMentions.ts", "packages/contracts/src/api/chat.ts", "apps/daemon/src/server.ts"],
+      "testPathGlobs": ["e2e/ui/entry-chrome-flows.test.ts", "e2e/ui/api-empty-response.test.ts"],
+      "validation": {
+        "required": ["pnpm -C e2e exec tsx scripts/ui-p0-shards.ts entry-onboarding"],
+        "recommended": ["pnpm -C e2e exec playwright test -c playwright.config.ts ui/entry-chrome-flows.test.ts ui/api-empty-response.test.ts --grep 'run|payload|submit|\\[P0\\]'"],
+        "optional": []
+      },
+      "manualQaChecklistId": "home-first-run-payload"
+    }
+  ],
+  "authorTestEvidence": {
+    "positiveSignal": "A PR that updates a mapped E2E test or reports the mapped command has stronger validation evidence for the matched capability.",
+    "riskFlag": "If changed files match pathGlobs for P0 coverage but the PR has no matching testPathGlobs change and no reported run evidence, mark changed-covered-code-without-test-evidence."
+  }
+}

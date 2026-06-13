@@ -7,7 +7,7 @@
 - 优先记录已经存在于 `e2e/` 下的自动化覆盖；当某个用户流主要由 `apps/web` 组件测试保护时，也会一并注明。
 - 以用户视角描述场景，不展开实现细节。
 - 新增测试文件或新增重要场景时，同步更新对应模块文档。
-- 插件系统总验收维护在 [`../plugin-system-test-suite.md`](../plugin-system-test-suite.md)；Registry / CLI / daemon 跨层用例另见 [`../plugin-registry-eval-cases.md`](../plugin-registry-eval-cases.md)。
+- PR 影响面分档与测试推荐规则维护在 [`../pr-impact-analysis/`](../pr-impact-analysis/)；插件系统总验收维护在 [`../plugin-system-test-suite.md`](../plugin-system-test-suite.md)；Registry / CLI / daemon 跨层用例另见 [`../plugin-registry-eval-cases.md`](../plugin-registry-eval-cases.md)。
 
 ## 模块索引
 
@@ -50,6 +50,6 @@
 ## 当前套件结构
 
 - `e2e/ui/*.test.ts`：面向浏览器 UI 的 Playwright 回归测试。
-- `e2e/specs/*.spec.ts`：运行时与平台级 smoke 测试。
-- `e2e/tests/*.test.ts`：轻量 Vitest 完整性校验。
+- `e2e/specs/**/*.spec.ts`：运行时与平台级 smoke 测试。
+- `e2e/tests/**/*.test.ts`：轻量 Vitest 完整性校验。
 - `e2e/lib/**`：仅放 helper，不放可执行用例入口。

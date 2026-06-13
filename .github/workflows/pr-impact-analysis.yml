@@ -1,0 +1,93 @@
+name: PR impact analysis
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-impact-analysis-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze PR impact
+    if: ${{ github.repository == 'nexu-io/open-design' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout trusted base
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Collect changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[] | .filename, (.previous_filename // empty) | select(. != "")' \
+            | sort -u > "$RUNNER_TEMP/changed-files.txt"
+
+      - name: Analyze impact
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/pr-impact-analysis.ts analyze --json \
+            < "$RUNNER_TEMP/changed-files.txt" > "$RUNNER_TEMP/impact.json"
+          pnpm exec tsx scripts/pr-impact-analysis.ts format-github-comment \
+            "$RUNNER_TEMP/impact.json" > "$RUNNER_TEMP/impact-comment.md"
+
+      - name: Upload impact artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-impact-analysis-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/impact.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        env:
+          COMMENT_PATH: ${{ runner.temp }}/impact-comment.md
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pr-impact-analysis -->';
+            const body = fs.readFileSync(process.env.COMMENT_PATH, 'utf8');
+            const issue_number = context.payload.pull_request.number;
+            const {owner, repo} = context.repo;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const previous = comments.find((comment) => comment.user.type === 'Bot' && comment.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: previous.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+
+      - name: Add high-risk validation label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          tier="$(node -e "const fs=require('fs'); console.log(JSON.parse(fs.readFileSync(process.argv[1], 'utf8')).tier)" "$RUNNER_TEMP/impact.json")"
+          if [ "$tier" = "tier-2" ]; then
+            gh issue edit "$PR_NUMBER" --add-label needs-validation
+          fi
