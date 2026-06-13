@@ -291,7 +291,7 @@ describe('chat run service shutdown', () => {
           sourceLabel: 'checkout:main',
           sourceRef: 'main@abc123',
           baseRevision: 'abc123',
-          writeback: 'ignored',
+          writeback: 'external',
         },
       },
     });
