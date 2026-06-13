@@ -96,6 +96,16 @@ describe('parseFrontmatter', () => {
     expect(body).toBe('body');
   });
 
+  it('keeps frontmatter body output byte-identical across newline styles', () => {
+    expect(parseFrontmatter('---\r\nname: foo\r\n---\r\nbody\r\n').body).toBe('body\r\n');
+    expect(parseFrontmatter('---\nname: foo\n---\nbody\n').body).toBe('body\n');
+  });
+
+  it('does not strip partial frontmatter blocks', () => {
+    const raw = '---\nname: foo\n# missing closing marker';
+    expect(parseFrontmatter(raw)).toEqual({ data: {}, body: raw });
+  });
+
   it('parses block-literal descriptions', () => {
     const src = '---\nname: foo\ndescription: |\n  line 1\n  line 2\n---\nbody';
     const { data } = parseFrontmatter(src);
@@ -106,5 +116,13 @@ describe('parseFrontmatter', () => {
     const { data, body } = parseFrontmatter('# heading');
     expect(Object.keys(data)).toHaveLength(0);
     expect(body).toBe('# heading');
+  });
+
+  it('rejects invalid closing delimiters like ---- or ---foo', () => {
+    const raw1 = '---\nname: foo\n----\nbody';
+    expect(parseFrontmatter(raw1)).toEqual({ data: {}, body: raw1 });
+
+    const raw2 = '---\nname: foo\n---foo\nbody';
+    expect(parseFrontmatter(raw2)).toEqual({ data: {}, body: raw2 });
   });
 });

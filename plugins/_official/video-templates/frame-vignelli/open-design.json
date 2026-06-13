@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-vignelli",
+  "title": "Vignelli",
+  "title_i18n": {
+    "en": "Vignelli",
+    "zh-CN": "维涅里"
+  },
+  "version": "0.1.0",
+  "description": "Bold typography with red accents",
+  "description_i18n": {
+    "en": "Bold typography with red accents",
+    "zh-CN": "维涅里风格的竖版强字幕动效，厚重的无衬线大字与强对比，适合社交竖屏。"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-vignelli",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "vignelli",
+    "red",
+    "bold",
+    "portrait",
+    "9:16",
+    "social-shorts"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-vignelli/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-vignelli/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Vignelli HyperFrames template to create a 10s social-shorts video. Replace the sample copy with real content, preserve the template's motion signature, and render to MP4.",
+        "zh-CN": "使用「维涅里」HyperFrames 模板创建一段约 10 秒的social-shorts动效视频。把示例文案替换为真实内容，保留模板的动效签名，并渲染为 MP4。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "9:16"
+        ],
+        "default": "9:16"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 10
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "attribution": [
+      {
+        "name": "hyperframes registry/examples/vignelli",
+        "license": "Apache-2.0",
+        "author": "heygen-com / Hyperframes",
+        "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/vignelli"
+      }
+    ]
+  }
+}

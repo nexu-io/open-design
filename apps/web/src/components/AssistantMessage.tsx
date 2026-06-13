@@ -1,5 +1,5 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ToolCard, StreamingAskUserQuestionCard, isAskUserQuestionName } from "./ToolCard";
+import { ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
   renderMarkdown,
@@ -7,7 +7,6 @@ import {
 } from "../runtime/markdown";
 import { asInProjectFilePath } from "../runtime/in-project-link";
 import { projectFileUrl } from "../providers/registry";
-import { submitChatRunToolResult } from "../providers/daemon";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
@@ -292,9 +291,6 @@ interface Props {
   // Kept for ChatPane compatibility; chat-side question forms now always
   // render as a compact Questions banner.
   nextUserContent?: string;
-  // Submit handler the form fires when the user picks answers — opaque
-  // to AssistantMessage; ProjectView wires it into onSend.
-  onSubmitForm?: (text: string) => void;
   // Open the right-hand Questions tab. The active discovery form renders
   // there (Claude-Design style) instead of inline; this assistant message
   // shows a banner that focuses the tab on click.
@@ -310,7 +306,7 @@ interface Props {
   // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
   // Featured design-toolbox follow-up rows on the "next step" card. Seeding the
-  // composer with an action / opening the full toolbox both route through the
+  // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
   onPickSkill?: (skillId: string) => void;
@@ -320,9 +316,8 @@ interface Props {
 }
 
 // Props compared by reference to decide whether a memoized AssistantMessage can
-// skip re-rendering. The interaction callbacks (onSubmitForm,
-// onContinueRemainingTasks, onForkFromMessage, onFeedback, and next-step
-// actions) are DELIBERATELY
+// skip re-rendering. The interaction callbacks (onContinueRemainingTasks,
+// onForkFromMessage, onFeedback, and next-step actions) are DELIBERATELY
 // excluded: ChatPane re-creates them per render, but routes them through a ref
 // so their behavior is reference-stable — comparing them would defeat the memo
 // on every streamed frame. `isLast` is compared, which captures the only state
@@ -352,8 +347,8 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'suppressDirectionForms',
   'hasDesignSystemContext',
   // Memoized + stable from ChatPane; compared so a late skill-list load
-  // refreshes the featured next-step rows' `@skill` hover detail and the full
-  // More → Design toolbox skill list.
+  // refreshes the featured next-step rows' `@skill` hover detail and the
+  // More → Design toolbox global resources.
   'toolboxSkillNames',
   'nextStepSkills',
   // Live streaming tool input changes identity on every `tool_input_delta`.
@@ -406,7 +401,6 @@ function AssistantMessageImpl({
   isLast,
   errorCardOwnerId = null,
   nextUserContent,
-  onSubmitForm,
   onOpenQuestions,
   onContinueRemainingTasks,
   onForkFromMessage,
@@ -423,11 +417,6 @@ function AssistantMessageImpl({
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
-  // Claude sometimes hedges by emitting a markdown duplicate of the same
-  // questions alongside an `AskUserQuestion` tool call. The card already
-  // shows the questions + options, so suppressing the trailing prose
-  // avoids rendering the same content twice. The system prompt asks the
-  // model not to do this; this is the belt-and-suspenders.
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
   // we strip TodoWrite tool-groups out of the per-message flow to avoid the
   // same task list rendering twice.
@@ -435,19 +424,7 @@ function AssistantMessageImpl({
     () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
     [events],
   );
-  // The earliest still-streaming AskUserQuestion (no full `tool_use` yet),
-  // tagged with the event position the tool call started at so we can place
-  // its live card there — text before it is preamble, text after is hedging.
-  const liveAuq = useMemo(() => {
-    if (!streaming || !liveToolInput) return null;
-    const entries = Object.entries(liveToolInput)
-      .filter(([id, e]) => !settledUseIds.has(id) && isAskUserQuestionName(e.name))
-      .map(([id, e]) => ({ id, raw: e.text, seq: e.seq ?? events.length }))
-      .sort((a, b) => a.seq - b.seq);
-    return entries[0] ?? null;
-  }, [streaming, liveToolInput, settledUseIds, events.length]);
-  // Live code boxes (Write/Edit streaming) append after everything else; they
-  // aren't part of the fallback-suppression ordering.
+  // Live code boxes (Write/Edit streaming) append after everything else.
   const liveCodeBlocks = useMemo<Block[]>(() => {
     if (!streaming || !liveToolInput) return [];
     const out: Block[] = [];
@@ -458,33 +435,17 @@ function AssistantMessageImpl({
     }
     return out;
   }, [streaming, liveToolInput, settledUseIds]);
-  // Compose the block list with the live AskUserQuestion at its real stream
-  // position (split the events around `seq`), then run the strip/suppress
-  // pipeline once. Because the live AUQ sits between preamble and any hedging,
-  // `suppressAskUserQuestionFallbackText` keeps the preamble and drops the
-  // hedging — matching the settled-case semantics.
+  // Compose the block list, then run the strip/suppress pipeline once.
   const blocks = useMemo(() => {
-    const rawBlocks = liveAuq
-      ? (() => {
-          const n = Math.min(Math.max(liveAuq.seq, 0), events.length);
-          return [
-            ...buildBlocks(events.slice(0, n)),
-            { kind: "live-tool", id: liveAuq.id, name: "AskUserQuestion", raw: liveAuq.raw } as Block,
-            ...buildBlocks(events.slice(n)),
-            ...liveCodeBlocks,
-          ];
-        })()
-      : [...buildBlocks(events), ...liveCodeBlocks];
+    const rawBlocks = [...buildBlocks(events), ...liveCodeBlocks];
     return placeConversationTodoCard(
-      stripEmptyThinkingBlocks(
-        suppressDuplicateQuestionForms(suppressAskUserQuestionFallbackText(rawBlocks)),
-      ),
+      stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
       {
         show: showConversationTodoCard,
         input: conversationTodoInput,
       },
     );
-  }, [events, liveAuq, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  }, [events, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
@@ -614,10 +575,16 @@ function AssistantMessageImpl({
   const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
   const showOpenDesignSubmission =
     canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
+  // "Next step" only makes sense once there is a deliverable to act on. Anchor
+  // the whole card (toolbox cascade + Share + Contribute) on a previewable HTML
+  // artifact — produced this turn or earlier in the project. A pure
+  // clarifying-questions / summary turn that emitted no HTML must not surface
+  // the card (issue: card appeared after a question-only turn with no artifact).
   const showNextStepActions =
     !streaming &&
     !!projectId &&
     runSucceeded &&
+    !!nextStepArtifactName &&
     ((!!isLast && !!onToolboxAction) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
@@ -625,22 +592,6 @@ function AssistantMessageImpl({
   // start so switching project tabs or remounting the message cannot restart it.
   const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
   const preparing = streaming && !hasContent;
-  // Route interactive tool answers (currently AskUserQuestion) back to the
-  // still-open stream-json child via the daemon. We resolve to `true` on
-  // success so the card can flip into its answered state; on `false` (run
-  // already terminated, stdin closed, etc.) the card falls back to the
-  // plain-text `onSubmitForm` path so the user is never stuck. Only wire
-  // this when we have an active run id and the message is the latest turn
-  // — older messages whose run is gone use the fallback exclusively.
-  const onAnswerToolUse = useCallback(
-    async (toolUseId: string, content: string) => {
-      if (!isLast) return false;
-      if (!message.runId) return false;
-      const resp = await submitChatRunToolResult(message.runId, toolUseId, content);
-      return resp.ok;
-    },
-    [isLast, message.runId],
-  );
 
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
@@ -706,16 +657,10 @@ function AssistantMessageImpl({
                 runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
-                isLast={!!isLast}
-                onSubmitForm={onSubmitForm}
-                onAnswerToolUse={onAnswerToolUse}
               />
             );
           }
           if (b.kind === "live-tool") {
-            if (isAskUserQuestionName(b.name)) {
-              return <StreamingAskUserQuestionCard key={b.id} raw={b.raw} />;
-            }
             return <LiveCodeBox key={b.id} name={b.name} raw={b.raw} />;
           }
           if (b.kind === "plugin-candidate") {
@@ -1113,6 +1058,7 @@ function AssistantForkButton({
       type="button"
       className="assistant-copy-button od-tooltip"
       disabled={disabled}
+      data-testid="assistant-fork-button"
       data-tooltip={label}
       data-tooltip-placement="top"
       onClick={onFork}
@@ -1151,6 +1097,7 @@ function AssistantMarkdownCopyButton({ markdown }: { markdown: string }) {
     <button
       type="button"
       className="assistant-copy-button od-tooltip"
+      data-testid="assistant-copy-markdown"
       data-copied={copied ? "true" : "false"}
       data-tooltip={label}
       data-tooltip-placement="top"
@@ -1451,6 +1398,7 @@ function AssistantFeedback({
       <button
         type="button"
         className="assistant-feedback-button od-tooltip"
+        data-testid="assistant-feedback-positive"
         data-selected={selected === "positive" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackPositive")}
         data-tooltip-placement="top"
@@ -1478,6 +1426,7 @@ function AssistantFeedback({
       <button
         type="button"
         className="assistant-feedback-button od-tooltip"
+        data-testid="assistant-feedback-negative"
         data-selected={selected === "negative" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackNegative")}
         data-tooltip-placement="top"
@@ -2300,12 +2249,8 @@ interface ToolItem {
 //   - TodoWrite / todowrite: the input replaces the previous list, so the
 //     latest call is the only one worth showing; older identical or
 //     superseded snapshots are pure duplication.
-//   - AskUserQuestion / ask_user_question: claude-code -p auto-errors the
-//     tool and the model retries with identical input until it gives up.
 // Other tool names pass through untouched.
 const SNAPSHOT_TOOL_NAMES = new Set([
-  "AskUserQuestion",
-  "ask_user_question",
   "TodoWrite",
   "todowrite",
   "todo_write",
@@ -2317,11 +2262,9 @@ function dedupeSnapshotToolRetries(items: ToolItem[]): ToolItem[] {
   const allSnapshot = items.every((it) => SNAPSHOT_TOOL_NAMES.has(it.use.name));
   if (!allSnapshot) return items;
   // For TodoWrite specifically, the LATEST call always wins regardless of
-  // input — it is a state replace, not an append. For AskUserQuestion we
-  // group by input so a sequence of distinct questions (rare) renders as
-  // distinct cards. The cheap unifying behavior: keep the last item per
-  // `(name, JSON.stringify(input))` key; for TodoWrite a single name+input
-  // is the snapshot identity, for AskUserQuestion it's the question text.
+  // input — it is a state replace, not an append. The cheap unifying
+  // behavior: keep the last item per `(name, JSON.stringify(input))` key;
+  // for TodoWrite a single name+input is the snapshot identity.
   const lastByKey = new Map<string, ToolItem>();
   for (const it of items) {
     let key: string;
@@ -2483,29 +2426,20 @@ function ToolGroupCard({
   runSucceeded,
   projectFileNames,
   onRequestOpenFile,
-  isLast,
-  onSubmitForm,
-  onAnswerToolUse,
 }: {
   items: ToolItem[];
   runStreaming: boolean;
   runSucceeded: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
-  isLast?: boolean;
-  onSubmitForm?: (text: string) => void;
-  onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
 
-  // `claude-code -p` (headless) auto errors `AskUserQuestion` because it
-  // cannot prompt the user, so the model retries the call up to ~4 times
-  // within a single turn. Each retry produces an identical tool_use event,
-  // which used to render as a stack of duplicate question cards. Collapse
-  // consecutive AskUserQuestion uses with identical input to the LAST one
-  // (it has the most up to date tool_use id, which is what we route the
-  // answer against if a backend tool_result wire is added later).
+  // Snapshot-style tools (TodoWrite and friends) replace their whole state on
+  // each call, so a turn that wrote the list several times would otherwise
+  // render a stack of superseded cards. Collapse those retries to the latest
+  // snapshot; every other tool passes through untouched.
   items = dedupeSnapshotToolRetries(items);
 
   // A run of one tool collapses to that tool's card directly so we don't
@@ -2519,9 +2453,6 @@ function ToolGroupCard({
         runSucceeded={runSucceeded}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
-        isLast={isLast}
-        onSubmitForm={onSubmitForm}
-        onAnswerToolUse={onAnswerToolUse}
       />
     );
   }
@@ -2564,9 +2495,6 @@ function ToolGroupCard({
                 runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
-                isLast={isLast}
-                onSubmitForm={onSubmitForm}
-                onAnswerToolUse={onAnswerToolUse}
               />
             ))}
           </div>
@@ -2742,40 +2670,6 @@ function suppressDuplicateQuestionForms(blocks: Block[]): Block[] {
       .join("");
     return changed ? { ...block, text: nextText } : block;
   });
-}
-
-// Hide text blocks that follow an `AskUserQuestion` tool use in the same
-// assistant message. Claude tends to also write the same questions as
-// markdown text alongside the tool call. The card already shows the
-// content; the prose is hedge that duplicates and confuses the user.
-function suppressAskUserQuestionFallbackText(blocks: Block[]): Block[] {
-  let seenAskUserQuestion = false;
-  const filtered: Block[] = [];
-  for (const block of blocks) {
-    if (block.kind === "tool-group") {
-      const hasAuq = block.items.some(
-        (it) =>
-          it.use.name === "AskUserQuestion" ||
-          it.use.name === "ask_user_question",
-      );
-      if (hasAuq) seenAskUserQuestion = true;
-      filtered.push(block);
-      continue;
-    }
-    // A still-streaming AskUserQuestion (live block, no persisted tool_use yet)
-    // counts the same as a settled one: hedging text after it is suppressed,
-    // preamble before it is kept.
-    if (block.kind === "live-tool" && isAskUserQuestionName(block.name)) {
-      seenAskUserQuestion = true;
-      filtered.push(block);
-      continue;
-    }
-    if (seenAskUserQuestion && block.kind === "text") {
-      continue;
-    }
-    filtered.push(block);
-  }
-  return filtered;
 }
 
 function buildBlocks(events: AgentEvent[]): Block[] {

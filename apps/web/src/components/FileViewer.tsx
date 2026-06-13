@@ -4515,10 +4515,21 @@ function HtmlViewer({
       const out = fn();
       if (out && typeof (out as Promise<unknown>).then === 'function') {
         (out as Promise<unknown>).then(
-          () => { finish('success'); if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' }); },
+          (result) => {
+            if (result === 'cancelled') {
+              finish('cancelled');
+              return;
+            }
+            finish('success');
+            if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' });
+          },
           (err) => finish('failed', err instanceof Error ? err.name : 'UNKNOWN'),
         );
       } else {
+        if (out === 'cancelled') {
+          finish('cancelled');
+          return;
+        }
         finish('success');
         if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportStarted'), tone: 'default' });
       }
@@ -7262,6 +7273,14 @@ function HtmlViewer({
     setDeployMenuOpen((v) => !v);
   };
   const captureExportImageSnapshot = useCallback(async () => {
+    // The host compositor grabs on-screen pixels, so any transient hover chrome
+    // over the preview leaks into the capture. The screenshot control's own
+    // tooltip is already dismissed by TooltipLayer's pointerdown/click listener,
+    // but that setState(null) has not repainted yet when capture starts. Wait
+    // two frames so the dismissal commits first — mirrors the double-rAF guard
+    // in the browser screenshot flow (DesignBrowserPanel).
+    await waitForAnimationFrame();
+    await waitForAnimationFrame();
     // Prefer the desktop compositor screenshot of the visible preview region:
     // it returns the real rendered pixels (fonts, external CSS, gradients,
     // images) and is never tainted, so it cannot produce the black/blank frames
@@ -9390,6 +9409,11 @@ function toOwnerRelativePath(ownerFileName: string, targetPath: string): string 
   return rel || '.';
 }
 
+function isBlockedPreviewAssetScheme(assetRef: string): boolean {
+  const clean = assetRef.replace(/[\s\u0000-\u001F\u007F-\u009F]/g, '');
+  return /^(?:javascript|data):/i.test(clean);
+}
+
 function hasRelativeAssetRefs(html: string): boolean {
   const attr = /\s(?:src|href)\s*=\s*["']([^"']+)["']/gi;
   let match: RegExpExecArray | null;
@@ -9470,11 +9494,15 @@ async function fetchProjectRelativeText(
 }
 
 function resolveProjectRelativePath(ownerFileName: string, assetRef: string): string | null {
+  if (isBlockedPreviewAssetScheme(assetRef)) return null;
   if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
   try {
     const url = new URL(assetRef, `https://od.local/${baseDirFor(ownerFileName)}`);
     if (url.origin !== 'https://od.local') return null;
-    return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    const decodedPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    const parts = decodedPath.split(/[/\\]/);
+    if (parts.some((part) => part === '..' || part.trim() === '..')) return null;
+    return decodedPath;
   } catch {
     return null;
   }

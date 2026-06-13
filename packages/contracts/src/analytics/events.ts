@@ -436,9 +436,9 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you; the
-// design-system and generation literals remain in the contract for historical
-// rows and a future reintroduction. Each step's `step_index` / `step_name`
+// welcome flow. The current first-run flow is Connect → About you →
+// Newsletter; the design-system and generation literals remain in the
+// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
 // must match the enum pairs below. `onboarding_session_id` is generated once
 // per session so dashboards can stitch the funnel.
 export type TrackingOnboardingArea =
@@ -1552,6 +1552,7 @@ export interface IntegrationsConnectorsTabClickProps {
     | 'save_key'
     | 'clear'
     | 'get_api_key'
+    | 'gate_card'
     | 'provider_chip'
     | 'search_connectors';
 }
@@ -2607,7 +2608,7 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
   artifact_count: number;
-  // True when the run raised an AskUserQuestion clarification card. Such runs
+  // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude
   // them from the "run finished -> has artifact" funnel instead of counting
@@ -2657,7 +2658,7 @@ export interface LangfuseReportResultProps {
   langfuse_delivery_status: TrackingLangfuseDeliveryStatus;
   langfuse_drop_reason?: TrackingLangfuseDropReason;
   langfuse_report_result: TrackingLangfuseReportResult;
-  langfuse_report_trigger: 'final_message';
+  langfuse_report_trigger: 'final_message' | 'terminal_fallback';
   langfuse_report_skip_reason?: TrackingLangfuseReportSkipReason;
   report_duration_ms?: number;
   result?: TrackingRunResult;

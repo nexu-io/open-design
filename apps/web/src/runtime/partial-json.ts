@@ -1,8 +1,7 @@
 /**
- * Truncation-tolerant JSON parsing for streamed LLM output. Both question
- * surfaces (the `AskUserQuestion` tool card and the `<question-form>`
- * discovery form) need to render a JSON *prefix* that grows one token at a
- * time, so they share this repair pass.
+ * Truncation-tolerant JSON parsing for streamed LLM output. The
+ * `<question-form>` discovery / clarification form needs to render a JSON
+ * *prefix* that grows one token at a time, so it relies on this repair pass.
  *
  * It deliberately handles only the shapes a streaming model emits — balanced
  * structure that simply hasn't finished — not arbitrary corruption. Callers

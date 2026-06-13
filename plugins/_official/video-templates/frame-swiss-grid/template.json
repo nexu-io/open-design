@@ -1,0 +1,37 @@
+{
+  "id": "frame-swiss-grid",
+  "surface": "hyperframes",
+  "title": "Swiss Grid",
+  "summary": "Structured grid layout",
+  "category": "Presentation",
+  "tags": [
+    "swiss",
+    "grid",
+    "minimal",
+    "corporate",
+    "typography"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 30,
+  "durationSec": 10,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Corporate slide",
+    "Minimal report card",
+    "Typography-led title"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-swiss-grid",
+    "license": "Apache-2.0",
+    "author": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/swiss-grid",
+    "notes": "Forked from heygen-com/hyperframes registry/examples/swiss-grid (Apache-2.0)."
+  }
+}

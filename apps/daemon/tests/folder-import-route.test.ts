@@ -56,6 +56,20 @@ describe('POST /api/import/folder', () => {
     }
   }
 
+  async function withSandboxImportAllowedRoots<T>(
+    roots: string[],
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const previous = process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
+    process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = roots.join(path.delimiter);
+    try {
+      return await run();
+    } finally {
+      if (previous == null) delete process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
+      else process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = previous;
+    }
+  }
+
   it('creates a project rooted at the submitted folder', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
@@ -93,6 +107,61 @@ describe('POST /api/import/folder', () => {
       expect(resp.status).toBe(400);
       const body = (await resp.json()) as { error?: { message?: string } };
       expect(body.error?.message).toMatch(/OD_SANDBOX_MODE/i);
+    });
+  });
+
+  it('allows sandbox folder imports under an explicit import root', async () => {
+    await withSandboxMode(async () => {
+      const root = makeFolder();
+      const folder = path.join(root, 'job-clone');
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      await withSandboxImportAllowedRoots([root], async () => {
+        const resp = await importFolder({ baseDir: folder });
+        expect(resp.status).toBe(200);
+        const body = (await resp.json()) as {
+          project: { id: string; metadata?: { baseDir?: string; importedFrom?: string } };
+          entryFile: string | null;
+        };
+        expect(body.project.metadata?.baseDir).toBe(await realpath(folder));
+        expect(body.project.metadata?.importedFrom).toBe('folder');
+        expect(body.entryFile).toBe('index.html');
+
+        const filesResp = await fetch(`${baseUrl}/api/projects/${body.project.id}/files`);
+        expect(filesResp.status).toBe(200);
+        const filesBody = (await filesResp.json()) as { files: Array<{ name: string }> };
+        expect(filesBody.files.map((file) => file.name)).toContain('index.html');
+      });
+    });
+  });
+
+  it('rejects sandbox folder imports outside the explicit import roots', async () => {
+    await withSandboxMode(async () => {
+      const allowedRoot = makeFolder();
+      const folder = makeFolder();
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      await withSandboxImportAllowedRoots([allowedRoot], async () => {
+        const resp = await importFolder({ baseDir: folder });
+        expect(resp.status).toBe(400);
+        const body = (await resp.json()) as { error?: { message?: string } };
+        expect(body.error?.message).toMatch(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS/i);
+      });
+    });
+  });
+
+  it('rejects relative sandbox import allowed roots', async () => {
+    await withSandboxMode(async () => {
+      const folder = makeFolder();
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      await withSandboxImportAllowedRoots(['tmp'], async () => {
+        const resp = await importFolder({ baseDir: folder });
+        expect(resp.status).toBe(400);
+        const body = (await resp.json()) as { error?: { message?: string } };
+        expect(body.error?.message).toMatch(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
+      });
     });
   });
 

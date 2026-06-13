@@ -426,6 +426,11 @@ when a natural French equivalent exists:
 - `Craft` stays `Craft` when it refers to the repository's `craft/` extension
   point or the matching UI label. Do not translate that feature name as a
   generic polish/finishing pass.
+- `SOTA Harness` and `Harness` stay in English when they name the Open Design
+  product/runtime harness concept or matching marketing label.
+- Motion-design jargon such as `motion`, `timing`, `easing`, `fallback`, and
+  `timeline` may stay in English for compact UI labels or agent-workflow
+  prompts where those terms are the design-domain vocabulary.
 - `runtime` stays `runtime` as a noun. Labels like "execution mode" can still
   use `mode d’exécution`.
 - `source` can stay `source` for provenance labels, but translate ordinary

@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: Die quelloffene Alternative zu Claude Design</h1>
 
-> 🔥 **Open Design 0.9.0 ist da: gestalten ohne Einrichtung.** Der [offizielle Model Router](https://open-design.ai/amr) ist direkt in die App integriert — keine zusätzliche Konfiguration, kein zu installierendes CLI, kein vorzubereitender API-Schlüssel. Einfach die App öffnen, anmelden und sofort mit dem Gestalten und Erstellen loslegen. [0.9.0 herunterladen](https://github.com/nexu-io/open-design/releases) · [An der Diskussion teilnehmen](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 ist da: der All-in-one Agentic-Design-Arbeitsplatz.** Das ganze Handwerk lebt jetzt in einem Fenster — von der vagen Idee über das Entdecken von Referenzen, das Sammeln von Material, interaktives Bearbeiten, das Einreihen von Kommentaren und den Feinschliff der Animationen bis zur Übergabe an einen Editor oder Code Agent — ohne die App zu verlassen. Mit parallelen Sessions fühlt es sich nicht mehr wie ein Assistent an, sondern wie ein lokales Designteam, das für dich arbeitet. [0.10.0 herunterladen](https://github.com/nexu-io/open-design/releases) · [An der Diskussion teilnehmen](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR (Agentic Model Router) — der offizielle Modell-Service.** Einmal aufladen und GPT, Claude, Gemini und DeepSeek direkt in Open Design nutzen: 20+ Flaggschiff-Modelle, null Konfiguration, Abrechnung nach realem Token-Verbrauch. [AMR ausprobieren](https://open-design.ai/amr/)
 >
 > 🏅 **Das Open Design Fellow-Programm ist jetzt offen.** Wenn auch du glaubst, dass Design offen sein sollte — werde Open Design Fellow, gestalte das Produkt gemeinsam mit dem Kernteam und hilf mehr Menschen dabei, die Zukunft des Designs mitzubestimmen. Details → [`MAINTAINERS.md`](../../MAINTAINERS.md) und [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Website</a> ·
   <a href="https://open-design.ai/">Download</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio folgen</a>
 </p>
@@ -116,13 +119,13 @@ Im Studio eines Projekts streamt dasselbe Designsystem mehrere Artefakttypen her
 | [Cursor](https://www.cursor.com/cli) | ✅ Unterstützt | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Unterstützt | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Unterstützt | `od mcp install copilot` |
-| Gemini CLI | ✅ Unterstützt | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Unterstützt | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Unterstützt | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Unterstützt | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Unterstützt | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Unterstützt | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Unterstützt | `od mcp install trae` |
-| Kimi CLI | ✅ Unterstützt | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Unterstützt | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Unterstützt | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Unterstützt | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Unterstützt | `od mcp install hermes` |

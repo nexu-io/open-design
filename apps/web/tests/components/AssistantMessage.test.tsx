@@ -123,7 +123,7 @@ describe('AssistantMessage feedback gate', () => {
 
     render(
       <AssistantMessage
-        message={baseMessage()}
+        message={baseMessage({ producedFiles: [producedFile('landing.html')] })}
         streaming={false}
         projectId="proj-1"
         isLast
@@ -232,35 +232,6 @@ describe('AssistantMessage feedback gate', () => {
       />,
     );
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
-  });
-});
-
-describe('AssistantMessage re-renders on live tool input changes', () => {
-  it('updates the streaming card when only liveToolInput changes (memo includes it)', () => {
-    // Same message object across renders — only liveToolInput differs, the way
-    // a burst of tool_input_delta arrives. The memo comparator must compare
-    // liveToolInput or the card freezes at its first frame.
-    const message = baseMessage({ content: '', runStatus: 'running', endedAt: undefined, events: [] });
-    const { container, rerender } = render(
-      <AssistantMessage
-        message={message}
-        streaming
-        projectId="proj-1"
-        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which databa","options":[]}]}', seq: 0 } }}
-      />,
-    );
-    expect(container.querySelector('.qf-label')?.textContent).toBe('Which databa');
-
-    rerender(
-      <AssistantMessage
-        message={message}
-        streaming
-        projectId="proj-1"
-        liveToolInput={{ t1: { name: 'AskUserQuestion', text: '{"questions":[{"question":"Which database?","options":[]}]}', seq: 0 } }}
-      />,
-    );
-    // Re-rendered to the grown prompt rather than frozen at "Which databa".
-    expect(container.querySelector('.qf-label')?.textContent).toBe('Which database?');
   });
 });
 
@@ -656,52 +627,3 @@ describe('AssistantMessage recovered produced files', () => {
   });
 });
 
-describe('AssistantMessage live AskUserQuestion fallback suppression', () => {
-  it('keeps preamble before a live AskUserQuestion but drops hedging after it', () => {
-    const message = baseMessage({
-      content: '',
-      runStatus: 'running',
-      endedAt: undefined,
-      // event[0] = preamble (before the tool call), event[1] = duplicate
-      // hedging the model emitted after starting the tool call.
-      events: [
-        { kind: 'text', text: 'INTROPREAMBLEXYZ' } as ChatMessage['events'][number],
-        { kind: 'text', text: 'HEDGINGDUPEXYZ' } as ChatMessage['events'][number],
-      ],
-    });
-    const { container } = render(
-      <AssistantMessage
-        message={message}
-        streaming
-        projectId="proj-1"
-        // seq=1 → the tool call started after event[0], so it sits between the
-        // preamble and the hedging.
-        liveToolInput={{
-          t1: {
-            name: 'AskUserQuestion',
-            text: '{"questions":[{"question":"Which database?","options":[{"label":"Postgres"}]}]}',
-            seq: 1,
-          },
-        }}
-      />,
-    );
-    expect(container.querySelector('[data-testid="ask-user-question"]')).not.toBeNull();
-    // Preamble before the card is preserved…
-    expect(container.textContent).toContain('INTROPREAMBLEXYZ');
-    // …hedging after the card is suppressed.
-    expect(container.textContent).not.toContain('HEDGINGDUPEXYZ');
-  });
-
-  it('keeps assistant prose when no live AskUserQuestion is present', () => {
-    const message = baseMessage({
-      content: '',
-      runStatus: 'running',
-      endedAt: undefined,
-      events: [{ kind: 'text', text: 'UNIQUENORMALPROSEXYZ' } as ChatMessage['events'][number]],
-    });
-    const { container } = render(
-      <AssistantMessage message={message} streaming projectId="proj-1" />,
-    );
-    expect(container.textContent).toContain('UNIQUENORMALPROSEXYZ');
-  });
-});

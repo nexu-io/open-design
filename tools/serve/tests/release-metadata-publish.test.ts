@@ -131,6 +131,8 @@ describe("shared release metadata publisher", () => {
           };
           allReadyTargetsSigned?: boolean;
           signed?: boolean;
+          stableVersion?: string;
+          github?: { commit?: string };
         };
         expect(metadata.channel).toBe(channel);
         expect(metadata.releaseState).toBe("complete");
@@ -138,6 +140,15 @@ describe("shared release metadata publisher", () => {
         expect(metadata.allReadyTargetsSigned).toBe(false);
         expect(metadata.releaseTargets?.mac_arm64?.artifacts?.payload?.url).toBe("https://example.test/mac-payload");
         expect(metadata.releaseTargets?.win_x64?.artifacts?.payload?.url).toBe("https://example.test/win-payload");
+        // github attribution must round-trip from the RELEASE_* env the workflow
+        // passes; the stable promotion gate checks metadata.github.commit.
+        expect(metadata.github?.commit).toBe("abc123");
+        // Nightlies are stable candidates for their own base version. The stable
+        // promotion gate requires metadata.stableVersion on the validated
+        // nightly; the unified-publisher refactor (#3995) dropped it.
+        if (channel === "nightly") {
+          expect(metadata.stableVersion).toBe("1.2.3");
+        }
         expect(server.getObject(`${channel}/latest/metadata.json`)).not.toBeNull();
       }
     } finally {

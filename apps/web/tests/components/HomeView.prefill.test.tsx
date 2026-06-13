@@ -779,7 +779,7 @@ describe('HomeView prompt handoff', () => {
     })));
     // Fidelity is deferred to first-turn discovery: the plugin is still applied
     // with its full inputs, but its default must NOT be forwarded to the run, so
-    // the AskUserQuestion flow collects it instead of inheriting a baked-in value.
+    // the question-form flow collects it instead of inheriting a baked-in value.
     const [{ pluginInputs: protoSubmittedInputs }] = onSubmit.mock.calls[0] as [
       { pluginInputs?: Record<string, unknown> },
     ];
@@ -1053,8 +1053,11 @@ describe('HomeView prompt handoff', () => {
     fireEvent.click(liveArtifactTemplatePreset);
 
     screen.getByTestId('home-hero-input');
+    // The composer seed prefers the curated description over the query head
+    // (the query is generator-facing; it still reaches the agent as plugin
+    // context on apply).
     await waitFor(() => {
-      expect(homeHeroPromptText()).toBe('Create a refreshable Notion dashboard live artifact.');
+      expect(homeHeroPromptText()).toBe('Create a live Notion dashboard artifact.');
     });
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/apply')
@@ -1081,7 +1084,7 @@ describe('HomeView prompt handoff', () => {
         intent: 'live-artifact',
         fidelity: 'high-fidelity',
       }),
-      prompt: 'Create a refreshable Notion dashboard live artifact.',
+      prompt: 'Create a live Notion dashboard artifact.',
     })));
   });
 

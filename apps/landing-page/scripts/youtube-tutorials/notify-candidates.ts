@@ -19,8 +19,14 @@
  */
 import { createHmac } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { readExistingVideoIds, type VideoInput } from './lib.ts';
-import { fetchCandidates, loadYoutubeKey } from './youtube.ts';
+import { readExistingVideoIds } from './lib.ts';
+import { fetchCandidates, loadYoutubeKey, type ScoredCandidate } from './youtube.ts';
+import {
+  fetchContributionPRs,
+  fetchSubmissionIssues,
+  type ContributionPR,
+  type SubmissionIssue,
+} from './github-submissions.ts';
 
 function fmtViews(n?: number): string {
   if (!n) return '';
@@ -34,19 +40,24 @@ function fmtDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function buildDigest(candidates: VideoInput[], today: string): string {
+function buildDigest(candidates: ScoredCandidate[], today: string): string {
   const lines: string[] = [];
-  lines.push(`📺 Open Design 教程候选 · ${today} · 共 ${candidates.length} 条待审`);
+  lines.push(`📺 Open Design 教程候选 · ${today} · 共 ${candidates.length} 条待审(按建议评分排序)`);
   lines.push('');
   candidates.forEach((v, i) => {
+    const s = v.score;
     const meta = [v.author, v.date, fmtViews(v.viewCount) && `${fmtViews(v.viewCount)} 次观看`, fmtDuration(v.durationSeconds)]
       .filter(Boolean)
       .join(' · ');
-    lines.push(`[${i + 1}] ${v.title}`);
+    const verdict = s.recommend ? '✅ 建议收录' : '🚫 不建议';
+    lines.push(`[${i + 1}] ${verdict} · ⭐${s.overall}分 · 完整${s.completeness}/5 精准${s.relevance}/5 热度${s.reach}/5`);
+    lines.push(`    ${v.title}`);
     lines.push(`    ${meta}`);
+    if (s.reason) lines.push(`    💬 ${s.reason}`);
     lines.push(`    https://youtu.be/${v.videoId}`);
   });
   lines.push('');
+  lines.push('评分=完整度×8+精准度×8+热度×4(满分100,仅供参考,你定夺)');
   lines.push('回复指令(发给 Claude):');
   lines.push('• 上架 1 3 5    只上这几条');
   lines.push('• 全上 / 全不上');
@@ -56,8 +67,89 @@ function buildDigest(candidates: VideoInput[], today: string): string {
   return lines.join('\n');
 }
 
-async function postToFeishu(webhook: string, secret: string | undefined, text: string): Promise<void> {
-  const body: Record<string, unknown> = { msg_type: 'text', content: { text } };
+/** Build a Feishu interactive card: one section per candidate with a verdict. */
+function buildCard(
+  candidates: ScoredCandidate[],
+  issues: SubmissionIssue[],
+  prs: ContributionPR[],
+  today: string,
+): Record<string, unknown> {
+  const recommended = candidates.filter((c) => c.score.recommend).length;
+  const elements: Record<string, unknown>[] = [];
+  elements.push({
+    tag: 'div',
+    text: {
+      tag: 'lark_md',
+      content:
+        `**YouTube 候选 ${candidates.length} 条**（✅ ${recommended} 建议收录）` +
+        (issues.length ? ` · **用户投稿 issue ${issues.length}**` : '') +
+        (prs.length ? ` · **待审 PR ${prs.length}**` : ''),
+    },
+  });
+  elements.push({ tag: 'hr' });
+  candidates.forEach((v, i) => {
+    const s = v.score;
+    const verdict = s.recommend ? '✅ **建议收录**' : '🚫 **不建议**';
+    const meta = [v.author, v.date, fmtViews(v.viewCount) && `${fmtViews(v.viewCount)} 次观看`, fmtDuration(v.durationSeconds)]
+      .filter(Boolean)
+      .join(' · ');
+    const parts = [
+      `**[${i + 1}] ${verdict} · ⭐ ${s.overall} 分**`,
+      `完整 ${s.completeness}/5 · 精准 ${s.relevance}/5 · 热度 ${s.reach}/5`,
+      `[${v.title}](https://youtu.be/${v.videoId})`,
+      meta,
+    ];
+    if (s.reason) parts.push(`💬 ${s.reason}`);
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: parts.join('\n') } });
+    elements.push({ tag: 'hr' });
+  });
+  if (issues.length) {
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**👤 用户投稿 issue（待你批准后由我生成）**' } });
+    for (const it of issues) {
+      const link = it.videoUrl ? `[视频](${it.videoUrl}) · ` : '⚠️ 未填视频链接 · ';
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `[#${it.number}](${it.url}) ${it.title}\n${link}@${it.author}` },
+      });
+    }
+    elements.push({ tag: 'hr' });
+  }
+  if (prs.length) {
+    elements.push({ tag: 'div', text: { tag: 'lark_md', content: '**🔀 待审 PR（去 GitHub review/merge）**' } });
+    for (const pr of prs) {
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: `[#${pr.number}](${pr.url}) ${pr.title} · @${pr.author}` },
+      });
+    }
+    elements.push({ tag: 'hr' });
+  }
+  elements.push({
+    tag: 'note',
+    elements: [
+      {
+        tag: 'lark_md',
+        content:
+          '评分 = 完整度×8 + 精准度×8 + 热度×4（满分100，仅供参考）｜回复 Claude：**上架 1 3 5**（YouTube 候选）/ **收 issue 12**（用户投稿）/ **全上** / **全上 除 2 4**',
+      },
+    ],
+  });
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: recommended > 0 ? 'green' : 'grey',
+      title: { tag: 'plain_text', content: `📺 Open Design 教程候选 · ${today}` },
+    },
+    elements,
+  };
+}
+
+async function postToFeishu(
+  webhook: string,
+  secret: string | undefined,
+  card: Record<string, unknown>,
+): Promise<void> {
+  const body: Record<string, unknown> = { msg_type: 'interactive', card };
   if (secret) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const sign = createHmac('sha256', `${timestamp}\n${secret}`).update('').digest('base64');
@@ -206,19 +298,40 @@ async function main(): Promise<void> {
 
   console.log(`${candidates.length} candidate(s) after dedupe + relevance gate`);
 
-  // Stamp the date from the publishedAfter window's "now" without Date APIs in
-  // the digest body? We need a date string for the header; derive from newest
-  // candidate or fall back to a generic label.
+  // Also surface user submissions (form issues + contribution PRs) when a GitHub
+  // token is present. If a lookup fails, abort before posting rather than send a
+  // digest that silently omits submissions — the run goes red (observable) and
+  // the next run re-queries (submissions are not windowed, so nothing is lost;
+  // YouTube candidates are re-covered via the unchanged watermark).
+  let issues: SubmissionIssue[] = [];
+  let prs: ContributionPR[] = [];
+  const ghToken = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (ghToken && repo) {
+    try {
+      [issues, prs] = await Promise.all([
+        fetchSubmissionIssues(ghToken, repo),
+        fetchContributionPRs(ghToken, repo),
+      ]);
+      console.log(`Submissions: ${issues.length} issue(s), ${prs.length} PR(s)`);
+    } catch (e) {
+      console.error(`Submission lookup failed; aborting before posting so the digest is not silently incomplete: ${(e as Error).message}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const today = candidates[0]?.date ?? new Date().toISOString().slice(0, 10);
   const digest = buildDigest(candidates, today);
 
   if (printOnly) {
     console.log('\n' + digest);
+    if (issues.length || prs.length) console.log(`\n(+ ${issues.length} issue / ${prs.length} PR submissions)`);
     return;
   }
 
-  if (candidates.length === 0) {
-    console.log('No new candidates; skipping Feishu post.');
+  if (candidates.length === 0 && issues.length === 0 && prs.length === 0) {
+    console.log('Nothing to review; skipping Feishu post.');
     return;
   }
 
@@ -229,8 +342,8 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  await postToFeishu(webhook, process.env.FEISHU_TUTORIALS_SECRET, digest);
-  console.log('Posted candidate digest to Feishu.');
+  await postToFeishu(webhook, process.env.FEISHU_TUTORIALS_SECRET, buildCard(candidates, issues, prs, today));
+  console.log('Posted candidate digest card to Feishu.');
 }
 
 // Only sweep when run directly; importing (e.g. from tests) must have no effect.

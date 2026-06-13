@@ -2628,11 +2628,12 @@
   border-top: 1px solid var(--border);
 }
 .ds-project-section-group {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: 10px;
 }
 .ds-project-section-group h2 {
+  grid-column: 1 / -1;
   margin: 0 0 2px 6px;
   color: var(--text-muted);
   font-size: 14px;
@@ -2700,11 +2701,21 @@
   border-top: 1px solid var(--border);
 }
 .ds-project-review-item .ds-project-inline-preview {
-  height: clamp(340px, 48vw, 540px);
+  height: clamp(170px, 20vw, 260px);
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  background: var(--bg);
+}
+.ds-project-review-item--ui-kit {
+  grid-column: 1 / -1;
+}
+.ds-project-review-item--ui-kit .ds-project-inline-preview {
+  height: clamp(420px, 56vw, 760px);
   background: #d8d8d8;
+}
+.ds-project-review-item--asset .ds-project-inline-preview {
+  height: clamp(220px, 28vw, 360px);
 }
 .ds-project-review-item .ds-project-review-notice,
 .ds-project-review-item .ds-project-last-feedback,

@@ -1,5 +1,4 @@
 const R2_PUBLIC_ORIGIN = 'https://static.open-design.ai';
-const REPOSITORY_ASSETS_PUBLIC_ORIGIN = 'https://repo-assets.open-design.ai';
 const IMAGE_RESIZING_ORIGIN = R2_PUBLIC_ORIGIN;
 const ASSET_PREFIX = 'landing/assets';
 
@@ -10,10 +9,6 @@ type ImageOptions = {
 
 export function r2Asset(name: string): string {
   return `${R2_PUBLIC_ORIGIN}/${ASSET_PREFIX}/${name}`;
-}
-
-export function repositoryAsset(path: string): string {
-  return `${REPOSITORY_ASSETS_PUBLIC_ORIGIN}/${path}`;
 }
 
 export function imageAsset(name: string, { width, quality = 85 }: ImageOptions): string {
@@ -40,16 +35,36 @@ export function imageAssetSrcset(
     .join(', ');
 }
 
-export const heroImage = imageAsset('hero.png', { width: 1280, quality: 82 });
+// Homepage hero art, served as local assets straight from the site origin.
+//
+// `heroImage` is the PNG kept ONLY for `og:image` / `twitter:image`: social
+// crawlers (Facebook, Twitter, LinkedIn, …) have spotty WebP support, so the
+// share card must stay a PNG.
+export const heroImage = '/hero-home.png?v=2';
+export const labStageImage = '/lab-stage-bg.webp';
 
-/**
- * Responsive srcset for the homepage hero. Widths cover phones (768),
- * laptops at 1x (1280), retina laptops (1920) and 4K / 2x retina (2560).
- */
-export const heroImageSrcset = imageAssetSrcset(
-  'hero.png',
-  [768, 1280, 1920, 2560],
-);
+// The visible full-bleed hero backdrop renders from responsive WebP variants
+// instead — the source 2880px PNG was a 326KB single file served to every
+// device (mobile included); these range 33KB (960w) → 110KB (2880w) at q90, so
+// each viewport downloads only what it paints. `heroBgImage` is the default
+// `src` fallback for browsers that ignore `srcset`.
+export const heroBgImage = '/hero-home-1440.webp?v=3';
+export const heroBgSrcset = [
+  '/hero-home-960.webp?v=3 960w',
+  '/hero-home-1440.webp?v=3 1440w',
+  '/hero-home-1920.webp?v=3 1920w',
+  '/hero-home-2880.webp?v=3 2880w',
+].join(', ');
+
+// Hero product screenshot — responsive WebP so phones don't pull the 2508px
+// retina master. Largest variant is the pristine original (no re-encode).
+export const heroProductImage = '/hero-product-1280.webp?v=3';
+export const heroProductSrcset = [
+  '/hero-product-800.webp?v=3 800w',
+  '/hero-product-1280.webp?v=3 1280w',
+  '/hero-product-1920.webp?v=3 1920w',
+  '/hero-product-2508.webp?v=3 2508w',
+].join(', ');
 
 /**
  * Default Open Graph card image. Used by every page that doesn't supply

@@ -49,6 +49,39 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
   // in-place span can loop while idle; plain video-template plugins keep the
   // cheaper poster-until-hover behaviour.
   const idlePlays = isVideo && holdMs != null;
+  // Prefetch zone: warm the full clip into the HTTP cache a row or two ahead so
+  // playback starts instantly on scroll-in instead of buffering from the
+  // +faststart header at the moment the tile appears. Keep the root ref stable
+  // across card reuse, and gate observer creation on `idlePlays` inside the
+  // effect: non-baked media cards pay no observer/rerender cost, while a reused
+  // card that flips from non-baked -> baked still subscribes correctly.
+  const approachRef = useRef<HTMLDivElement>(null);
+  const [approaching, setApproaching] = useState(false);
+  useEffect(() => {
+    if (!idlePlays) {
+      setApproaching(false);
+      return;
+    }
+
+    const node = approachRef.current;
+    if (!node) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setApproaching(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          setApproaching(entry.isIntersecting);
+        }
+      },
+      { rootMargin: '1000px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [idlePlays]);
   // Mount across the wider `inView` margin so hover/scroll-in never remounts +
   // reloads the source, but only decode/buffer when truly `visible` (or
   // hovering) — otherwise every tile in the margin runs a simultaneous decode +
@@ -121,6 +154,7 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
 
   return (
     <div
+      ref={approachRef}
       className="plugins-home__media"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
@@ -153,11 +187,13 @@ export function MediaSurface({ preview, pluginTitle, inView, visible = inView }:
           muted
           playsInline
           loop
-          // `metadata` paints the first frame off the +faststart header (moov +
-          // a few frames) instead of waiting on the whole file, so tiles show
-          // fast and don't all saturate the network buffering full clips up
-          // front; the idle hold buffers the pan span before hover.
-          preload={idlePlays ? 'metadata' : 'none'}
+          // Tiered preload so scroll-in is instant without saturating the
+          // network on first paint. In the wide mount margin: `metadata` (moov +
+          // first frame off the +faststart header). Once `approaching` (or
+          // hovering): `auto`, warming the whole clip into the HTTP cache a row
+          // or two ahead so it plays without a buffering beat. Hover-only video
+          // templates stay `none` until hovered.
+          preload={approaching || hovering ? 'auto' : idlePlays ? 'metadata' : 'none'}
           // Look like an inert iframe thumbnail: no native controls or PiP, and
           // clicks fall through to the card (open detail) instead of the video.
           disablePictureInPicture

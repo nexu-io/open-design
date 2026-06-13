@@ -40,6 +40,30 @@ interface Props {
   onSkip?: () => void;
 }
 
+function sanitizePluginComponentPath(path: string): string | null {
+  const clean = path.replace(/[\s\u0000-\u001F\u007F-\u009F]/g, '');
+  if (/^(?:javascript|data):/i.test(clean)) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(clean)) return null;
+
+  let decoded = path.trim();
+  try {
+    for (let iter = 0; iter < 3; iter++) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
+  } catch {
+    return null;
+  }
+
+  const parts = decoded.split(/[/\\]/);
+  if (parts.some((part) => part === '..' || part.trim() === '..')) return null;
+
+  const sanitized = decoded.replace(/^[./\\]+/, '');
+  if (!sanitized) return null;
+  return sanitized;
+}
+
 export function GenUISurfaceRenderer(props: Props) {
   const { surface } = props.pending;
   const [submitting, setSubmitting] = useState(false);
@@ -160,7 +184,14 @@ export function GenUISurfaceRenderer(props: Props) {
         </div>
       );
     }
-    const sanitizedPath = surface.component.path.replace(/^[./\\]+/, '');
+    const sanitizedPath = sanitizePluginComponentPath(surface.component.path);
+    if (!sanitizedPath) {
+      return (
+        <div className="genui-surface genui-surface--component-error" role="alert">
+          Plugin component surface "{surface.id}" declares an unsafe component path.
+        </div>
+      );
+    }
     const src = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${sanitizedPath
       .split('/')
       .map(encodeURIComponent)

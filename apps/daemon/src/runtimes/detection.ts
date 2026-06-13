@@ -265,6 +265,9 @@ function stripFns(
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
   // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
   // metadata and shouldn't bleed into the API response either.
+  // `inactivityTimeoutMs` is a spawn-time hint for the chat-run watchdog
+  // and is not part of the public AgentInfo contract — strip it here so
+  // the runtime registry stays the only consumer.
   const {
     buildArgs,
     listModels,
@@ -276,6 +279,7 @@ function stripFns(
     versionProbeTimeoutMs,
     maxPromptArgBytes,
     env,
+    inactivityTimeoutMs,
     authProbe,
     ...rest
   } = def;

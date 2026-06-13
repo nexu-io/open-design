@@ -31,7 +31,7 @@ i18n:
       <p>这些都不是 bug。它们是一个托管的、协作画布产品的形状,而 Figma 是这个形状里最好的版本。我们只是不为画布而造——我们为 agent 而造。</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="一把黑色多面挂锁与文档形状融合,被一圈虚线边界包住,旁边有一把以工程图方式绘制的钥匙,呈现在暖色编辑风研究图版上" />
+        <img src="/blog/plate-17-locked-format.webp" alt="一把黑色多面挂锁与文档形状融合,被一圈虚线边界包住,旁边有一把以工程图方式绘制的钥匙,呈现在暖色编辑风研究图版上" />
         <figcaption>事实来源活在一个专有文件里,在别人的云上。</figcaption>
       </figure>
 
@@ -52,7 +52,7 @@ i18n:
       <p>心智模型是这样的:Figma 是一块你租来的画布。Open Design 是一套你拥有的工作流。</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="一叠黑色素纸和索引卡从一个打开的容器里铺展开来,有几张正飘离,呈现在暖色编辑风研究图版上" />
+        <img src="/blog/plate-18-portable-files.webp" alt="一叠黑色素纸和索引卡从一个打开的容器里铺展开来,有几张正飘离,呈现在暖色编辑风研究图版上" />
         <figcaption>skill 和 system 是 repo 里的纯文本文件——可移植、可 fork、不靠工具也能读。</figcaption>
       </figure>
 
@@ -127,7 +127,7 @@ i18n:
       <p>這些都不是 bug。它們是一個託管的、協作畫布產品的形狀,而 Figma 是這個形狀裡最好的版本。我們只是不為畫布而造——我們為 agent 而造。</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="一把黑色多面掛鎖與文件形狀融合,被一圈虛線邊界包住,旁邊有一把以工程圖方式繪製的鑰匙,呈現在暖色編輯風研究圖版上" />
+        <img src="/blog/plate-17-locked-format.webp" alt="一把黑色多面掛鎖與文件形狀融合,被一圈虛線邊界包住,旁邊有一把以工程圖方式繪製的鑰匙,呈現在暖色編輯風研究圖版上" />
         <figcaption>事實來源活在一個專有檔案裡,在別人的雲上。</figcaption>
       </figure>
 
@@ -148,7 +148,7 @@ i18n:
       <p>心智模型是這樣的:Figma 是一塊你租來的畫布。Open Design 是一套你擁有的工作流。</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="一疊黑色素紙和索引卡從一個打開的容器裡鋪展開來,有幾張正飄離,呈現在暖色編輯風研究圖版上" />
+        <img src="/blog/plate-18-portable-files.webp" alt="一疊黑色素紙和索引卡從一個打開的容器裡鋪展開來,有幾張正飄離,呈現在暖色編輯風研究圖版上" />
         <figcaption>skill 和 system 是 repo 裡的純文字檔案——可移植、可 fork、不靠工具也能讀。</figcaption>
       </figure>
 
@@ -223,7 +223,7 @@ i18n:
       <p>これらはどれもバグではありません。これらは、ホスト型でコラボレーション・キャンバス型の製品の形であり、Figma はその形の最良の版です。私たちはただ、キャンバスのために作っていないだけです——私たちは agent のために作っています。</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="ドキュメントの形と融合した黒い多面体の南京錠が破線の境界線に囲まれ、工学図のように描かれた鍵が添えられた、暖色系のエディトリアル風スタディプレート" />
+        <img src="/blog/plate-17-locked-format.webp" alt="ドキュメントの形と融合した黒い多面体の南京錠が破線の境界線に囲まれ、工学図のように描かれた鍵が添えられた、暖色系のエディトリアル風スタディプレート" />
         <figcaption>事実の源は、独自仕様のファイルの中、他人のクラウド上に生きている。</figcaption>
       </figure>
 
@@ -244,7 +244,7 @@ i18n:
       <p>心の中のモデルはこうです。Figma はあなたが借りるキャンバス。Open Design はあなたが所有するワークフロー。</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="開いた容器から扇状に広がる黒いプレーンな紙とインデックスカードの束、数枚が自由に漂う、暖色系のエディトリアル風スタディプレート" />
+        <img src="/blog/plate-18-portable-files.webp" alt="開いた容器から扇状に広がる黒いプレーンな紙とインデックスカードの束、数枚が自由に漂う、暖色系のエディトリアル風スタディプレート" />
         <figcaption>skill と system は repo の中のプレーンテキストファイル——移植可能で、fork でき、ツールがなくても読み取れる。</figcaption>
       </figure>
 
@@ -319,7 +319,7 @@ i18n:
       <p>이 중 어느 것도 버그가 아닙니다. 호스팅된 협업 캔버스 제품의 형태이며, Figma는 그 형태의 가장 좋은 버전입니다. 우리는 그저 캔버스를 위해 만들지 않을 뿐입니다 — 우리는 agent를 위해 만듭니다.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="검은색 다면 자물쇠가 문서 형태와 융합되어 점선 경계로 둘러싸여 있고, 그 옆에 엔지니어링 도면 방식으로 그려진 열쇠가 있는, 따뜻한 색조의 에디토리얼 연구 도판" />
+        <img src="/blog/plate-17-locked-format.webp" alt="검은색 다면 자물쇠가 문서 형태와 융합되어 점선 경계로 둘러싸여 있고, 그 옆에 엔지니어링 도면 방식으로 그려진 열쇠가 있는, 따뜻한 색조의 에디토리얼 연구 도판" />
         <figcaption>사실의 원천이 독점 파일 안에, 남의 클라우드 위에 산다.</figcaption>
       </figure>
 
@@ -340,7 +340,7 @@ i18n:
       <p>심성 모형은 이렇습니다. Figma는 당신이 빌린 캔버스입니다. Open Design는 당신이 소유한 워크플로입니다.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="열린 용기에서 검은색 평문 종이와 색인 카드 한 무더기가 부채꼴로 펼쳐지고 몇 장이 자유롭게 떠가는, 따뜻한 색조의 에디토리얼 연구 도판" />
+        <img src="/blog/plate-18-portable-files.webp" alt="열린 용기에서 검은색 평문 종이와 색인 카드 한 무더기가 부채꼴로 펼쳐지고 몇 장이 자유롭게 떠가는, 따뜻한 색조의 에디토리얼 연구 도판" />
         <figcaption>skill과 system은 repo 안의 평문 파일이다 — 이식 가능하고, fork 가능하며, 도구 없이도 읽힌다.</figcaption>
       </figure>
 
@@ -415,7 +415,7 @@ i18n:
       <p>Nichts davon sind Bugs. Sie sind die Form eines gehosteten, kollaborativen Leinwand-Produkts, und Figma ist die beste Version dieser Form. Wir bauen einfach nicht für die Leinwand – wir bauen für den Agenten.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Ein schwarzes facettiertes Vorhängeschloss, verschmolzen mit einer Dokumentform, umringt von einer gestrichelten Begrenzung, mit einem als Konstruktionszeichnung dargestellten Schlüssel, auf einer warmen redaktionellen Studientafel" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Ein schwarzes facettiertes Vorhängeschloss, verschmolzen mit einer Dokumentform, umringt von einer gestrichelten Begrenzung, mit einem als Konstruktionszeichnung dargestellten Schlüssel, auf einer warmen redaktionellen Studientafel" />
         <figcaption>Die Quelle der Wahrheit lebt in einer proprietären Datei, in jemand anderes Cloud.</figcaption>
       </figure>
 
@@ -436,7 +436,7 @@ i18n:
       <p>Das mentale Modell: Figma ist eine Leinwand, die du mietest. Open Design ist ein Workflow, den du besitzt.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Ein Fächer aus schlichten schwarzen Papierbögen und Karteikarten, der sich aus einem offenen Behälter ausbreitet, ein paar davon lösen sich frei, auf einer warmen redaktionellen Studientafel" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Ein Fächer aus schlichten schwarzen Papierbögen und Karteikarten, der sich aus einem offenen Behälter ausbreitet, ein paar davon lösen sich frei, auf einer warmen redaktionellen Studientafel" />
         <figcaption>Skills und Systems sind Klartextdateien in einem Repo – portabel, forkbar, auch ohne das Werkzeug lesbar.</figcaption>
       </figure>
 
@@ -511,7 +511,7 @@ i18n:
       <p>Aucun de ces points n'est un bug. C'est la forme d'un produit de canevas collaboratif hébergé, et Figma est la meilleure version de cette forme. Nous ne construisons simplement pas pour le canevas — nous construisons pour l'agent.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Un cadenas noir à facettes fusionné avec une forme de document, cerné par une frontière en pointillés, avec une clé dessinée comme un schéma d'ingénierie, sur une planche d'étude éditoriale aux teintes chaudes" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Un cadenas noir à facettes fusionné avec une forme de document, cerné par une frontière en pointillés, avec une clé dessinée comme un schéma d'ingénierie, sur une planche d'étude éditoriale aux teintes chaudes" />
         <figcaption>La source de vérité vit dans un fichier propriétaire, à l'intérieur du cloud de quelqu'un d'autre.</figcaption>
       </figure>
 
@@ -532,7 +532,7 @@ i18n:
       <p>Le modèle mental : Figma est un canevas que vous louez. Open Design est un workflow que vous possédez.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Un éventail de feuilles de papier noir uni et de fiches s'étalant hors d'un récipient ouvert, quelques-unes s'échappant librement, sur une planche d'étude éditoriale aux teintes chaudes" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Un éventail de feuilles de papier noir uni et de fiches s'étalant hors d'un récipient ouvert, quelques-unes s'échappant librement, sur une planche d'étude éditoriale aux teintes chaudes" />
         <figcaption>Les skills et systems sont des fichiers en texte brut dans un repo — portables, forkables, lisibles sans l'outil.</figcaption>
       </figure>
 
@@ -607,7 +607,7 @@ i18n:
       <p>Ничто из этого не баг. Это форма облачного продукта-холста для совместной работы, и Figma — лучшая версия этой формы. Мы просто строим не для холста — мы строим для agent.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Чёрный гранёный навесной замок, сплавленный с формой документа, окружённый пунктирной границей, рядом ключ, нарисованный как инженерная схема, на тёплой редакторской исследовательской плашке" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Чёрный гранёный навесной замок, сплавленный с формой документа, окружённый пунктирной границей, рядом ключ, нарисованный как инженерная схема, на тёплой редакторской исследовательской плашке" />
         <figcaption>Источник истины живёт в проприетарном файле, внутри чужого облака.</figcaption>
       </figure>
 
@@ -628,7 +628,7 @@ i18n:
       <p>Ментальная модель такая: Figma — это холст, который вы арендуете. Open Design — это рабочий процесс, которым вы владеете.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Веер из простых чёрных листов бумаги и карточек, разворачивающийся из открытого контейнера, пара листов улетает свободно, на тёплой редакторской исследовательской плашке" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Веер из простых чёрных листов бумаги и карточек, разворачивающийся из открытого контейнера, пара листов улетает свободно, на тёплой редакторской исследовательской плашке" />
         <figcaption>Skills и systems — это текстовые файлы в репозитории — переносимые, форкаемые, читаемые без инструмента.</figcaption>
       </figure>
 
@@ -703,7 +703,7 @@ i18n:
       <p>Nada de esto son bugs. Son la forma de un producto de lienzo colaborativo alojado, y Figma es la mejor versión de esa forma. Simplemente nosotros no construimos para el lienzo — construimos para el agente.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Un candado negro facetado fusionado con la forma de un documento, rodeado por un borde de línea discontinua, con una llave dibujada como un diagrama de ingeniería, sobre una lámina de estudio editorial de tono cálido" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Un candado negro facetado fusionado con la forma de un documento, rodeado por un borde de línea discontinua, con una llave dibujada como un diagrama de ingeniería, sobre una lámina de estudio editorial de tono cálido" />
         <figcaption>La fuente de verdad vive en un archivo propietario, dentro de la nube de otra persona.</figcaption>
       </figure>
 
@@ -724,7 +724,7 @@ i18n:
       <p>El modelo mental es este: Figma es un lienzo que alquilas. Open Design es un flujo de trabajo que posees.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Un abanico de hojas de papel negro liso y fichas de índice desplegándose desde un contenedor abierto, con un par flotando libres, sobre una lámina de estudio editorial de tono cálido" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Un abanico de hojas de papel negro liso y fichas de índice desplegándose desde un contenedor abierto, con un par flotando libres, sobre una lámina de estudio editorial de tono cálido" />
         <figcaption>Los skills y systems son archivos de texto plano en un repo — portables, forkeables, legibles sin la herramienta.</figcaption>
       </figure>
 
@@ -799,7 +799,7 @@ i18n:
       <p>Nada disso é um bug. É o formato de um produto de canvas colaborativo hospedado, e o Figma é a melhor versão desse formato. Nós simplesmente não estamos construindo para o canvas — estamos construindo para o agent.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Um cadeado preto facetado fundido com a forma de um documento, cercado por uma borda tracejada, com uma chave desenhada como um diagrama de engenharia, sobre uma prancha de estudo editorial em tons quentes" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Um cadeado preto facetado fundido com a forma de um documento, cercado por uma borda tracejada, com uma chave desenhada como um diagrama de engenharia, sobre uma prancha de estudo editorial em tons quentes" />
         <figcaption>A fonte da verdade vive em um arquivo proprietário, dentro da nuvem de outra pessoa.</figcaption>
       </figure>
 
@@ -820,7 +820,7 @@ i18n:
       <p>O modelo mental: o Figma é um canvas que você aluga. O Open Design é um fluxo de trabalho que você possui.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Um leque de folhas de papel preto liso e fichas de índice se espalhando para fora de um recipiente aberto, algumas deslizando soltas, sobre uma prancha de estudo editorial em tons quentes" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Um leque de folhas de papel preto liso e fichas de índice se espalhando para fora de um recipiente aberto, algumas deslizando soltas, sobre uma prancha de estudo editorial em tons quentes" />
         <figcaption>Skills e systems são arquivos de texto puro em um repo — portáveis, passíveis de fork, legíveis sem a ferramenta.</figcaption>
       </figure>
 
@@ -895,7 +895,7 @@ i18n:
       <p>Nessuna di queste è un bug. Sono la forma di un prodotto a canvas collaborativa ospitata, e Figma è la migliore versione di quella forma. Semplicemente noi non costruiamo per la canvas — costruiamo per l'agent.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Un lucchetto nero sfaccettato fuso con la forma di un documento, cerchiato da un confine tratteggiato, con una chiave disegnata come un diagramma tecnico, su una tavola di studio editoriale dai toni caldi" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Un lucchetto nero sfaccettato fuso con la forma di un documento, cerchiato da un confine tratteggiato, con una chiave disegnata come un diagramma tecnico, su una tavola di studio editoriale dai toni caldi" />
         <figcaption>La fonte di verità vive in un file proprietario, dentro il cloud di qualcun altro.</figcaption>
       </figure>
 
@@ -916,7 +916,7 @@ i18n:
       <p>Il modello mentale: Figma è una canvas che affitti. Open Design è un flusso di lavoro che possiedi.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Un ventaglio di fogli di carta nera semplice e schede indice che si dispiega da un contenitore aperto, con un paio che fluttuano via, su una tavola di studio editoriale dai toni caldi" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Un ventaglio di fogli di carta nera semplice e schede indice che si dispiega da un contenitore aperto, con un paio che fluttuano via, su una tavola di studio editoriale dai toni caldi" />
         <figcaption>Skill e system sono file in testo semplice in un repo — portabili, forkabili, leggibili senza lo strumento.</figcaption>
       </figure>
 
@@ -991,7 +991,7 @@ i18n:
       <p>Không cái nào trong số này là lỗi. Chúng là hình hài của một sản phẩm canvas cộng tác được lưu trữ trên máy chủ, và Figma là phiên bản tốt nhất của hình hài đó. Chỉ là chúng tôi không xây cho canvas — chúng tôi xây cho agent.</p>
 
       <figure>
-      <img src="/blog/plate-17-locked-format.png" alt="Một ổ khóa đen nhiều mặt hợp nhất với hình dạng tài liệu, được bao quanh bởi một đường biên nét đứt cùng một chiếc chìa khóa được vẽ như sơ đồ kỹ thuật, trên một tấm bản nghiên cứu phong cách biên tập tông ấm" />
+      <img src="/blog/plate-17-locked-format.webp" alt="Một ổ khóa đen nhiều mặt hợp nhất với hình dạng tài liệu, được bao quanh bởi một đường biên nét đứt cùng một chiếc chìa khóa được vẽ như sơ đồ kỹ thuật, trên một tấm bản nghiên cứu phong cách biên tập tông ấm" />
       <figcaption>Nguồn sự thật sống trong một tệp độc quyền, bên trong đám mây của người khác.</figcaption>
       </figure>
 
@@ -1012,7 +1012,7 @@ i18n:
       <p>Mô hình tư duy là thế này: Figma là một canvas bạn thuê. Open Design là một quy trình làm việc bạn sở hữu.</p>
 
       <figure>
-      <img src="/blog/plate-18-portable-files.png" alt="Một xấp giấy đen trơn và thẻ mục lục xòe ra từ một hộp đựng đang mở, vài tờ đang trôi tự do, trên một tấm bản nghiên cứu phong cách biên tập tông ấm" />
+      <img src="/blog/plate-18-portable-files.webp" alt="Một xấp giấy đen trơn và thẻ mục lục xòe ra từ một hộp đựng đang mở, vài tờ đang trôi tự do, trên một tấm bản nghiên cứu phong cách biên tập tông ấm" />
       <figcaption>Skill và system là những tệp văn bản thuần trong một repo — di động được, fork được, đọc được mà không cần công cụ.</figcaption>
       </figure>
 
@@ -1087,7 +1087,7 @@ i18n:
       <p>Żadna z tych rzeczy nie jest błędem. To kształt hostowanego produktu z płótnem do współpracy, a Figma jest najlepszą wersją tego kształtu. My po prostu nie budujemy dla płótna — budujemy dla agenta.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Czarna fasetowana kłódka zespolona z kształtem dokumentu, otoczona przerywaną granicą, z kluczem narysowanym jako schemat inżynierski, na ciepłej redakcyjnej planszy studyjnej" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Czarna fasetowana kłódka zespolona z kształtem dokumentu, otoczona przerywaną granicą, z kluczem narysowanym jako schemat inżynierski, na ciepłej redakcyjnej planszy studyjnej" />
         <figcaption>Źródło prawdy żyje w zastrzeżonym pliku, wewnątrz cudzej chmury.</figcaption>
       </figure>
 
@@ -1108,7 +1108,7 @@ i18n:
       <p>Model mentalny: Figma to płótno, które wynajmujesz. Open Design to workflow, który posiadasz.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Wachlarz zwykłych czarnych kartek papieru i kart indeksowych rozpościerający się z otwartego pojemnika, kilka z nich unosi się swobodnie, na ciepłej redakcyjnej planszy studyjnej" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Wachlarz zwykłych czarnych kartek papieru i kart indeksowych rozpościerający się z otwartego pojemnika, kilka z nich unosi się swobodnie, na ciepłej redakcyjnej planszy studyjnej" />
         <figcaption>Skille i systemy to tekstowe pliki w repozytorium — przenośne, gotowe do forkowania, czytelne bez narzędzia.</figcaption>
       </figure>
 
@@ -1183,7 +1183,7 @@ i18n:
       <p>Tidak ada satu pun dari ini yang merupakan bug. Mereka adalah bentuk dari sebuah produk kanvas kolaboratif yang hosted, dan Figma adalah versi terbaik dari bentuk itu. Kami hanya tidak membangun untuk kanvas — kami membangun untuk agent.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Sebuah gembok hitam bersegi yang menyatu dengan bentuk dokumen, dikelilingi batas garis putus-putus dengan sebuah kunci yang digambar sebagai diagram teknik, di atas plat studi editorial bernuansa hangat" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Sebuah gembok hitam bersegi yang menyatu dengan bentuk dokumen, dikelilingi batas garis putus-putus dengan sebuah kunci yang digambar sebagai diagram teknik, di atas plat studi editorial bernuansa hangat" />
         <figcaption>Sumber kebenaran hidup di sebuah file proprietary, di dalam cloud milik orang lain.</figcaption>
       </figure>
 
@@ -1204,7 +1204,7 @@ i18n:
       <p>Model mentalnya: Figma adalah sebuah kanvas yang Anda sewa. Open Design adalah sebuah alur kerja yang Anda miliki.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Sebuah kipasan lembaran kertas hitam polos dan kartu indeks yang menyebar keluar dari wadah terbuka, beberapa di antaranya melayang bebas, di atas plat studi editorial bernuansa hangat" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Sebuah kipasan lembaran kertas hitam polos dan kartu indeks yang menyebar keluar dari wadah terbuka, beberapa di antaranya melayang bebas, di atas plat studi editorial bernuansa hangat" />
         <figcaption>Skill dan system adalah file teks biasa di dalam sebuah repo — portabel, bisa di-fork, terbaca tanpa alatnya.</figcaption>
       </figure>
 
@@ -1279,7 +1279,7 @@ i18n:
       <p>Geen van deze zijn bugs. Het zijn de vorm van een gehost, collaboratief-canvasproduct, en Figma is de beste versie van die vorm. Wij bouwen alleen niet voor het canvas — we bouwen voor de agent.</p>
 
       <figure>
-      <img src="/blog/plate-17-locked-format.png" alt="Een zwart gefacetteerd hangslot versmolten met een documentvorm, omringd door een gestippelde grens met een sleutel getekend als een technische tekening, op een warm redactioneel studievel" />
+      <img src="/blog/plate-17-locked-format.webp" alt="Een zwart gefacetteerd hangslot versmolten met een documentvorm, omringd door een gestippelde grens met een sleutel getekend als een technische tekening, op een warm redactioneel studievel" />
       <figcaption>De bron van waarheid leeft in een propriëtair bestand, in andermans cloud.</figcaption>
       </figure>
 
@@ -1300,7 +1300,7 @@ i18n:
       <p>Het mentale model: Figma is een canvas dat je huurt. Open Design is een workflow die je bezit.</p>
 
       <figure>
-      <img src="/blog/plate-18-portable-files.png" alt="Een waaier van blanco zwarte vellen papier en indexkaarten die uit een open houder spreiden, een paar zwevend los, op een warm redactioneel studievel" />
+      <img src="/blog/plate-18-portable-files.webp" alt="Een waaier van blanco zwarte vellen papier en indexkaarten die uit een open houder spreiden, een paar zwevend los, op een warm redactioneel studievel" />
       <figcaption>Skills en systems zijn plain-text bestanden in een repo — overdraagbaar, forkbaar, leesbaar zonder de tool.</figcaption>
       </figure>
 
@@ -1375,7 +1375,7 @@ i18n:
       <p>لا شيء من هذا أخطاء برمجية. إنها شكل منتج لوحة تعاونية مُستضافة، وFigma هي أفضل نسخة من ذلك الشكل. نحن فقط لا نبني للوحة — نحن نبني للوكيل.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="قفل أسود متعدد الأوجه مندمج مع شكل مستند، محاط بحدّ متقطع مع مفتاح مرسوم على هيئة مخطط هندسي، على لوح دراسة تحريري بألوان دافئة" />
+        <img src="/blog/plate-17-locked-format.webp" alt="قفل أسود متعدد الأوجه مندمج مع شكل مستند، محاط بحدّ متقطع مع مفتاح مرسوم على هيئة مخطط هندسي، على لوح دراسة تحريري بألوان دافئة" />
         <figcaption>مصدر الحقيقة يعيش في ملف مملوك احتكاريًا، داخل سحابة شخص آخر.</figcaption>
       </figure>
 
@@ -1396,7 +1396,7 @@ i18n:
       <p>النموذج الذهني: Figma لوحة تستأجرها. Open Design سير عمل تملكه.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="مروحة من أوراق سوداء صرفة وبطاقات فهرسة تنتشر خارج حاوية مفتوحة، وبعضها ينجرف حرًا، على لوح دراسة تحريري بألوان دافئة" />
+        <img src="/blog/plate-18-portable-files.webp" alt="مروحة من أوراق سوداء صرفة وبطاقات فهرسة تنتشر خارج حاوية مفتوحة، وبعضها ينجرف حرًا، على لوح دراسة تحريري بألوان دافئة" />
         <figcaption>الـ skills والـ systems ملفات نصية صرفة داخل repo — قابلة للنقل، قابلة للـ fork، مقروءة دون الأداة.</figcaption>
       </figure>
 
@@ -1471,7 +1471,7 @@ i18n:
       <p>Bunların hiçbiri hata değil. Bunlar barındırılan, işbirlikçi tuval bir ürünün biçimidir ve Figma o biçimin en iyi versiyonudur. Biz sadece tuval için inşa etmiyoruz — agent için inşa ediyoruz.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Bir belge biçimiyle birleşmiş siyah çok yüzeyli bir asma kilit, kesik çizgili bir sınırla çevrelenmiş, mühendislik diyagramı olarak çizilmiş bir anahtarla birlikte, sıcak editöryel bir çalışma plakası üzerinde" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Bir belge biçimiyle birleşmiş siyah çok yüzeyli bir asma kilit, kesik çizgili bir sınırla çevrelenmiş, mühendislik diyagramı olarak çizilmiş bir anahtarla birlikte, sıcak editöryel bir çalışma plakası üzerinde" />
         <figcaption>Gerçeğin kaynağı tescilli bir dosyada, başkasının bulutunda yaşıyor.</figcaption>
       </figure>
 
@@ -1492,7 +1492,7 @@ i18n:
       <p>Zihinsel model şöyle: Figma kiraladığınız bir tuvaldir. Open Design sahip olduğunuz bir iş akışıdır.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Açık bir kaptan yelpaze gibi açılan düz siyah kâğıt sayfaları ve dizin kartları, birkaçı serbestçe süzülüyor, sıcak editöryel bir çalışma plakası üzerinde" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Açık bir kaptan yelpaze gibi açılan düz siyah kâğıt sayfaları ve dizin kartları, birkaçı serbestçe süzülüyor, sıcak editöryel bir çalışma plakası üzerinde" />
         <figcaption>Skill'ler ve system'ler bir repo'daki düz metin dosyalarıdır — taşınabilir, fork'lanabilir, araç olmadan okunabilir.</figcaption>
       </figure>
 
@@ -1567,7 +1567,7 @@ i18n:
       <p>Жодна з цих речей не є багом. Це форма хостованого продукту-полотна для колаборації, і Figma — найкраща версія цієї форми. Ми просто будуємо не для полотна — ми будуємо для agent'а.</p>
 
       <figure>
-        <img src="/blog/plate-17-locked-format.png" alt="Чорний гранований навісний замок, злитий із формою документа, оточений пунктирним кордоном, з ключем, намальованим як інженерна діаграма, на теплій редакторській дослідницькій плашці" />
+        <img src="/blog/plate-17-locked-format.webp" alt="Чорний гранований навісний замок, злитий із формою документа, оточений пунктирним кордоном, з ключем, намальованим як інженерна діаграма, на теплій редакторській дослідницькій плашці" />
         <figcaption>Джерело істини живе у пропрієтарному файлі, всередині чиєїсь чужої хмари.</figcaption>
       </figure>
 
@@ -1588,7 +1588,7 @@ i18n:
       <p>Ментальна модель така: Figma — це полотно, яке ви орендуєте. Open Design — це робочий процес, яким ви володієте.</p>
 
       <figure>
-        <img src="/blog/plate-18-portable-files.png" alt="Віяло простих чорних аркушів паперу та індексних карток, що розгортаються з відкритого контейнера, кілька з яких відлітають убік, на теплій редакторській дослідницькій плашці" />
+        <img src="/blog/plate-18-portable-files.webp" alt="Віяло простих чорних аркушів паперу та індексних карток, що розгортаються з відкритого контейнера, кілька з яких відлітають убік, на теплій редакторській дослідницькій плашці" />
         <figcaption>Skills і systems — це текстові файли у repo — переносні, форкабельні, читабельні без інструмента.</figcaption>
       </figure>
 
@@ -1669,7 +1669,7 @@ Figma carries four pieces of lock-in worth naming upfront, because the pricing p
 None of these are bugs. They're the shape of a hosted, collaborative-canvas product, and Figma is the best version of that shape. We're just not building for the canvas — we're building for the agent.
 
 <figure>
-  <img src="/blog/plate-17-locked-format.png" alt="A black faceted padlock fused with a document shape, ringed by a dashed boundary with a key drawn as an engineering diagram, on a warm editorial study plate" />
+  <img src="/blog/plate-17-locked-format.webp" alt="A black faceted padlock fused with a document shape, ringed by a dashed boundary with a key drawn as an engineering diagram, on a warm editorial study plate" />
   <figcaption>The source of truth lives in a proprietary file, inside someone else's cloud.</figcaption>
 </figure>
 
@@ -1691,7 +1691,7 @@ What that buys you is the opposite of the four lock-ins above:
 The mental model: Figma is a canvas you rent. Open Design is a workflow you own.
 
 <figure>
-  <img src="/blog/plate-18-portable-files.png" alt="A fan of plain black paper sheets and index cards spreading out of an open container, a couple drifting free, on a warm editorial study plate" />
+  <img src="/blog/plate-18-portable-files.webp" alt="A fan of plain black paper sheets and index cards spreading out of an open container, a couple drifting free, on a warm editorial study plate" />
   <figcaption>Skills and systems are plain-text files in a repo — portable, forkable, legible without the tool.</figcaption>
 </figure>
 

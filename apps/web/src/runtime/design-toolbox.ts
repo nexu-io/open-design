@@ -103,10 +103,48 @@ export function designToolboxActionDescription(action: DesignToolboxAction, t: T
   return t(`chat.designToolbox.action.${action.id}.description` as keyof Dict);
 }
 
-export function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
+// Shared matcher for the Design toolbox action rows, used by both the composer
+// panel and the next-step card so the two surfaces filter identically. `skill`
+// is the action's matched skill (see findDesignToolboxSkill); threading it in
+// means searching by a preferred skill's id/name/description/category keeps the
+// action row visible alongside its resource row, instead of the two disagreeing.
+export function designToolboxActionMatchesQuery(
+  action: DesignToolboxAction,
+  query: string,
+  skill: SkillSummary | null,
+  t: TranslateFn,
+  extra: string[] = [],
+): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [skill.id, skill.name, skill.description, skill.mode, skill.surface ?? '', ...skill.triggers]
+  return [
+    designToolboxActionTitle(action, t),
+    designToolboxActionBadge(action, t),
+    designToolboxActionDescription(action, t),
+    ...action.searchTerms,
+    skill?.id ?? '',
+    skill?.name ?? '',
+    skill?.description ?? '',
+    skill?.category ?? '',
+    ...extra,
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(q);
+}
+
+// `extra` carries any locale-resolved text (localized name / description) the
+// caller wants indexed alongside the raw skill fields, so a localized query
+// matches the same way the composer's localized resource index does. design-
+// toolbox stays free of i18n/content — the caller resolves the strings.
+export function skillMatchesQuery(
+  skill: SkillSummary,
+  query: string,
+  extra: string[] = [],
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [skill.id, skill.name, skill.description, skill.mode, skill.surface ?? '', ...skill.triggers, ...extra]
     .join(' ')
     .toLowerCase()
     .includes(q);

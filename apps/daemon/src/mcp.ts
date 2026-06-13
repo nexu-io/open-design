@@ -18,6 +18,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifact-create.js';
@@ -1212,9 +1213,7 @@ async function resolveProjectEntry(baseUrl: string, projectId: string, declared:
 // UI). Returns null when there's no entry file. Pure: no I/O, so
 // get_project can call it from project data it already has.
 function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): string | null {
-  if (typeof entry !== 'string' || entry.length === 0) return null;
-  const segments = entry.split('/').filter((s) => s.length > 0).map(encodeURIComponent).join('/');
-  return `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
+  return buildProjectRawFileUrl(baseUrl, projectId, entry);
 }
 
 // Best-effort variant for get_run, which only has a projectId: fetch the

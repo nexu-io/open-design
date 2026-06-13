@@ -14,6 +14,7 @@
 // override live in `./plugins-home/usePluginFacets.ts`. This file
 // owns layout only.
 
+import { Button, Input } from '@open-design/components';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n, useT } from '../i18n';
@@ -23,6 +24,7 @@ import { PluginCard } from './plugins-home/PluginCard';
 import { isFeaturedPlugin, type FacetOption } from './plugins-home/facets';
 import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
+import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
@@ -462,7 +464,9 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
     case 'public-link': return t('pluginsHome.facet.publicLink');
     case 'github-pr': return t('pluginsHome.facet.githubPr');
     case 'github-gist': return t('pluginsHome.facet.githubGist');
-    default: return fallback;
+    // Subcategory pills render through the same CategoryPill, so unknown
+    // top-level slugs fall through to the subfacet table before giving up.
+    default: return pluginSubfacetLabel(slug, fallback, t);
   }
 }
 
@@ -482,7 +486,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
   return (
     <div className="plugins-home__search">
       <Icon name="search" size={12} className="plugins-home__search-icon" />
-      <input
+      <Input
         type="search"
         className="plugins-home__search-input"
         value={value}
@@ -494,15 +498,15 @@ function SearchInput({ value, onChange }: SearchInputProps) {
         autoComplete="off"
       />
       {value ? (
-        <button
-          type="button"
+        <Button
+          variant="subtle"
           className="plugins-home__search-clear"
           onClick={() => onChange('')}
           aria-label={t('pluginsHome.clearSearch')}
           data-testid="plugins-home-search-clear"
         >
           <Icon name="close" size={12} />
-        </button>
+        </Button>
       ) : null}
     </div>
   );

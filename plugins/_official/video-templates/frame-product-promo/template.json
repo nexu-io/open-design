@@ -1,0 +1,37 @@
+{
+  "id": "frame-product-promo",
+  "surface": "hyperframes",
+  "title": "Product Promo",
+  "summary": "Multi-scene product showcase with SVG assets",
+  "category": "Product-demo",
+  "tags": [
+    "product",
+    "promo",
+    "multi-scene",
+    "showcase",
+    "svg"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 30,
+  "durationSec": 20,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Product showcase",
+    "Multi-feature reel",
+    "Hero promo"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-product-promo",
+    "license": "Apache-2.0",
+    "author": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/product-promo",
+    "notes": "Forked from heygen-com/hyperframes registry/examples/product-promo (Apache-2.0)."
+  }
+}

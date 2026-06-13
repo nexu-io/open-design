@@ -30,7 +30,8 @@
  * the Anthropic path sends as `system`.
  */
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
@@ -590,6 +591,30 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    // Direction library is only useful when the agent must pick a visual
+    // direction itself. When an active design system is present it is the
+    // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
+    // below), so the ~6.7KB direction-card catalogue would just be dead
+    // weight the model is told to ignore. Gate it on the composer-visible
+    // active-DS signal (stable for the whole session, so the stable-prompt
+    // fingerprint stays cacheable).
+    if (!activeDesignSystemBody) {
+      parts.push(renderDirectionSpecBlock(), '\n\n---\n\n');
+    }
+    // Shared device-frame catalogue only applies to multi-device /
+    // multi-target projects (same product across desktop+tablet+phone, or
+    // multiple app screens side-by-side). A single-surface prototype never
+    // uses it. Gate on the composer-visible platform signal (set at project
+    // creation, stable for the session → fingerprint stays cacheable). The
+    // per-platform contracts themselves stay in DISCOVERY_AND_PHILOSOPHY so
+    // a single-platform prototype keeps the contract for its own platform.
+    const isMultiTargetProject =
+      metadata?.platform === 'responsive' ||
+      metadata?.platformTargets?.includes('responsive') ||
+      (metadata?.platformTargets?.length ?? 0) > 1;
+    if (isMultiTargetProject) {
+      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+    }
   }
 
   parts.push(
@@ -800,18 +825,14 @@ export function composeSystemPrompt({
     );
   }
 
-  // Claude only: nudge the model toward the `AskUserQuestion` tool for
-  // mid-conversation clarifications. Without this hint Claude tends to fall
-  // back to a markdown bulleted list of options, which the chat UI cannot
-  // turn into clickable buttons. Discovery (turn 1) is still owned by the
-  // `<question-form>` flow defined in DISCOVERY_AND_PHILOSOPHY; this only
-  // covers follow-ups where the next action depends on a small set of
-  // choices the user can pick quickly.
-  if (agentId === 'claude') {
-    parts.push(
-      "\n\n---\n\n## Clarifying questions\n\nWhen you need a mid-conversation clarification AND the natural answer is one of a small finite set of choices (2-4 options per question), call the `AskUserQuestion` tool instead of writing a bulleted list in markdown. The host chat renders the tool call as inline choice buttons; a markdown list renders as plain text and forces the user to type a reply. Skip the tool when the answer is naturally free-form text, when the answer needs more than ~4 options, or when you only have one yes/no choice to ask. First-turn discovery still uses the `<question-form id=\"discovery\">` workflow described earlier; `AskUserQuestion` is for follow-ups only.\n\n**When you call `AskUserQuestion`, that tool call is the entire response.** Do NOT also write the same questions or options as markdown text alongside it, do NOT add a trailing prose paragraph like \"what sounds right?\", do NOT hedge by listing the options twice. Emit the tool call and stop generating tokens. The host is waiting on the tool's `tool_result` and will resume your turn the moment the user answers. Anything you write before, between, or after the tool call in the same message just duplicates what the card already shows and confuses the user.",
-    );
-  }
+  // Mid-conversation clarification reuses the same `<question-form>` flow as
+  // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
+  // questions surface: the chat shows a banner, the form renders in the
+  // right-hand Questions tab, and answers return as the next user message.
+  // Applies to every agent — question-form is UI-parsed markup, not a tool.
+  parts.push(
+    "\n\n---\n\n## Clarifying questions mid-conversation\n\nWhen you need a clarification AFTER turn 1 and the natural answer is one of a small finite set of choices (2-4 options per question), emit a `<question-form>` block — the same markup turn-1 discovery uses — instead of writing a bulleted list of options in markdown. The host renders it as a Questions banner the user opens in the side tab; a markdown list renders as plain text and forces the user to type a reply. Use free-form prose questions only when the answer is naturally open-ended, needs more than ~4 options, or is a single yes/no. Do NOT also duplicate the form's questions as markdown text alongside it.",
+  );
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // This is the canonical anti-roleplay instruction;
@@ -856,7 +877,7 @@ Every later instruction in this prompt that tells you to "call TodoWrite", "run 
 **Allowed output:**
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
-- \`<question-form>\` blocks for discovery on turn 1, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- \`<question-form>\` blocks for discovery (turn 1) and for mid-conversation clarification, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
@@ -1046,7 +1067,7 @@ function renderMetadataBlock(
   }
   if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
     lines.push(
-      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 600px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
     );
   }
   if ((metadata.platformTargets?.length ?? 0) > 1) {

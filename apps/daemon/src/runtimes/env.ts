@@ -147,6 +147,12 @@ export function spawnEnvForAgent(
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode') {
+    stripKeysCaseInsensitive(env, [
+      'OPENCODE',
+      'OPENCODE_PID',
+      'OPENCODE_RUN_ID',
+      'OPENCODE_SERVER_PASSWORD',
+    ]);
     // OpenCode is bun-based and, left to its defaults, walks up from its cwd to
     // the nearest project root and runs `bun install` there at startup to set up
     // local plugins. When that root is a pnpm workspace (the daemon's own repo,
@@ -238,5 +244,15 @@ function stripUnlessCustomBaseUrl(
   const secretKeysUpper = new Set(secretKeys.map((k) => k.toUpperCase()));
   for (const key of Object.keys(env)) {
     if (secretKeysUpper.has(key.toUpperCase())) delete env[key];
+  }
+}
+
+function stripKeysCaseInsensitive(
+  env: NodeJS.ProcessEnv,
+  keysToStrip: readonly string[],
+): void {
+  const keysUpper = new Set(keysToStrip.map((key) => key.toUpperCase()));
+  for (const key of Object.keys(env)) {
+    if (keysUpper.has(key.toUpperCase())) delete env[key];
   }
 }

@@ -960,8 +960,18 @@ function AppInner() {
   // avoids racing the local-config initial value against a slow agents
   // probe — by the time this runs, daemonConfig has already overlaid the
   // user's previous choice, so we only fill an empty slot.
+  //
+  // First-run onboarding is the one time we must NOT do this: the onboarding
+  // flow is the sole authority for the initial agent pick (AMR is the
+  // recommended default there), and AMR (vela) detection is asynchronous. If
+  // this fallback fires during onboarding while AMR is still being detected it
+  // snaps the slot to the registry-first *detected* agent (Claude) and
+  // persists it to the daemon, which then races and clobbers the user's AMR
+  // selection on the next launch. Gate on onboardingCompleted so this only
+  // backfills an empty slot for returning users.
   useEffect(() => {
     if (!daemonConfigLoaded || agentsLoading) return;
+    if (config.onboardingCompleted !== true) return;
     if (config.agentId) return;
     const firstAvailable = agents.find((a) => a.available);
     if (!firstAvailable) return;
@@ -972,7 +982,13 @@ function AppInner() {
       void syncConfigToDaemon(next);
       return next;
     });
-  }, [daemonConfigLoaded, agentsLoading, agents, config.agentId]);
+  }, [
+    daemonConfigLoaded,
+    agentsLoading,
+    agents,
+    config.agentId,
+    config.onboardingCompleted,
+  ]);
 
   // Auto-pick the default design system the same way — only after daemon
   // config has merged so we never overwrite a daemon-stored selection.
@@ -1100,7 +1116,7 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(persisted),
+      syncConfigToDaemon(persisted, { throwOnError: true }),
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
@@ -1300,19 +1316,42 @@ function AppInner() {
       const fidelity = fidelityToTracking(input.metadata?.fidelity ?? null);
       const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
         kind === 'template' ? 'template' : 'blank';
-      const result = await createProject({
-        name: input.name,
-        skillId: input.skillId,
-        designSystemId: input.designSystemId,
-        pendingPrompt: derivedPendingPrompt,
-        metadata: input.metadata,
-        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
-        ...(input.pluginId ? { pluginId: input.pluginId } : {}),
-        ...(input.appliedPluginSnapshotId
-          ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
-          : {}),
-        ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
-      });
+      let result;
+      try {
+        result = await createProject({
+          name: input.name,
+          skillId: input.skillId,
+          designSystemId: input.designSystemId,
+          pendingPrompt: derivedPendingPrompt,
+          metadata: input.metadata,
+          ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
+          ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+          ...(input.appliedPluginSnapshotId
+            ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
+            : {}),
+          ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+        });
+      } catch (err) {
+        const errorCode =
+          err instanceof Error && err.message.trim()
+            ? err.message
+            : 'CREATE_REQUEST_FAILED';
+        trackProjectCreateResult(
+          analytics.track,
+          {
+            page_name: 'home',
+            area: 'new_project',
+            project_source: 'create_button',
+            project_id: null,
+            project_kind: projectKindToTracking(kind),
+            fidelity,
+            result: 'failed',
+            error_code: errorCode,
+          },
+          { requestId: input.requestId },
+        );
+        throw err;
+      }
       if (!result) {
         trackProjectCreateResult(
           analytics.track,
@@ -2028,6 +2067,7 @@ function AppInner() {
         onModeChange={handleModeChange}
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
+        onApiModelChange={handleApiModelChange}
         onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}
@@ -2059,6 +2099,7 @@ function AppInner() {
         promptTemplates={promptTemplates}
         defaultDesignSystemId={config.designSystemId}
         agents={agents}
+        agentsLoading={agentsLoading}
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}

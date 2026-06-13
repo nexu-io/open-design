@@ -17,11 +17,11 @@ import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
 import {
   DEFAULT_LOCALE,
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -44,6 +44,7 @@ const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const ui = getLandingUiCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
+const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/tutorials/${entry.id}.md`;
 const youtubeUrl = `https://www.youtube.com/watch?v=${entry.data.youtubeId}`;
 const thumbnailUrl =
   entry.data.thumbnail ?? `https://i.ytimg.com/vi/${entry.data.youtubeId}/maxresdefault.jpg`;
@@ -57,7 +58,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'tutorials',
     locale,
-    currentPath: Astro.url.pathname,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -132,7 +133,6 @@ const tutorialCopy =
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -203,6 +203,14 @@ const tutorialCopy =
 
             <div class='tut-foot'>
               <a class='tut-back' href={href('/tutorials/')}>{ui.tutorials.backToTutorials}</a>
+              <a
+                class='tut-source'
+                href={sourceUrl}
+                target='_blank'
+                rel='noreferrer noopener'
+              >
+                {ui.tutorials.viewSource}
+              </a>
             </div>
           </div>
         </article>
@@ -217,6 +225,7 @@ const tutorialCopy =
       .tut-detail-shell {
         position: relative;
         z-index: 2;
+        padding-top: 140px;
       }
       .tut-detail-shell + .sub-footer {
         margin-top: 0;
@@ -453,7 +462,21 @@ const tutorialCopy =
       .tut-foot .tut-back {
         margin-bottom: 0;
       }
+      .tut-source {
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+        text-decoration: none;
+        transition: color 160ms ease;
+      }
+      .tut-source:hover {
+        color: var(--coral);
+      }
       @media (max-width: 760px) {
+        .tut-detail-shell {
+          padding-top: 120px;
+        }
         .tut-detail {
           padding: 36px 0 64px;
         }

@@ -62,6 +62,40 @@ function markVisible(win: { document: Document }, selector: string): void {
   });
 }
 
+type PostedMessage = { type?: string; [key: string]: unknown };
+type ParentPostMessageSpy = {
+  mock: { calls: ReadonlyArray<ReadonlyArray<unknown>> };
+};
+
+function postedMessages(
+  parentPostMessage: ParentPostMessageSpy,
+  type: string,
+): PostedMessage[] {
+  return parentPostMessage.mock.calls
+    .map((call) => call[0])
+    .filter(
+      (message): message is PostedMessage =>
+        typeof message === 'object' &&
+        message !== null &&
+        (message as PostedMessage).type === type,
+    );
+}
+
+async function waitForPostedMessages(
+  win: Pick<Window, 'setTimeout'>,
+  parentPostMessage: ParentPostMessageSpy,
+  type: string,
+  expectedCount = 1,
+): Promise<PostedMessage[]> {
+  const deadline = Date.now() + 500;
+  let messages = postedMessages(parentPostMessage, type);
+  while (messages.length < expectedCount && Date.now() < deadline) {
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    messages = postedMessages(parentPostMessage, type);
+  }
+  return messages;
+}
+
 function setupBridgeDom(
   bodyHtml: string,
   mode: 'inspect' | 'comment',
@@ -233,14 +267,16 @@ describe('selection bridge — empty annotation surface (#890)', () => {
 
     parentPostMessage.mockClear();
     target!.firstChild!.textContent = 'Updated copy';
-    await new Promise<void>((resolve) => win.setTimeout(resolve, 20));
-
-    const updateMessages = parentPostMessage.mock.calls
-      .map((call) => call[0])
-      .filter((message) => message?.type === 'od:comment-active-target-update');
+    const updateMessages = await waitForPostedMessages(
+      win,
+      parentPostMessage,
+      'od:comment-active-target-update',
+    );
     expect(updateMessages).toHaveLength(1);
-    expect(updateMessages[0].elementId).toBe('hero');
-    expect(updateMessages[0].text).toBe('Updated copy');
+    expect(updateMessages[0]).toMatchObject({
+      elementId: 'hero',
+      text: 'Updated copy',
+    });
   });
 
   it('does not invent fallback targets in Inspect mode for unannotated elements', async () => {
