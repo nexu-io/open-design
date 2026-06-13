@@ -217,9 +217,11 @@ describe('FileWorkspace design-system project surface', () => {
           <html>
             <head>
               <link rel="stylesheet" href="../../colors_and_type.css">
+              <style>.inline-bg { background-image: url("/assets/site/inline-bg.png"); }</style>
             </head>
             <body>
               <div id="root"></div>
+              <div class="inline-style" style="background-image:url('/assets/site/inline-card.png')"></div>
               <img
                 alt="Hero"
                 src="../assets/site/hero.png"
@@ -284,6 +286,8 @@ describe('FileWorkspace design-system project surface', () => {
     expect(srcdoc).toContain('data-od-inline-asset="../../colors_and_type.css"');
     expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
     expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png"');
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/assets/site/inline-bg.png")');
+    expect(srcdoc).toContain('/api/projects/ds-acme/raw/assets/site/inline-card.png');
     expect(srcdoc).toContain(
       'srcset="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png 1x, /api/projects/ds-acme/raw/ui_kits/assets/site/hero%402x.png 2x"',
     );

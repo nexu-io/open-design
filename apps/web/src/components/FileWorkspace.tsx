@@ -3906,7 +3906,8 @@ async function inlineDesignSystemPreviewRelativeAssets(
     (next, replacement) => next.replace(replacement.from, () => replacement.to),
     html,
   );
-  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineAssets, projectId, ownerFileName);
+  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName);
+  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName);
 }
 
 async function fetchDesignSystemPreviewRelativeText(
@@ -3982,6 +3983,28 @@ function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string
   return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
     const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
     if (rewritten === rawSrcset) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+  const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
+    match,
+    attrs: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    if (rewritten === css) return match;
+    return `<style${attrs}>${rewritten}</style>`;
+  });
+  return withStyleBlocks.replace(/(\sstyle\s*=\s*)(['"])([\s\S]*?)\2/gi, (
+    match,
+    prefix: string,
+    quote: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    if (rewritten === css) return match;
     return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
   });
 }
