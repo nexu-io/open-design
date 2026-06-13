@@ -258,6 +258,44 @@ describe('FileWorkspace design-system project surface', () => {
     expect(alert?.textContent).toContain('Invalid _ds_manifest.json');
   });
 
+  it('reports semantically invalid design-system card entries instead of silently skipping them', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/type-display.html',
+          group: 123,
+          name: 'Display & Headings',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const alert = container.querySelector<HTMLElement>('[data-testid="design-system-manifest-error"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('cards[0].group must be a string');
+  });
+
   it('does not duplicate the first review card above the grouped gallery after generation', async () => {
     registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
       cards: [

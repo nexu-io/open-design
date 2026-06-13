@@ -347,6 +347,7 @@ interface DesignSystemCardManifestEntry {
   viewport?: string;
 }
 type DesignSystemCardManifestMap = Map<string, DesignSystemCardManifestEntry>;
+const DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS = ['group', 'name', 'subtitle', 'viewport'] as const;
 type DesignSystemGenerationStepStatus = 'pending' | 'running' | 'succeeded';
 interface DesignSystemGenerationStep {
   id: string;
@@ -3123,6 +3124,37 @@ function isDesignSystemUiKitEntryPage(path: string): boolean {
   return isDesignSystemUiKitFile(path) && /\.html?$/iu.test(path);
 }
 
+function designSystemManifestCardError(index: number, detail: string): Error {
+  const separator = detail.startsWith('.') ? '' : ' ';
+  return new Error(`Invalid _ds_manifest.json: cards[${index}]${separator}${detail}.`);
+}
+
+function optionalDesignSystemManifestString(
+  record: Record<string, unknown>,
+  field: (typeof DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS)[number],
+  index: number,
+): string | undefined {
+  const value = record[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') throw designSystemManifestCardError(index, `.${field} must be a string`);
+  return value;
+}
+
+function parseDesignSystemCardManifestEntry(card: unknown, index: number): DesignSystemCardManifestEntry {
+  if (!card || typeof card !== 'object' || Array.isArray(card)) {
+    throw designSystemManifestCardError(index, 'must be an object');
+  }
+  const record = card as Record<string, unknown>;
+  if (typeof record.path !== 'string' || !record.path.trim()) {
+    throw designSystemManifestCardError(index, '.path must be a non-empty string');
+  }
+  const entry: DesignSystemCardManifestEntry = { path: normalizeDesignSystemPath(record.path) };
+  for (const field of DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS) {
+    entry[field] = optionalDesignSystemManifestString(record, field, index);
+  }
+  return entry;
+}
+
 function parseDesignSystemCardManifest(text: string | null): DesignSystemCardManifestMap {
   if (!text) return new Map();
   let parsed: { cards?: unknown };
@@ -3140,21 +3172,9 @@ function parseDesignSystemCardManifest(text: string | null): DesignSystemCardMan
   }
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
   const entries: Array<[string, DesignSystemCardManifestEntry]> = [];
-  for (const card of cards) {
-    if (!card || typeof card !== 'object') continue;
-    const record = card as Record<string, unknown>;
-    if (typeof record.path !== 'string' || !record.path.trim()) continue;
-    const path = normalizeDesignSystemPath(record.path);
-    entries.push([
-      path,
-      {
-        path,
-        group: typeof record.group === 'string' ? record.group : undefined,
-        name: typeof record.name === 'string' ? record.name : undefined,
-        subtitle: typeof record.subtitle === 'string' ? record.subtitle : undefined,
-        viewport: typeof record.viewport === 'string' ? record.viewport : undefined,
-      },
-    ]);
+  for (const [index, card] of cards.entries()) {
+    const entry = parseDesignSystemCardManifestEntry(card, index);
+    entries.push([entry.path, entry]);
   }
   return new Map(entries);
 }
