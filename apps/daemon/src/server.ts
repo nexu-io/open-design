@@ -15043,6 +15043,71 @@ export async function startServer({
     res.json(design.runs.statusBody(run));
   });
 
+  app.get('/api/runs/:id/result-package', async (req, res) => {
+    const run = design.runs.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const status = design.runs.statusBody(run);
+    const project = run.projectId ? getProject(db, run.projectId) : null;
+    let files: any[] = [];
+    let filesError: string | null = null;
+    if (project) {
+      try {
+        files = await listFiles(PROJECTS_DIR, project.id, { metadata: project.metadata });
+      } catch (err) {
+        filesError = err instanceof Error ? err.message : String(err);
+      }
+    }
+    const artifacts = files
+      .filter((file) => file?.artifactManifest && typeof file.artifactManifest === 'object')
+      .map((file) => ({
+        file: file.name,
+        kind: typeof file.artifactManifest.kind === 'string'
+          ? file.artifactManifest.kind
+          : file.artifactKind ?? null,
+        renderer: typeof file.artifactManifest.renderer === 'string'
+          ? file.artifactManifest.renderer
+          : null,
+        title: typeof file.artifactManifest.title === 'string'
+          ? file.artifactManifest.title
+          : file.name,
+        status: typeof file.artifactManifest.status === 'string'
+          ? file.artifactManifest.status
+          : null,
+        manifest: file.artifactManifest,
+      }));
+    res.json({
+      schema: 'open-design.run-result-package.v1',
+      run: {
+        id: status.id,
+        status: status.status,
+        projectId: status.projectId,
+        conversationId: status.conversationId,
+        assistantMessageId: status.assistantMessageId,
+        agentId: status.agentId,
+        createdAt: status.createdAt,
+        updatedAt: status.updatedAt,
+        cancelRequested: status.cancelRequested,
+        exitCode: status.exitCode,
+        signal: status.signal,
+        error: status.error,
+        errorCode: status.errorCode,
+      },
+      workspace: status.workspace,
+      events: {
+        logPath: status.eventsLogPath,
+      },
+      project: project
+        ? {
+            id: project.id,
+            name: project.name,
+            fileCount: files.length,
+            ...(filesError ? { filesError } : {}),
+          }
+        : null,
+      artifacts,
+    });
+  });
+
   app.get('/api/runs/:id/events', (req, res) => {
     const run = design.runs.get(req.params.id);
     if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
