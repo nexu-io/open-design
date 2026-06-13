@@ -140,4 +140,72 @@ describe('HomeView plugin i18n', () => {
   // modal, which routes plain `use`), so use-with-query + its localized-query
   // hydration is now exercised by the rich-card surface (PluginsView.test.tsx)
   // and the query localization itself by state/projects.test.ts.
+
+  // Issue #4058: the Create-plugin chip rail prefilled the composer with the
+  // English prompt even under a zh-CN UI. End-to-end check that the rendered
+  // chip click now seeds the locale-correct template into the composer.
+  function renderHomeAtLocale(initial: 'en' | 'zh-CN') {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return render(
+      <I18nProvider initial={initial}>
+        <div className="entry-main--scroll">
+          <HomeView
+            projects={[]}
+            onSubmit={() => undefined}
+            onOpenProject={() => undefined}
+            onViewAllProjects={() => undefined}
+          />
+        </div>
+      </I18nProvider>,
+    );
+  }
+
+  // The Create-plugin chip lives in the "migrate" group, rendered inside the
+  // collapsed shortcuts menu — open it, then click the chip.
+  async function clickCreatePluginChip() {
+    const trigger = await waitFor(() => {
+      const el = screen.getByTestId('home-hero-shortcuts-trigger') as HTMLButtonElement;
+      expect(el.disabled).toBe(false);
+      return el;
+    });
+    fireEvent.click(trigger);
+    const chip = await waitFor(() => {
+      const el = screen.getByTestId('home-hero-rail-create-plugin') as HTMLButtonElement;
+      expect(el.disabled).toBe(false);
+      return el;
+    });
+    fireEvent.click(chip);
+  }
+
+  it('seeds the Chinese Create-plugin prompt into the composer under a zh-CN UI', async () => {
+    renderHomeAtLocale('zh-CN');
+    await clickCreatePluginChip();
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toContain('创建一个 Open Design 插件');
+    });
+    // The goal-less click must not leak the English default goal or template.
+    expect(homeHeroPromptText()).toContain('用户在提示词中描述的可复用工作流');
+    expect(homeHeroPromptText()).not.toContain('Create an Open Design plugin for');
+  });
+
+  it('keeps the English Create-plugin prompt under an en UI', async () => {
+    renderHomeAtLocale('en');
+    await clickCreatePluginChip();
+    await waitFor(() => {
+      expect(homeHeroPromptText()).toContain('Create an Open Design plugin for');
+    });
+    expect(homeHeroPromptText()).not.toContain('创建一个 Open Design 插件');
+  });
 });
