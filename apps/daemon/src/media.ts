@@ -79,6 +79,16 @@ import {
   aihubmixGeminiImageBytes,
   classifyAIHubMixModel,
 } from './aihubmix.js';
+import {
+  codexAgentDef,
+  codexNeedsDangerFullAccessSandbox,
+} from './runtimes/defs/codex.js';
+import { applyAgentLaunchEnv, resolveAgentLaunch } from './runtimes/launch.js';
+import {
+  codexImageAuthErrorMessage,
+  codexImageFailureMessage,
+  inspectCodexImageAuth,
+} from './codex-image-auth.js';
 
 const execFile = promisify(execFileCb);
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
@@ -680,6 +690,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'codex-cli' && surface === 'image') {
+      const result = await renderCodexCliImage(ctx, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else {
       // No real renderer wired up for this (provider, surface). Gate the
       // stub fallback behind OD_MEDIA_ALLOW_STUBS so release builds don't
@@ -699,10 +714,11 @@ export async function generateMedia(args: {
     if (err instanceof StubProviderDisabledError) {
       throw err;
     }
-    // HyperFrames is a local render, not a remote provider. Falling back
-    // to a stub here hides actionable composition/preflight failures and
-    // can make the agent retry or narrate a fake MP4 as success.
-    if (def.provider === 'hyperframes') {
+    // HyperFrames and codex-cli are local renders, not remote providers.
+    // Falling back to a stub here hides actionable composition/preflight or
+    // image_gen failures and can make the agent retry or narrate a fake
+    // asset as success.
+    if (def.provider === 'hyperframes' || def.provider === 'codex-cli') {
       throw err;
     }
     // A real provider failed (network blip, 4xx, missing key, …). We
@@ -3761,6 +3777,321 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
       reject(err);
     });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Provider: codex-cli — local Codex CLI built-in image_gen (no API key).
+//
+// Unlike the `openai` provider (which POSTs to the Images API and needs an
+// OPENAI_API_KEY), this provider drives the operator's already-signed-in
+// Codex CLI. We spawn a headless `codex exec` turn, instruct it to use its
+// built-in `image_gen` tool, and have it copy the result to a path we then
+// read back. The bytes bill against the user's ChatGPT subscription; Open
+// Design never sees an API key.
+//
+// Why a provider and not a skill: every coding agent (Claude Code, Gemini,
+// …) routes media through `od media generate`, so wiring it here lets the
+// no-key path work no matter which agent drives the chat. PR #622's
+// renderCodexImagegenOverride only rewires generation when the chat agent
+// ITSELF is Codex; a non-Codex agent still had no no-key route until now.
+//
+// The image_gen tool call leaves NO distinct event in `codex exec --json`
+// (only command_execution + agent_message items show up), so we confirm
+// success from ground truth: codex exits 0, the file exists at the path we
+// handed it, and it carries a PNG signature. If codex reports the tool is
+// unavailable, or no valid image lands, we throw — this provider never
+// falls back to a stub (a fake "success" image is worse than a loud error;
+// see the hyperframes precedent in the dispatcher's catch block).
+// ---------------------------------------------------------------------------
+
+const CODEX_CLI_IMAGE_TIMEOUT_MS = 4 * 60 * 1000;
+const CODEX_IMAGE_SAVED_MARKER = 'OD_IMAGE_SAVED:';
+const CODEX_IMAGE_UNAVAILABLE_MARKER = 'IMAGE_GEN_UNAVAILABLE';
+const CODEX_OUTPUT_BASENAME = 'od-codex-image.png';
+
+async function renderCodexCliImage(ctx: MediaContext, onProgress?: ProgressFn): Promise<RenderResult> {
+  // Resolve Codex the same way the daemon's runtime launcher does — not the
+  // bare `resolveAgentExecutable`. `resolveAgentLaunch` swaps an npm wrapper
+  // for the native Codex binary when one is present, and the matching
+  // `applyAgentLaunchEnv` (below) prepends the running Node dir + Codex
+  // toolchain dirs to the child's PATH. Without that symmetry a GUI-launched
+  // daemon (the desktop/packaged app, where PATH is minimal) can *resolve* a
+  // shell-installed Codex but still fail at spawn with a `#!/usr/bin/env node`
+  // interpreter-lookup error. Same invariant the chat-run launch path uses.
+  const launch = resolveAgentLaunch(codexAgentDef, process.env as Record<string, string>);
+  if (!launch.launchPath) {
+    throw new Error(
+      'codex-image-gen needs the Codex CLI on PATH (or set CODEX_BIN). Install it ' +
+        'and sign in with your ChatGPT account — https://developers.openai.com/codex/cli — ' +
+        'then this model generates images with no OPENAI_API_KEY.',
+    );
+  }
+  // Fail fast before spawning a multi-minute codex turn: image_gen only works
+  // on a ChatGPT-plan login. Detect API-key / programmatic / third-party /
+  // not-signed-in up front from $CODEX_HOME and return precise switch-to-
+  // subscription guidance, instead of letting the user wait out a whole turn
+  // for a vague "no image" error.
+  const authVerdict = await inspectCodexImageAuth(process.env);
+  if (!authVerdict.ok) {
+    throw new Error(codexImageAuthErrorMessage(authVerdict));
+  }
+  const childEnv = applyAgentLaunchEnv(process.env, launch);
+
+  // Render into a private temp workspace, not the project dir: the codex
+  // turn writes scratch state (and its sandbox is rooted here), and we only
+  // want the final PNG bytes to flow back to the generic dispatcher, which
+  // writes them into the project under the user-supplied filename.
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'open-design-codex-img-'));
+  const outPath = path.join(tmpRoot, CODEX_OUTPUT_BASENAME);
+  try {
+    const prompt = buildCodexImagePrompt(ctx, outPath);
+    await runCodexImageGen(launch.launchPath, childEnv, prompt, tmpRoot, onProgress);
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(outPath);
+    } catch {
+      throw new Error(
+        'Codex exited cleanly but produced no image at the requested path. The ' +
+          'built-in image_gen tool is likely unavailable in this Codex session — ' +
+          'it requires an official ChatGPT login, not an API key or third-party gateway.',
+      );
+    }
+    assertCodexPngBytes(bytes);
+    return {
+      bytes,
+      providerNote: `codex-cli/image_gen · ${ctx.aspect} · ${bytes.length} bytes · ChatGPT subscription (no API key)`,
+      suggestedExt: '.png',
+    };
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+}
+
+function buildCodexImagePrompt(ctx: MediaContext, outPath: string): string {
+  const prompt = ctx.prompt?.trim() || 'an abstract placeholder image';
+  const aspect = ctx.aspect || '1:1';
+  return [
+    `Use your built-in image_gen tool to generate this image: ${prompt}`,
+    `Aspect ratio: ${aspect}.`,
+    `After the image is generated, copy the final image file to exactly this absolute path: ${outPath}`,
+    `Then print one line in the form ${CODEX_IMAGE_SAVED_MARKER}${outPath} and stop.`,
+    'Do not use any API-key, CLI, or scripts/image_gen.py fallback path. If the built-in ' +
+      `image_gen tool is not available in this session, print exactly ${CODEX_IMAGE_UNAVAILABLE_MARKER} ` +
+      'and stop without doing anything else.',
+  ].join('\n');
+}
+
+/**
+ * The PNG signature. image_gen writes real raster PNGs (~hundreds of KB);
+ * we reject anything without the magic bytes so a stray text file or the
+ * 67-byte stub PNG can't masquerade as a successful generation.
+ */
+function assertCodexPngBytes(bytes: Buffer): void {
+  const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.length < 128 || !bytes.subarray(0, 8).equals(PNG_SIG)) {
+    throw new Error(
+      `Codex wrote ${bytes.length} bytes but they are not a valid PNG. The image_gen ` +
+        'tool did not produce a usable image (check that your Codex CLI is signed in ' +
+        'to ChatGPT and that image_gen is enabled).',
+    );
+  }
+}
+
+/**
+ * Spawn one headless `codex exec` turn and resolve when it finishes a
+ * successful run. Prompt is delivered over stdin (recent Codex CLIs reject
+ * a bare `-` argv sentinel — see runtimes/defs/codex.ts). stdout carries
+ * the `--json` event stream; stderr carries codex's own logs, which we keep
+ * only to attach to a failure message. Rejects on: the IMAGE_GEN_UNAVAILABLE
+ * sentinel, a non-zero exit, spawn error, or timeout (SIGTERM→SIGKILL).
+ */
+function runCodexImageGen(
+  codexBin: string,
+  env: NodeJS.ProcessEnv,
+  prompt: string,
+  cwd: string,
+  onProgress?: ProgressFn,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    // Match the sandbox policy the daemon's codex runtime already uses:
+    // workspace-write + network on macOS/Linux, danger-full-access only
+    // where Codex has no working sandbox (Windows/WSL). image_gen reaches
+    // its backend over codex's own connection, not the sandboxed shell, so
+    // workspace-write is sufficient (verified locally) and keeps the spawned
+    // turn's file writes scoped to our temp workspace.
+    const needsDangerFullAccess = codexNeedsDangerFullAccessSandbox();
+    const sandboxArgs = needsDangerFullAccess
+      ? ['--sandbox', 'danger-full-access']
+      : ['--sandbox', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=true'];
+    // Mirror codexAgentDef.buildArgs: newer Codex builds honor the
+    // permissions config over the legacy sandbox flags, and without this a
+    // Windows/WSL launch can stay read-only and fail to write the PNG (#2834).
+    const args = [
+      'exec', '--json', '--skip-git-repo-check',
+      ...sandboxArgs,
+      '-c', 'default_permissions=":workspace"',
+    ];
+    // Mirror codexAgentDef.buildArgs: when an operator globally disables Codex
+    // plugins (OD_CODEX_DISABLE_PLUGINS=1), this image-gen turn must honor it
+    // too — it handles user prompt input, so it cannot keep plugins enabled
+    // after an explicit opt-out.
+    if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      args.push('--disable', 'plugins');
+    }
+    args.push('-C', cwd);
+
+    const child = spawn(codexBin, args, {
+      cwd,
+      // PATH augmented via applyAgentLaunchEnv so the spawned Codex (or its
+      // node/bun shebang shim) resolves even under a minimal GUI-launch PATH.
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    // A fast-exiting codex (bad auth / image_gen unavailable) can close stdin
+    // before we finish writing the prompt; the resulting EPIPE surfaces as an
+    // async 'error' event that would otherwise crash the daemon. Swallow it —
+    // the close handler reports the real exit reason. (Same guard the daemon's
+    // main codex spawn path uses.)
+    child.stdin.on('error', () => {});
+
+    let settled = false;
+    let unavailable = false;
+    let stderrTail = '';
+    let stdoutBuf = '';
+    // Agent text kept (bounded) only to classify a non-zero exit into
+    // auth / quota / transient — a ChatGPT usage-limit message can land here
+    // rather than on stderr.
+    let agentTextTail = '';
+
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+
+    const consumeLine = (raw: string): void => {
+      const line = raw.trim();
+      if (!line) return;
+      const text = extractCodexAgentText(line);
+      if (text) {
+        agentTextTail = `${agentTextTail}\n${text}`.slice(-4000);
+        // Anchor on a line that *is* the sentinel (the prompt asks codex to
+        // "print exactly IMAGE_GEN_UNAVAILABLE"), so a message that merely
+        // mentions the marker can't reject an otherwise-successful run.
+        if (text.split('\n').some((l) => l.trim() === CODEX_IMAGE_UNAVAILABLE_MARKER)) {
+          unavailable = true;
+        }
+        if (typeof onProgress === 'function') {
+          try {
+            onProgress(truncate(text, 200));
+          } catch {
+            // best-effort: never let a progress emitter kill the render
+          }
+        }
+      }
+    };
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutBuf += chunk.toString('utf8');
+      let nl: number;
+      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
+        consumeLine(stdoutBuf.slice(0, nl));
+        stdoutBuf = stdoutBuf.slice(nl + 1);
+      }
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrTail += chunk.toString('utf8');
+      if (stderrTail.length > 8000) stderrTail = stderrTail.slice(-8000);
+    });
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // ignore
+      }
+      // Escalate if it ignores SIGTERM. unref so this stray timer can't keep
+      // the process alive after we've already rejected.
+      setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // ignore
+        }
+      }, 2000).unref();
+      finish(() =>
+        reject(
+          new Error(
+            `codex image_gen timed out after ${Math.round(CODEX_CLI_IMAGE_TIMEOUT_MS / 1000)}s`,
+          ),
+        ),
+      );
+    }, CODEX_CLI_IMAGE_TIMEOUT_MS);
+
+    // Deliver the prompt over stdin and close it; codex reads stdin once.
+    try {
+      child.stdin.end(prompt);
+    } catch {
+      // If stdin is already gone the close handler reports the real failure.
+    }
+
+    child.on('error', (err) => {
+      finish(() => reject(err));
+    });
+    child.on('close', (code, signal) => {
+      if (stdoutBuf.trim()) consumeLine(stdoutBuf);
+      finish(() => {
+        if (unavailable) {
+          reject(
+            new Error(
+              'Codex reported its built-in image_gen tool is unavailable in this session. ' +
+                'It requires an official ChatGPT login (not an API key or third-party gateway). ' +
+                'Run `codex login` and confirm `image_gen` is enabled, then retry.',
+            ),
+          );
+          return;
+        }
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        const reason = signal ? `signal ${signal}` : `exit ${code}`;
+        const tail = stderrTail.trim().split('\n').slice(-12).join('\n');
+        reject(
+          new Error(
+            codexImageFailureMessage({
+              reason,
+              tail,
+              output: `${stderrTail}\n${agentTextTail}`,
+            }),
+          ),
+        );
+      });
+    });
+  });
+}
+
+/**
+ * Pull the human-readable text out of one `codex exec --json` line. We only
+ * care about `agent_message` items (where our OD_IMAGE_SAVED /
+ * IMAGE_GEN_UNAVAILABLE sentinels land); everything else returns null so the
+ * caller ignores command_execution noise and codex's internal log lines.
+ */
+function extractCodexAgentText(line: string): string | null {
+  let evt: unknown;
+  try {
+    evt = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (!isRecord(evt)) return null;
+  // Final agent text lands on a completed item; ignore any streaming partials.
+  if (evt.type !== 'item.completed') return null;
+  const item = evt.item;
+  if (!isRecord(item)) return null;
+  if (item.type !== 'agent_message') return null;
+  return typeof item.text === 'string' ? item.text : null;
 }
 
 // ---------------------------------------------------------------------------

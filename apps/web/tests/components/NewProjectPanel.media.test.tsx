@@ -176,4 +176,32 @@ describe('NewProjectPanel media provider badges', () => {
       }),
     );
   });
+
+  it('offers the codex-cli model in the picker but never auto-selects it as the default', async () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+
+    // codex-cli needs no API key, so it must not become a silent default just
+    // because nothing else is configured — it spends the ChatGPT subscription.
+    await waitFor(() => {
+      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('Pick a model');
+    });
+
+    // But it is still available for an explicit, deliberate choice.
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    expect(screen.getByTestId('model-picker-option-codex-image-gen')).toBeTruthy();
+  });
 });

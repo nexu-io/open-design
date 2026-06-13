@@ -26,6 +26,12 @@ describe('NewProjectPanel image provider visibility', () => {
     expect(models.some((model) => model.provider === 'openrouter')).toBe(true);
   });
 
+  it('shows the Codex CLI image model in supported image models', () => {
+    const models = supportedModels('image', IMAGE_MODELS);
+    expect(models.some((model) => model.provider === 'codex-cli')).toBe(true);
+    expect(models.some((model) => model.id === 'codex-image-gen')).toBe(true);
+  });
+
   it('shows OpenRouter in supported video models', () => {
     const models = supportedModels('video', VIDEO_MODELS);
     expect(models.some((model) => model.provider === 'openrouter')).toBe(true);

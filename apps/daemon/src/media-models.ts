@@ -32,6 +32,11 @@ export type MediaModel = {
 
 export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'openai', label: 'OpenAI', hint: 'gpt-image-2 / dall-e-3', integrated: true, defaultBaseUrl: 'https://api.openai.com/v1' },
+  // Local Codex CLI built-in image_gen — drives the operator's own
+  // already-signed-in Codex CLI (ChatGPT subscription), so it needs no
+  // OPENAI_API_KEY. Like `hyperframes`, it's a local renderer: no settings
+  // card, no stored credentials.
+  { id: 'codex-cli', label: 'Codex CLI', hint: 'Local Codex CLI image_gen — uses ChatGPT subscription, no API key', integrated: true, credentialsRequired: false, settingsVisible: false },
   { id: 'volcengine', label: 'Volcengine Ark (Doubao)', hint: 'Seedance 2.0 / Seedream', integrated: true, defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'grok', label: 'xAI Grok Imagine', hint: 'grok-imagine — image + video with native audio', integrated: true, defaultBaseUrl: 'https://api.x.ai/v1' },
   { id: 'hyperframes', label: 'HyperFrames', hint: 'Local HTML -> MP4 renderer', integrated: true, credentialsRequired: false, settingsVisible: false },
@@ -90,6 +95,12 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'gpt-image-1-mini', label: 'gpt-image-1-mini', hint: 'OpenAI · low-cost variant', provider: 'openai', caps: ['t2i', 'i2i'] },
   { id: 'dall-e-3', label: 'dall-e-3', hint: 'OpenAI · classic', provider: 'openai', caps: ['t2i'] },
   { id: 'dall-e-2', label: 'dall-e-2', hint: 'OpenAI · legacy', provider: 'openai', caps: ['t2i'] },
+
+  // No-API-key path to ChatGPT-grade image generation: the daemon spawns a
+  // headless `codex exec` turn and lets the operator's signed-in Codex CLI
+  // run its built-in image_gen tool. Works for ANY coding agent (Claude
+  // Code, Gemini, …), not just when Codex is the chat agent.
+  { id: 'codex-image-gen', label: 'codex-image-gen', hint: 'Codex CLI · built-in image_gen · ChatGPT subscription, no API key', provider: 'codex-cli', caps: ['t2i'] },
 
   { id: 'doubao-seedream-3-0-t2i-250415', label: 'seedream-3.0', hint: 'ByteDance · Doubao image', provider: 'volcengine', caps: ['t2i'] },
   { id: 'doubao-seededit-3-0-i2i-250628', label: 'seededit-3.0', hint: 'ByteDance · image edit', provider: 'volcengine', caps: ['i2i'] },
