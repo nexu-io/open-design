@@ -20,7 +20,7 @@ Before starting:
    openssl rand -hex 32
    ```
 
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+3. Open `.env` in your editor, find `OD_ACCESS_TOKEN=`, and paste the generated token there.
 
 Then pull and start the service:
 
@@ -71,6 +71,131 @@ ignored. Use this only for trusted, single-user deployments. It lets Codex run
 without the workspace-write sandbox, which is useful when the container host
 blocks unprivileged user namespaces, but it gives the Codex process broader
 filesystem access inside the container.
+
+## Authentication modes
+
+Open Design supports three mutually exclusive authentication modes. Choose one
+and configure only that mode in your `.env` file.
+
+| Mode | Variable(s) | Loopback exempt | Use case |
+|------|-------------|-----------------|----------|
+| Bearer token | `OD_ACCESS_TOKEN` | Yes | Simplest; single-user, LAN, or VPN-gated deployments |
+| Cloudflare Access | `OD_BEHIND_PROXY=cloudflare`, `OD_CF_ACCESS_TEAM_DOMAIN`, `OD_CF_ACCESS_AUD` | No | Teams using Cloudflare Zero Trust |
+| Trusted proxy | `OD_TRUSTED_PROXY` | Varies | Custom reverse proxy with forwarded headers |
+
+**Bearer token** is the default for local Compose. Generate a token with
+`openssl rand -hex 32`, set it in `OD_ACCESS_TOKEN`, and pass
+`Authorization: Bearer <token>` with every `/api` request. Requests from
+`127.0.0.1` are exempt.
+
+**Cloudflare Access** mode validates `Cf-Access-Jwt-Assertion` headers issued by
+your Cloudflare Access application. Set `OD_BEHIND_PROXY=cloudflare`, then
+provide your team domain and application AUD tag. In this mode the bearer token
+is ignored and loopback requests are *not* exempt.
+
+**Trusted proxy** mode tells the daemon to trust `X-Forwarded-*` headers from a
+named proxy (e.g. `nginx`, `caddy`, `cloudflare`). Pair it with
+`OPEN_DESIGN_ALLOWED_ORIGINS` to validate browser origins.
+
+The backward-compatible `OD_API_TOKEN` variable is still accepted by the server
+as a deprecated fallback. New deployments should use `OD_ACCESS_TOKEN`.
+
+## Reverse proxy
+
+When deploying behind nginx, Caddy, or another reverse proxy, forward the
+standard headers so the daemon can resolve the real client address and protocol.
+
+### nginx example
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name od.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:7456;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+    }
+}
+```
+
+### Caddy example
+
+```
+od.example.com {
+    reverse_proxy localhost:7456
+}
+```
+
+Caddy sets `X-Forwarded-*` headers automatically.
+
+Set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be allowed
+to call `/api`:
+
+```bash
+OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com docker compose up -d --no-build
+```
+
+If your proxy is a known type (e.g. `nginx`, `caddy`), set `OD_TRUSTED_PROXY`
+so the daemon trusts forwarded headers from it.
+
+> **Note:** Content Security Policy (CSP) headers are set by the daemon itself,
+> not by the reverse proxy. Proxy-level CSP overrides may conflict with the
+> daemon's sandbox and asset policies.
+
+## Troubleshooting
+
+### `ACCESS_TOKEN_REQUIRED` error
+
+The daemon rejects API requests that lack authentication. Verify:
+
+1. `OD_ACCESS_TOKEN` is set in your `.env` file.
+2. Your client sends `Authorization: Bearer <token>` with every `/api` request.
+3. If you are using Cloudflare Access mode, ensure `OD_BEHIND_PROXY=cloudflare`
+   is set and the request carries a valid `Cf-Access-Jwt-Assertion` header.
+
+### `Origin: null` not allowed
+
+Sandboxed iframes (e.g. `sandbox="allow-scripts"`) report their origin as
+`null`. This is expected browser behavior, not a Docker deployment regression.
+If your workflow uses sandboxed content, add `null` to
+`OPEN_DESIGN_ALLOWED_ORIGINS` or adjust the iframe's sandbox attributes.
+
+### Docker Desktop macOS networking
+
+Docker Desktop on macOS uses a virtual machine with bridge networking. The
+daemon may see API requests as coming from a non-loopback address, causing the
+bearer-token check to reject them even though the request originates locally.
+
+Workaround — enable host networking:
+
+1. In Docker Desktop: **Settings → Resources → Network → Enable host networking → Apply and restart**.
+
+2. Add a local override to `docker-compose.yml`:
+
+   ```yaml
+   services:
+     open-design:
+       network_mode: host
+       ports: []
+   ```
+
+3. Recreate the container:
+
+   ```bash
+   docker compose down
+   docker compose up -d --force-recreate
+   ```
+
+4. Verify:
+
+   ```bash
+   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
+   # host
+   ```
 
 ## Publish to Docker Hub
 
@@ -140,37 +265,3 @@ COLIMA_BUILD_SWAP_CLEANUP_FORCE=1 COLIMA_BUILD_SWAPFILE=/custom-swapfile deploy/
 `cleanup` removes the default helper path and the old helper path. If you set a
 custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 `COLIMA_BUILD_SWAP_CLEANUP_FORCE=1` is also set.
-
-### Docker Desktop on macOS
-
-When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
-
-`Authorization: Bearer <OD_API_TOKEN> required`
-
-Workaround:
-
-1. Enable host networking in Docker Desktop:
-   `Docker Desktop → Settings → Resources → Network → Enable host networking → Apply and restart`
-
-2. Use a local override to docker-compose.yml:
-
-   ```yaml
-   services:
-     open-design:
-       network_mode: host
-       ports: []
-   ```
-
-3. Recreate the container:
-
-   ```bash
-   docker compose down
-   docker compose up -d --force-recreate
-   ```
-
-4. Verify:
-
-   ```bash
-   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
-   # host
-   ```

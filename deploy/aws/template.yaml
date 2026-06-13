@@ -430,7 +430,7 @@ Resources:
             - Name: OD_PORT
               Value: "7456"
           Secrets:
-            - Name: OD_API_TOKEN
+            - Name: OD_ACCESS_TOKEN
               ValueFrom: !Ref ApiTokenSecret
           MountPoints:
             - SourceVolume: efs-storage

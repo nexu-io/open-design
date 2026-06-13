@@ -125,7 +125,7 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: allowedOrigins
             }
             {
-              name: 'OD_API_TOKEN'
+              name: 'OD_ACCESS_TOKEN'
               secureValue: odApiToken
             }
           ]
