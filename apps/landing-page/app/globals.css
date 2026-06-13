@@ -4786,10 +4786,36 @@ footer .container {
 }
 .sub-footer-col a:hover { color: var(--coral); }
 
+/* ---------- footer masthead ----------
+ *
+ * Masthead sign-off under the footer link columns: a container-filling
+ * two-tone "Open Design." wordmark. One class contract shared by
+ * `site-footer.astro` and the homepage footer in `page.tsx`.
+ */
+.foot-masthead {
+  margin-top: 56px;
+}
+.foot-masthead-wordmark {
+  margin: 0;
+  font-weight: 800;
+  /* Fills the 964px column at the 1440px design width and degrades
+     fluidly; the nowrap keeps "Open Design." a single editorial line. */
+  font-size: clamp(52px, 10.4vw, 158px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.foot-masthead-accent { color: var(--coral); }
+.foot-masthead-period { color: var(--ink); }
+
 @media (max-width: 720px) {
   .sub-footer .sub-footer-inner { padding-inline: 24px; }
   .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
   .sub-footer { padding: 40px 0 24px; }
+  /* Clear the page-bottom GradualBlur band (4rem) so the wordmark
+     reads crisp at final scroll on phones. */
+  .foot-masthead { margin-top: 40px; padding-bottom: 48px; }
 }
 
 /* ---------- scroll-reveal motion ----------
