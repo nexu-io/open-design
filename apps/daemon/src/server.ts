@@ -3874,7 +3874,7 @@ function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   if (
     /bufio\.scanner:\s*token too long/i.test(combined) &&
     /opencode/i.test(combined) &&
-    (agentId === 'opencode' || agentId === 'amr' || /json-rpc id \d+/i.test(combined))
+    (agentId === 'opencode' || agentId === 'amr' || agentId === 'mimo' || /json-rpc id \d+/i.test(combined))
   ) {
     return 'The run failed due to an unknown upstream streaming error. Please retry.';
   }
@@ -12658,7 +12658,7 @@ export async function startServer({
       // generic stall message. Bound to this run via `since` so a stale or
       // concurrent session's error can't be misattributed. See issue #982.
       let stallPayload = null;
-      if (agentId === 'opencode') {
+      if (agentId === 'opencode' || agentId === 'mimo') {
         const logFailure = readOpenCodeServiceFailure(spawnedAgentEnv, {
           since: run.createdAt,
         });

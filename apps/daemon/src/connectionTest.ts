@@ -1995,7 +1995,7 @@ async function testAgentConnectionInternal(
   };
 
   try {
-    if (input.agentId === 'opencode') {
+    if (input.agentId === 'opencode' || input.agentId === 'mimo') {
       await prepareOpenCodeConnectionTestCwd(tempDir);
     }
     let args: string[];
@@ -2015,10 +2015,10 @@ async function testAgentConnectionInternal(
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
       // the user's full plugin environment.
-      if (input.agentId === 'opencode' && !args.includes('--pure')) {
+      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
         args.push('--pure');
       }
-      if (input.agentId === 'opencode' && !args.includes('--title')) {
+      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');
       }
     } catch (err) {
@@ -2198,7 +2198,7 @@ async function testAgentConnectionInternal(
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
-      if (input.agentId === 'opencode' && exitedCleanly && rawStdoutTail) {
+      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && exitedCleanly && rawStdoutTail) {
         const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
         if (recoveredText) {
           return resultFromAgentText(recoveredText, {
@@ -2323,18 +2323,38 @@ async function testAgentConnectionInternal(
     ]);
 
     if (winner.kind === 'text') {
-      const completion = await Promise.race([
-        streamError,
-        childExit,
-        cancellationPromise,
-      ]);
-      if (completion.kind === 'streamError') {
-        return resultFromStreamError(completion.error);
+      // Early-exit optimisation: receiving assistant text proves the CLI
+      // started, the LLM provider connected, and the model started
+      // responding — that's all the connection test needs.  Killing the
+      // child here shaves off the remaining LLM generation time (typically
+      // 5–8 s for a trivial "ok" prompt) and the natural-exit overhead.
+      if (child && !childClosed) {
+        child.kill('SIGTERM');
       }
-      if (completion.kind === 'timeout' || completion.kind === 'aborted') {
-        return resultFromCancellation(completion.kind);
+      // We already have the text sample — short-circuit to success
+      // without routing through resultFromChildExit, which would
+      // misinterpret the forced SIGTERM exit as a failure.
+      const latencyMs = Date.now() - start;
+      const rawSample = truncateSample(winner.text);
+      const sample = redactSecrets(rawSample);
+      if (!isSmokeOkReply(winner.text)) {
+        console.warn(
+          `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
+        );
       }
-      return await resultFromChildExit(completion);
+      console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+      return {
+        ok: true,
+        kind: 'success',
+        latencyMs,
+        model,
+        agentName: def.name,
+        sample,
+        diagnostics: buildDiagnostics({
+          phase: 'connection_smoke_test',
+          exitCode: 0,
+        }),
+      };
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);
