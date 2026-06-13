@@ -173,11 +173,11 @@ export async function uploadImage(localPath, mimeType) {
         requestBody: { role: 'reader', type: 'anyone' },
       });
       publiclyShared = true;
-    } catch {
-      // Best-effort. Wix Workspace DLP rejects "anyone-with-link" with
-      // `publishOutNotPermitted` (HTTP 400) and other orgs may have
-      // different policies. Either way Slides API can still read the
-      // file via the user's own OAuth token, so we proceed silently.
+    } catch (err) {
+      const wrapped = new Error('Your Google Workspace administrator has blocked public file sharing. Image insertion is disabled.');
+      wrapped.code = 'GOOGLE_WORKSPACE_DLP_BLOCKED';
+      wrapped.cause = err;
+      throw wrapped;
     }
     return {
       driveFileId: fileId,
