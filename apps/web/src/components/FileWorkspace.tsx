@@ -2384,6 +2384,7 @@ function DesignSystemProjectPanel({
   const [status, setStatus] = useState(system.status ?? 'draft');
   const [statusBusy, setStatusBusy] = useState(false);
   const [cardManifest, setCardManifest] = useState<DesignSystemCardManifestMap>(() => new Map());
+  const [cardManifestError, setCardManifestError] = useState<string | null>(null);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -2402,6 +2403,7 @@ function DesignSystemProjectPanel({
   useEffect(() => {
     if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
       setCardManifest(new Map());
+      setCardManifestError(null);
       return undefined;
     }
     let cancelled = false;
@@ -2411,6 +2413,11 @@ function DesignSystemProjectPanel({
     }).then((text) => {
       if (cancelled) return;
       setCardManifest(parseDesignSystemCardManifest(text));
+      setCardManifestError(null);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setCardManifest(new Map());
+      setCardManifestError(err instanceof Error ? err.message : 'Unable to read _ds_manifest.json.');
     });
     return () => {
       cancelled = true;
@@ -2888,6 +2895,26 @@ function DesignSystemProjectPanel({
           <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
+        {cardManifestError ? (
+          <div
+            className="ds-project-warning-card ds-project-warning-card--error"
+            data-testid="design-system-manifest-error"
+            role="alert"
+          >
+            <Icon name="alert-triangle" size={16} />
+            <span>
+              <strong>Design manifest needs attention</strong>
+              <small>{cardManifestError}</small>
+            </span>
+            {manifestFileName ? (
+              <Button variant="ghost" className="compact" onClick={() => onOpenFile(manifestFileName)}>
+                <Icon name="file" size={13} />
+                Open manifest
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="ds-project-sections">
           {groupedSectionReviews.map((group) => (
             <div key={group.title} className="ds-project-section-group">
@@ -3098,30 +3125,38 @@ function isDesignSystemUiKitEntryPage(path: string): boolean {
 
 function parseDesignSystemCardManifest(text: string | null): DesignSystemCardManifestMap {
   if (!text) return new Map();
+  let parsed: { cards?: unknown };
   try {
-    const parsed = JSON.parse(text) as { cards?: unknown };
-    const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
-    const entries: Array<[string, DesignSystemCardManifestEntry]> = [];
-    for (const card of cards) {
-      if (!card || typeof card !== 'object') continue;
-      const record = card as Record<string, unknown>;
-      if (typeof record.path !== 'string' || !record.path.trim()) continue;
-      const path = normalizeDesignSystemPath(record.path);
-      entries.push([
-        path,
-        {
-          path,
-          group: typeof record.group === 'string' ? record.group : undefined,
-          name: typeof record.name === 'string' ? record.name : undefined,
-          subtitle: typeof record.subtitle === 'string' ? record.subtitle : undefined,
-          viewport: typeof record.viewport === 'string' ? record.viewport : undefined,
-        },
-      ]);
-    }
-    return new Map(entries);
-  } catch {
-    return new Map();
+    parsed = JSON.parse(text) as { cards?: unknown };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid _ds_manifest.json: ${detail}`);
   }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid _ds_manifest.json: expected an object with a cards array.');
+  }
+  if (parsed.cards !== undefined && !Array.isArray(parsed.cards)) {
+    throw new Error('Invalid _ds_manifest.json: cards must be an array.');
+  }
+  const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
+  const entries: Array<[string, DesignSystemCardManifestEntry]> = [];
+  for (const card of cards) {
+    if (!card || typeof card !== 'object') continue;
+    const record = card as Record<string, unknown>;
+    if (typeof record.path !== 'string' || !record.path.trim()) continue;
+    const path = normalizeDesignSystemPath(record.path);
+    entries.push([
+      path,
+      {
+        path,
+        group: typeof record.group === 'string' ? record.group : undefined,
+        name: typeof record.name === 'string' ? record.name : undefined,
+        subtitle: typeof record.subtitle === 'string' ? record.subtitle : undefined,
+        viewport: typeof record.viewport === 'string' ? record.viewport : undefined,
+      },
+    ]);
+  }
+  return new Map(entries);
 }
 
 function designSystemReviewPreviewDisplay(

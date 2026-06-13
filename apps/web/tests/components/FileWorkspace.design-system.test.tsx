@@ -228,6 +228,36 @@ describe('FileWorkspace design-system project surface', () => {
     });
   });
 
+  it('reports malformed design-system card manifests instead of silently falling back', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue('{not json');
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const alert = container.querySelector<HTMLElement>('[data-testid="design-system-manifest-error"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('Invalid _ds_manifest.json');
+  });
+
   it('does not duplicate the first review card above the grouped gallery after generation', async () => {
     registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
       cards: [
