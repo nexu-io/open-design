@@ -232,7 +232,7 @@ export function defaultDesignSystemSelection(
   designSystems: DesignSystemSummary[],
 ): string[] {
   if (!defaultDesignSystemId) return [];
-  return designSystems.some((d) => d.id === defaultDesignSystemId)
+  return designSystems.some((d) => d.id === defaultDesignSystemId && (d.status ?? 'published') !== 'draft')
     ? [defaultDesignSystemId]
     : [];
 }
@@ -2019,7 +2019,7 @@ function DesignSystemPicker({
       .filter((d): d is DesignSystemSummary => Boolean(d));
     const pickedSet = new Set(picked.map((d) => d.id));
     const rest = designSystems
-      .filter((d) => !pickedSet.has(d.id))
+      .filter((d) => (d.status ?? 'published') !== 'draft' && !pickedSet.has(d.id))
       .sort((a, b) => {
         if (a.id === defaultDesignSystemId) return -1;
         if (b.id === defaultDesignSystemId) return 1;

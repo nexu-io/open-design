@@ -270,45 +270,9 @@ const jsonLd = {
    */}
   <script>
     const initTemplatesKindPage = () => {
-      // Hover-only video preview — same contract as the parent
-      // `/plugins/templates/` page. IntersectionObserver hydrates
-      // `data-src` lazily; play/pause is gated to pointer + focus
-      // interactions so the grid never fires N simultaneous decoders
-      // on a casual scroll. (Reviewer flag #3185.)
-      const videos = document.querySelectorAll<HTMLVideoElement>('video[data-tpl-autoplay]:not([data-tpl-init])');
-      if (videos.length > 0) {
-        const hydrate = (v: HTMLVideoElement) => {
-          const src = v.getAttribute('data-src');
-          if (src && !v.src) v.src = src;
-        };
-        const lazyObs = new IntersectionObserver(
-          (entries) => {
-            for (const entry of entries) {
-              if (!entry.isIntersecting) continue;
-              const v = entry.target as HTMLVideoElement;
-              hydrate(v);
-              lazyObs.unobserve(v);
-            }
-          },
-          { rootMargin: '300px' },
-        );
-        videos.forEach((v) => {
-          v.setAttribute('data-tpl-init', '1');
-          lazyObs.observe(v);
-          const startPlayback = () => {
-            hydrate(v);
-            v.play().catch(() => {});
-          };
-          const stopPlayback = () => {
-            v.pause();
-          };
-          const host = v.closest('.tpl-media') ?? v;
-          host.addEventListener('pointerenter', startPlayback);
-          host.addEventListener('pointerleave', stopPlayback);
-          host.addEventListener('focusin', startPlayback);
-          host.addEventListener('focusout', stopPlayback);
-        });
-      }
+      // Card preview hover-autoplay + idle hold/pan loop lives in the shared
+      // <TemplateCardAutoplay /> component (same contract as the parent
+      // `/plugins/templates/` page), so the behaviour stays identical here.
 
       const dialog = document.querySelector<HTMLDialogElement>('[data-tpl-share-dialog]');
       const positionPopover = (trigger: HTMLElement) => {

@@ -1088,6 +1088,14 @@ export default function Page({
                 </ul>
               </div>
             </div>
+            {/* Masthead sign-off — same markup contract as
+                `site-footer.astro` so the shared `.foot-masthead` styles
+                in globals.css cover both footers. */}
+            <div className='foot-masthead' data-od-id='footer-masthead'>
+              <p className='foot-masthead-wordmark'>
+                Open <span className='foot-masthead-accent'>Design</span><span className='foot-masthead-period'>.</span>
+              </p>
+            </div>
           </div>
         </footer>
       </div>

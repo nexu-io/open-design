@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { writeFile as writeFsFile } from 'node:fs/promises';
@@ -124,7 +125,7 @@ describe('project export manifest route', () => {
     };
 
     expect(body).toMatchObject({
-      schema: 'open-design.project-export-manifest.v1',
+      schema: PROJECT_EXPORT_MANIFEST_SCHEMA,
       projectId,
       entryFile: 'index.html',
     });

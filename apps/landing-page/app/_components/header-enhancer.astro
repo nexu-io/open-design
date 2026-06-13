@@ -215,8 +215,28 @@
     // textarea + copy-link per click, so the intents must be rebuilt from the
     // dialog's current payload each time it reopens. Exposed on `window` so
     // those per-card handlers can re-wire after they swap the payload.
+    // Share text + links are baked at build time against the canonical
+    // production host (Astro.site). Rewrite that origin to wherever the page is
+    // actually served so a share from staging/preview carries the matching host
+    // (e.g. staging.open-design.ai) instead of always pointing at production.
+    // On production this is a no-op (the origins match).
+    const SHARE_PROD_ORIGIN = 'https://open-design.ai';
+    const rewriteShareOrigin = (dialog) => {
+      const here = window.location.origin;
+      if (!here || here === SHARE_PROD_ORIGIN || !/^https?:/.test(here)) return;
+      const swap = (value) => (value ? value.split(SHARE_PROD_ORIGIN).join(here) : value);
+      const ta = dialog.querySelector('[data-share-text]');
+      if (ta && ta.value) ta.value = swap(ta.value);
+      const linkBtn = dialog.querySelector('[data-copy-link]');
+      if (linkBtn) {
+        const cur = linkBtn.getAttribute('data-copy-link');
+        if (cur) linkBtn.setAttribute('data-copy-link', swap(cur));
+      }
+    };
+
     const wireSharePlatforms = (dialog) => {
       if (!dialog) return;
+      rewriteShareOrigin(dialog);
       const ta = dialog.querySelector('[data-share-text]');
       const linkBtn = dialog.querySelector('[data-copy-link]');
       const message = ta ? (ta.value || ta.textContent || '').trim() : '';
