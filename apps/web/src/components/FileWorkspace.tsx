@@ -2398,21 +2398,24 @@ function DesignSystemProjectPanel({
   const fileByName = new Map(files.map((file) => [file.name, file]));
   const manifestFile = files.find((file) => normalizeDesignSystemPath(file.name) === '_ds_manifest.json');
   const manifestFileName = manifestFile?.name ?? null;
-  const manifestSignature = manifestFile ? `${manifestFile.name}:${manifestFile.mtime}` : '';
+  const manifestCacheBustKey = manifestFile ? Math.round(manifestFile.mtime) : null;
   useEffect(() => {
-    if (!system.id || !manifestFileName) {
+    if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
       setCardManifest(new Map());
       return undefined;
     }
     let cancelled = false;
-    void fetchProjectFileText(projectId, manifestFileName).then((text) => {
+    void fetchProjectFileText(projectId, manifestFileName, {
+      cache: 'no-store',
+      cacheBustKey: manifestCacheBustKey,
+    }).then((text) => {
       if (cancelled) return;
       setCardManifest(parseDesignSystemCardManifest(text));
     });
     return () => {
       cancelled = true;
     };
-  }, [manifestFileName, manifestSignature, projectId, system.id]);
+  }, [manifestCacheBustKey, manifestFileName, projectId, system.id]);
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );

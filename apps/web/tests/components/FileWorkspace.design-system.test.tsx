@@ -143,12 +143,89 @@ describe('FileWorkspace design-system project surface', () => {
     const typeCard = itemByTitle('Display & Headings');
     const uiKitCard = itemByTitle('Website — Home (UI Kit)');
 
-    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json');
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(workspaceFile('_ds_manifest.json').mtime),
+    });
     expect(container.textContent).not.toContain('type-display');
     expect(typeCard?.textContent).toContain('Tahoma bold, tight');
     expect(typeCard?.classList.contains('ds-project-review-item--specimen')).toBe(true);
     expect(uiKitCard?.textContent).toContain('Full passivebook.com home recreation');
     expect(uiKitCard?.classList.contains('ds-project-review-item--ui-kit')).toBe(true);
+  });
+
+  it('refreshes design-system card manifest labels when the manifest mtime changes', async () => {
+    const firstManifest = workspaceFile('_ds_manifest.json');
+    const nextManifest = { ...firstManifest, mtime: firstManifest.mtime + 5_000 };
+    registryMocks.fetchProjectFileText.mockImplementation((
+      _projectId: string,
+      _name: string,
+      options?: { cacheBustKey?: number },
+    ) => {
+      if (options?.cacheBustKey === Math.round(nextManifest.mtime)) {
+        return Promise.resolve(JSON.stringify({
+          cards: [
+            {
+              path: 'preview/type-display.html',
+              group: 'Brand',
+              name: 'Fresh Type Label',
+              subtitle: 'Fresh subtitle',
+            },
+          ],
+        }));
+      }
+      return Promise.resolve(JSON.stringify({
+        cards: [
+          {
+            path: 'preview/type-display.html',
+            group: 'Brand',
+            name: 'Old Type Label',
+            subtitle: 'Old subtitle',
+          },
+        ],
+      }));
+    });
+
+    const renderDesignSystem = (manifestFile: ProjectFile) => (
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          manifestFile,
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />
+    );
+
+    const container = renderWorkspace(renderDesignSystem(firstManifest));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('Old Type Label');
+
+    await act(async () => {
+      root?.render(renderDesignSystem(nextManifest));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Fresh Type Label');
+    expect(container.textContent).not.toContain('Old Type Label');
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(firstManifest.mtime),
+    });
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(nextManifest.mtime),
+    });
   });
 
   it('does not duplicate the first review card above the grouped gallery after generation', async () => {
