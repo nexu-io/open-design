@@ -2513,9 +2513,9 @@ function DesignSystemProjectPanel({
     }));
   }
 
-  function openNeedsWorkFeedback(sectionTitle: string) {
+  function openNeedsWorkFeedback(sectionTitle: string, expansionKey: string) {
     setReviewDecisions((current) => ({ ...current, [sectionTitle]: 'needs-work' }));
-    setExpandedSections((current) => ({ ...current, [sectionTitle]: true }));
+    setExpandedSections((current) => ({ ...current, [expansionKey]: true }));
     setFeedbackSection(sectionTitle);
     setFeedbackText('');
   }
@@ -2626,7 +2626,7 @@ function DesignSystemProjectPanel({
               type="button"
               className={`ghost danger ${reviewDecisions[section.title] === 'needs-work' ? 'active' : ''}`}
               data-testid={`design-system-review-work-${slugForTestId(section.title)}`}
-              onClick={() => openNeedsWorkFeedback(section.title)}
+              onClick={() => openNeedsWorkFeedback(section.title, instanceId)}
             >
               <Icon name="comment" size={13} />
               Needs work...

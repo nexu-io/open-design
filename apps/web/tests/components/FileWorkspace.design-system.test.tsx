@@ -706,6 +706,61 @@ describe('FileWorkspace design-system project surface', () => {
     expect(unreviewed?.classList.contains('is-expanded')).toBe(true);
   });
 
+  it('re-expands a grouped section after Looks good collapses it and Needs work is clicked', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/colors-primary.html',
+          group: 'Colors',
+          name: 'Primary Colors',
+          subtitle: 'Emerald green + navy ink',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/colors-primary.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const section = Array.from(container.querySelectorAll('.ds-project-review-item')).find((item) =>
+      item.querySelector('.ds-project-section-title strong')?.textContent === 'Primary Colors',
+    );
+    expect(section?.classList.contains('is-expanded')).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-system-review-good-primary-colors"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(section?.classList.contains('is-collapsed')).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-system-review-work-primary-colors"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(section?.classList.contains('is-expanded')).toBe(true);
+    expect(section?.querySelector('.ds-project-feedback-popover')).toBeTruthy();
+  });
+
   it('reopens a looks-good section after it is regenerated so the review-again prompt stays visible', () => {
     const container = renderWorkspace(
       <FileWorkspace
