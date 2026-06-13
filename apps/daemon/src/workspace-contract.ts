@@ -86,3 +86,40 @@ export function isOrchestratorScratchWorkspace(metadata: unknown): boolean {
   const record = plainObject(metadata);
   return !!record && normalizeOrchestratorWorkspace(record.orchestratorWorkspace) !== null;
 }
+
+export function projectWorkspaceProvenance(metadata: unknown) {
+  const record = plainObject(metadata);
+  const baseDir = stringField(record?.baseDir);
+  const orchestratorWorkspace = normalizeOrchestratorWorkspace(record?.orchestratorWorkspace);
+  if (orchestratorWorkspace) {
+    return {
+      storage: {
+        kind: 'folder-backed',
+        baseDir,
+      },
+      provenance: {
+        ...orchestratorWorkspace,
+        kind: 'orchestrator-scratch',
+      },
+    };
+  }
+  if (baseDir) {
+    return {
+      storage: {
+        kind: 'folder-backed',
+        baseDir,
+      },
+      provenance: {
+        kind: 'user-local',
+        writeback: 'in-place',
+      },
+    };
+  }
+  return {
+    storage: {
+      kind: 'od-owned',
+      baseDir: null,
+    },
+    provenance: null,
+  };
+}
