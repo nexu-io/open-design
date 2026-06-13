@@ -519,4 +519,68 @@ process.stdin.on('end', () => {
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-configured.png'));
     expect(bytes.length).toBeGreaterThan(0);
   });
+
+  it('preserves Codex custom gateway credentials for subscription image generation', async () => {
+    const dataDir = path.join(root, 'app-data');
+    const generatedHome = path.join(root, 'gateway-codex-home');
+    const codexBin = path.join(root, 'gateway-codex.mjs');
+    const gatewayUrl = 'https://gateway.example.test/v1';
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: codexBin,
+          CODEX_HOME: generatedHome,
+          OPENAI_BASE_URL: gatewayUrl,
+          OPENAI_API_KEY: 'gateway-openai-key',
+        },
+      },
+    }), 'utf8');
+    await writeFile(codexBin, `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+const pngBase64 = '${PNG_BASE64}';
+const expectedBaseUrl = ${JSON.stringify(gatewayUrl)};
+const args = process.argv.slice(2);
+const addDirIndex = args.indexOf('--add-dir');
+const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
+if (process.env.OPENAI_BASE_URL !== expectedBaseUrl) {
+  process.stderr.write('OPENAI_BASE_URL override was not forwarded');
+  process.exit(21);
+}
+if (process.env.OPENAI_API_KEY !== 'gateway-openai-key') {
+  process.stderr.write('OPENAI_API_KEY was not preserved for custom gateway');
+  process.exit(22);
+}
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(23);
+  const threadId = 'gateway-codex-thread';
+  const outDir = path.join(generatedRoot, threadId);
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: threadId }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.OD_DATA_DIR = dataDir;
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'codex-gateway.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex-gateway.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
 });

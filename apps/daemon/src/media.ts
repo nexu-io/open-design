@@ -935,24 +935,15 @@ function codexImagePrompt(ctx: MediaContext): string {
   return `${prefix} ${prompt}${aspect}`;
 }
 
-function sanitizeCodexImagegenEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env = { ...baseEnv };
-  const blocked = new Set(['openai_api_key', 'codex_api_key', 'anthropic_api_key']);
-  for (const key of Object.keys(env)) {
-    if (blocked.has(key.toLowerCase())) delete env[key];
-  }
-  return env;
-}
-
 async function resolveCodexImagegenEnv(): Promise<NodeJS.ProcessEnv> {
   const dataDir = process.env.OD_DATA_DIR?.trim();
-  if (!dataDir) return sanitizeCodexImagegenEnv(process.env);
+  if (!dataDir) return spawnEnvForAgent('codex', process.env);
   try {
     const appConfig = await readAppConfig(dataDir);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
-    return sanitizeCodexImagegenEnv(spawnEnvForAgent('codex', process.env, configuredEnv));
+    return spawnEnvForAgent('codex', process.env, configuredEnv);
   } catch {
-    return sanitizeCodexImagegenEnv(process.env);
+    return spawnEnvForAgent('codex', process.env);
   }
 }
 
