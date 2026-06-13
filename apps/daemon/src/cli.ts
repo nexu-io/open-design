@@ -6164,7 +6164,7 @@ function formatBytes(n) {
 
 async function runDaemonStart(flags) {
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
+  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,

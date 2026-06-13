@@ -93,6 +93,7 @@ import {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
+import { normalizeDaemonBindHost } from './daemon-startup.js';
 export {
   isDesktopAuthGateActive,
   isDesktopAuthRegistered,
@@ -4602,11 +4603,12 @@ function resolveAcpStageTimeoutMs(): number | undefined {
 
 export async function startServer({
   port = 7456,
-  host = process.env.OD_BIND_HOST || '127.0.0.1',
+  host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
+  host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
