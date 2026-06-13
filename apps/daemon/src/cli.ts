@@ -5057,6 +5057,8 @@ async function runRun(args) {
   od run cancel <runId>                     Request cancellation.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
+  od run result-package <runId> [--json]    Inspect run outputs and workspace
+                                            provenance without applying them.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -5092,6 +5094,30 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'result-package': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od run result-package <runId> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/result-package`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const run = data?.run ?? {};
+      const workspace = data?.workspace ?? {};
+      const storage = workspace.storage ?? {};
+      const provenance = workspace.provenance ?? null;
+      console.log(`run\t${run.id ?? id}\t${run.status ?? '-'}`);
+      console.log(`workspace\t${storage.kind ?? '-'}\t${storage.baseDir ?? '-'}`);
+      console.log(`provenance\t${provenance?.kind ?? '-'}\twriteback=${provenance?.writeback ?? '-'}`);
+      console.log(`project\t${data?.project?.id ?? '-'}\tfiles=${data?.project?.fileCount ?? 0}`);
+      const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
+      for (const artifact of artifacts) {
+        console.log(`artifact\t${artifact.file ?? '-'}\t${artifact.kind ?? '-'}\t${artifact.title ?? '-'}`);
+      }
       return;
     }
     case 'cancel': {

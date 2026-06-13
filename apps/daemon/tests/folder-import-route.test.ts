@@ -203,6 +203,63 @@ describe('POST /api/import/folder', () => {
       expect(filesResp.status).toBe(200);
       const filesBody = (await filesResp.json()) as { files: Array<{ name: string }> };
       expect(filesBody.files.map((file) => file.name)).toContain('index.html');
+
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'missing-agent',
+          projectId: project.id,
+          message: 'Inspect the scratch workspace.',
+        }),
+      });
+      expect(runResp.status).toBe(202);
+      const runBody = (await runResp.json()) as { runId?: string };
+      expect(runBody.runId).toBeTruthy();
+
+      const resultPackageResp = await fetch(
+        `${baseUrl}/api/runs/${runBody.runId}/result-package`,
+      );
+      expect(resultPackageResp.status).toBe(200);
+      const resultPackage = (await resultPackageResp.json()) as {
+        schema?: string;
+        run?: { id?: string; projectId?: string };
+        workspace?: {
+          storage?: { kind?: string; baseDir?: string };
+          provenance?: { kind?: string; writeback?: string; sourceRef?: string };
+        };
+        project?: { id?: string; fileCount?: number };
+        artifacts?: Array<{
+          file?: string;
+          kind?: string;
+          title?: string;
+          manifest?: { metadata?: { inferred?: boolean } };
+        }>;
+      };
+      expect(resultPackage.schema).toBe('open-design.run-result-package.v1');
+      expect(resultPackage.run).toMatchObject({ id: runBody.runId, projectId: project.id });
+      expect(resultPackage.workspace).toMatchObject({
+        storage: {
+          kind: 'folder-backed',
+          baseDir: await realpath(folder),
+        },
+        provenance: {
+          kind: 'orchestrator-scratch',
+          sourceRef: 'main@abc123',
+          writeback: 'external',
+        },
+      });
+      expect(resultPackage.project).toMatchObject({ id: project.id, fileCount: 1 });
+      expect(resultPackage.artifacts).toEqual([
+        expect.objectContaining({
+          file: 'index.html',
+          kind: 'html',
+          title: 'index.html',
+          manifest: expect.objectContaining({
+            metadata: expect.objectContaining({ inferred: true }),
+          }),
+        }),
+      ]);
     });
   });
 
@@ -267,6 +324,58 @@ describe('POST /api/import/folder', () => {
       project: { metadata?: { orchestratorWorkspace?: unknown } };
     };
     expect(replaceBody.project.metadata?.orchestratorWorkspace).toBeUndefined();
+
+    const runResp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'missing-agent',
+        projectId: project.id,
+        message: 'Inspect the local workspace.',
+      }),
+    });
+    expect(runResp.status).toBe(202);
+    const runBody = (await runResp.json()) as { runId?: string };
+    const statusResp = await fetch(`${baseUrl}/api/runs/${runBody.runId}`);
+    expect(statusResp.status).toBe(200);
+    const statusBody = (await statusResp.json()) as {
+      workspace?: { provenance?: { kind?: string; writeback?: string } };
+    };
+    expect(statusBody.workspace?.provenance).toEqual({
+      kind: 'user-local',
+      writeback: 'in-place',
+    });
+  });
+
+  it('fails result-package when a folder-backed workspace cannot be enumerated', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const runResp = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'missing-agent',
+        projectId: project.id,
+        message: 'Inspect the local workspace.',
+      }),
+    });
+    expect(runResp.status).toBe(202);
+    const runBody = (await runResp.json()) as { runId?: string };
+
+    rmSync(folder, { recursive: true, force: true });
+    const resultPackageResp = await fetch(
+      `${baseUrl}/api/runs/${runBody.runId}/result-package`,
+    );
+    expect(resultPackageResp.status).toBe(500);
+    const body = (await resultPackageResp.json()) as {
+      error?: { code?: string; message?: string };
+    };
+    expect(body.error?.code).toBe('WORKSPACE_ENUMERATION_FAILED');
+    expect(body.error?.message).toMatch(/ENOENT|no such file/i);
   });
 
   it('rejects sandbox runs for imported folders before creating a run', async () => {

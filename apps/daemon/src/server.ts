@@ -17,6 +17,7 @@ import {
   type OpenDesignGithubLatestReleaseResponse,
   type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  RUN_RESULT_PACKAGE_SCHEMA,
 } from '@open-design/contracts';
 import {
   composeSystemPrompt,
@@ -15049,12 +15050,21 @@ export async function startServer({
     const status = design.runs.statusBody(run);
     const project = run.projectId ? getProject(db, run.projectId) : null;
     let files: any[] = [];
-    let filesError: string | null = null;
     if (project) {
       try {
+        const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+        const projectRootStat = await fs.promises.stat(projectRoot);
+        if (!projectRootStat.isDirectory()) {
+          throw new Error('workspace root is not a directory');
+        }
         files = await listFiles(PROJECTS_DIR, project.id, { metadata: project.metadata });
       } catch (err) {
-        filesError = err instanceof Error ? err.message : String(err);
+        return sendApiError(
+          res,
+          500,
+          'WORKSPACE_ENUMERATION_FAILED',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     }
     const artifacts = files
@@ -15076,7 +15086,7 @@ export async function startServer({
         manifest: file.artifactManifest,
       }));
     res.json({
-      schema: 'open-design.run-result-package.v1',
+      schema: RUN_RESULT_PACKAGE_SCHEMA,
       run: {
         id: status.id,
         status: status.status,
@@ -15101,7 +15111,6 @@ export async function startServer({
             id: project.id,
             name: project.name,
             fileCount: files.length,
-            ...(filesError ? { filesError } : {}),
           }
         : null,
       artifacts,

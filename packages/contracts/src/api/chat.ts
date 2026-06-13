@@ -1,5 +1,5 @@
 import type { ProjectFile } from './files';
-import type { RunWorkspace } from './workspaces.js';
+import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
   PreviewCommentMember,
@@ -316,6 +316,8 @@ export interface ChatRunStatusResponse {
   /** Effective storage/provenance for the workspace used by this run. */
   workspace?: RunWorkspace;
 }
+
+export type ChatRunResultPackageResponse = RunResultPackageResponse;
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
