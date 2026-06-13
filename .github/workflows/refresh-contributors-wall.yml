@@ -11,8 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: refresh-contributors-wall
@@ -21,6 +20,7 @@ concurrency:
 jobs:
   refresh:
     name: Refresh contributors wall cache bust
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
 
     steps:
@@ -30,24 +30,37 @@ jobs:
       - name: Refresh cache bust date
         run: |
           DATE="$(date -u +%F)"
-          MATCHES="$(perl -0ne '$count += () = /cache_bust=\d{4}-\d{2}-\d{2}/g; END { print $count + 0 }' README*.md)"
+          README_FILES=(README.md docs/i18n/README.*.md)
+          MATCHES="$(perl -0ne '$count += () = /cache_bust=\d{4}-\d{2}-\d{2}/g; END { print $count + 0 }' "${README_FILES[@]}")"
           if [ "$MATCHES" -eq 0 ]; then
             echo "Warning: No cache_bust patterns found. README format may have changed."
             exit 1
           fi
-          perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" README*.md
+          perl -0pi -e "s/cache_bust=\d{4}-\d{2}-\d{2}/cache_bust=$DATE/g" "${README_FILES[@]}"
+
+      - name: Generate Open Design bot token
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Create refresh pull request
         uses: peter-evans/create-pull-request@v8
         with:
-          # Auth mirrors the metrics workflow: prefer a repository token that can
-          # create pull requests, with GITHUB_TOKEN as a fallback for repos where
-          # Actions-created PRs are allowed.
-          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
-          add-paths: 'README*.md'
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          add-paths: |
+            README.md
+            docs/i18n/README.*.md
           branch: automation/refresh-contributors-wall
           delete-branch: true
           commit-message: 'docs(readme): refresh contributors wall'
+          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
           title: 'docs(readme): refresh contributors wall'
           body: |
             Refreshes the contributors wall cache bust date in README files.

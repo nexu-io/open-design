@@ -1,0 +1,263 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/meta/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Meta (Store)".
+ * Photography-first retail: pure white canvas, Optimistic VF typography,
+ * Meta Blue (#0064E0) reserved for action, generous gallery whitespace,
+ * pill-shaped CTAs, dual-shadow elevation.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention to
+ * match Meta's voice rather than the cross-brand default):
+ *
+ *   1. `--bg` is pure white (#FFFFFF), `--surface` is Warm Gray
+ *      (#F7F8FA — Dolly's --flat-card-bg), and `--surface-warm` is
+ *      independently bound to Linen (#F2F0E6) — the "warm off-white for
+ *      lifestyle-adjacent sections" called out in DESIGN.md §2. Three
+ *      genuinely different surface tiers ladder up: white for browsing,
+ *      warm gray for card differentiation, linen for the lifestyle /
+ *      Ray-Ban-adjacent moments. Aliasing `--surface-warm` to surface
+ *      would collapse a meaningful brand tier.
+ *
+ *   2. The foreground ramp binds four distinct tiers — Dark Charcoal
+ *      (#1C2B33) → Slate Gray (#5D6C7B) → Secondary Text (#65676B) →
+ *      CTA Disabled Text (#8595A4). DESIGN.md §2 names each one as a
+ *      shipped Dolly/FDS token with its own role (heading vs body vs
+ *      caption vs muted/disabled), so `--fg-2` and `--meta` are bound
+ *      independently rather than aliased to `--fg` / `--muted`.
+ *
+ *   3. `--accent` is Meta Blue (#0064E0), NOT Facebook Blue (#1877F2).
+ *      DESIGN.md §7 ("Don'ts") explicitly forbids Facebook Blue as a
+ *      primary CTA color — the corporate Meta Store layer overlays a
+ *      slightly deeper, more saturated blue on the FDS gray ramp.
+ *      `--accent-hover` and `--accent-active` are bound to the exact
+ *      Meta Blue Hover (#0143B5) and Pressed (#004BB9) hexes from
+ *      DESIGN.md §2 rather than computed via `color-mix()`, because
+ *      the Dolly hover/pressed pair is hand-tuned to land on different
+ *      hue points than a flat luminance darken.
+ *
+ *   4. Semantic colors bind to the Dolly-store palette: Success Green
+ *      (#31A24C), Warning Amber (#F7B928), Error Red (#E41E3F) — the
+ *      "badge" tier from DESIGN.md §2. Darker store-confirmation
+ *      variants (#007D1E, #C80A28) live in components, not the schema,
+ *      because they are state overrides on top of the shared semantic
+ *      slot rather than the slot itself.
+ *
+ *   5. `--font-display` and `--font-body` share the Optimistic VF
+ *      stack with the documented fallbacks (Montserrat, Helvetica,
+ *      Arial, Noto Sans). Inter is added as a humanist sans bridge for
+ *      hosts that have neither Optimistic nor Montserrat installed —
+ *      it matches Optimistic's geometric warmth more closely than the
+ *      Helvetica/Arial fallbacks alone. The variable font keeps weight
+ *      300/400/500/700 all available; component CSS picks the weight,
+ *      not the face.
+ *
+ *   6. The type scale tracks DESIGN.md §3 verbatim: 12 / 14 / 16 / 18
+ *      / 28 / 36 / 48 / 64. The 18px tier (`--text-lg`) is Meta's
+ *      primary body size — Body and Heading 3 BOTH live there per
+ *      DESIGN.md §3 — while `--text-base` (16px) is Body Compact
+ *      reserved for navigation and dense UI. Display tracking stays
+ *      neutral (`-0.01em`) because DESIGN.md §3 specifies negative
+ *      letter-spacing only at small sizes (`-0.14px` to `-0.16px` on
+ *      14–16px UI text), not on display headlines.
+ *
+ *   7. Section rhythm is gallery-generous: 80 / 64 / 48 px desktop /
+ *      tablet / phone, mirroring the responsive padding ladder
+ *      DESIGN.md §8 prescribes ("Section padding: 80 → 64 → 48 → 32").
+ *      The 32px floor folds into component-level overrides on the
+ *      smallest viewports rather than into the shared schema.
+ *
+ *   8. Radius scale: 8 / 20 / 24 / 100. DESIGN.md §5 explicitly
+ *      enumerates these four tiers — 8px inputs, 20px standard cards
+ *      (--card-corner-radius), 24px feature cards & ghost buttons,
+ *      100px pill — and `--radius-pill` is bound to literal `100px`
+ *      (not the schema's 9999px sentinel) because the brand's pill
+ *      radius IS 100px and that value flows into actual padding /
+ *      stroke calculations on Meta-Blue CTAs.
+ *
+ *   9. `--elev-raised` reproduces DESIGN.md §6 Level 2 dual-shadow
+ *      pattern verbatim: a small sharp shadow (0 2px 4px rgba(0,0,0,
+ *      0.1)) for direct-light contact + a large diffused shadow
+ *      (0 12px 28px rgba(0,0,0,0.2)) for ambient-light depth.
+ *      Reordering or dropping a layer breaks Meta's "physically
+ *      plausible depth" feel — the brand specifically uses two
+ *      shadows together, not one blurred soft shadow.
+ *
+ *  10. Container caps at 1440px per DESIGN.md §5 ("Max container
+ *      width: ~1440px"), wider than Vercel's 1200 because the store
+ *      surfaces full-bleed cinematic product photography that needs
+ *      the room. Gutters step 40 / 24 / 16 to preserve generous
+ *      breathing room around hero imagery on every breakpoint.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Optimistic VF is not embedded; the stack falls back through
+ * Montserrat → Helvetica → Arial → Noto Sans so artifacts render
+ * acceptably on hosts that haven't loaded the commissioned face.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — schema slot) ─────────────────────────────
+   * Binary plus a warm tier: pure white for browsing/information,
+   * Warm Gray for flat card differentiation, Linen as the lifestyle-
+   * adjacent warm off-white. DESIGN.md §1 calls out the binary
+   * white/dark cadence; Linen lives between for Ray-Ban-flavored
+   * sections where pure white feels too cold. Dark immersive
+   * surfaces (#1C1E21 / #181A1B / #000000) are component-level
+   * overrides, not surface tokens — they're product-context, not
+   * canvas. */
+  --bg: #ffffff;                       /* White — primary canvas, nav, default cards */
+  --surface: #f7f8fa;                  /* Warm Gray — flat card, subtle differentiation */
+  --surface-warm: #f2f0e6;             /* Linen — lifestyle-adjacent warm off-white */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Dark Charcoal heading → Slate Gray body → Secondary Text caption
+   * → CTA Disabled muted blue-gray. DESIGN.md §2 names each tier as
+   * a shipped Dolly/FDS token with its own role, so the four-level
+   * ramp resolves to four distinct values rather than aliasing. */
+  --fg: #1c2b33;                       /* Dark Charcoal — Dolly primary text, headings */
+  --fg-2: #5d6c7b;                     /* Slate Gray — Meta Store secondary text, body */
+  --muted: #65676b;                    /* Secondary Text — captions, labels, timestamps */
+  --meta: #8595a4;                     /* CTA Disabled — placeholder, muted blue-gray */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Standard divider for input/card edges, lighter inner divider for
+   * Dolly section separators that should not visually compete. */
+  --border: #ced0d4;                   /* Divider — content separators, input borders */
+  --border-soft: #dee3e9;              /* Divider Gray — lighter Dolly inner separator */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Meta Blue is the single action color. DESIGN.md §7 forbids
+   * Facebook Blue (#1877F2) for primary CTAs — Meta Blue (#0064E0)
+   * is the deeper, more saturated corporate-store variant. Hover
+   * and active states are hand-tuned hexes from DESIGN.md §2, not
+   * `color-mix()` derivations, because Dolly's interactive states
+   * shift hue, not just luminance. */
+  --accent: #0064e0;                   /* Meta Blue — primary CTA, links, focus */
+  --accent-on: #ffffff;                /* white label on Meta Blue */
+  --accent-hover: #0143b5;             /* Meta Blue Hover — hand-tuned, not a darken */
+  --accent-active: #004bb9;            /* Meta Blue Pressed — deepest interactive state */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Dolly badge tier — bright enough to read on white surfaces.
+   * Darker store-confirmation variants (#007D1E success, #C80A28
+   * error) are component-level state overrides, not slot bindings. */
+  --success: #31a24c;                  /* Success Green — badge, positive indicators */
+  --warn: #f7b928;                     /* Warning Amber — attention, caution badges */
+  --danger: #e41e3f;                   /* Error Red — critical badges, notifications */
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Optimistic VF is Meta's commissioned variable face; the documented
+   * fallbacks (Montserrat → Helvetica → Arial → Noto Sans) ensure
+   * artifacts read consistently on hosts without the licensed font.
+   * Inter bridges between Optimistic and Helvetica when neither the
+   * commissioned face nor Montserrat is loaded — it's the closest
+   * humanist geometric sans available system-wide. Display and body
+   * share one stack; weight (300/400/500/700) and size carry hierarchy. */
+  --font-display: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+  --font-body: "Optimistic VF", "Optimistic", Inter, Montserrat, Helvetica, Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 verbatim. The 18px tier (text-lg) is
+   * Meta's primary body size (Body AND Heading 3 both live at 18/?);
+   * 16px (text-base) is Body Compact for navigation and dense UI.
+   * Display 1 lands at 64px on desktop; Display 2 at 48px; Heading 1
+   * at 36px; Heading 2 at 28px. */
+  --text-xs: 12px;                     /* Small — footer, legal, timestamps */
+  --text-sm: 14px;                     /* Caption — labels, button text, metadata */
+  --text-base: 16px;                   /* Body Compact — navigation, dense UI */
+  --text-lg: 18px;                     /* Body / Heading 3 — primary reading size */
+  --text-xl: 28px;                     /* Heading 2 — light-weight subheading */
+  --text-2xl: 36px;                    /* Heading 1 — major section heading */
+  --text-3xl: 48px;                    /* Display 2 — section heroes, product titles */
+  --text-4xl: 64px;                    /* Display 1 — hero headlines on desktop */
+
+  /* Body leading 1.5 (16px Body Compact ratio); tight leading 1.16
+   * (Display 1 ratio) for hero headlines. Display tracking stays
+   * neutral (-0.01em) — DESIGN.md §3 reserves negative tracking for
+   * small UI (-0.14px on Caption / Button), not for headlines. */
+  --leading-body: 1.5;
+  --leading-tight: 1.16;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 8px-base scale per DESIGN.md §5 ("Base unit: 8px"). The 1px /
+   * 10px / 14px / 18px sub-tiers from DESIGN.md (hairlines, card
+   * horizontal padding, caption rhythm, body vertical rhythm) are
+   * inlined per-component because they are too fine to belong in
+   * the shared schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §8: "Section padding: 80 → 64 → 48
+   * → 32 as viewport narrows". We bind the documented desktop /
+   * tablet / phone tiers; the 32px ultra-narrow floor falls into
+   * component-level @media overrides, not the schema. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 enumerates 8 / 20 / 24 / 100 px. Pill is literal
+   * 100px (not 9999px sentinel) because Meta's pill radius IS 100px
+   * — DESIGN.md §4 buttons specify "Border radius: fully rounded
+   * pill (100px)". For most components 100px and 9999px render
+   * identically, but 100px flows correctly into outline / focus
+   * geometry calculations in product. */
+  --radius-sm: 8px;                    /* Inputs, small UI, glimmer placeholders */
+  --radius-md: 20px;                   /* --card-corner-radius — standard cards */
+  --radius-lg: 24px;                   /* Feature cards, ghost buttons */
+  --radius-pill: 100px;                /* Pill buttons, tags, badges (DESIGN.md §5) */
+
+  /* ─── Elevation ──────────────────────────────────────────────────
+   * Three sanctioned levels. `--elev-raised` is DESIGN.md §6 Level 2
+   * dual-shadow pattern reproduced verbatim: small sharp shadow for
+   * direct-light contact + large diffused shadow for ambient-light
+   * depth. Together they create "physically plausible depth without
+   * heavy visual weight" — never collapse to a single soft blur.
+   * Most surface differentiation in Meta comes from background
+   * color shifts (white → soft gray → dark), not shadow; cards in
+   * dark sections SHOULD use --elev-flat per DESIGN.md §7 ("Don'ts"). */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 12px 28px 0 rgba(0, 0, 0, 0.2),
+    0 2px 4px 0 rgba(0, 0, 0, 0.1);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * DESIGN.md §4 inputs: "Focus: border color shifts to accent blue,
+   * 3px outer ring". DESIGN.md §4 buttons: "Focus: 3px ring in accent
+   * color". The schema-default 3px alpha glow at the accent matches
+   * Meta's documented behavior; the inner-element border-color shift
+   * is component-level. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * DESIGN.md §4 buttons: "Transition: background 200ms ease,
+   * transform 150ms ease". Two durations, one easing curve. The
+   * scale(1.1) hover and scale(0.9) press transforms from DESIGN.md
+   * are component-level animation, not schema. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * DESIGN.md §5: "Max container width: ~1440px, centered with auto
+   * margins". Wider than Vercel/Mistral because Meta surfaces full-
+   * bleed cinematic product photography that needs the room. Gutters
+   * step 40 / 24 / 16 — DESIGN.md §5 names "Page horizontal padding:
+   * 24-40px depending on breakpoint" and §8 collapses to 16px on
+   * mobile to preserve gallery-style breathing room. */
+  --container-max: 1440px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

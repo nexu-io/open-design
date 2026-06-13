@@ -1,0 +1,72 @@
+---
+/*
+ * /plugins/skills/ — instruction skills.
+ *
+ * Reads `plugins/_official/`, filters to entries that don't fit any
+ * of the seven artifact kinds (i.e. `categorizePlugin` returns null).
+ * These are scenarios, atoms-style helpers, and miscellaneous mode
+ * values that the agent loads mid-task — copywriting, color theory,
+ * creative direction, brainstorming. The output depends on the
+ * user's input, so there's no static preview to embed.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import PluginRow from '../../../_components/plugin-row.astro';
+import { getBundledPlugins } from '../../../_lib/bundled-plugins';
+import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+
+const skills = getBundledPlugins()
+  .filter((p) => p.bucket !== 'design-systems')
+  .filter((p) => categorizePlugin(bundledRecordOf(p)) === null);
+
+const title = `${pcopy.tileSkills} · ${skills.length} · Open Design`;
+const description = pcopy.skillsLead;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/plugins/skills/', Astro.site).toString(),
+  numberOfItems: skills.length,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+    <span>/</span>
+    <span aria-current="page">{pcopy.tileSkills}</span>
+  </nav>
+
+  <header class="catalog-head plugin-skills-head">
+    <span class="label">{pcopy.skillsLabel}</span>
+    <h1 class="display">{pcopy.skillsHeading(skills.length)}<span class="dot">.</span></h1>
+    <p class="lead">{pcopy.skillsLead}</p>
+  </header>
+
+  <section class="catalog-grid catalog-grid-skills" aria-label="All instruction skills">
+    <ol>
+      {skills.map((s, idx) => (
+        <PluginRow item={{ kind: 'bundled', record: s }} index={idx} />
+      ))}
+    </ol>
+  </section>
+
+  <style>
+    .plugin-skills-head {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .plugin-skills-head .label {
+      display: none;
+    }
+  </style>
+</Layout>

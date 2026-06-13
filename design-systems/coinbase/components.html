@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coinbase — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/coinbase. Coinbase Blue (#0052ff)
+        as the singular functional accent, white canvas with cool-gray panels,
+        56px pill CTAs, ultra-tight 1.00 display leading."
+    />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #eef0f3;
+        --surface-warm: var(--surface);
+
+        --fg: #0a0b0d;
+        --fg-2: var(--fg);
+        --muted: #5b616e;
+        --meta: var(--muted);
+
+        --border: rgba(91, 97, 110, 0.2);
+        --border-soft: var(--border);
+
+        --accent: #0052ff;
+        --accent-on: #ffffff;
+        --accent-hover: #578bfa;
+        --accent-active: #0667d0;
+
+        --success: #16a34a;
+        --warn: #eab308;
+        --danger: #dc2626;
+
+        --font-display:
+          "CoinbaseDisplay", "Coinbase Display",
+          "Inter", ui-sans-serif, system-ui, -apple-system,
+          "Segoe UI", Arial, sans-serif;
+        --font-body:
+          "CoinbaseText", "CoinbaseSans", "Coinbase Sans",
+          "Inter", ui-sans-serif, system-ui, -apple-system,
+          "Segoe UI", Arial, sans-serif;
+        --font-mono:
+          ui-monospace, "SF Mono", "JetBrains Mono",
+          Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 32px;
+        --text-2xl: 36px;
+        --text-3xl: 52px;
+        --text-4xl: 80px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1.0;
+        --tracking-display: -0.01em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 40px;
+
+        --radius-sm: 8px;
+        --radius-md: 16px;
+        --radius-lg: 32px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 1px 2px color-mix(in oklab, var(--fg), transparent 92%);
+
+        --focus-ring: 0 0 0 2px var(--fg);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 16px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      /* ─── Layout ─────────────────────────────────────────────── */
+      .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Section variants — dark/light alternation per DESIGN.md §1 */
+      .section-dark { background: var(--fg); color: #ffffff; }
+      .section-dark h1, .section-dark h2, .section-dark h3 { color: #ffffff; }
+      .section-dark .lead, .section-dark .body-muted { color: color-mix(in oklab, #ffffff, transparent 28%); }
+      .section-dark a { color: var(--accent); }
+      .section-dark + section { border-top: none; }
+
+      /* ─── Typography — display ultra-tight, body regular ────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 400;            /* CoinbaseDisplay carries weight via drawing, not 700 */
+        line-height: var(--leading-tight);
+        margin: 0;
+        color: var(--fg);
+      }
+      h1 { font-size: var(--text-4xl); letter-spacing: var(--tracking-display); }
+      h2 { font-size: var(--text-2xl); }
+      h3 {
+        font-size: var(--text-lg);
+        font-weight: 600;            /* Feature title 18/600 per DESIGN.md §3 */
+        font-family: var(--font-body);
+        line-height: 1.33;
+      }
+      p { margin: 0; }
+      .lead { font-size: var(--text-lg); color: var(--muted); line-height: 1.56; max-width: 56ch; }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .eyebrow {
+        font-size: var(--text-sm);
+        color: var(--muted);
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-5 > * + * { margin-block-start: var(--space-5); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — 56px pill, blue functional accent ───────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 14px 24px;
+        border-radius: 56px;         /* DESIGN.md §4 — primary CTA pill */
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 600;            /* Button 16/600 per DESIGN.md §3 */
+        line-height: 1.2;
+        letter-spacing: 0.01em;      /* ≈ +0.16px tracking per DESIGN.md §3 */
+        cursor: pointer;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn:active { transform: translateY(0); }
+
+      /* Primary: cool-gray surface with blue text — Coinbase consumer CTA */
+      .btn-primary {
+        background: var(--surface);
+        color: var(--fg);
+        border-color: var(--surface);
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+        color: #ffffff;
+      }
+
+      /* Secondary: dark solid for inverse contexts and product moments */
+      .btn-secondary {
+        background: #282b31;          /* Dark Card per DESIGN.md §2 */
+        color: #ffffff;
+        border-color: #282b31;
+      }
+      .btn-secondary:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+
+      /* Outline: blue-bordered, transparent — DESIGN.md §4 "Blue Bordered" */
+      .btn-outline {
+        background: transparent;
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .btn-outline:hover {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+
+      .btn-link {
+        background: transparent;
+        color: var(--accent);
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        font-weight: 600;
+      }
+      .btn-link:hover { color: var(--accent-active); text-decoration: underline; text-underline-offset: 3px; }
+
+      /* ─── Inputs ────────────────────────────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 600; color: var(--fg); }
+      .field input {
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: #ffffff;
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--muted); }
+      .field input:hover { border-color: color-mix(in oklab, var(--fg), transparent 70%); }
+      .field input:focus-visible {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help { font-size: var(--text-sm); color: var(--muted); }
+
+      /* ─── Cards ─────────────────────────────────────────────── */
+      .card {
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .card-feature {
+        background: var(--surface);
+        border-color: transparent;
+        border-radius: var(--radius-lg);
+        padding: var(--space-8);
+        gap: var(--space-4);
+      }
+      .card-icon {
+        width: 40px; height: 40px;
+        border-radius: var(--radius-pill);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: var(--accent);
+        border: 1px solid var(--border);
+      }
+      .card-feature .card-icon { background: var(--bg); border-color: var(--border); }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 13px;             /* DESIGN.md §3 Small 13/600 — inlined */
+        font-weight: 600;
+        line-height: 1.23;
+      }
+      .badge-success { color: var(--success); background: color-mix(in oklab, var(--success), transparent 88%); }
+      .badge-muted { color: var(--muted); background: var(--surface); }
+      .badge-accent { color: var(--accent); background: color-mix(in oklab, var(--accent), transparent 92%); }
+      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; text-underline-offset: 3px; }
+      a:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 2px; }
+      kbd {
+        font-family: var(--font-mono); font-size: var(--text-xs);
+        padding: 2px 6px; border-radius: var(--radius-sm);
+        border: 1px solid var(--border); background: #ffffff; color: var(--muted);
+      }
+
+      /* ─── Layout helpers ────────────────────────────────────── */
+      .hero-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--space-12); align-items: end; }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; }
+      .hero-meta {
+        display: flex; flex-direction: column; gap: var(--space-4);
+        padding: var(--space-6);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: #ffffff;
+      }
+      .price-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+      .price-symbol { display: inline-flex; align-items: center; gap: var(--space-3); }
+      .price-symbol-icon {
+        width: 32px; height: 32px; border-radius: var(--radius-pill);
+        background: var(--surface); color: var(--accent);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-family: var(--font-body); font-weight: 700; font-size: var(--text-sm);
+      }
+      .price-symbol .ticker { font-weight: 600; font-size: var(--text-base); }
+      .price-value { font-family: var(--font-display); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+      .price-change-up { color: var(--success); font-size: var(--text-sm); font-weight: 600; }
+      .price-change-dn { color: var(--danger); font-size: var(--text-sm); font-weight: 600; }
+      .row-divider { height: 1px; background: var(--border-soft); }
+
+      .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px) { .features-grid { grid-template-columns: 1fr; } }
+
+      .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-12); align-items: center; }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; } }
+      .form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 440px; }
+      .form-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-2); flex-wrap: wrap; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · coinbase</p>
+            <h1>The easiest place to buy, sell, and manage crypto.</h1>
+            <p class="lead">
+              From your first satoshi to a long-term portfolio — Coinbase is the
+              trusted on-ramp for over 100 million people worldwide. Get started
+              in minutes, secure your assets, and trade with confidence.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Get started
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-outline">View prices</a>
+            </div>
+          </div>
+          <aside class="hero-meta" aria-label="Market preview">
+            <div class="row-between">
+              <span class="eyebrow" style="color: var(--fg)">Markets</span>
+              <span class="badge badge-success">
+                <span class="badge-dot" aria-hidden="true"></span>
+                Live
+              </span>
+            </div>
+            <div class="stack-3">
+              <div class="price-row">
+                <span class="price-symbol">
+                  <span class="price-symbol-icon" aria-hidden="true">B</span>
+                  <span class="ticker">BTC</span>
+                </span>
+                <span class="price-value">$68,420.50</span>
+                <span class="price-change-up">+2.41%</span>
+              </div>
+              <div class="row-divider" aria-hidden="true"></div>
+              <div class="price-row">
+                <span class="price-symbol">
+                  <span class="price-symbol-icon" aria-hidden="true">E</span>
+                  <span class="ticker">ETH</span>
+                </span>
+                <span class="price-value">$3,512.18</span>
+                <span class="price-change-up">+1.18%</span>
+              </div>
+              <div class="row-divider" aria-hidden="true"></div>
+              <div class="price-row">
+                <span class="price-symbol">
+                  <span class="price-symbol-icon" aria-hidden="true">S</span>
+                  <span class="ticker">SOL</span>
+                </span>
+                <span class="price-value">$182.04</span>
+                <span class="price-change-dn">−0.62%</span>
+              </div>
+            </div>
+            <p class="body-sm" style="color: var(--muted)">
+              Press <kbd>⌘</kbd> <kbd>K</kbd> to search assets.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section data-od-id="features">
+        <div class="stack-4">
+          <p class="eyebrow">Why Coinbase</p>
+          <h2 style="max-width: 24ch">A mainstream-friendly home for digital money.</h2>
+        </div>
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card card-feature">
+            <span class="card-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4z"/>
+              </svg>
+            </span>
+            <h3>Trusted security</h3>
+            <p class="body-muted body-sm">
+              Industry-leading custody, cold storage for the majority of customer
+              assets, and FDIC-insured USD balances up to $250,000.
+            </p>
+            <a href="./tokens.css" class="btn-link body-sm">Learn how →</a>
+          </article>
+          <article class="card card-feature">
+            <span class="card-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
+              </svg>
+            </span>
+            <h3>200+ assets</h3>
+            <p class="body-muted body-sm">
+              Buy and trade Bitcoin, Ethereum, and hundreds of other supported
+              cryptocurrencies — all from a single, regulated platform.
+            </p>
+            <a href="./DESIGN.md" class="btn-link body-sm">See all assets →</a>
+          </article>
+          <article class="card card-feature">
+            <span class="card-icon" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12h4l3-8 4 16 3-8h4"/>
+              </svg>
+            </span>
+            <h3>Instant on-ramp</h3>
+            <p class="body-muted body-sm">
+              Link a bank or card, verify your identity, and place your first
+              trade in minutes. Recurring buys keep your portfolio on autopilot.
+            </p>
+            <a href="./tokens.css" class="btn-link body-sm">Start in minutes →</a>
+          </article>
+        </div>
+      </section>
+
+      <section data-od-id="form" class="section-dark">
+        <div class="container" style="padding-inline: 0">
+          <div class="form-row">
+            <div class="stack-5">
+              <p class="eyebrow" style="color: color-mix(in oklab, #ffffff, transparent 30%)">
+                Get the app
+              </p>
+              <h2>Start with as little as $1.</h2>
+              <p class="body-muted" style="max-width: 48ch">
+                Create your account and we'll send setup instructions, recurring-buy
+                templates, and a guide to keeping your assets safe — nothing else.
+              </p>
+              <div class="row-between" style="gap: var(--space-3); justify-content: flex-start">
+                <span class="badge badge-accent">
+                  <span class="badge-dot" aria-hidden="true"></span>
+                  No platform fees on USDC
+                </span>
+              </div>
+            </div>
+            <form class="form" onsubmit="event.preventDefault();">
+              <div class="field">
+                <label for="email" style="color: #ffffff">Work or personal email</label>
+                <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+                <p class="field-help" style="color: color-mix(in oklab, #ffffff, transparent 40%)">
+                  By continuing, you agree to Coinbase's User Agreement and Privacy Policy.
+                </p>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Get started</button>
+                <button type="button" class="btn btn-secondary">Sign in</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

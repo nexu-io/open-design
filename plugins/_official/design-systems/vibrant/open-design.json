@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-vibrant",
+  "title": "Vibrant",
+  "title_i18n": {
+    "zh-CN": "Vibrant",
+    "zh-TW": "Vibrant",
+    "ja": "Vibrant",
+    "ko": "Vibrant",
+    "de": "Vibrant",
+    "fr": "Vibrant",
+    "ru": "Vibrant",
+    "es": "Vibrant",
+    "pt-BR": "Vibrant",
+    "it": "Vibrant",
+    "vi": "Vibrant",
+    "pl": "Vibrant",
+    "id": "Vibrant",
+    "nl": "Vibrant",
+    "ar": "Vibrant",
+    "tr": "Vibrant",
+    "uk": "Vibrant",
+    "en": "Vibrant"
+  },
+  "version": "0.1.0",
+  "description": "Lively, colorful design with bold playful typography, warm accents, and dynamic visual energy.",
+  "description_i18n": {
+    "zh-CN": "充满活力的多彩设计，采用大胆俏皮的字体排版、温暖的强调色和动感的视觉能量。",
+    "zh-TW": "充滿活力的多彩設計，採用大膽俏皮的字體排版、溫暖的強調色和動感的視覺能量。",
+    "ja": "鮮やかで活気あふれるカラフルなデザイン。大胆で遊び心のあるタイポグラフィ、温かみのあるアクセント、ダイナミックなビジュアルエネルギーが特徴です。",
+    "ko": "대담하고 경쾌한 타이포그래피, 따뜻한 강조색, 역동적인 시각적 에너지를 갖춘 생동감 넘치는 다채로운 디자인입니다.",
+    "de": "Lebendiges, farbenfrohes Design mit kräftiger, verspielter Typografie, warmen Akzenten und dynamischer visueller Energie.",
+    "fr": "Design vif et coloré avec une typographie audacieuse et ludique, des accents chaleureux et une énergie visuelle dynamique.",
+    "ru": "Яркий красочный дизайн со смелой игривой типографикой, теплыми акцентами и динамичной визуальной энергией.",
+    "es": "Diseño vivo y colorido con tipografía audaz y juguetona, acentos cálidos y energía visual dinámica.",
+    "pt-BR": "Design vivo e colorido com tipografia ousada e divertida, acentos quentes e energia visual dinâmica.",
+    "it": "Design vivace e colorato con tipografia audace e giocosa, accenti caldi ed energia visiva dinamica.",
+    "vi": "Thiết kế sống động, đầy màu sắc với kiểu chữ táo bạo và vui tươi, điểm nhấn ấm áp và năng lượng thị giác năng động.",
+    "pl": "Żywy, kolorowy projekt z odważną, zabawną typografią, ciepłymi akcentami i dynamiczną energią wizualną.",
+    "id": "Desain yang hidup dan penuh warna dengan tipografi yang berani dan ceria, aksen hangat, dan energi visual yang dinamis.",
+    "nl": "Levendig, kleurrijk ontwerp met gedurfde speelse typografie, warme accenten en dynamische visuele energie.",
+    "ar": "تصميم حيوي وملون مع طباعة جريئة ومرحة، ولمسات دافئة، وطاقة بصرية ديناميكية.",
+    "tr": "Cesur ve eğlenceli tipografi, sıcak vurgular ve dinamik görsel enerjiyle canlı, renkli tasarım.",
+    "uk": "Яскравий барвистий дизайн із сміливою ігривою типографікою, теплими акцентами та динамічною візуальною енергією.",
+    "en": "Lively, colorful design with bold playful typography, warm accents, and dynamic visual energy."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "bold-expressive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Vibrant design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Vibrant design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "vibrant",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

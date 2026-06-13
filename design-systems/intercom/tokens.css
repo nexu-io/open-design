@@ -1,0 +1,150 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/intercom/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Intercom".
+ * Editorial customer-service warmth: warm cream canvas, off-black text,
+ * a single Fin Orange signal, and aggressively sharp 4px geometry.
+ *
+ * Key brand decisions encoded here:
+ *   - Warm Cream (#faf9f6) canvas — never pure white, but white pops above it
+ *   - Fin Orange (#ff5600) — the SINGULAR accent, named after Intercom's AI agent
+ *   - Off Black (#111111) — warmer than #000, primary text + dark buttons
+ *   - Oat (#dedbd6) borders — warm-tinted, never cool gray
+ *   - Saans display: 80px at line-height 1.0 with -2.4px (≈ -0.03em) tracking
+ *   - Sharp 4px radius — near-rectangular buttons are the geometric identity
+ *
+ * The "vivid purple/blue" hint sometimes associated with Intercom is the
+ * legacy Messenger SDK palette. The current intercom.com identity is
+ * warm-neutral + Fin Orange (see DESIGN.md §1, §2, §9), and that is what
+ * this token set encodes.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Warm cream is the foundation — Intercom's website never uses pure
+   * white as the page background. Pure white IS used for the "lifted"
+   * surface tier so cards and panels punch above the warm canvas.
+   * --surface-warm holds the warm-cream value for any component that
+   * wants the warm tier explicitly (cards-on-warm-canvas pattern). */
+  --bg: #faf9f6;             /* Warm Cream — the editorial canvas */
+  --surface: #ffffff;        /* Pure White — lifted card / panel tier */
+  --surface-warm: #faf9f6;   /* Warm Cream — DESIGN.md §4 warm-card pattern */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Off Black is warmer than #000 — pure black would read harsh against
+   * the warm canvas. DESIGN.md describes a single off-black heading
+   * weight; --fg-2 aliases --fg because the brand expresses hierarchy
+   * through size and tracking, not through tonal text variation. */
+  --fg: #111111;             /* Off Black — primary text, dark buttons */
+  --fg-2: var(--fg);         /* alias — single heading color throughout */
+  --muted: #7b7b78;          /* Black 50 — warm muted text */
+  --meta: #9c9fa5;           /* Content Tertiary — captions, metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Oat is THE Intercom border — warm-tinted, never cool gray. The
+   * DESIGN.md "don't" list explicitly forbids cool grays. --border-soft
+   * is a lighter oat for inner row separators that must not compete
+   * with the primary card edge. */
+  --border: #dedbd6;         /* Oat — warm card edge */
+  --border-soft: #ebe9e4;    /* Lighter oat — inner row separators */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Fin Orange — named after Intercom's AI agent, the SINGLE chromatic
+   * move against the warm-neutral palette. DESIGN.md §7 forbids
+   * decorative use: reserve for primary CTAs and AI/brand moments. */
+  --accent: #ff5600;         /* Fin Orange */
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Pulled from DESIGN.md §2 "Report Palette" so semantic states land
+   * inside the brand vocabulary (green, red), with the schema warn
+   * default for amber. */
+  --success: #00da00;        /* Green from report palette */
+  --warn: #eab308;
+  --danger: #c41c1c;         /* Report Red */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Saans is Intercom's custom geometric sans — falls back through
+   * Saans Fallback and then through the system ui-sans-serif chain so
+   * artifacts render legibly even when Saans is not loaded. SaansMono
+   * for code and uppercase technical labels (DESIGN.md §3). */
+  --font-display: "Saans", "Saans Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-body: "Saans", "Saans Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: "SaansMono", "SaansMono Fallback", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy: 80 / 54 / 40 / 32 / 24 / 20
+   * down to 14 / 12. The 80px display with -2.4px tracking and 1.00
+   * line-height is the billboard identity. */
+  --text-xs: 12px;           /* Mono labels, eyebrows */
+  --text-sm: 14px;           /* Body Light, button small */
+  --text-base: 16px;         /* Body, button */
+  --text-lg: 20px;           /* Body Emphasis */
+  --text-xl: 24px;           /* Feature Title */
+  --text-2xl: 32px;          /* Card Title */
+  --text-3xl: 54px;          /* Section Heading */
+  --text-4xl: 80px;          /* Display Hero — billboard scale */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.0;      /* 1.00 across all heading sizes — ultra-compressed */
+  --tracking-display: -0.03em; /* ≈ -2.4px at 80px — aggressive negative tracking */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px-grid base scale. DESIGN.md §5 lists 8/10/12/14/16/20/24/32/
+   * 40/48/60/64/80/96; the intermediate 10/14/40/60 tiers are
+   * component-internal and not part of the shared schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 documents 80–96px between sections
+   * desktop. Generous editorial whitespace is part of the magazine-
+   * like reading experience. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Sharp geometry is the identity. DESIGN.md §7 "Don't" list:
+   * "Don't round buttons beyond 4px". The radius scale tops out at
+   * 8px for cards. No softness. */
+  --radius-sm: 4px;          /* Buttons — near-rectangular */
+  --radius-md: 6px;          /* Nav items */
+  --radius-lg: 8px;          /* Cards, containers */
+  --radius-pill: 9999px;     /* Badges, status dots */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Minimal shadows (DESIGN.md §6). Depth comes from warm borders and
+   * surface tints. The raised tier is a near-invisible whisper using
+   * the warm fg as the shadow color so it tints rather than greys. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 94%);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Orange-tinted to match the Fin accent — keeps keyboard focus
+   * inside the brand voice rather than borrowing browser blue. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Schema defaults — Intercom's signature interaction is scale(1.1)
+   * hover, which lives in components (button :hover transform), not
+   * in the motion duration tokens. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1280px container — comfortable editorial width that accommodates
+   * the 80px display headlines without crowding. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

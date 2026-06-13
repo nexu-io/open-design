@@ -1,0 +1,22 @@
+{
+  "id": "cinematic-vampire-alley-fight-sequence",
+  "surface": "video",
+  "title": "Cinematic vampire alley fight sequence",
+  "summary": "A comprehensive action prompt for a short film scene involving dynamic camera movements and high-speed combat in a neon-lit alley.",
+  "category": "Cinematic",
+  "tags": [
+    "cinematic",
+    "cyberpunk"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "Draev stands in the center of the neon-lit alley, surrounded by multiple vampires positioned on rooftops and street level.\n\nThe vampires attack simultaneously.\nDraev reacts instantly with superhuman speed.\n\nHe dodges the first attacker with a fast sidestep and counters with a brutal punch, sending the vampire crashing into a wall.\n\nSecond vampire lunges from above Draev jumps unnaturally high, grabs him mid-air, and slams him into the ground.\n\nImpact creates a small shockwave on the wet street.\nThe defeated vampire rapidly disintegrates into ash and particles.\n\nCamera moves dynamically:\nstarts frontal wide shot transitions into fast tracking side movement then switches to over-the-shoulder following Draev More vampires rush in.\n\nDraev performs a fast acrobatic kick hitting two enemies at once.\n\nOne vampire is thrown into neon signs, sparks and electricity burst.\n\nAnother gets grabbed by the throat — Draev lifts him with one hand and crushes him, turning him into ash.\nRain reacts to movement, splashes intensify with impacts.\n\nFinal moment:\nDraev stands still in the center, surrounded by falling ash, breathing slightly, eyes glowing red.\nRemaining vampires hesitate, stepping back in fear. No music",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Cortex Visual ・ AI Movies",
+    "url": "https://x.com/Cortex__Visual/status/2049070872426688714"
+  }
+}

@@ -1,0 +1,428 @@
+import { expect, test } from '@playwright/test';
+import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
+import type { Locator, Page } from '@playwright/test';
+
+const STORAGE_KEY = 'open-design:config';
+
+const CONNECTORS = [
+  {
+    id: 'github',
+    name: 'GitHub',
+    provider: 'composio',
+    category: 'Developer tools',
+    description: 'Read repository issues and pull requests.',
+    status: 'available',
+    auth: { provider: 'composio', configured: true },
+    tools: [
+      {
+        name: 'list_issues',
+        title: 'List issues',
+        description: 'List recent issues from a repository.',
+        safety: {
+          sideEffect: 'read',
+          approval: 'auto',
+          reason: 'Read-only issue lookup.',
+        },
+        refreshEligible: true,
+      },
+    ],
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    provider: 'composio',
+    category: 'Communication',
+    description: 'Search channels and messages.',
+    status: 'connected',
+    accountLabel: 'design-team',
+    auth: { provider: 'composio', configured: true },
+    tools: [],
+  },
+];
+
+const IMAGE_TEMPLATE = {
+  id: 'editorial-poster',
+  surface: 'image',
+  title: 'Editorial Poster',
+  summary: 'A punchy launch poster for a product announcement.',
+  category: 'Marketing',
+  tags: ['poster', 'launch'],
+  model: 'gpt-image-1',
+  aspect: '4:5',
+  source: {
+    repo: 'open-design/test-prompts',
+    license: 'MIT',
+    author: 'Open Design QA',
+  },
+};
+
+async function readSavedConfig(page: Page) {
+  return page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }, STORAGE_KEY);
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((key) => {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        mode: 'daemon',
+        apiKey: '',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        agentId: 'mock',
+        skillId: null,
+        designSystemId: null,
+        onboardingCompleted: true,
+        agentModels: {},
+      }),
+    );
+  }, STORAGE_KEY);
+
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+});
+
+test('[P1] prompt template retry preserves the edited body in project metadata', async ({ page }) => {
+  let detailRequests = 0;
+  await page.route('**/api/prompt-templates', async (route) => {
+    await route.fulfill({ json: { promptTemplates: [IMAGE_TEMPLATE] } });
+  });
+  await page.route('**/api/prompt-templates/image/editorial-poster', async (route) => {
+    detailRequests += 1;
+    if (detailRequests === 1) {
+      await route.fulfill({ status: 500, body: 'template unavailable' });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        promptTemplate: {
+          ...IMAGE_TEMPLATE,
+          prompt: 'Original poster prompt with dramatic type and product photography.',
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await page.getByTestId('new-project-tab-media').click();
+  await page.getByTestId('new-project-media-surface-image').click();
+  await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
+
+  await page.getByTestId('prompt-template-trigger').click();
+  await page.getByTestId('prompt-template-search').fill('poster');
+  await page.getByRole('option', { name: /Editorial Poster/i }).click();
+
+  await expect(page.getByTestId('prompt-template-error')).toBeVisible();
+  await page.getByTestId('prompt-template-retry').click();
+  await expect(page.getByTestId('prompt-template-error')).toHaveCount(0);
+  await expect(page.getByTestId('prompt-template-body')).toContainText('Original poster prompt');
+
+  await page.getByTestId('prompt-template-body').fill('');
+  await expect(page.getByTestId('prompt-template-empty-hint')).toBeVisible();
+  await page.getByTestId('prompt-template-body').fill(
+    'Edited QA prompt: bold poster, one hero product, crisp headline.',
+  );
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  const createResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith('/api/projects') &&
+    response.request().method() === 'POST',
+  );
+  await page.getByTestId('create-project').click();
+  const createResponse = await createResponsePromise;
+  expect(createResponse.ok(), await createResponse.text()).toBeTruthy();
+
+  const project = await fetchCurrentProject(page);
+  expect(project.metadata?.promptTemplate).toMatchObject({
+    id: 'editorial-poster',
+    surface: 'image',
+    title: 'Editorial Poster',
+    prompt: 'Edited QA prompt: bold poster, one hero product, crisp headline.',
+  });
+});
+
+test('[P1] live artifact empty connector CTA opens the gated connector setup path', async ({ page }) => {
+  await routeConnectors(page, []);
+  await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
+
+  await gotoEntryHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await page.getByTestId('new-project-tab-live-artifact').click();
+  await expect(page.getByTestId('new-project-connectors')).toBeVisible();
+
+  // The empty CTA now opens Integrations → Connectors directly. The Composio
+  // API key field sits at the top of the section; the catalog (and its gate)
+  // sits below it.
+  await page.getByTestId('new-project-connectors-empty').click();
+  await expect(page.getByTestId('new-project-modal')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByPlaceholder('Paste Composio API key')).toBeVisible();
+  await expect(page.getByTestId('connector-gate')).toBeVisible();
+  await expect(page.getByTestId('connectors-search-input')).toBeDisabled();
+});
+
+test('[P2] connectors search supports empty results and keyboard-closeable details', async ({ page }) => {
+  await routeConnectors(page, CONNECTORS);
+  await routeComposioConfig(page, { configured: true, apiKeyTail: '1234' });
+  await page.addInitScript((key) => {
+    const next = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: 'mock',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: {},
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+      },
+    };
+    window.localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
+
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
+
+  const search = settingsDialog.getByTestId('connectors-search-input');
+  await search.fill('git');
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+  await expect(connectorCard(settingsDialog, 'slack')).toHaveCount(0);
+
+  await search.fill('missing connector');
+  await expect(settingsDialog.getByTestId('connectors-empty')).toBeVisible();
+  await settingsDialog.getByTestId('connectors-search-clear').click();
+  await expect(settingsDialog.getByTestId('connectors-empty')).toHaveCount(0);
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+  await expect(connectorCard(settingsDialog, 'slack')).toBeVisible();
+
+  await connectorCard(settingsDialog, 'github').focus();
+  await connectorCard(settingsDialog, 'github').press('Enter');
+  await expect(page.getByTestId('connector-drawer')).toBeVisible();
+  await expect(page.getByTestId('connector-drawer')).toContainText('List issues');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('connector-drawer')).toHaveCount(0);
+});
+
+test('[P0] saving a Composio key from Integrations unlocks the connectors gate immediately', async ({ page }) => {
+  const { accountLabel: _unusedAccountLabel, ...slackConnector } = CONNECTORS[1]!;
+  await routeConnectors(page, [
+    {
+      ...CONNECTORS[0]!,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+    {
+      ...slackConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: false },
+    },
+  ]);
+
+  let savedComposioBody: unknown = null;
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    savedComposioBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
+  await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
+
+  await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
+  await settingsDialog.getByRole('button', { name: 'Save key', exact: true }).click();
+
+  expect(savedComposioBody).toEqual({ apiKey: 'cmp-secret-1234' });
+  await expect(settingsDialog.getByTestId('connectors-search-input')).toBeEnabled();
+  await expect(connectorCard(settingsDialog, 'github')).toBeVisible();
+
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    composio: {
+      apiKey: '',
+      apiKeyConfigured: true,
+      apiKeyTail: '1234',
+    },
+  });
+  const savedConfig = await readSavedConfig(page);
+  expect(savedConfig?.composio).toMatchObject({
+    apiKey: '',
+    apiKeyConfigured: true,
+    apiKeyTail: '1234',
+  });
+  expect(savedConfig?.composio?.apiKey).toBe('');
+});
+
+test('[P1] typing a draft replacement Composio key does not trigger global autosave', async ({ page }) => {
+  await routeConnectors(page, CONNECTORS);
+  await routeComposioConfig(page, { configured: true, apiKeyTail: '1234' });
+  await page.addInitScript((key) => {
+    const next = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: 'mock',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: {},
+      composio: {
+        apiKey: '',
+        apiKeyConfigured: true,
+        apiKeyTail: '1234',
+      },
+    };
+    window.localStorage.setItem(key, JSON.stringify(next));
+  }, STORAGE_KEY);
+
+  const appConfigPersistBodies: unknown[] = [];
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, json: { config: null } });
+      return;
+    }
+    appConfigPersistBodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, body: '{}' });
+  });
+
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
+  await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
+
+  await page.waitForTimeout(1200);
+  const appConfigPersistCountBeforeDraftEdit = appConfigPersistBodies.length;
+
+  const replacementInput = settingsDialog.getByPlaceholder('Paste a new key to replace the saved one');
+  await replacementInput.fill('cmp-draft-secret-9999');
+  await expect(settingsDialog.getByRole('button', { name: 'Save key', exact: true })).toBeEnabled();
+
+  await page.waitForTimeout(900);
+  expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
+  const savedConfig = await readSavedConfig(page);
+  expect(savedConfig?.composio).toMatchObject({
+    apiKey: '',
+    apiKeyConfigured: true,
+    apiKeyTail: '1234',
+  });
+});
+
+async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({ json: { connectors } });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    const statuses = Object.fromEntries(
+      connectors.map((connector) => [
+        connector.id,
+        {
+          status: connector.status,
+          accountLabel: connector.accountLabel,
+        },
+      ]),
+    );
+    await route.fulfill({ json: { statuses } });
+  });
+  await page.route('**/api/connectors/discovery*', async (route) => {
+    await route.fulfill({
+      json: {
+        connectors,
+        meta: { provider: 'composio' },
+      },
+    });
+  });
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+}
+
+async function openIntegrationsConnectors(page: Page): Promise<Locator> {
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-integrations').click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await page.getByTestId('integrations-tab-connectors').click();
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const panel = page.locator('.integrations-view__panel');
+  await expect(panel.getByTestId('connector-grid-wrap')).toBeVisible();
+  return panel;
+}
+
+async function routeComposioConfig(
+  page: Page,
+  config: { configured: boolean; apiKeyTail?: string },
+) {
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: config });
+      return;
+    }
+
+    await route.fulfill({ json: { ok: true } });
+  });
+}
+
+function connectorCard(scope: Page | Locator, id: string) {
+  return scope.locator(`article.connector-card[data-connector-id="${id}"]`);
+}
+
+async function fetchCurrentProject(page: Page) {
+  await expect(page).toHaveURL(/\/projects\/[^/]+/);
+  const url = new URL(page.url());
+  const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
+  expect(projectId).toBeTruthy();
+
+  const response = await page.request.get(`/api/projects/${projectId}`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    project: {
+      metadata?: {
+        promptTemplate?: {
+          id: string;
+          surface: string;
+          title: string;
+          prompt: string;
+        };
+      };
+    };
+  };
+  return body.project;
+}

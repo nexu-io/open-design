@@ -1,7 +1,12 @@
-// @ts-nocheck
 import { describe, expect, it } from 'vitest';
 
-import { lintArtifact } from '../src/lint-artifact.js';
+import { lintArtifact, type LintFinding } from '../src/lint-artifact.js';
+
+function requiredFinding(findings: LintFinding[], id: string): LintFinding {
+  const hit = findings.find((finding) => finding.id === id);
+  if (!hit) throw new Error(`expected lint finding ${id}`);
+  return hit;
+}
 
 describe('ai-default-indigo', () => {
   it('flags solid #6366f1 used as accent', () => {
@@ -12,8 +17,7 @@ describe('ai-default-indigo', () => {
       <button class="cta">Get started</button>
     `;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'ai-default-indigo');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'ai-default-indigo');
     expect(hit.severity).toBe('P0');
   });
 
@@ -35,8 +39,7 @@ describe('ai-default-indigo', () => {
   ])('flags solid %s (%s) as a documented cardinal-sin accent', (hex) => {
     const html = `<div style="background: ${hex}">Hi</div>`;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'ai-default-indigo');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'ai-default-indigo');
     expect(hit.severity).toBe('P0');
   });
 
@@ -476,8 +479,7 @@ describe('all-caps-no-tracking', () => {
       <span class="eyebrow">New</span>
     `;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'all-caps-no-tracking');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'all-caps-no-tracking');
     expect(hit.severity).toBe('P1');
   });
 
@@ -529,8 +531,7 @@ describe('all-caps-no-tracking', () => {
       <span class="eyebrow">New</span>
     `;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'all-caps-no-tracking');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'all-caps-no-tracking');
     expect(hit.severity).toBe('P1');
   });
 
@@ -572,8 +573,7 @@ describe('all-caps-no-tracking', () => {
     // ALL CAPS the typography rule prohibits without tracking.
     const html = `<span style="text-transform: uppercase">NEW</span>`;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'all-caps-no-tracking');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'all-caps-no-tracking');
     expect(hit.severity).toBe('P1');
   });
 
@@ -1169,16 +1169,14 @@ describe('trust-gradient', () => {
     // past unflagged. The new `trust-gradient` rule closes that gap.
     const html = `<div style="background: linear-gradient(90deg, #3b82f6, #06b6d4)">Hi</div>`;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'trust-gradient');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'trust-gradient');
     expect(hit.severity).toBe('P0');
   });
 
   it('flags a blue→cyan two-stop gradient with keyword stops', () => {
     const html = `<div style="background: linear-gradient(90deg, blue, cyan)">Hi</div>`;
     const findings = lintArtifact(html);
-    const hit = findings.find((f) => f.id === 'trust-gradient');
-    expect(hit).toBeDefined();
+    const hit = requiredFinding(findings, 'trust-gradient');
     expect(hit.severity).toBe('P0');
   });
 

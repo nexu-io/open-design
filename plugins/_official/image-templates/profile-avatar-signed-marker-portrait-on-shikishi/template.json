@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-signed-marker-portrait-on-shikishi",
+  "surface": "image",
+  "title": "Profile / Avatar - Signed Marker Portrait on Shikishi",
+  "summary": "This generates a lively signed marker-style portrait on a square shikishi board, useful for fan-art autographs, commemorative illustration posts, and personalized thank-you visuals.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fantasy",
+    "3d-render"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A lively hand-drawn fashion portrait in a changed illustration style, made to look like a signed fan-art sketch drawn with markers on a square white shikishi board with a thin gold border. Show a stylish young woman from about the waist up, leaning slightly forward with one elbow resting up near her face in a casual, friendly pose. Her face area is covered by a simple rectangular censor block in a muted beige tone. She has shoulder-length medium brown hair with warm highlights, soft volume, side-swept bangs, and flipped-out ends. Render the art with expressive black ink outlines, visible marker strokes, watercolor-like blending, sketchy hatching, and an energetic, vivid handmade feel. She wears a fitted dark gray ribbed long-sleeve knit top with subtle puffed shoulders, layered delicate gold necklaces, a dangling pearl earring, a beige crossbody bag strap running diagonally across her chest, and a light beige skirt or dress visible at the waist. Leave plenty of clean white background around the figure. Add 2 small sparkle doodles on the left side. Add handwritten Japanese thank-you messages and signature-style black ink writing around the portrait: at upper right write {argument name=\"top message\" default=\"ありがとう！\"} with an underline and a small heart, beneath it place a large stylized autograph reading {argument name=\"signature name\" default=\"Yui\"} with a smiling face mark and a heart, at lower left write {argument name=\"side message\" default=\"いつも応援してくれてありがとう♡\"}, and at lower right write the date {argument name=\"date\" default=\"2024.5.20\"} with another heart. The overall image should feel warm, personal, lively, and like a celebratory signed illustration on a square autograph board.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777367317129_2rohn0_HG8hIdab0AAwzdp.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "ダルトワ★TV",
+    "url": "https://x.com/MireilleDartois/status/2048894364479565869#reversed-0"
+  }
+}

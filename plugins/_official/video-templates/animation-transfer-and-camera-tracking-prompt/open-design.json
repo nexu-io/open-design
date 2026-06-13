@@ -1,0 +1,120 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-animation-transfer-and-camera-tracking-prompt",
+  "title": "Animation transfer and camera tracking prompt",
+  "title_i18n": {
+    "zh-CN": "动画迁移和相机跟踪提示词",
+    "zh-TW": "動畫轉移和相機追蹤提示詞",
+    "ja": "アニメーション転送とカメラトラッキングプロンプト",
+    "ko": "애니메이션 전송 및 카메라 트래킹 프롬프트",
+    "de": "Animationsübertragung und Kamera-Tracking-Prompt",
+    "fr": "Prompt de transfert d'animation et de suivi de caméra",
+    "ru": "Промпт для переноса анимации и отслеживания камеры",
+    "es": "Prompt de transferencia de animación y seguimiento de cámara",
+    "pt-BR": "Prompt de transferência de animação e rastreamento de câmera",
+    "it": "Prompt per trasferimento animazione e tracciamento camera",
+    "vi": "Prompt chuyển động tác và theo dõi camera",
+    "pl": "Prompt transferu animacji i śledzenia kamery",
+    "id": "Prompt transfer animasi dan pelacakan kamera",
+    "nl": "Prompt voor animatieoverdracht en cameratracking",
+    "ar": "موجه نقل الحركة وتتبع الكاميرا",
+    "tr": "Animasyon aktarımı ve kamera takibi istemi",
+    "uk": "Промпт для передачі анімації та відстеження камери",
+    "en": "Animation transfer and camera tracking prompt"
+  },
+  "version": "0.1.0",
+  "description": "A technical prompt for Seedance 2.0 that applies a specific motion reference to a character while maintaining fixed camera tracking.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 提供的技术提示词，将特定动作参考应用到角色上，同时保持固定的相机跟踪。",
+    "zh-TW": "為 Seedance 2.0 提供的技術提示詞，將特定動作參考應用到角色上，同時保持固定的相機追蹤。",
+    "ja": "Seedance 2.0用の技術プロンプト。特定のモーションリファレンスをキャラクターに適用しながら、固定カメラトラッキングを維持します。",
+    "ko": "특정 모션 참조를 캐릭터에 적용하면서 고정 카메라 트래킹을 유지하는 Seedance 2.0용 기술 프롬프트입니다.",
+    "de": "Ein technischer Prompt für Seedance 2.0, der eine spezifische Bewegungsreferenz auf einen Charakter anwendet und dabei ein festes Kamera-Tracking beibehält.",
+    "fr": "Un prompt technique pour Seedance 2.0 qui applique une référence de mouvement spécifique à un personnage tout en maintenant un suivi de caméra fixe.",
+    "ru": "Технический промпт для Seedance 2.0, применяющий определенный эталон движения к персонажу с сохранением фиксированного отслеживания камеры.",
+    "es": "Un prompt técnico para Seedance 2.0 que aplica una referencia de movimiento específica a un personaje mientras mantiene el seguimiento de cámara fijo.",
+    "pt-BR": "Um prompt técnico para Seedance 2.0 que aplica uma referência de movimento específica a um personagem mantendo o rastreamento de câmera fixo.",
+    "it": "Un prompt tecnico per Seedance 2.0 che applica un riferimento di movimento specifico a un personaggio mantenendo un tracciamento della camera fisso.",
+    "vi": "Prompt kỹ thuật cho Seedance 2.0 áp dụng tham chiếu chuyển động cụ thể cho nhân vật trong khi duy trì theo dõi camera cố định.",
+    "pl": "Techniczny prompt dla Seedance 2.0, który stosuje konkretną referencję ruchu do postaci, zachowując jednocześnie stałe śledzenie kamery.",
+    "id": "Prompt teknis untuk Seedance 2.0 yang menerapkan referensi gerakan tertentu pada karakter sambil mempertahankan pelacakan kamera tetap.",
+    "nl": "Een technische prompt voor Seedance 2.0 die een specifieke bewegingsreferentie toepast op een personage met behoud van vaste cameratracking.",
+    "ar": "موجه تقني لـ Seedance 2.0 يطبق مرجع حركة محدد على الشخصية مع الحفاظ على تتبع ثابت للكاميرا.",
+    "tr": "Seedance 2.0 için karaktere belirli bir hareket referansı uygularken sabit kamera takibini koruyan teknik istem.",
+    "uk": "Технічний промпт для Seedance 2.0, що застосовує конкретний еталон руху до персонажа зі збереженням фіксованого відстеження камери.",
+    "en": "A technical prompt for Seedance 2.0 that applies a specific motion reference to a character while maintaining fixed camera tracking."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Olivio Sarikas",
+    "url": "https://x.com/OlivioSarikas/status/2049093762077630628"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/089e7cd70d20131d6d1b44741520eaee/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/089e7cd70d20131d6d1b44741520eaee/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "apply the walking animation of @anim exactly as it is to @char7. the camera tracks the character exactly in place, camera angle does not change",
+        "zh-CN": "使用这个插件完成以下任务：apply the walking animation of @anim exactly as it is to @char7. the camera tracks the character exactly in place, camera angle does not change"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

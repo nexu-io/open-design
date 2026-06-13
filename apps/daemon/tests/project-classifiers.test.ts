@@ -105,6 +105,7 @@ describe('mimeFor', () => {
     expect(mimeFor('a.jsx')).toBe('text/javascript; charset=utf-8');
     expect(mimeFor('a.tsx')).toBe('text/javascript; charset=utf-8');
     expect(mimeFor('a.ts')).toBe('text/typescript; charset=utf-8');
+    expect(mimeFor('a.py')).toBe('text/x-python; charset=utf-8');
     expect(mimeFor('a.json')).toBe('application/json; charset=utf-8');
     expect(mimeFor('a.md')).toBe('text/markdown; charset=utf-8');
     expect(mimeFor('a.txt')).toBe('text/plain; charset=utf-8');
@@ -151,6 +152,7 @@ describe('mimeFor', () => {
   it('is case-insensitive on the extension', () => {
     expect(mimeFor('IMG.PNG')).toBe('image/png');
     expect(mimeFor('PAGE.HTML')).toBe('text/html; charset=utf-8');
+    expect(mimeFor('SCRIPT.PY')).toBe('text/x-python; charset=utf-8');
     expect(mimeFor('FOO.JSON')).toBe('application/json; charset=utf-8');
   });
 });

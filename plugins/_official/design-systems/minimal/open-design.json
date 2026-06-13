@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-minimal",
+  "title": "Minimal",
+  "title_i18n": {
+    "zh-CN": "极简",
+    "zh-TW": "極簡",
+    "ja": "ミニマル",
+    "ko": "미니멀",
+    "de": "Minimal",
+    "fr": "Minimal",
+    "ru": "Minimal",
+    "es": "Minimal",
+    "pt-BR": "Minimal",
+    "it": "Minimal",
+    "vi": "Minimal",
+    "pl": "Minimal",
+    "id": "Minimal",
+    "nl": "Minimaal",
+    "ar": "بسيط",
+    "tr": "Minimal",
+    "uk": "Мінімал",
+    "en": "Minimal"
+  },
+  "version": "0.1.0",
+  "description": "Stripped-back design emphasizing whitespace, clean typography, and restrained color for maximum clarity and focus.",
+  "description_i18n": {
+    "zh-CN": "简约设计，强调留白、清晰排版和克制的色彩，实现最大化的清晰度和专注度。",
+    "zh-TW": "簡約設計，強調留白、清晰排版和克制的色彩，實現最大化的清晰度和專注度。",
+    "ja": "余白、クリーンなタイポグラフィ、抑制されたカラーを重視したシンプルなデザインで、最大限の明瞭さと集中力を実現します。",
+    "ko": "여백, 깔끔한 타이포그래피, 절제된 색상을 강조하여 최대한의 명확성과 집중도를 제공하는 간결한 디자인입니다.",
+    "de": "Reduziertes Design mit Fokus auf Weißraum, klare Typografie und zurückhaltende Farben für maximale Klarheit und Konzentration.",
+    "fr": "Design épuré mettant l'accent sur les espaces blancs, une typographie claire et des couleurs sobres pour une clarté et une concentration maximales.",
+    "ru": "Лаконичный дизайн с акцентом на пустое пространство, чистую типографику и сдержанные цвета для максимальной ясности и концентрации.",
+    "es": "Diseño minimalista que enfatiza el espacio en blanco, tipografía limpia y colores sobrios para lograr máxima claridad y concentración.",
+    "pt-BR": "Design minimalista que enfatiza espaços em branco, tipografia limpa e cores contidas para máxima clareza e foco.",
+    "it": "Design essenziale che enfatizza gli spazi bianchi, tipografia pulita e colori sobri per massima chiarezza e concentrazione.",
+    "vi": "Thiết kế tối giản nhấn mạnh khoảng trắng, kiểu chữ rõ ràng và màu sắc tiết chế để đạt độ rõ nét và tập trung tối đa.",
+    "pl": "Minimalistyczny design kładący nacisk na białą przestrzeń, czystą typografię i stonowane kolory dla maksymalnej czytelności i skupienia.",
+    "id": "Desain minimalis yang menekankan ruang putih, tipografi bersih, dan warna yang terkendali untuk kejelasan dan fokus maksimal.",
+    "nl": "Gestript ontwerp met nadruk op witruimte, heldere typografie en ingetogen kleurgebruik voor maximale helderheid en focus.",
+    "ar": "تصميم مبسط يركز على المساحات البيضاء والطباعة الواضحة والألوان المحدودة لتحقيق أقصى قدر من الوضوح والتركيز.",
+    "tr": "Maksimum netlik ve odaklanma için beyaz alanı, temiz tipografiyi ve ölçülü renkleri vurgulayan sade tasarım.",
+    "uk": "Лаконічний дизайн з акцентом на білому просторі, чистій типографіці та стриманих кольорах для максимальної ясності та концентрації.",
+    "en": "Stripped-back design emphasizing whitespace, clean typography, and restrained color for maximum clarity and focus."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "modern-minimal"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Minimal design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Minimal design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "minimal",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

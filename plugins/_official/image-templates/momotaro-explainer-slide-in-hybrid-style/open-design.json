@@ -1,0 +1,120 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-momotaro-explainer-slide-in-hybrid-style",
+  "title": "Momotaro Explainer Slide in Hybrid Style",
+  "title_i18n": {
+    "zh-CN": "桃太郎解说幻灯片混合风格",
+    "zh-TW": "桃太郎解說簡報混合風格",
+    "ja": "桃太郎解説スライド ハイブリッドスタイル",
+    "ko": "모모타로 설명 슬라이드 하이브리드 스타일",
+    "de": "Momotaro Erklärungs-Folie im Hybrid-Stil",
+    "fr": "Diapositive explicative Momotaro en style hybride",
+    "ru": "Объясняющий слайд Момотаро в гибридном стиле",
+    "es": "Diapositiva explicativa Momotaro en estilo híbrido",
+    "pt-BR": "Slide explicativo Momotaro em estilo híbrido",
+    "it": "Slide esplicativa Momotaro in stile ibrido",
+    "vi": "Slide giải thích Momotaro phong cách kết hợp",
+    "pl": "Slajd objaśniający Momotaro w stylu hybrydowym",
+    "id": "Slide penjelasan Momotaro gaya hibrida",
+    "nl": "Momotaro uitlegdia in hybride stijl",
+    "ar": "شريحة شرح Momotaro بأسلوب هجين",
+    "tr": "Hibrit tarzda Momotaro açıklama slaydı",
+    "uk": "Пояснювальний слайд Момотаро в гібридному стилі",
+    "en": "Momotaro Explainer Slide in Hybrid Style"
+  },
+  "version": "0.1.0",
+  "description": "A prompt that combines the simple, warm aesthetic of Irasutoya illustrations with the high-information density characteristic of Japanese government slides.",
+  "description_i18n": {
+    "zh-CN": "结合 Irasutoya 插画简洁温暖的美学与日本政府幻灯片高信息密度特征的提示词。",
+    "zh-TW": "結合 Irasutoya 插畫簡潔溫暖的美學與日本政府簡報高資訊密度特徵的提示詞。",
+    "ja": "いらすとやのシンプルで温かみのある画風と、日本の官公庁スライドの高情報密度を組み合わせたプロンプト。",
+    "ko": "Irasutoya 일러스트의 단순하고 따뜻한 미학과 일본 정부 슬라이드의 높은 정보 밀도를 결합한 프롬프트입니다.",
+    "de": "Ein Prompt, der die einfache, warme Ästhetik von Irasutoya-Illustrationen mit der hohen Informationsdichte japanischer Regierungspräsentationen kombiniert.",
+    "fr": "Un prompt combinant l'esthétique simple et chaleureuse des illustrations Irasutoya avec la haute densité d'information des présentations gouvernementales japonaises.",
+    "ru": "Промпт, сочетающий простую теплую эстетику иллюстраций Irasutoya с высокой информационной плотностью японских правительственных презентаций.",
+    "es": "Un prompt que combina la estética simple y cálida de las ilustraciones Irasutoya con la alta densidad informativa de las presentaciones gubernamentales japonesas.",
+    "pt-BR": "Um prompt que combina a estética simples e acolhedora das ilustrações Irasutoya com a alta densidade de informação dos slides governamentais japoneses.",
+    "it": "Un prompt che combina l'estetica semplice e calorosa delle illustrazioni Irasutoya con l'alta densità informativa delle presentazioni governative giapponesi.",
+    "vi": "Prompt kết hợp thẩm mỹ đơn giản, ấm áp của tranh minh họa Irasutoya với mật độ thông tin cao đặc trưng của slide chính phủ Nhật Bản.",
+    "pl": "Prompt łączący prostą, ciepłą estetykę ilustracji Irasutoya z wysoką gęstością informacji charakterystyczną dla japońskich prezentacji rządowych.",
+    "id": "Prompt yang menggabungkan estetika sederhana dan hangat dari ilustrasi Irasutoya dengan kepadatan informasi tinggi khas slide pemerintah Jepang.",
+    "nl": "Een prompt die de eenvoudige, warme esthetiek van Irasutoya-illustraties combineert met de hoge informatiedichtheid van Japanse overheidspresentaties.",
+    "ar": "موجه يجمع بين الجمالية البسيطة والدافئة لرسومات Irasutoya وكثافة المعلومات العالية المميزة لعروض الحكومة اليابانية.",
+    "tr": "Irasutoya çizimlerinin sade ve sıcak estetiğini Japon hükümet sunumlarının yüksek bilgi yoğunluğuyla birleştiren bir prompt.",
+    "uk": "Промпт, що поєднує просту теплу естетику ілюстрацій Irasutoya з високою інформаційною щільністю японських урядових презентацій.",
+    "en": "A prompt that combines the simple, warm aesthetic of Irasutoya illustrations with the high-information density characteristic of Japanese government slides."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "やまもん",
+    "url": "https://x.com/yammamon/status/2045778624092254603"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "illustration"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1776699414289_t6mebs_HGQQxukbUAA_qc0.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create an explanatory slide ({argument name=\"format\" default=\"ponchi-e diagram\"}) for {argument name=\"theme\" default=\"Momotaro\"} that fuses the gentle atmosphere of \"Irasutoya\" with the overwhelming information density of \"Kasumigaseki slides\".",
+        "zh-CN": "使用这个插件完成以下任务：Create an explanatory slide ({argument name=\"format\" default=\"ponchi-e diagram\"}) for {argument name=\"theme\" default=\"Momotaro\"} that fuses the gentle atmosphere of \"Irasutoya\" with the overwhelming information density of \"Kasumigaseki slides\"."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

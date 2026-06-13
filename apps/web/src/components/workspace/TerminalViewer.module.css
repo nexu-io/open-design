@@ -1,0 +1,349 @@
+/* Terminal workspace tab: an xterm.js surface mounted in `.ws-body`, bound to a
+   daemon PTY session. Output arrives over SSE; keystrokes/resizes flow back up
+   over POST. Fills the body so the terminal owns the scroll. */
+
+.root {
+  --terminal-bg: #fbfaf8;
+  --terminal-fg: #1f2328;
+  --terminal-muted-fg: rgba(31, 35, 40, 0.68);
+  --terminal-cursor: #1f2328;
+  --terminal-cursor-accent: #fbfaf8;
+  --terminal-selection-bg: rgba(37, 99, 235, 0.24);
+  --terminal-selection-fg: #0f172a;
+  --terminal-selection-inactive-bg: rgba(100, 116, 139, 0.18);
+  --terminal-banner-bg: rgba(15, 23, 42, 0.045);
+  --terminal-banner-border: rgba(15, 23, 42, 0.11);
+  --terminal-button-bg: rgba(15, 23, 42, 0.06);
+  --terminal-button-bg-hover: rgba(15, 23, 42, 0.11);
+  --terminal-button-border: rgba(15, 23, 42, 0.12);
+  --terminal-button-border-hover: rgba(15, 23, 42, 0.2);
+  --terminal-ansi-black: #24292f;
+  --terminal-ansi-red: #b42318;
+  --terminal-ansi-green: #087443;
+  --terminal-ansi-yellow: #9a5b00;
+  --terminal-ansi-blue: #1d4ed8;
+  --terminal-ansi-magenta: #7e22ce;
+  --terminal-ansi-cyan: #047481;
+  --terminal-ansi-white: #ede9e0;
+  --terminal-ansi-bright-black: #6b7280;
+  --terminal-ansi-bright-red: #d92d20;
+  --terminal-ansi-bright-green: #099250;
+  --terminal-ansi-bright-yellow: #b7791f;
+  --terminal-ansi-bright-blue: #2563eb;
+  --terminal-ansi-bright-magenta: #9333ea;
+  --terminal-ansi-bright-cyan: #0891b2;
+  --terminal-ansi-bright-white: #ffffff;
+
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color-scheme: light;
+  background: var(--terminal-bg);
+}
+
+:global([data-theme='dark']) .root {
+  --terminal-bg: #1e1e1e;
+  --terminal-fg: #e6e1d9;
+  --terminal-muted-fg: rgba(230, 225, 217, 0.72);
+  --terminal-cursor: #f2ede4;
+  --terminal-cursor-accent: #1e1e1e;
+  --terminal-selection-bg: rgba(96, 165, 250, 0.32);
+  --terminal-selection-fg: #ffffff;
+  --terminal-selection-inactive-bg: rgba(148, 163, 184, 0.22);
+  --terminal-banner-bg: rgba(255, 255, 255, 0.06);
+  --terminal-banner-border: rgba(255, 255, 255, 0.12);
+  --terminal-button-bg: rgba(255, 255, 255, 0.12);
+  --terminal-button-bg-hover: rgba(255, 255, 255, 0.2);
+  --terminal-button-border: rgba(255, 255, 255, 0.18);
+  --terminal-button-border-hover: rgba(255, 255, 255, 0.3);
+  --terminal-ansi-black: #1f2328;
+  --terminal-ansi-red: #ff7b72;
+  --terminal-ansi-green: #7ee787;
+  --terminal-ansi-yellow: #d29922;
+  --terminal-ansi-blue: #79c0ff;
+  --terminal-ansi-magenta: #d2a8ff;
+  --terminal-ansi-cyan: #56d4dd;
+  --terminal-ansi-white: #e6edf3;
+  --terminal-ansi-bright-black: #6e7681;
+  --terminal-ansi-bright-red: #ffa198;
+  --terminal-ansi-bright-green: #7ee787;
+  --terminal-ansi-bright-yellow: #e3b341;
+  --terminal-ansi-bright-blue: #a5d6ff;
+  --terminal-ansi-bright-magenta: #d2a8ff;
+  --terminal-ansi-bright-cyan: #7ee7f2;
+  --terminal-ansi-bright-white: #ffffff;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme])) .root {
+    --terminal-bg: #1e1e1e;
+    --terminal-fg: #e6e1d9;
+    --terminal-muted-fg: rgba(230, 225, 217, 0.72);
+    --terminal-cursor: #f2ede4;
+    --terminal-cursor-accent: #1e1e1e;
+    --terminal-selection-bg: rgba(96, 165, 250, 0.32);
+    --terminal-selection-fg: #ffffff;
+    --terminal-selection-inactive-bg: rgba(148, 163, 184, 0.22);
+    --terminal-banner-bg: rgba(255, 255, 255, 0.06);
+    --terminal-banner-border: rgba(255, 255, 255, 0.12);
+    --terminal-button-bg: rgba(255, 255, 255, 0.12);
+    --terminal-button-bg-hover: rgba(255, 255, 255, 0.2);
+    --terminal-button-border: rgba(255, 255, 255, 0.18);
+    --terminal-button-border-hover: rgba(255, 255, 255, 0.3);
+    --terminal-ansi-black: #1f2328;
+    --terminal-ansi-red: #ff7b72;
+    --terminal-ansi-green: #7ee787;
+    --terminal-ansi-yellow: #d29922;
+    --terminal-ansi-blue: #79c0ff;
+    --terminal-ansi-magenta: #d2a8ff;
+    --terminal-ansi-cyan: #56d4dd;
+    --terminal-ansi-white: #e6edf3;
+    --terminal-ansi-bright-black: #6e7681;
+    --terminal-ansi-bright-red: #ffa198;
+    --terminal-ansi-bright-green: #7ee787;
+    --terminal-ansi-bright-yellow: #e3b341;
+    --terminal-ansi-bright-blue: #a5d6ff;
+    --terminal-ansi-bright-magenta: #d2a8ff;
+    --terminal-ansi-bright-cyan: #7ee7f2;
+    --terminal-ansi-bright-white: #ffffff;
+    color-scheme: dark;
+  }
+}
+
+.surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The fit addon measures this element; give the terminal a small, even
+     gutter so the first row/column isn't flush against the tab edge. */
+  padding: 8px 10px;
+  overflow: hidden;
+  background: var(--terminal-bg);
+  opacity: 1;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.surfaceConnecting {
+  opacity: 0.16;
+}
+
+/* xterm injects its own `.terminal` element here; let it fill the gutter box. */
+.surface :global(.xterm) {
+  height: 100%;
+  color: var(--terminal-fg);
+}
+
+.surface :global(.xterm-viewport),
+.surface :global(.composition-view) {
+  background-color: var(--terminal-bg);
+}
+
+.surface :global(.xterm-helper-textarea) {
+  position: absolute !important;
+  left: -9999em !important;
+  top: 0 !important;
+  z-index: -5 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  color: transparent !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  resize: none !important;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--terminal-fg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--terminal-bg) 94%, transparent), var(--terminal-bg)),
+    var(--terminal-bg);
+}
+
+.loadingStack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(420px, 100%);
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    'SF Mono',
+    Menlo,
+    Consolas,
+    'Liberation Mono',
+    monospace;
+}
+
+.loadingPromptLine {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--terminal-fg);
+}
+
+.loadingPrompt {
+  color: var(--terminal-ansi-green);
+}
+
+.loadingCommand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadingCursor {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 15px;
+  background: var(--terminal-cursor);
+  animation: terminal-cursor-blink 1s steps(2, start) infinite;
+}
+
+.loadingCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: inherit;
+}
+
+.loadingTitle {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--terminal-fg);
+}
+
+.loadingDescription {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--terminal-muted-fg);
+}
+
+.loadingRows {
+  display: grid;
+  gap: 7px;
+}
+
+.loadingRows span {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--terminal-fg) 12%, transparent);
+  border-radius: 999px;
+}
+
+.loadingRows span:nth-child(1) {
+  width: 78%;
+}
+
+.loadingRows span:nth-child(2) {
+  width: 58%;
+}
+
+.loadingRows span:nth-child(3) {
+  width: 68%;
+}
+
+.loadingRows span::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--terminal-fg) 16%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: terminal-loading-sweep 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+@keyframes terminal-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0.18;
+  }
+}
+
+@keyframes terminal-loading-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface {
+    transition: none;
+  }
+
+  .loadingCursor,
+  .loadingRows span::after {
+    animation: none;
+  }
+}
+
+.banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--terminal-muted-fg);
+  background: var(--terminal-banner-bg);
+  border-top: 1px solid var(--terminal-banner-border);
+}
+
+.bannerIcon {
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.bannerLabel {
+  flex: 1 1 auto;
+}
+
+.restartBtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--terminal-fg);
+  background: var(--terminal-button-bg);
+  border: 1px solid var(--terminal-button-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.restartBtn:hover {
+  background: var(--terminal-button-bg-hover);
+  border-color: var(--terminal-button-border-hover);
+}

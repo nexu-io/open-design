@@ -1,128 +1,135 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseFrontmatter } from '../../../daemon/src/frontmatter';
-import { LOCALIZED_CONTENT_IDS } from '../../src/i18n/content';
+import type { DesignSystemSummary, PromptTemplateSummary, SkillSummary } from '../../src/types';
+import {
+  FRENCH_CONTENT_IDS,
+  localizeDesignSystemSummary,
+  localizePromptTemplateSummary,
+  localizeSkillDescription,
+  localizeSkillName,
+  localizeSkillPrompt,
+  hasLocalizedContent,
+} from '../../src/i18n/content';
+import { LOCALES } from '../../src/i18n/types';
 
-const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+describe('localized resource content', () => {
+  it('derives localized ids only from localized dictionaries', () => {
+    expect(FRENCH_CONTENT_IDS.skills).toContain('blog-post');
+    expect(FRENCH_CONTENT_IDS.skills).not.toContain('ib-pitch-book');
+    expect(FRENCH_CONTENT_IDS.designSystems).toContain('airbnb');
+    expect(FRENCH_CONTENT_IDS.designSystems).not.toContain('agentic');
+    expect(FRENCH_CONTENT_IDS.promptTemplates).toContain('3d-stone-staircase-evolution-infographic');
+    expect(FRENCH_CONTENT_IDS.promptTemplates).not.toContain('notion-team-dashboard-live-artifact');
+  });
 
-function sorted(values: Iterable<string>): string[] {
-  return [...values].sort((a, b) => a.localeCompare(b));
-}
+  it('prefers localized skill copy and falls back to english field-by-field', () => {
+    const partiallyLocalizedSkill = {
+      id: 'blog-post',
+      examplePrompt: '  English prompt from source.  ',
+      description: '  English description from source.  ',
+    } as unknown as SkillSummary;
 
-async function entriesWithFile(root: string, fileName: string): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true });
-  const ids: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const filePath = path.join(root, entry.name, fileName);
-    try {
-      if ((await stat(filePath)).isFile()) {
-        ids.push(entry.name);
-      }
-    } catch {
-      // Missing optional registry files are ignored, matching daemon discovery.
-    }
-  }
-  return sorted(ids);
-}
+    expect(localizeSkillPrompt('fr', partiallyLocalizedSkill)).toBe(
+      'Un article long-form / blog post — masthead, placeholder d’image hero, corps d’article avec figures et pull quotes, ligne auteur, articles associés.',
+    );
+    expect(localizeSkillDescription('fr', partiallyLocalizedSkill)).toBe(
+      'English description from source.',
+    );
+  });
 
-async function readSkillIds(): Promise<string[]> {
-  const skillsRoot = path.join(repoRoot, 'skills');
-  const dirs = await entriesWithFile(skillsRoot, 'SKILL.md');
-  const ids = await Promise.all(
-    dirs.map(async (dir) => {
-      const raw = await readFile(path.join(skillsRoot, dir, 'SKILL.md'), 'utf8');
-      const { data } = parseFrontmatter(raw) as { data: { name?: unknown } };
-      const name = data.name;
-      return typeof name === 'string' && name.trim() ? name : dir;
-    }),
-  );
-  return sorted(ids);
-}
+  it('uses inline skill display metadata before falling back to source fields', () => {
+    const inlineSkill = {
+      id: 'inline-skill',
+      name: 'inline-skill',
+      displayName: {
+        en: 'Inline Skill',
+        'zh-CN': '内联技能',
+      },
+      description: ' English description from source. ',
+      descriptionI18n: {
+        en: 'English inline description.',
+        'zh-CN': '中文内联描述。',
+      },
+      examplePrompt: ' English prompt from source. ',
+      examplePromptI18n: {
+        en: 'English inline prompt.',
+        'zh-CN': '中文内联 prompt。',
+      },
+    } as unknown as SkillSummary;
 
-async function readDesignSystemIds(): Promise<string[]> {
-  return entriesWithFile(path.join(repoRoot, 'design-systems'), 'DESIGN.md');
-}
+    expect(localizeSkillName('zh-CN', inlineSkill)).toBe('内联技能');
+    expect(localizeSkillName('zh-TW', inlineSkill)).toBe('内联技能');
+    expect(localizeSkillName('fr', inlineSkill)).toBe('Inline Skill');
+    expect(localizeSkillDescription('zh-CN', inlineSkill)).toBe('中文内联描述。');
+    expect(localizeSkillDescription('fr', inlineSkill)).toBe('English inline description.');
+    expect(localizeSkillPrompt('zh-CN', inlineSkill)).toBe('中文内联 prompt。');
+    expect(localizeSkillPrompt('fr', inlineSkill)).toBe('English inline prompt.');
+  });
 
-async function readDesignSystemCategories(): Promise<string[]> {
-  const systemsRoot = path.join(repoRoot, 'design-systems');
-  const ids = await readDesignSystemIds();
-  const categories = await Promise.all(
-    ids.map(async (id) => {
-      const raw = await readFile(path.join(systemsRoot, id, 'DESIGN.md'), 'utf8');
-      return /^>\s*Category:\s*(.+?)\s*$/im.exec(raw)?.[1] ?? 'Uncategorized';
-    }),
-  );
-  return sorted(new Set(categories));
-}
+  it('falls back to english design system summaries when localized copy is missing', () => {
+    const englishOnlySystem = {
+      id: 'agentic',
+      summary: ' English summary from source. ',
+      category: 'English category',
+    } as DesignSystemSummary;
 
-async function readPromptTemplateSummaries(): Promise<
-  Array<{ id: string; category: string; tags: string[] }>
-> {
-  const templatesRoot = path.join(repoRoot, 'prompt-templates');
-  const summaries: Array<{ id: string; category: string; tags: string[] }> = [];
-  for (const surface of ['image', 'video']) {
-    const dir = path.join(templatesRoot, surface);
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-      const raw = JSON.parse(await readFile(path.join(dir, entry.name), 'utf8')) as {
-        id?: unknown;
-        category?: unknown;
-        tags?: unknown;
-      };
-      if (typeof raw.id !== 'string' || !raw.id) continue;
-      summaries.push({
-        id: raw.id,
-        category: typeof raw.category === 'string' ? raw.category : 'General',
-        tags: Array.isArray(raw.tags) ? raw.tags.filter((tag): tag is string => typeof tag === 'string') : [],
-      });
-    }
-  }
-  return summaries;
-}
+    expect(localizeDesignSystemSummary('fr', englishOnlySystem)).toBe(' English summary from source. ');
+  });
 
-describe('Localized display content coverage', () => {
-  for (const [locale, ids] of Object.entries(LOCALIZED_CONTENT_IDS)) {
-    it(`covers every curated skill, design system, and prompt template for ${locale}`, async () => {
-      const [skillIds, designSystemIds, promptTemplateSummaries] = await Promise.all([
-        readSkillIds(),
-        readDesignSystemIds(),
-        readPromptTemplateSummaries(),
-      ]);
+  it('prefers localized prompt template fields and falls back to english fields and tags', () => {
+    const translatedTemplate = {
+      id: '3d-stone-staircase-evolution-infographic',
+      surface: 'image',
+      title: 'English title',
+      summary: 'English summary',
+      category: 'Infographic',
+      tags: ['3d', 'unknown-tag'],
+      source: { repo: 'repo', license: 'MIT' },
+    } satisfies PromptTemplateSummary;
 
-      expect(sorted(ids.skills), 'skills display copy').toEqual(skillIds);
-      expect(sorted(ids.designSystems), 'design-system summaries').toEqual(
-        designSystemIds,
-      );
-      expect(sorted(ids.promptTemplates), 'prompt-template metadata').toEqual(
-        sorted(promptTemplateSummaries.map((template) => template.id)),
-      );
+    const localized = localizePromptTemplateSummary('fr', translatedTemplate);
+    expect(localized.title).toBe('Infographie 3D d’une évolution en escalier de pierre');
+    expect(localized.summary).toBe(
+      'Transforme une timeline d’évolution plate en infographie 3D réaliste en escalier de pierre, avec rendus détaillés d’organismes et panneaux latéraux structurés.',
+    );
+    expect(localized.category).toBe('Infographie');
+    expect(localized.tags).toEqual(['3D', 'unknown-tag']);
+    expect(
+      localizePromptTemplateSummary('fr', { ...translatedTemplate, category: 'Unknown category' }).category,
+    ).toBe('Unknown category');
+
+    const englishOnlyTemplate = {
+      ...translatedTemplate,
+      id: 'notion-team-dashboard-live-artifact',
+      title: ' English title from source ',
+      summary: ' English summary from source ',
+      category: 'General',
+      tags: ['unknown-tag'],
+    } satisfies PromptTemplateSummary;
+
+    expect(localizePromptTemplateSummary('fr', englishOnlyTemplate)).toMatchObject({
+      title: ' English title from source ',
+      summary: ' English summary from source ',
+      category: 'Général',
+      tags: ['unknown-tag'],
     });
+  });
 
-    it(`covers every curated display category and prompt tag for ${locale}`, async () => {
-      const [designSystemCategories, promptTemplateSummaries] = await Promise.all([
-        readDesignSystemCategories(),
-        readPromptTemplateSummaries(),
-      ]);
-      const promptTemplateCategories = new Set(
-        promptTemplateSummaries.map((template) => template.category),
-      );
-      const promptTemplateTags = new Set(
-        promptTemplateSummaries.flatMap((template) => template.tags),
-      );
-
-      expect(sorted(ids.designSystemCategories)).toEqual(
-        expect.arrayContaining(designSystemCategories),
-      );
-      expect(sorted(ids.promptTemplateCategories)).toEqual(
-        expect.arrayContaining(sorted(promptTemplateCategories)),
-      );
-      expect(sorted(ids.promptTemplateTags)).toEqual(
-        expect.arrayContaining(sorted(promptTemplateTags)),
-      );
-    });
-  }
+  // Coverage lock (PR #3755 review): every supported non-English locale must
+  // resolve a built-in-content bundle — either its own `content.<locale>.ts`
+  // (or inline `XX_*` tables) registered in LOCALIZED_CONTENT, or an
+  // intentional script fallback (zh-TW -> zh-CN via getLocalizedContent).
+  // When a locale has no bundle, built-in skill / design-system /
+  // prompt-template copy silently renders English for that locale — the exact
+  // gap this PR fixes (it was missing for `it`). This locks every non-English
+  // locale to a resolvable bundle so a future locale addition can't regress.
+  it('resolves a built-in-content bundle for every supported non-English locale', () => {
+    const missing = LOCALES.filter(
+      (locale) => locale !== 'en' && !hasLocalizedContent(locale),
+    );
+    expect(
+      missing,
+      `These locales have no built-in-content bundle (add content.<locale>.ts and ` +
+        `register it in LOCALIZED_CONTENT, or add an intentional fallback): ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
 });

@@ -1,0 +1,37 @@
+# Spec §15.5 — AWS override.
+#
+# `helm install od ./tools/pack/helm/open-design \
+#    -f tools/pack/helm/open-design/values-aws.yaml \
+#    --set secrets.apiToken=$(openssl rand -hex 32)`
+#
+# Persistence:
+#   - EFS for the shared /data/od (multi-AZ; required when replicaCount > 1).
+#   - Block-level (gp3) for /data/config (single-pod; provider keys
+#     don't need cross-AZ replication).
+#
+# Secrets:
+#   - Operators wire this Helm release's Secret to AWS Secrets Manager
+#     via External Secrets Operator (ESO) or aws-secrets-csi. The
+#     chart's Secret stays as the destination of the sync.
+
+persistence:
+  enabled: true
+  data:
+    storageClass: efs-sc
+    size: 50Gi
+  config:
+    storageClass: gp3
+    size: 1Gi
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+  hosts:
+    - host: od.example.com
+      paths:
+        - path: /
+          pathType: Prefix

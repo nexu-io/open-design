@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prototype Dashboard Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f5f1;
+      color: #18202a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main {
+      width: min(960px, 100%);
+      min-height: 520px;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      border: 1px solid #dad6cb;
+      background: #fffdf8;
+      box-shadow: 0 20px 50px rgba(40, 36, 27, 0.12);
+    }
+    nav { border-right: 1px solid #e4dfd4; padding: 22px; }
+    .brand { font-weight: 800; font-size: 18px; margin-bottom: 28px; }
+    .nav-item { padding: 10px 0; color: #5f6670; font-size: 14px; }
+    .nav-item.active { color: #111820; font-weight: 700; }
+    section { padding: 24px; display: grid; gap: 18px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
+    h1 { font-size: 28px; margin: 0; letter-spacing: 0; }
+    p { margin: 6px 0 0; color: #68707a; line-height: 1.45; }
+    .pill { border: 1px solid #d9d4c8; padding: 8px 12px; font-size: 13px; color: #39414c; background: #fbfaf6; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .metric, .panel, .queue { border: 1px solid #e1dccf; background: #ffffff; padding: 16px; }
+    .label { color: #6d7480; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .value { font-size: 30px; font-weight: 800; margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 12px; }
+    .bar { height: 12px; background: #ebe7dc; margin-top: 14px; overflow: hidden; }
+    .bar span { display: block; height: 100%; background: #2f6f73; }
+    .item { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid #eee9df; }
+    .item:first-child { border-top: 0; }
+    .status { color: #a85036; font-weight: 700; }
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; }
+      nav { border-right: 0; border-bottom: 1px solid #e4dfd4; }
+      .metrics, .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <nav>
+      <div class="brand">Northstar Ops</div>
+      <div class="nav-item active">Risk monitor</div>
+      <div class="nav-item">Accounts</div>
+      <div class="nav-item">Playbooks</div>
+      <div class="nav-item">Reports</div>
+    </nav>
+    <section>
+      <header>
+        <div>
+          <h1>Enterprise onboarding risk</h1>
+          <p>Prioritized queue for accounts likely to miss activation targets this week.</p>
+        </div>
+        <div class="pill">Live artifact</div>
+      </header>
+      <div class="metrics">
+        <div class="metric"><div class="label">At risk</div><div class="value">18</div></div>
+        <div class="metric"><div class="label">Blocked ARR</div><div class="value">$2.4M</div></div>
+        <div class="metric"><div class="label">SLA health</div><div class="value">91%</div></div>
+      </div>
+      <div class="grid">
+        <div class="panel">
+          <div class="label">Activation progress</div>
+          <p>Workspace setup is healthy; security review is the current bottleneck.</p>
+          <div class="bar"><span style="width: 72%"></span></div>
+        </div>
+        <div class="queue">
+          <div class="item"><strong>Acme BioSystems</strong><span class="status">High</span></div>
+          <div class="item"><strong>Vanta Labs</strong><span class="status">Med</span></div>
+          <div class="item"><strong>Helio Grid</strong><span class="status">Med</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+

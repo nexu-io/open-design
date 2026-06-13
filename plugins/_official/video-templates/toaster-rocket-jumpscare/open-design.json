@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-toaster-rocket-jumpscare",
+  "title": "Toaster Rocket Jumpscare",
+  "title_i18n": {
+    "zh-CN": "烤面包机火箭惊吓",
+    "zh-TW": "烤麵包機火箭驚嚇",
+    "ja": "トースターロケットびっくり",
+    "ko": "토스터 로켓 깜짝 놀람",
+    "de": "Toaster Raketen-Jumpscare",
+    "fr": "Toaster Fusée Jumpscare",
+    "ru": "Тостер Ракета Пугалка",
+    "es": "Tostadora Cohete Susto",
+    "pt-BR": "Torradeira Foguete Susto",
+    "it": "Tostapane Razzo Spavento",
+    "vi": "Máy Nướng Bánh Mì Tên Lửa Giật Mình",
+    "pl": "Toster Rakieta Jumpscare",
+    "id": "Pemanggang Roti Roket Jumpscare",
+    "nl": "Broodrooster Raket Jumpscare",
+    "ar": "محمصة الخبز الصاروخية المفزعة",
+    "tr": "Ekmek Kızartma Makinesi Roket Korkutması",
+    "uk": "Тостер Ракета Переляк",
+    "en": "Toaster Rocket Jumpscare"
+  },
+  "version": "0.1.0",
+  "description": "A prompt for a realistic home-video style shot of an old man being jumpscared by a toaster launching bread like a rocket.",
+  "description_i18n": {
+    "zh-CN": "生成老人被弹射面包的烤面包机吓到的家庭录像风格真实画面提示词。",
+    "zh-TW": "生成老人被彈射麵包的烤麵包機嚇到的家庭錄影風格真實畫面提示詞。",
+    "ja": "パンがロケットのように飛び出すトースターに驚く老人の家庭用ビデオ風リアルな映像を生成するプロンプト。",
+    "ko": "빵이 로켓처럼 발사되는 토스터에 놀라는 노인의 홈비디오 스타일 리얼한 장면 생성 프롬프트.",
+    "de": "Ein Prompt für eine realistische Homevideo-Aufnahme eines alten Mannes, der von einem Toaster erschreckt wird, der Brot wie eine Rakete abschießt.",
+    "fr": "Un prompt pour générer une scène réaliste style vidéo amateur d'un vieil homme surpris par un grille-pain qui éjecte du pain comme une fusée.",
+    "ru": "Промпт для создания реалистичной домашней видеосцены пожилого человека, напуганного тостером, выстреливающим хлеб как ракету.",
+    "es": "Un prompt para generar una escena realista estilo video casero de un anciano asustado por una tostadora que lanza pan como un cohete.",
+    "pt-BR": "Um prompt para gerar uma cena realista estilo vídeo caseiro de um idoso assustado por uma torradeira que lança pão como um foguete.",
+    "it": "Un prompt per generare una scena realistica stile video casalingo di un anziano spaventato da un tostapane che lancia pane come un razzo.",
+    "vi": "Prompt tạo cảnh video gia đình chân thực về cụ già bị giật mình bởi máy nướng bánh mì phóng bánh như tên lửa.",
+    "pl": "Prompt do wygenerowania realistycznego ujęcia w stylu domowego wideo starszego mężczyzny przestraszonego przez toster wystrzeliwujący chleb jak rakietę.",
+    "id": "Prompt untuk menghasilkan adegan video rumahan realistis seorang pria tua yang kaget karena pemanggang roti meluncurkan roti seperti roket.",
+    "nl": "Een prompt voor een realistische homevideo-opname van een oude man die schrikt van een broodrooster die brood als een raket lanceert.",
+    "ar": "موجه لإنشاء لقطة واقعية بأسلوب فيديو منزلي لرجل مسن يفزع من محمصة خبز تطلق الخبز كالصاروخ.",
+    "tr": "Ekmeği roket gibi fırlatan bir ekmek kızartma makinesinden korkan yaşlı bir adamın gerçekçi ev videosu tarzı sahnesini oluşturan prompt.",
+    "uk": "Промпт для створення реалістичної домашньої відеосцени літньої людини, наляканої тостером, що випускає хліб як ракету.",
+    "en": "A prompt for a realistic home-video style shot of an old man being jumpscared by a toaster launching bread like a rocket."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Marin",
+    "url": "https://x.com/MarinMethod/status/2049140113343394003"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "food"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/fbf9f399fd8f4905a62661966d937ba8/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/fbf9f399fd8f4905a62661966d937ba8/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling.A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling.",
+        "zh-CN": "使用这个插件完成以下任务：A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling.A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

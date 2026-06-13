@@ -1,0 +1,44 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "import-screenshot-to-prototype",
+  "title": "Screenshot To Prototype",
+  "version": "0.1.0",
+  "description": "Rebuild a screenshot as an editable Open Design prototype.",
+  "license": "MIT",
+  "tags": ["import", "screenshot-import", "image-import", "prototype"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "figma-migration",
+    "mode": "prototype",
+    "scenario": "import",
+    "useCase": {
+      "query": "Import the attached screenshot and rebuild it as an editable prototype for {{viewport}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["file-read", "token-map", "todo-write", "file-write", "live-artifact", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "inspect", "atoms": ["file-read", "token-map"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write", "live-artifact"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "viewport", "type": "select", "required": false, "label": "Target viewport", "options": ["desktop", "mobile", "responsive"], "default": "responsive" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "fs:write"]
+  }
+}
+

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Spotify Now Playing · Lo-Fi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  body { font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif; background: radial-gradient(circle at 30% 30%, #1a1a1f 0%, #050507 70%); }
+  .cover {
+    background:
+      radial-gradient(circle at 30% 25%, #ffb1c3 0%, transparent 40%),
+      radial-gradient(circle at 75% 70%, #6b46c1 0%, transparent 50%),
+      linear-gradient(135deg, #1e1247 0%, #2c0f3f 100%);
+  }
+  .bar { background: rgba(255,255,255,0.18); }
+  .bar-fill { background: #fff; }
+  @keyframes wave { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
+  .wave i { display:inline-block; width:3px; margin-right:2px; background:#1DB954; transform-origin:bottom; animation: wave 1s ease-in-out infinite; }
+  .wave i:nth-child(2){animation-delay:.15s} .wave i:nth-child(3){animation-delay:.3s} .wave i:nth-child(4){animation-delay:.45s}
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-12">
+  <div class="w-[640px] rounded-2xl p-6 flex gap-5 items-stretch" style="background:linear-gradient(135deg,#1e3264 0%,#0d1f3d 100%);border:1px solid rgba(255,255,255,0.08);box-shadow:0 30px 60px -20px rgba(0,0,0,0.6)">
+    <!-- album cover -->
+    <div class="cover w-44 h-44 rounded-md flex flex-col justify-between p-4 shrink-0 relative overflow-hidden">
+      <div class="text-[10px] uppercase tracking-[0.22em] text-white/70 font-semibold">Chillhop</div>
+      <div class="text-white">
+        <div class="text-[22px] font-bold leading-tight">Lo-Fi<br/>Essentials</div>
+        <div class="text-[10px] opacity-70 mt-1">Spring · 2026</div>
+      </div>
+    </div>
+    <!-- right -->
+    <div class="flex-1 flex flex-col justify-between min-w-0">
+      <div>
+        <div class="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] font-semibold" style="color:#1DB954">
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor"><path d="M12 0a12 12 0 100 24 12 12 0 000-24zm5.52 17.36a.75.75 0 01-1.03.25c-2.83-1.73-6.4-2.12-10.6-1.16a.75.75 0 11-.34-1.46c4.6-1.05 8.55-.6 11.72 1.34.36.22.47.69.25 1.03zm1.47-3.27a.94.94 0 01-1.29.3c-3.24-1.99-8.17-2.57-12-1.4a.94.94 0 11-.55-1.8c4.4-1.34 9.83-.7 13.55 1.6.45.27.6.86.29 1.3zm.13-3.4c-3.88-2.3-10.3-2.51-14.01-1.4a1.13 1.13 0 11-.66-2.16c4.27-1.3 11.36-1.04 15.81 1.6a1.13 1.13 0 11-1.14 1.96z"/></svg>
+          <span>Now Playing</span>
+          <span class="wave ml-auto h-3 flex items-end"><i></i><i></i><i></i><i></i></span>
+        </div>
+        <h1 class="mt-3 text-white text-2xl font-bold leading-tight">Sunday Afternoon</h1>
+        <p class="text-white/70 text-base mt-1">j'san · evil needle</p>
+      </div>
+      <div class="mt-4">
+        <div class="flex items-center gap-3 text-[11px] font-mono text-white/60">
+          <span>1:24</span>
+          <div class="flex-1 h-[3px] rounded-full bar relative">
+            <div class="bar-fill h-full rounded-full" style="width:38%"></div>
+            <div class="absolute w-2.5 h-2.5 rounded-full bg-white" style="left:38%;top:50%;transform:translate(-50%,-50%);"></div>
+          </div>
+          <span>3:42</span>
+        </div>
+        <!-- controls -->
+        <div class="flex items-center justify-between mt-4 text-white">
+          <svg viewBox="0 0 24 24" class="w-4 h-4 opacity-60" fill="currentColor"><path d="M10 17l-5-5 5-5v3h7v4h-7v3z"/></svg>
+          <div class="flex items-center gap-5">
+            <svg viewBox="0 0 24 24" class="w-5 h-5 opacity-80" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+            <button class="w-11 h-11 rounded-full bg-white flex items-center justify-center text-black">
+              <svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <svg viewBox="0 0 24 24" class="w-5 h-5 opacity-80" fill="currentColor"><path d="M16 18h2V6h-2zM6 18l8.5-6L6 6z"/></svg>
+          </div>
+          <svg viewBox="0 0 24 24" class="w-4 h-4 opacity-60" fill="currentColor"><path d="M19 7v4l5-5-5-5v3a8 8 0 00-8 8 8 8 0 008 8v-2a6 6 0 010-12z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

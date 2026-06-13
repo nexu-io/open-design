@@ -1,0 +1,63 @@
+/* design-systems/voltagent/tokens.css
+ * Structured token bindings for VoltAgent.
+ * dark agent runtime surfaces, neon green command signals, and technical orchestration cards.
+ */
+
+:root {
+  --bg: #07110c;
+  --surface: #101c16;
+  --surface-warm: #14281e;
+  --fg: #f4fff8;
+  --fg-2: #c8dfd0;
+  --muted: #8ba493;
+  --meta: #7cff6b;
+  --border: #254132;
+  --border-soft: #1a3024;
+  --accent: #7cff6b;
+  --accent-on: #07110c;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #52e875;
+  --warn: #facc15;
+  --danger: #fb7185;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 46px;
+  --text-4xl: 64px;
+  --leading-body: 1.56;
+  --leading-tight: 1.07;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 70px rgba(0, 0, 0, 0.42);
+  --focus-ring: 0 0 0 4px rgba(124, 255, 107, 0.30);
+  --motion-fast: 120ms;
+  --motion-base: 210ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

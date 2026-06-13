@@ -6,8 +6,10 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
   resolveAppRuntimePath,
+  resolveLogFilePath,
   resolveNamespace,
   resolveNamespaceRoot,
+  resolveRuntimeNamespaceRoot,
   resolveSidecarBase,
   resolveSourceRuntimeRoot,
   type SidecarContractDescriptor,
@@ -127,5 +129,40 @@ describe("generic sidecar bootstrap", () => {
       namespace: "alpha",
       source: "tool",
     });
+  });
+});
+
+describe("resolveRuntimeNamespaceRoot", () => {
+  // dev / tools-dev: `base` is the pre-namespace source root, so the namespace
+  // is appended — identical to plain `resolveNamespaceRoot`.
+  it("appends the namespace for pre-namespace (dev) bases", () => {
+    const namespaceRoot = resolveRuntimeNamespaceRoot({
+      contract: fakeContract,
+      runtime: { base: "/runtime/base", mode: "dev", namespace: "alpha" },
+      runtimeMode: "prod",
+    });
+    expect(namespaceRoot).toBe(join(resolve("/runtime/base"), "alpha"));
+  });
+
+  // packaged: the orchestrator launches children with `base = <namespaceRoot>/runtime`,
+  // so the namespace root is the PARENT of `base` and logs resolve to
+  // `<namespaceRoot>/logs/...`. Re-appending the namespace (the old bug) would
+  // point at `<namespaceRoot>/runtime/<namespace>/logs/...` → ENOENT.
+  it("walks up out of the runtime dir for packaged bases", () => {
+    const runtime = { base: "/data/ns/alpha/runtime", mode: "prod", namespace: "alpha" } as const;
+    const namespaceRoot = resolveRuntimeNamespaceRoot({
+      contract: fakeContract,
+      runtime,
+      runtimeMode: "prod",
+    });
+    expect(namespaceRoot).toBe(resolve("/data/ns/alpha"));
+    expect(
+      resolveLogFilePath({ app: "api", contract: fakeContract, runtimeRoot: namespaceRoot }),
+    ).toBe(join(resolve("/data/ns/alpha"), "logs", "api", "latest.log"));
+    // The old `resolveNamespaceRoot(base, namespace)` path would have produced
+    // a phantom dir nested under `runtime/`.
+    expect(
+      resolveNamespaceRoot({ base: runtime.base, contract: fakeContract, namespace: runtime.namespace }),
+    ).toBe(join(resolve("/data/ns/alpha/runtime"), "alpha"));
   });
 });

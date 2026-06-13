@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-vintage",
+  "title": "Vintage",
+  "title_i18n": {
+    "zh-CN": "复古风格",
+    "zh-TW": "復古風格",
+    "ja": "ヴィンテージ",
+    "ko": "빈티지",
+    "de": "Vintage",
+    "fr": "Vintage",
+    "ru": "Винтаж",
+    "es": "Vintage",
+    "pt-BR": "Vintage",
+    "it": "Vintage",
+    "vi": "Vintage",
+    "pl": "Vintage",
+    "id": "Vintage",
+    "nl": "Vintage",
+    "ar": "فينتاج",
+    "tr": "Vintage",
+    "uk": "Вінтаж",
+    "en": "Vintage"
+  },
+  "version": "0.1.0",
+  "description": "1950s-1990s nostalgia with skeuomorphic touches, grainy textures, retro color palettes, and pixel-style typography.",
+  "description_i18n": {
+    "zh-CN": "1950至1990年代怀旧风格，包含拟物化设计、颗粒纹理、复古色板和像素字体。",
+    "zh-TW": "1950至1990年代懷舊風格，包含擬物化設計、顆粒紋理、復古色板和像素字體。",
+    "ja": "1950年代から1990年代のノスタルジア、スキューモーフィックなタッチ、粒状テクスチャ、レトロカラーパレット、ピクセルスタイルのタイポグラフィ。",
+    "ko": "1950~1990년대 향수를 담은 스큐어모픽 터치, 그레인 텍스처, 레트로 컬러 팔레트 및 픽셀 스타일 타이포그래피.",
+    "de": "1950er-1990er Nostalgie mit skeuomorphen Elementen, körnigen Texturen, Retro-Farbpaletten und Pixel-Typografie.",
+    "fr": "Nostalgie des années 1950 à 1990 avec touches skeuomorphiques, textures granuleuses, palettes de couleurs rétro et typographie pixelisée.",
+    "ru": "Ностальгия 1950-1990-х с скевоморфными элементами, зернистыми текстурами, ретро-палитрами и пиксельной типографикой.",
+    "es": "Nostalgia de los años 1950-1990 con toques skeuomórficos, texturas granuladas, paletas de colores retro y tipografía estilo pixel.",
+    "pt-BR": "Nostalgia dos anos 1950-1990 com toques esqueuomórficos, texturas granuladas, paletas de cores retrô e tipografia em estilo pixel.",
+    "it": "Nostalgia anni '50-'90 con tocchi skeuomorfi, texture granulari, palette di colori retrò e tipografia in stile pixel.",
+    "vi": "Hoài niệm thập niên 1950-1990 với nét skeuomorphic, kết cấu hạt, bảng màu retro và kiểu chữ pixel.",
+    "pl": "Nostalgia lat 1950-1990 ze skeuomorficznymi akcentami, ziarnistymi teksturami, retro paletami kolorów i typografią w stylu pixel.",
+    "id": "Nostalgia era 1950-1990 dengan sentuhan skeuomorfik, tekstur berbutir, palet warna retro, dan tipografi gaya pixel.",
+    "nl": "1950-1990 nostalgie met skeuomorfische accenten, korrelige texturen, retro kleurenpaletten en pixel-typografie.",
+    "ar": "حنين لفترة الخمسينات حتى التسعينات مع لمسات skeuomorphic وتأثيرات محببة ولوحات ألوان ريترو وطباعة بنمط البكسل.",
+    "tr": "1950-1990'lar nostaljisi ile skeuomorphic dokunuşlar, grenli dokular, retro renk paletleri ve piksel tarzı tipografi.",
+    "uk": "Ностальгія 1950-1990-х зі скевоморфними елементами, зернистими текстурами, ретро-палітрами та піксельною типографікою.",
+    "en": "1950s-1990s nostalgia with skeuomorphic touches, grainy textures, retro color palettes, and pixel-style typography."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "retro-nostalgic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Vintage design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Vintage design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "vintage",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

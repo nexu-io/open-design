@@ -1,0 +1,171 @@
+---
+/*
+ * Card-style row used by `/plugins/templates/` (and its kind-scoped
+ * facets) — the YouMind-inspired layout product called for after PR
+ * #3010 shipped:
+ *
+ *   ┌──────────────────────────┐
+ *   │ ▆ accent band            │
+ *   │ [Featured]               │  ← optional, top-anchored
+ *   │ ┌──────────────────────┐ │
+ *   │ │ 16:9 video / poster   │ │  ← hover-autoplay when video
+ *   │ └──────────────────────┘ │
+ *   │ @author          DATE    │
+ *   │ ┌──────────────────────┐ │
+ *   │ │ Read full prompt →    │ │
+ *   │ │ <description clamp>   │ │
+ *   │ └──────────────────────┘ │
+ *   │ [ Use this template ] [⤴] │
+ *   └──────────────────────────┘
+ *
+ * The legacy `plugin-row.astro` row component still backs
+ * `/plugins/skills/` and other list-style routes; this file is
+ * intentionally separate so a future refactor can split the data
+ * shapes cleanly. For now it accepts the same `BundledPluginRecord`
+ * shape that the templates page already iterates over.
+ *
+ * Hover-autoplay is wired here via a small inline script per page —
+ * one IntersectionObserver across all `<video data-tpl-autoplay>`
+ * elements pauses anything outside the viewport so we don't spawn
+ * 200 simultaneous decoders on a long grid.
+ */
+import {
+  resolveBundledDescription,
+  resolveBundledTitle,
+  type BundledPluginRecord,
+} from '../_lib/bundled-plugins';
+import { localeFromPath } from '../i18n';
+import { localizeTaxonomyValue } from '../content-i18n';
+import { getPluginsCopy } from '../_lib/plugins-i18n';
+
+export interface Props {
+  record: BundledPluginRecord;
+  /** Index used to derive a stable accent-band hue. */
+  index: number;
+  /** Force-mark the card as featured (e.g. top-N from `od.featured`). */
+  featured?: boolean;
+  /**
+   * Subcategory slug used by the per-kind page's client-side scene
+   * filter to toggle visibility — same contract `plugin-row.astro`
+   * exposes so the existing filter script keeps working when the row
+   * is rendered as a card.
+   */
+  dataScene?: string;
+}
+
+const { record, index, featured = false, dataScene } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+
+const name = resolveBundledTitle(record, locale);
+const description = resolveBundledDescription(record, locale);
+// Plugin detail pages exist only at the canonical `/plugins/<slug>/` URL —
+// there are no `/{locale}/plugins/<slug>/` variants — so the card must NOT
+// run the href through `localizedHref` even when it renders on a localized
+// catalog or solutions page.
+const detailHref = record.detailHref;
+
+/*
+ * Share text — bake the localized share template into a `data-share-text`
+ * attribute on the share button so the page-level click handler can
+ * surface it via the Web Share API on mobile or the clipboard on desktop
+ * without each card needing its own dialog. The detail page still ships
+ * a full `<dialog>` for the platform jump-to grid; cards on the catalog
+ * surface get the lighter affordance.
+ */
+const pcopy = getPluginsCopy(locale);
+const shareUrl = new URL(detailHref, 'https://open-design.ai').toString();
+const shareText = pcopy.shareTemplate({ title: name, url: shareUrl });
+
+/*
+ * Accent band — derived from the plugin's `mode` so the same kind of
+ * artifact gets the same hue across the grid (videos green, prototypes
+ * blue, etc.). Falls back to a stable per-index hue rotation so cards
+ * without a recognized mode still get a band rather than disappearing
+ * visually. The seven-slot palette mirrors YouMind's color-coded
+ * top-band pattern but uses our paper-tone-friendly hues.
+ */
+// Hues come from the skill palette's functional colors (references/颜色.md)
+// so the categorical bands stay inside the fixed color system.
+const ACCENT_BY_MODE: Record<string, string> = {
+  video: '#00aa54',            // 成功 green
+  prototype: '#1a74ff',        // 链接/信息 blue
+  deck: '#ffba12',             // 警告 yellow
+  image: '#8ecc29',            // 通过 yellow-green
+  hyperframes: '#ff5e5e',      // 错误辅助 rose
+  audio: '#ff7528',            // 提醒 orange
+  'live-artifact': '#3bbf7d',  // 成功辅助 teal-green
+  'design-system': '#70b500',  // 通过辅助 olive-green
+};
+const PALETTE = ['#00aa54', '#1a74ff', '#ffba12', '#8ecc29', '#ff5e5e', '#ff7528', '#3bbf7d', '#70b500'];
+const accent = (record.mode && ACCENT_BY_MODE[record.mode]) ?? PALETTE[index % PALETTE.length];
+
+/*
+ * Author + date strip. Author surfaces the manifest's `author.name`
+ * with a leading `@` per YouMind convention; first-party manifests
+ * read as `@open-design`. Date is intentionally absent — bundled
+ * manifests don't carry a `published_at` and inferring it from git
+ * mtime adds build-time complexity for a soft signal. We render
+ * a paper-toned `Open Design` attribution badge in the date slot
+ * instead so the row still balances visually.
+ */
+const authorRaw = record.authorName ?? 'Open Design';
+const authorHandle = `@${authorRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+
+/*
+ * Localized chip labels. The catalog row's prior chip rail leaked
+ * raw English mode/scenario slugs on un-localized rows; the same
+ * fallback rule applies here. When `localizeTaxonomyValue` returns
+ * undefined the chip drops rather than showing a kebab slug.
+ */
+const modeLabel = localizeTaxonomyValue(record.mode, locale);
+const scenarioLabel = localizeTaxonomyValue(record.scenario, locale);
+
+const isVideoPreview = record.previewType === 'video' && record.previewVideo;
+---
+
+<article class={`tpl-card${featured ? ' tpl-card-featured' : ''}`} data-mode={record.mode ?? 'misc'} data-scene={dataScene}>
+  <span class="tpl-band" aria-hidden="true" style={`background:${accent}`}></span>
+  {featured && <span class="tpl-featured-tag">{pcopy.cardFeaturedTag}</span>}
+
+  <a class="tpl-media" href={detailHref} aria-label={name}>
+    {isVideoPreview ? (
+      <video
+        class="tpl-media-video"
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        poster={record.previewPoster}
+        data-tpl-autoplay
+        data-src={record.previewVideo}
+        data-tpl-hold-ms={record.previewHoldMs != null ? String(record.previewHoldMs) : undefined}
+      />
+    ) : record.previewPoster ? (
+      <img
+        class="tpl-media-poster"
+        src={record.previewPoster}
+        alt={pcopy.previewImageAlt(name)}
+        loading="lazy"
+        decoding="async"
+      />
+    ) : (
+      <span class="tpl-media-empty" aria-hidden="true" />
+    )}
+    {modeLabel && <span class="tpl-media-kind">{modeLabel}</span>}
+  </a>
+
+  <div class="tpl-meta">
+    <span class="tpl-author">{authorHandle}</span>
+    <span class="tpl-meta-date">Open Design</span>
+  </div>
+
+  <a class="tpl-excerpt" href={detailHref}>
+    <span class="tpl-excerpt-head">{pcopy.cardReadFullPrompt}</span>
+    <h3 class="tpl-excerpt-title">{name}</h3>
+    <p class="tpl-excerpt-body">{description}</p>
+  </a>
+
+  <div class="tpl-actions">
+    <a class="tpl-cta" href={detailHref}>{pcopy.cardUseTemplate}</a>
+  </div>
+</article>

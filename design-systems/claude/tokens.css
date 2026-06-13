@@ -1,0 +1,130 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/claude/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Claude (Anthropic)".
+ * Literary salon aesthetic: warm parchment canvas, terracotta accent,
+ * exclusive warm-toned neutrals, Anthropic Serif for all headlines.
+ *
+ * Key brand decisions encoded here:
+ *   - Parchment (#f5f4ed) as page canvas — never pure white
+ *   - Ivory (#faf9f5) for elevated card surfaces
+ *   - Terracotta (#c96442) as the single brand accent — earthy, un-tech
+ *   - All grays carry a yellow-brown undertone — no cool blue-grays
+ *   - Serif for headings, sans for UI — the typographic identity split
+ *   - Ring-based depth (0 0 0 1px) instead of traditional drop shadows
+ *   - Generous body line-height (1.60) for a literary reading experience
+ *   - Focus blue (#3898ec) is the only cool color — accessibility only
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ─────────────────────────────────────────
+   * Parchment (bg) → Ivory (surface) → Warm Sand (surface-warm).
+   * Never use pure white as a page background — the warm cream IS
+   * the Claude personality. */
+  --bg: #f5f4ed;
+  --surface: #faf9f5;
+  --surface-warm: #e8e6dc;   /* Warm Sand — button bg, prominent interactive surfaces */
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * Every gray carries a yellow-brown undertone. No cool blue-grays. */
+  --fg: #141413;             /* Anthropic Near Black — warmest "black" in any major tech brand */
+  --fg-2: #3d3d3a;           /* Dark Warm — dark text links, emphasized secondary text */
+  --muted: #5e5d59;          /* Olive Gray — secondary body text */
+  --meta: #87867f;           /* Stone Gray — tertiary text, footnotes, metadata */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Cream-tinted borders — the gentlest possible containment. */
+  --border: #f0eee6;         /* Border Cream — standard light-theme border */
+  --border-soft: #e8e6dc;    /* Border Warm — section dividers, emphasized containment */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Terracotta Brand — the only chromatic element on most screens.
+   * Used for primary CTA buttons and highest-signal brand moments only. */
+  --accent: #c96442;
+  --accent-on: #faf9f5;      /* Ivory — fg when terracotta is the bg */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Error Crimson is a warm, deep red — serious without alarming.
+   * Focus Blue (#3898ec) is the sole cool color in the system,
+   * reserved for accessibility (input focus rings). */
+  --success: #17a34a;
+  --warn: #eab308;
+  --danger: #b53333;         /* Error Crimson — warm red, not standard danger red */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Anthropic Serif (Georgia fallback) for all headlines — the single
+   * weight (500) gives every heading the gravitas of a published title.
+   * Anthropic Sans for all UI/body — quiet functional efficiency. */
+  --font-display: "Anthropic Serif", Georgia, "Times New Roman", serif;
+  --font-body: "Anthropic Sans", "Arial", system-ui, -apple-system, sans-serif;
+  --font-mono: "Anthropic Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  /* Type scale — DESIGN.md §3 Typography Rules.
+   * 64px hero → 52px section → 36px sub → 32px card → 25px small */
+  --text-xs: 10px;           /* Overline — uppercase labels at smallest scale */
+  --text-sm: 14px;           /* Caption — metadata, descriptions */
+  --text-base: 16px;         /* Body Standard */
+  --text-lg: 20px;           /* Body Large — intro paragraphs */
+  --text-xl: 25px;           /* Sub-heading Small */
+  --text-2xl: 32px;          /* Sub-heading — card titles, feature names */
+  --text-3xl: 52px;          /* Section Heading */
+  --text-4xl: 64px;          /* Display / Hero — maximum impact, book-title presence */
+
+  --leading-body: 1.6;       /* Relaxed — closer to a book than a dashboard */
+  --leading-tight: 1.1;      /* Tight headings — serif letterforms breathe naturally */
+  --tracking-display: 0em;   /* Serif faces carry authority; no compression needed */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. Card internal padding ~24–32px. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 96px; /* Editorial pacing — generous like a magazine spread */
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Claude's softness: comfortably rounded (8px) for standard,
+   * generously rounded (12px) for primary, very rounded (16px) for
+   * featured containers. No sharp corners — softness is core identity. */
+  --radius-sm: 8px;          /* Comfortably rounded — standard buttons, cards */
+  --radius-md: 12px;         /* Generously rounded — primary buttons, inputs, nav */
+  --radius-lg: 16px;         /* Very rounded — featured containers, video players */
+  --radius-pill: 9999px;     /* Chip-like elements (use sparingly) */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Ring shadows (0px 0px 0px 1px) instead of drop shadows.
+   * The signature is a border-like halo — shadow pretending to be
+   * a border. Drop shadows only at 0.05 opacity when truly needed. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);          /* Border-like halo */
+  --elev-raised: rgba(0, 0, 0, 0.05) 0px 4px 24px; /* Whisper soft — barely visible lift */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Focus Blue (#3898ec) is the ONLY cool color in the Claude system.
+   * Reserved exclusively for accessibility / keyboard focus. */
+  --focus-ring: 0 0 0 3px rgba(56, 152, 236, 0.3);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Short, purposeful transitions. The editorial warmth doesn't need
+   * animation energy — interactions should feel calm. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px container, editorial layout. Hero is centered, feature
+   * sections use 2–3 column card grids. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

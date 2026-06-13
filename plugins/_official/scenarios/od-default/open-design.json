@@ -1,0 +1,184 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-default",
+  "title": "Default design router",
+  "title_i18n": {
+    "en": "Default design router",
+    "zh-CN": "默认设计路由器",
+    "zh-TW": "預設設計路由器",
+    "ja": "デフォルトデザインルーター",
+    "ko": "기본 디자인 라우터",
+    "de": "Standard-Design-Router",
+    "fr": "Routeur de design par défaut",
+    "ru": "Маршрутизатор дизайна по умолчанию",
+    "es": "Router de diseño por defecto",
+    "pt-BR": "Roteador de design padrão",
+    "it": "Router di design predefinito",
+    "vi": "Router thiết kế mặc định",
+    "pl": "Domyślny router designu",
+    "id": "Router desain default",
+    "nl": "Standaard designrouter",
+    "ar": "موجّه التصميم الافتراضي",
+    "tr": "Varsayılan tasarım yönlendiricisi",
+    "uk": "Типовий маршрутизатор дизайну"
+  },
+  "version": "0.1.0",
+  "description": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
+  "description_i18n": {
+    "en": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
+    "zh-CN": "面向 Home 自由提示的隐藏 fallback 场景：先询问用户要做哪种任务，再走对应的设计流。",
+    "zh-TW": "面向 Home 自由提示的隱藏 fallback 場景：先詢問使用者要做哪種任務，再走對應的設計流程。",
+    "ja": "Home の自由形式プロンプト向けの隠れたフォールバックシナリオ。タスク種別をユーザーに尋ね、対応するデザインフローへ続けます。",
+    "ko": "Home의 자유 입력 프롬프트를 위한 숨겨진 폴백 시나리오. 어떤 작업을 만들지 사용자에게 묻고 해당 디자인 플로로 이어집니다.",
+    "de": "Versteckter Fallback für freie Home-Prompts. Fragt den Nutzer, welcher Task-Typ gebaut werden soll, und wechselt dann in den passenden Design-Flow.",
+    "fr": "Scénario de repli caché pour les prompts libres de Home. Demande à l'utilisateur quel type de tâche construire, puis enchaîne sur le flow de design correspondant.",
+    "ru": "Скрытый fallback-сценарий для свободных промтов на Home. Спрашивает у пользователя, какой тип задачи строить, и продолжает в соответствующем дизайн-потоке.",
+    "es": "Escenario de fallback oculto para prompts libres en Home. Pregunta al usuario qué tipo de tarea construir y continúa por el flow de diseño correspondiente.",
+    "pt-BR": "Cenário de fallback oculto para prompts livres no Home. Pergunta ao usuário qual tipo de tarefa construir e segue pelo flow de design correspondente.",
+    "it": "Scenario di fallback nascosto per i prompt liberi della Home. Chiede all'utente quale tipo di task costruire e prosegue nel flow di design corrispondente.",
+    "vi": "Kịch bản fallback ẩn cho prompt tự do ở Home. Hỏi người dùng muốn xây loại task nào rồi đi tiếp qua design flow tương ứng.",
+    "pl": "Ukryty scenariusz fallback dla swobodnych promptów Home. Pyta użytkownika, jaki typ zadania zbudować, i kontynuuje przez pasujący design flow.",
+    "id": "Skenario fallback tersembunyi untuk prompt bebas di Home. Bertanya jenis tugas apa yang akan dibangun, lalu lanjut ke design flow yang cocok.",
+    "nl": "Verborgen fallback-scenario voor vrije Home-prompts. Vraagt de gebruiker welk taaktype te bouwen en gaat dan verder via de bijpassende designflow.",
+    "ar": "سيناريو احتياطي مخفي للموجهات الحرة في Home. يسأل المستخدم عن نوع المهمة ثم ينتقل إلى تدفق التصميم المطابق.",
+    "tr": "Home'daki serbest promptlar için gizli yedek senaryo. Hangi görev türünün kurulacağını sorar ve eşleşen tasarım akışıyla devam eder.",
+    "uk": "Прихований резервний сценарій для вільних промтів на Home. Питає користувача, який тип задачі будувати, і переходить у відповідний дизайн-потік."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-default",
+  "tags": [
+    "scenario",
+    "first-party",
+    "default",
+    "router",
+    "hidden"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "default-router",
+    "mode": "scenario",
+    "hidden": true,
+    "context": {
+      "craft": [
+        "typography",
+        "color",
+        "anti-ai-slop"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "task-type",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "direction-picker",
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "media-image",
+            "media-video",
+            "media-audio",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "genui": {
+      "surfaces": [
+        {
+          "id": "task-type",
+          "kind": "choice",
+          "persist": "conversation",
+          "trigger": {
+            "stageId": "task-type",
+            "atom": "discovery-question-form"
+          },
+          "prompt": "What type of design task should this free-form prompt create?",
+          "schema": {
+            "type": "object",
+            "required": [
+              "taskType"
+            ],
+            "properties": {
+              "taskType": {
+                "type": "string",
+                "title": "Task type",
+                "enum": [
+                  "prototype",
+                  "live-artifact",
+                  "deck",
+                  "image",
+                  "video",
+                  "hyperframes",
+                  "audio",
+                  "other"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "pipeline:*",
+      "genui:choice",
+      "media:image",
+      "media:video",
+      "media:audio",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Route a free-form Home prompt by asking the task type first, then continue through the matching design workflow.",
+        "zh-CN": "先询问自由输入属于哪一类设计任务，然后进入匹配的设计工作流。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "text",
+        "required": false,
+        "label": "User prompt",
+        "placeholder": "Describe what you want to design"
+      }
+    ]
+  }
+}

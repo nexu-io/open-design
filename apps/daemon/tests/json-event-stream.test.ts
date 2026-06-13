@@ -1,16 +1,22 @@
-// @ts-nocheck
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createJsonEventStreamHandler } from '../src/json-event-stream.js';
 
+type JsonStreamEvent = Record<string, unknown>;
+
+function collectEvents(kind: string) {
+  const events: JsonStreamEvent[] = [];
+  const handler = createJsonEventStreamHandler(kind, (event) => events.push(event));
+  return { events, handler };
+}
+
 test('opencode json stream emits text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed(
     '{"type":"step_start","sessionID":"ses-1","part":{"type":"step-start"}}\n' +
-      '{"type":"text","sessionID":"ses-1","part":{"type":"text","text":"hello"}}\n' +
-      '{"type":"step_finish","sessionID":"ses-1","part":{"type":"step-finish","tokens":{"input":11,"output":7,"reasoning":3,"cache":{"read":5,"write":2}},"cost":0}}\n',
+    '{"type":"text","sessionID":"ses-1","part":{"type":"text","text":"hello"}}\n' +
+    '{"type":"step_finish","sessionID":"ses-1","part":{"type":"step-finish","tokens":{"input":11,"output":7,"reasoning":3,"cache":{"read":5,"write":2}},"cost":0}}\n',
   );
 
   assert.deepEqual(events, [
@@ -31,8 +37,7 @@ test('opencode json stream emits text and usage events', () => {
 });
 
 test('opencode json stream emits tool events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed(
     JSON.stringify({
@@ -55,9 +60,50 @@ test('opencode json stream emits tool events', () => {
   ]);
 });
 
+test('opencode json stream emits structured errors as error events', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { data: { message: 'OpenCode auth failed: login required' } },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'OpenCode auth failed: login required', raw: errorLine },
+  ]);
+});
+
+test('opencode json stream preserves nested error messages', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { message: 'model not found: openai/nope' },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'model not found: openai/nope', raw: errorLine },
+  ]);
+});
+
+test('opencode json stream falls back to error name when data has no message', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { name: 'AuthError', data: {} },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    { type: 'error', message: 'AuthError', raw: errorLine },
+  ]);
+});
+
 test('unknown json stream lines become raw events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('opencode', (event) => events.push(event));
+  const { events, handler } = collectEvents('opencode');
 
   handler.feed('not-json\n');
   handler.flush();
@@ -65,19 +111,79 @@ test('unknown json stream lines become raw events', () => {
   assert.deepEqual(events, [{ type: 'raw', line: 'not-json' }]);
 });
 
+// Regression coverage for #691: OpenCode emits structured error frames on
+// stdout while still exiting 0. The parser must surface them as proper
+// `error` events (matching the qoder-stream contract) so server.ts's
+// `sendAgentEvent` flips the run to `failed` and forwards a visible SSE
+// error to the chat. Previously these were downgraded to `type:'raw'`,
+// which the chat UI doesn't render — the run looked like a fast clean
+// success while the user actually got nothing back.
+test('opencode json stream surfaces error frames as proper error events (regression of #691)', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: {
+      name: 'ProviderError',
+      data: { message: 'Authentication expired — please re-login.' },
+    },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Authentication expired — please re-login.',
+      raw: errorLine,
+    },
+  ]);
+});
+
+test('opencode json stream falls back to error.name when error.data.message is absent', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({
+    type: 'error',
+    error: { name: 'NetworkError' },
+  });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'NetworkError',
+      raw: errorLine,
+    },
+  ]);
+});
+
+test('opencode json stream falls back to a generic message when error has no usable detail', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  const errorLine = JSON.stringify({ type: 'error', error: {} });
+  handler.feed(errorLine + '\n');
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'OpenCode error',
+      raw: errorLine,
+    },
+  ]);
+});
+
 test('gemini stream emits init text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('gemini', (event) => events.push(event));
+  const { events, handler } = collectEvents('gemini');
 
   handler.feed(
     JSON.stringify({ type: 'init', session_id: 'gm-1', model: 'gemini-3-flash-preview' }) + '\n' +
-      JSON.stringify({ type: 'message', role: 'assistant', content: 'hello', delta: true }) + '\n' +
-      JSON.stringify({
-        type: 'result',
-        status: 'success',
-        stats: { input_tokens: 9, output_tokens: 4, cached: 2, duration_ms: 321 },
-      }) +
-      '\n',
+    JSON.stringify({ type: 'message', role: 'assistant', content: 'hello', delta: true }) + '\n' +
+    JSON.stringify({
+      type: 'result',
+      status: 'success',
+      stats: { input_tokens: 9, output_tokens: 4, cached: 2, duration_ms: 321 },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -91,35 +197,448 @@ test('gemini stream emits init text and usage events', () => {
   ]);
 });
 
+test('gemini stream handles real stream-json user, tool, and error frames', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  const fatalResult = {
+    type: 'result',
+    status: 'error',
+    error: { type: 'FatalAuthenticationError', message: 'Authentication failed' },
+    stats: { input_tokens: 11, output_tokens: 0, cached: 0, duration_ms: 42 },
+  };
+
+  handler.feed(
+    JSON.stringify({ type: 'message', role: 'user', content: 'make a video' }) + '\n' +
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'tool-1',
+      parameters: { path: 'timeline.json' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'tool_result',
+      tool_id: 'tool-1',
+      status: 'success',
+      output: 'wrote timeline.json',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'error',
+      severity: 'warning',
+      message: 'Agent execution blocked: retrying without shell',
+    }) +
+    '\n' +
+    JSON.stringify(fatalResult) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'tool-1', name: 'write_file', input: { path: 'timeline.json' } },
+    { type: 'tool_result', toolUseId: 'tool-1', content: 'wrote timeline.json', isError: false },
+    { type: 'status', label: 'warning', detail: 'Agent execution blocked: retrying without shell' },
+    { type: 'error', message: 'Authentication failed', raw: JSON.stringify(fatalResult) },
+  ]);
+});
+
+test('gemini stream emits TodoWrite from native write_todos tool', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_todos',
+      tool_id: 'write_todos__1',
+      parameters: {
+        todos: [
+          { description: 'Inspect context', status: 'in_progress' },
+          { description: 'Answer user', status: 'pending' },
+          { description: 'Wait for input', status: 'blocked' },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_todos__1:todo-native',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect context', status: 'in_progress' },
+          { content: 'Answer user', status: 'pending' },
+          { content: 'Wait for input', status: 'stopped' },
+        ],
+      },
+    },
+  ]);
+});
+
+test('gemini stream normalizes suffixed native todo statuses', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_todos',
+      tool_id: 'write_todos__extra',
+      parameters: {
+        todos: [
+          { description: 'Bind tokens', status: 'in_progressExtra' },
+          { description: 'Write page', status: 'pendingExtra' },
+          { description: 'Ship page', status: 'completedExtra' },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events[0], {
+    type: 'tool_use',
+    id: 'write_todos__extra:todo-native',
+    name: 'TodoWrite',
+    input: {
+      todos: [
+        { content: 'Bind tokens', status: 'in_progress' },
+        { content: 'Write page', status: 'pending' },
+        { content: 'Ship page', status: 'completed' },
+      ],
+    },
+  });
+});
+
+test('gemini stream suppresses duplicate artifact text after file writes', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+  ]);
+});
+
+test('gemini stream suppresses duplicate artifact text split across chunks', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n<',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: 'Tail',
+    },
+  ]);
+});
+
+test('gemini stream preserves later artifact text after plain prose clears file-write suppression', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    },
+  ]);
+});
+
+test('gemini stream emits prose immediately after file write when no artifact follows', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done, preview ready.',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done, preview ready.',
+    },
+  ]);
+});
+
+test('gemini stream flushes trailing partial artifact opener as prose', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done <art',
+    }) +
+    '\n',
+  );
+  handler.flush();
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done ',
+    },
+    {
+      type: 'text_delta',
+      delta: '<art',
+    },
+  ]);
+});
+
+test('gemini stream preserves later artifact text after suppressing immediate file-write echo', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'helper.html',
+        content: '<!doctype html><html>helper</html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Helper written.\\n\\n<artifact identifier="helper" type="text/html">\\n<!doctype html><html>helper</html>\\n</artifact>',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'helper.html',
+        content: '<!doctype html><html>helper</html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Helper written.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+    },
+  ]);
+});
+
+test('gemini stream treats terminal error frames as fatal error events', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  const terminalError = {
+    type: 'error',
+    severity: 'error',
+    message: 'Maximum session turns exceeded',
+  };
+  const unknownSeverityError = {
+    type: 'error',
+    severity: 'critical',
+    error: { message: 'Invalid stream: malformed tool call' },
+  };
+
+  handler.feed(
+    JSON.stringify(terminalError) + '\n' +
+    JSON.stringify(unknownSeverityError) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Maximum session turns exceeded',
+      raw: JSON.stringify(terminalError),
+    },
+    {
+      type: 'error',
+      message: 'Invalid stream: malformed tool call',
+      raw: JSON.stringify(unknownSeverityError),
+    },
+  ]);
+});
+
 test('cursor stream emits partial text once and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({ type: 'system', subtype: 'init', model: 'GPT-5 Mini' }) + '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        timestamp_ms: 1,
-        message: { role: 'assistant', content: [{ type: 'text', text: 'OD' }] },
-      }) +
-      '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        timestamp_ms: 2,
-        message: { role: 'assistant', content: [{ type: 'text', text: '_OK' }] },
-      }) +
-      '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        message: { role: 'assistant', content: [{ type: 'text', text: 'OD_OK' }] },
-      }) +
-      '\n' +
-      JSON.stringify({
-        type: 'result',
-        duration_ms: 120,
-        usage: { inputTokens: 5, outputTokens: 2, cacheReadTokens: 1, cacheWriteTokens: 0 },
-      }) +
-      '\n',
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'OD' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: '_OK' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'OD_OK' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'result',
+      duration_ms: 120,
+      usage: { inputTokens: 5, outputTokens: 2, cacheReadTokens: 1, cacheWriteTokens: 0 },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -135,8 +654,7 @@ test('cursor stream emits partial text once and usage events', () => {
 });
 
 test('cursor stream emits suffix when final assistant extends partial text', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({
@@ -144,12 +662,12 @@ test('cursor stream emits suffix when final assistant extends partial text', () 
       timestamp_ms: 1,
       message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
     }) +
-      '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
-      }) +
-      '\n',
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -159,8 +677,7 @@ test('cursor stream emits suffix when final assistant extends partial text', () 
 });
 
 test('cursor stream de-duplicates cumulative timestamped assistant chunks', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('cursor-agent', (event) => events.push(event));
+  const { events, handler } = collectEvents('cursor-agent');
 
   handler.feed(
     JSON.stringify({
@@ -168,19 +685,19 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
       timestamp_ms: 1,
       message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
     }) +
-      '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        timestamp_ms: 2,
-        message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
-      }) +
-      '\n' +
-      JSON.stringify({
-        type: 'assistant',
-        timestamp_ms: 3,
-        message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
-      }) +
-      '\n',
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -190,22 +707,21 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
 });
 
 test('codex json stream emits status text and usage events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(
     JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
-      JSON.stringify({ type: 'turn.started' }) + '\n' +
-      JSON.stringify({
-        type: 'item.completed',
-        item: { id: 'item-1', type: 'agent_message', text: 'hello' },
-      }) +
-      '\n' +
-      JSON.stringify({
-        type: 'turn.completed',
-        usage: { input_tokens: 12, cached_input_tokens: 4, output_tokens: 3 },
-      }) +
-      '\n',
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-1', type: 'agent_message', text: 'hello' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'turn.completed',
+      usage: { input_tokens: 12, cached_input_tokens: 4, output_tokens: 3 },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -216,9 +732,93 @@ test('codex json stream emits status text and usage events', () => {
   ]);
 });
 
+test('codex json stream preserves line boundaries between assistant message items', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-1', type: 'agent_message', text: 'English: one' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-2', type: 'agent_message', text: 'Chinese: 一' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-3', type: 'agent_message', text: 'English: two' },
+    }) +
+    '\n',
+  );
+
+  const text = events
+    .filter((event) => event.type === 'text_delta')
+    .map((event) => event.delta)
+    .join('');
+
+  assert.equal(text, 'English: one\nChinese: 一\nEnglish: two');
+});
+
+test('codex json stream does not duplicate existing assistant message newlines', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-1', type: 'agent_message', text: 'English: one\n' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-2', type: 'agent_message', text: 'Chinese: 一' },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item-3', type: 'agent_message', text: '\nEnglish: two' },
+    }) +
+    '\n',
+  );
+
+  const text = events
+    .filter((event) => event.type === 'text_delta')
+    .map((event) => event.delta)
+    .join('');
+
+  assert.equal(text, 'English: one\nChinese: 一\nEnglish: two');
+});
+
+test('codex json stream emits structured errors once', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      message: JSON.stringify({
+        detail: "The 'gpt-5.5' model requires a newer version of Codex.",
+      }),
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'turn.failed',
+      error: { message: 'plain failure' },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: "The 'gpt-5.5' model requires a newer version of Codex.",
+    },
+  ]);
+});
+
 test('codex json stream emits command execution tool events', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(
     JSON.stringify({
@@ -232,19 +832,19 @@ test('codex json stream emits command execution tool events', () => {
         status: 'in_progress',
       },
     }) +
-      '\n' +
-      JSON.stringify({
-        type: 'item.completed',
-        item: {
-          id: 'item-1',
-          type: 'command_execution',
-          command: "/bin/zsh -lc 'echo hello-from-codex'",
-          aggregated_output: 'hello-from-codex\n',
-          exit_code: 0,
-          status: 'completed',
-        },
-      }) +
-      '\n',
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-1',
+        type: 'command_execution',
+        command: "/bin/zsh -lc 'echo hello-from-codex'",
+        aggregated_output: 'hello-from-codex\n',
+        exit_code: 0,
+        status: 'completed',
+      },
+    }) +
+    '\n',
   );
 
   assert.deepEqual(events, [
@@ -263,11 +863,341 @@ test('codex json stream emits command execution tool events', () => {
   ]);
 });
 
+test('codex json stream emits TodoWrite events from todo_list items', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-0',
+        type: 'todo_list',
+        items: [
+          { text: 'Inspect workspace', completed: false },
+          { text: 'Write prototype', completed: false },
+        ],
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.updated',
+      item: {
+        id: 'item-0',
+        type: 'todo_list',
+        items: [
+          { text: 'Inspect workspace', completed: true },
+          { text: 'Write prototype', completed: false },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-0',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect workspace', status: 'pending' },
+          { content: 'Write prototype', status: 'pending' },
+        ],
+      },
+    },
+    {
+      type: 'tool_use',
+      id: 'item-0',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect workspace', status: 'completed' },
+          { content: 'Write prototype', status: 'pending' },
+        ],
+      },
+    },
+  ]);
+});
+
+test('codex json stream surfaces disallowed connector tool selections as terminal errors', () => {
+  const { events, handler } = collectEvents('codex');
+  const connectorError = JSON.stringify({
+    ok: false,
+    status: 404,
+    error: {
+      code: 'CONNECTOR_TOOL_NOT_FOUND',
+      message: 'connector tool is not allowed',
+      details: {
+        connectorId: 'github',
+        toolName: 'github.github_list_notifications',
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector',
+      content: `${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
+test('codex json stream finds connector tool errors after earlier noise json output', () => {
+  const { events, handler } = collectEvents('codex');
+  const noiseLine = JSON.stringify({
+    event: 'running',
+    message: 'starting connector call',
+  });
+  const connectorError = JSON.stringify({
+    ok: false,
+    status: 404,
+    error: {
+      code: 'CONNECTOR_TOOL_NOT_FOUND',
+      message: 'connector tool is not allowed',
+      details: {
+        connectorId: 'github',
+        toolName: 'github.github_list_notifications',
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector-noise',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector-noise',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${noiseLine}\n${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector-noise',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector-noise',
+      content: `${noiseLine}\n${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
+test('codex json stream surfaces wrapped connector tool errors as terminal errors', () => {
+  const { events, handler } = collectEvents('codex');
+  const connectorError = JSON.stringify({
+    error: {
+      data: {
+        error: {
+          code: 'CONNECTOR_TOOL_NOT_FOUND',
+          message: 'connector tool is not allowed',
+          details: {
+            connectorId: 'github',
+            toolName: 'github.github_list_notifications',
+          },
+        },
+      },
+    },
+  });
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-connector-wrapped',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: '',
+        exit_code: null,
+        status: 'in_progress',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item-connector-wrapped',
+        type: 'command_execution',
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+        aggregated_output: `${connectorError}\n`,
+        exit_code: 1,
+        status: 'failed',
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-connector-wrapped',
+      name: 'Bash',
+      input: {
+        command: 'od tools connectors execute --connector github --tool github.github_list_notifications --input .daily-digest-tmp/notifications.json',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item-connector-wrapped',
+      content: `${connectorError}\n`,
+      isError: true,
+    },
+    {
+      type: 'error',
+      message: 'Connector tool github.github_list_notifications is not allowed for connector github. Re-list the connector catalog and choose one of the currently allowed read-only tools.',
+    },
+  ]);
+});
+
 test('unhandled structured events fall back to raw', () => {
-  const events = [];
-  const handler = createJsonEventStreamHandler('codex', (event) => events.push(event));
+  const { events, handler } = collectEvents('codex');
 
   handler.feed(JSON.stringify({ type: 'unhandled.event', foo: 'bar' }) + '\n');
 
   assert.deepEqual(events, [{ type: 'raw', line: '{"type":"unhandled.event","foo":"bar"}' }]);
+});
+test('codex json stream treats reconnect errors as status warnings not fatal (regression of #1471)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({ type: 'error', message: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' }) + '\n' +
+    JSON.stringify({ type: 'item.completed', item: { id: 'item-0', type: 'agent_message', text: 'OK' } }) + '\n' +
+    JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 5, output_tokens: 2, cached_input_tokens: 0 } }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'running' },
+    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'text_delta', delta: 'OK' },
+    { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
+  ]);
+});
+
+test('codex json stream treats stream disconnect reconnect errors as status warnings not fatal', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'thread.started', thread_id: 'thr-1' }) + '\n' +
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'error',
+      message: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',
+    }) + '\n' +
+    JSON.stringify({ type: 'item.completed', item: { id: 'item-0', type: 'agent_message', text: 'OK' } }) + '\n' +
+    JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 5, output_tokens: 2, cached_input_tokens: 0 } }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing' },
+    { type: 'status', label: 'running' },
+    {
+      type: 'status',
+      label: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',
+    },
+    { type: 'text_delta', delta: 'OK' },
+    { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
+  ]);
+});
+
+test('codex json stream still treats real errors as fatal after reconnect warnings', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'error', message: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' }) + '\n' +
+    JSON.stringify({ type: 'error', message: 'Authentication failed: invalid API key' }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'error', message: 'Authentication failed: invalid API key' },
+  ]);
+});
+
+test('codex json stream does not downgrade non-reconnect errors that mention reconnect text', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'error',
+      message: 'Authentication failed after Reconnecting... stream disconnected before completion',
+    }) + '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'error',
+      message: 'Authentication failed after Reconnecting... stream disconnected before completion',
+    },
+  ]);
 });

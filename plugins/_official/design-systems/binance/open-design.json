@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-binance",
+  "title": "Binance.US",
+  "title_i18n": {
+    "zh-CN": "Binance.US",
+    "zh-TW": "Binance.US",
+    "ja": "Binance.US",
+    "ko": "Binance.US",
+    "de": "Binance.US",
+    "fr": "Binance.US",
+    "ru": "Binance.US",
+    "es": "Binance.US",
+    "pt-BR": "Binance.US",
+    "it": "Binance.US",
+    "vi": "Binance.US",
+    "pl": "Binance.US",
+    "id": "Binance.US",
+    "nl": "Binance.US",
+    "ar": "Binance.US",
+    "tr": "Binance.US",
+    "uk": "Binance.US",
+    "en": "Binance.US"
+  },
+  "version": "0.1.0",
+  "description": "Crypto exchange. Bold yellow accent on monochrome, trading-floor urgency.",
+  "description_i18n": {
+    "zh-CN": "加密货币交易所。单色底上的醒目黄色强调，营造交易大厅的紧迫感。",
+    "zh-TW": "加密貨幣交易所。單色底上的醒目黃色強調，營造交易大廳的緊迫感。",
+    "ja": "暗号資産取引所。モノクロームに鮮やかなイエローのアクセント、トレーディングフロアの緊迫感。",
+    "ko": "암호화폐 거래소. 모노크롬 위 선명한 노란색 강조, 거래소 현장의 긴박감.",
+    "de": "Krypto-Börse. Kräftiger gelber Akzent auf Monochrom, Dringlichkeit des Handelsraums.",
+    "fr": "Plateforme d'échange crypto. Accent jaune vif sur monochrome, urgence de salle de marché.",
+    "ru": "Криптовалютная биржа. Яркий жёлтый акцент на монохроме, динамика торгового зала.",
+    "es": "Exchange de criptomonedas. Acento amarillo intenso sobre monocromo, urgencia de piso de operaciones.",
+    "pt-BR": "Exchange de criptomoedas. Destaque amarelo vibrante em monocromático, urgência de pregão.",
+    "it": "Exchange di criptovalute. Accento giallo brillante su monocromatico, urgenza della sala operativa.",
+    "vi": "Sàn giao dịch tiền mã hóa. Điểm nhấn vàng nổi bật trên nền đơn sắc, tính cấp bách của sàn giao dịch.",
+    "pl": "Giełda kryptowalut. Wyrazisty żółty akcent na monochromatycznym tle, naglący charakter parkietu.",
+    "id": "Platform exchange kripto. Aksen kuning tegas pada monokrom, urgensi lantai perdagangan.",
+    "nl": "Crypto-exchange. Gedurfd geel accent op monochroom, urgentie van de handelsvloer.",
+    "ar": "منصة تبادل العملات المشفرة. لون أصفر بارز على خلفية أحادية اللون، إلحاح قاعة التداول.",
+    "tr": "Kripto borsası. Monokrom üzerine cesur sarı vurgu, işlem katı aciliyeti.",
+    "uk": "Криптовалютна біржа. Яскравий жовтий акцент на монохромі, невідкладність торгового майданчика.",
+    "en": "Crypto exchange. Bold yellow accent on monochrome, trading-floor urgency."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "fintech-crypto"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Binance.US design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Binance.US design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "binance",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

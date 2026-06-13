@@ -1,11 +1,21 @@
 import { build } from "esbuild";
 
-await build({
+const sharedOptions = {
   bundle: true,
-  entryPoints: ["./src/index.ts"],
   format: "esm",
-  outfile: "./dist/index.mjs",
   packages: "external",
   platform: "node",
   target: "node24",
+};
+
+await build({
+  ...sharedOptions,
+  entryPoints: ["./src/index.ts"],
+  outfile: "./dist/index.mjs",
+});
+
+await build({
+  ...sharedOptions,
+  entryPoints: ["./src/headless.ts"],
+  outfile: "./dist/headless.mjs",
 });

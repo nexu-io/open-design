@@ -1,0 +1,261 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/airtable/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Airtable" —
+ * the spreadsheet-database hybrid that talks to enterprise without
+ * shouting. A white canvas with deep-navy text, Airtable Blue as the
+ * single chromatic accent, Haas Swiss-precision typography, and a
+ * signature blue-tinted multi-layer shadow that makes cards feel
+ * built into the page rather than dropped onto it.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Airtable's voice rather than the cross-brand default):
+ *
+ *   1. `--accent` is Airtable Blue (#1b61c9), not deep navy. Deep
+ *      navy is already `--fg`; the brand expresses primary CTAs by
+ *      using `--accent` as the button background and reserves
+ *      navy-on-white for headlines and body. `--accent-hover` binds
+ *      to the documented "Mid Blue" #254fad rather than a generic
+ *      color-mix darken — Airtable explicitly differentiates the
+ *      hover tier as a discrete brand tone, not a calculated shade.
+ *
+ *   2. `--fg` is `#181d26` (Deep Navy), not `#000000`. The faint
+ *      blue undertone at the top of the neutral ramp is part of the
+ *      brand — pure black would clash with Airtable Blue and make
+ *      the page read as harsh against the white canvas. `--fg-2`
+ *      drops to `#333333` (documented Dark Gray) for body
+ *      description; `--muted` binds to the documented Weak Text
+ *      `rgba(4, 14, 32, 0.69)` so cross-brand `var(--muted)` calls
+ *      land on Airtable's actual semitransparent navy tier instead
+ *      of a flat gray.
+ *
+ *   3. `--surface-warm` aliases to `--surface` because Airtable has
+ *      no warm tier — the canvas is white and the lifted surface is
+ *      the documented `#f8fafc` light-surface, both cool. Adding a
+ *      warm sibling would invent a tone the brand does not use.
+ *
+ *   4. `--elev-raised` is the full multi-layer Airtable shadow stack
+ *      reproduced VERBATIM from DESIGN.md §6: a 1px dark hairline, a
+ *      2px ambient, a 3px blue-tinted (rgba(45,127,249,0.28))
+ *      "Airtable glow" at 1px y-offset, and a 0.5px inner ring. The
+ *      blue tint is the brand signature — it makes cards feel
+ *      authored by the same hand as the Airtable Blue CTAs, instead
+ *      of a generic gray-shadow drop. Never drop the third layer
+ *      when overriding this token.
+ *
+ *   5. Radius scale binds 12 / 16 / 24 / 9999 (sm / md / lg / pill)
+ *      per DESIGN.md §5. Buttons sit at 12px (documented), cards at
+ *      16px, large feature containers at 24px. The 2px "sharp"
+ *      cookie-consent radius is component-specific and inlined
+ *      where needed, not promoted to the schema. The 32px "large"
+ *      radius is also section-specific; binding it to `--radius-lg`
+ *      would over-round the typical card surface.
+ *
+ *   6. `--leading-body` is 1.35 (DESIGN.md body 18px / 24px), not
+ *      the schema-conventional 1.5. Airtable runs body copy at a
+ *      slightly tighter rhythm so dense product UI (table rows,
+ *      record cards) does not feel sparse. `--leading-tight` is 1.2
+ *      for headings, matching the documented 1.15–1.25 band.
+ *
+ *   7. `--tracking-display` is `0` (normal), not negative. DESIGN.md
+ *      §3 explicitly lists display headings as `letter-spacing:
+ *      normal` and body text as POSITIVE tracking (0.08–0.28px).
+ *      The Haas family is engineered for positive tracking; mapping
+ *      display to a negative em would fight the typeface. Body-tier
+ *      positive tracking is applied at the component level (button,
+ *      caption) since `--tracking-display` only covers display sizes.
+ *
+ *   8. `--success` is `#006400` (documented `--theme_success-text`),
+ *      a darker forest green than the schema's #16a34a. Airtable's
+ *      semantic green is intentionally deeper so it reads as a
+ *      "confirmed / saved" tone against the white canvas rather
+ *      than a vibrant alert.
+ *
+ *   9. Section rhythm is 96 / 64 / 48 (desktop / tablet / phone).
+ *      DESIGN.md does not pin section padding numerically but the
+ *      site's airy enterprise voice asks for generous vertical
+ *      space — this matches the documented 8px-base spacing scale
+ *      (96 = 12 × 8) without inventing a new tier. Container caps
+ *      at 1200px, consistent with Airtable's documented
+ *      425–1664px responsive band centered on a desktop sweet spot.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the schema. The Haas family does not
+ * need a CDN reference here — the font stack lists OS fallbacks
+ * (`-apple-system, system-ui, Segoe UI, Roboto`) per DESIGN.md §3
+ * so artifacts render acceptably even when Haas is not loaded.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * White canvas, white lifted card. Airtable explicitly does not
+   * vary background between sections — depth comes from the
+   * blue-tinted shadow stack, not from tinting one surface against
+   * another. `--surface-warm` aliases to surface because the brand
+   * has no warm tier (DESIGN.md §2 lists only cool neutrals). */
+  --bg: #ffffff;                       /* primary canvas */
+  --surface: #ffffff;                  /* card / lifted container */
+  --surface-warm: var(--surface);      /* alias — Airtable has no warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Deep Navy → Dark Gray → Weak Text (semitransparent navy) →
+   * tertiary alias. The four-tier ramp matches DESIGN.md §2 + §6
+   * exactly: `#181d26` headings, `#333333` body, the documented
+   * `rgba(4, 14, 32, 0.69)` weak tier for captions, and `--meta`
+   * aliasing to muted because Airtable does not differentiate a
+   * fourth tertiary tone. */
+  --fg: #181d26;                       /* Deep Navy — primary text */
+  --fg-2: #333333;                     /* Dark Gray — secondary text / body */
+  --muted: rgba(4, 14, 32, 0.69);      /* Weak Text — captions, meta */
+  --meta: var(--muted);                /* alias — no distinct tertiary tier */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * `#e0e2e6` is the documented card-border tone from DESIGN.md §4.
+   * `--border-soft` drops to a lighter `#eef0f3` for inner row
+   * separators (table rows, list dividers) that must not visually
+   * compete with the outer card edge. */
+  --border: #e0e2e6;                   /* card / input edge */
+  --border-soft: #eef0f3;              /* inner row separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Airtable Blue — the single chromatic accent across the brand.
+   * Used for primary CTAs, links, focus rings, and active-state
+   * highlights. Hard cap of ≤2 visible uses per screen (lint
+   * enforced); decorative blue is forbidden because the brand reads
+   * the accent as "this is the action".
+   *
+   * `--accent-hover` binds to the documented "Mid Blue" #254fad
+   * rather than a generic color-mix darken — Airtable explicitly
+   * differentiates the hover tier as a discrete brand tone. */
+  --accent: #1b61c9;                   /* Airtable Blue — CTA, links */
+  --accent-on: #ffffff;                /* white label on blue */
+  --accent-hover: #254fad;             /* Mid Blue — documented hover tone */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * `--success` is the documented `--theme_success-text` (#006400),
+   * a deeper forest green than the schema's #16a34a — Airtable's
+   * green reads as "confirmed / saved" against white, not as a
+   * vivid alert. Warn / danger inherit schema defaults because the
+   * brand has no defined yellow / red. */
+  --success: #006400;                  /* documented Success Green */
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Haas (display + Groot Disp variant) is Airtable's proprietary
+   * Swiss family. The OS fallbacks `-apple-system, system-ui,
+   * Segoe UI, Roboto` are documented in DESIGN.md §3 and ensure
+   * artifacts render legibly when Haas is not loaded. The Groot
+   * Disp variant carries display headings; Haas regular carries
+   * body and UI. */
+  --font-display: "Haas Groot Disp", Haas, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body: Haas, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — derived from DESIGN.md §3 hierarchy. The scale
+   * tops out at 48px (display hero); Airtable reads as "sophisticated
+   * simplicity" because hierarchy comes from weight + tracking
+   * variation within the Haas family, not from inflated px counts. */
+  --text-xs: 12px;                     /* metadata, tags */
+  --text-sm: 14px;                     /* caption, small UI */
+  --text-base: 16px;                   /* body medium, button */
+  --text-lg: 20px;                     /* feature copy */
+  --text-xl: 24px;                     /* card title */
+  --text-2xl: 32px;                    /* sub-heading */
+  --text-3xl: 40px;                    /* section heading */
+  --text-4xl: 48px;                    /* display hero */
+
+  /* `--leading-body` is 1.35 (DESIGN.md body 18px / 24px), not 1.5.
+   * Dense product UI (table rows, record cards) needs the tighter
+   * rhythm so rows do not feel sparse. `--leading-tight` is 1.2
+   * for headings, matching the documented 1.15–1.25 band.
+   * `--tracking-display` is `0` because DESIGN.md §3 explicitly
+   * lists display headings as `letter-spacing: normal`; positive
+   * body tracking (0.08–0.28px) is applied per-component. */
+  --leading-body: 1.35;
+  --leading-tight: 1.2;
+  --tracking-display: 0;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5 (1–48px range). The 4/8/12/16/
+   * 20/24/32/48 tier covers structural rhythm; finer sub-tier
+   * increments (1–3px micro-padding inside chips and badges) are
+   * inlined per-component because they are too granular for the
+   * shared schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — Airtable's enterprise voice asks for generous
+   * vertical space between marketing sections without going gallery-
+   * empty. 96 desktop / 64 tablet / 48 phone matches the 8px base
+   * (96 = 12 × 8) and stays within the documented responsive band. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 2 / 12 / 16 / 24 / 32 / 50%. We bind
+   * the four schema tiers to: 12 (button/input, documented), 16
+   * (card, documented), 24 (large feature container, documented),
+   * 9999 (pill). The 2px "sharp" cookie-consent radius is
+   * component-specific and inlined where it appears; the 32px
+   * section radius would over-round typical surfaces and is
+   * intentionally not bound here. */
+  --radius-sm: 12px;                   /* buttons, inputs, chips */
+  --radius-md: 16px;                   /* cards, modals */
+  --radius-lg: 24px;                   /* featured containers */
+  --radius-pill: 9999px;               /* badges, avatars */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Airtable's signature: blue-tinted multi-layer shadow that makes
+   * cards feel authored by the same hand as the Airtable Blue CTAs.
+   * Four layers reproduced verbatim from DESIGN.md §6:
+   *   1px dark hairline   (defines the edge)
+   *   2px ambient         (soft surround)
+   *   3px blue glow @ 1y  (the Airtable signature — never drop)
+   *   0.5px inset ring    (subtle inner highlight) */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 0 1px rgba(0, 0, 0, 0.32),
+    0 0 2px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(45, 127, 249, 0.28),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * 3px Airtable-Blue alpha glow — keyboard focus reads as
+   * "actionable" without competing with the saturated CTA fill.
+   * Matches schema default formula so cross-brand focus styles
+   * remain visually consistent. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations + curve. Airtable's product UI uses motion
+   * to confirm direct manipulation (cell edits, drag-and-drop),
+   * not to choreograph entrances — 150/200ms feels responsive
+   * without dragging. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px max content width — sits in the middle of Airtable's
+   * documented 425–1664px responsive band. Gutters narrow on
+   * mobile to preserve line length on dense marketing copy. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

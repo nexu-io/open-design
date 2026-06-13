@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/spotify/tokens.css
+ *
+ * Structured token bindings for the "Spotify" brand — near-black immersive
+ * dark theme, vibrant green accent, bold type, album-art-driven.
+ *
+ * Brand identity in three sentences:
+ *   1. Content-first darkness — three-step charcoal ladder (#121212 deepest
+ *      → #181818 cards → #1f1f1f buttons) where the UI recedes so album
+ *      art and playlists can glow; achromatic chrome by design.
+ *   2. SpotifyMixUI/CircularSp family at bold (700) / semibold (600) /
+ *      regular (400); uppercase button labels with wide letter-spacing
+ *      (1.4px–2px) create a systematic label voice; compact 10–24px range.
+ *   3. Spotify Green (#1ed760) as the singular functional accent —
+ *      exclusively for play controls, active states, and primary CTAs;
+ *      never decorative; full-pill (500px–9999px) or circular (50%) geometry.
+ *
+ * Schema decisions:
+ *   - --bg: #121212 (near-black deepest); --surface: #181818 (cards).
+ *   - --surface-warm: #1f1f1f (button bg / interactive surfaces).
+ *   - --fg: #ffffff (white — primary text on dark).
+ *   - --fg-2: #fdfdfd (near-pure white — maximum emphasis).
+ *   - --muted: #b3b3b3 (silver — secondary text, inactive nav).
+ *   - --meta: #cbcbcb (near-white secondary body text).
+ *   - --border: #4d4d4d; --border-soft: rgba(255,255,255,0.1).
+ *   - --accent: #1ed760 (Spotify Green — play/active/CTA).
+ *   - --accent-on: #000000 (black text on green).
+ *   - --tracking-display: normal (titles use uppercase + wide tracking inline).
+ *   - --leading-tight: 1.00 (section title line-height).
+ *   - --radius-sm: 9999px (full pill); --radius-md: 6px (cards/containers).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #121212;             /* near-black — deepest background */
+  --surface:      #181818;             /* cards, sidebar, containers */
+  --surface-warm: #1f1f1f;            /* button bg / interactive surfaces */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #ffffff;                     /* primary text — white on dark */
+  --fg-2: #fdfdfd;                     /* near-pure white — maximum emphasis */
+  --muted: #b3b3b3;                    /* silver — secondary, inactive nav */
+  --meta:  #cbcbcb;                    /* slightly brighter secondary text */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #4d4d4d;             /* button borders on dark */
+  --border-soft: rgba(255, 255, 255, 0.1);
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #1ed760;           /* Spotify Green — functional only */
+  --accent-on:     #000000;           /* black text on green */
+  --accent-hover:  #1db954;           /* green border variant on hover */
+  --accent-active: color-mix(in oklab, var(--accent), black 10%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #1ed760;                 /* green — completion, active */
+  --warn:    #ffa42b;                 /* warning orange */
+  --danger:  #f3727f;                 /* negative red — error states */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "SpotifyMixUITitle", "CircularSp", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    "SpotifyMixUI", "CircularSp", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography.
+   * Spotify's compact range: 10px–24px. The schema spine maps key stops.
+   * No display hero larger than 24px; this is an app, not a magazine. */
+  --text-xs:   10px;                  /* micro / badge */
+  --text-sm:   12px;                  /* small — tags, counts */
+  --text-base: 16px;                  /* body bold / body regular */
+  --text-lg:   18px;                  /* feature heading — semibold */
+  --text-xl:   20px;                  /* section sub-heading */
+  --text-2xl:  24px;                  /* section title — SpotifyMixUITitle */
+  --text-3xl:  24px;                  /* same tier — max useful display size */
+  --text-4xl:  24px;                  /* Spotify caps at 24px in the schema */
+
+  /* Leading + tracking.
+   * Compact and dense — this is an app built for scanning playlists.
+   * Button labels are uppercase + 1.4px–2px tracking (set inline in CSS). */
+  --leading-body:     1.50;
+  --leading-tight:    1.00;
+  --tracking-display: normal;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 8px base unit per DESIGN.md §Spacing System. Compact scale. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — dark compression; density over breathing room. */
+  --section-y-desktop: 64px;
+  --section-y-tablet:  40px;
+  --section-y-phone:   24px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Pill everything — 9999px for navigation pills, 500px for large pill
+     buttons, 6px for album art and card containers. */
+  --radius-sm:   9999px;              /* full pill — buttons/navigation */
+  --radius-md:   6px;                 /* cards, album art containers */
+  --radius-lg:   8px;                 /* dialogs, panels */
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Heavy shadows needed on dark — 0.3–0.5 opacity for visibility. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: rgba(0, 0, 0, 0.3) 0px 8px 8px;
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px rgba(30, 215, 96, 0.4);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: ease;
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

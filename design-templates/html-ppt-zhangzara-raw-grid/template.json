@@ -1,0 +1,46 @@
+{
+  "slug": "zhangzara-raw-grid",
+  "name": "Raw Grid",
+  "tagline": "Neo-brutalist deck with thick borders, offset shadows, and a pink/sage/ink palette.",
+  "mood": [
+    "raw",
+    "punchy",
+    "energetic",
+    "confident"
+  ],
+  "occasion": [
+    "startup pitch",
+    "accelerator demo day",
+    "founder pitch",
+    "indie product launch",
+    "brand deck",
+    "creator portfolio"
+  ],
+  "tone": [
+    "direct",
+    "modern",
+    "no-nonsense",
+    "graphic"
+  ],
+  "formality": "medium-low",
+  "density": "high",
+  "palette": {
+    "primary": "#FFFFFF",
+    "ink": "#0A0A0A",
+    "pink": "#F2D4CF",
+    "green": "#E5EDD6",
+    "gray": "#F5F5F5",
+    "description": "white background with ink-black structure, soft pink and sage green as flat color blocks, hard 3px borders and 6px offset shadows"
+  },
+  "typography": {
+    "display": "Segoe UI / system-ui",
+    "body": "Segoe UI / system-ui",
+    "style": "system sans set in heavy weights with strong uppercase tracking; functional rather than expressive"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel direct and graphic-confident: founder pitches, accelerator demos, brand decks, indie launches, creator portfolios. Strong for stat slides, comparison tables, and process flows. Equally good for tech, research, or finance when the speaker wants the deck to feel scrappy-confident rather than buttoned-up.",
+  "avoid_for": "Contexts that need to feel soft, warm, or intentionally quiet — the brutalist borders and offset shadows commit to a graphic voice.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/raw-grid"
+}

@@ -1,0 +1,125 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/github/tokens.css
+ *
+ * Structured token bindings for the "GitHub" brand — Primer foundations,
+ * functional density, blue-on-white precision.
+ *
+ * Brand identity in three sentences:
+ *   1. True white canvas (#ffffff) with a clean canvas-subtle (#f6f8fa)
+ *      secondary surface; hairline borders (#d0d7de) define every pane
+ *      — density over decoration, information over aesthetics.
+ *   2. System-ui stack throughout — no custom webfont; type renders at
+ *      instant on every OS; 14px body (not 16px) is the identity.
+ *   3. Primer blue (#0969da) for all interactive affordances; GitHub
+ *      green (#1a7f37) reserved for success/merge states only.
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff; --surface: #f6f8fa (canvas-subtle).
+ *   - --surface-warm aliases --surface (no warm tier in Primer).
+ *   - --fg: #1f2328 (fg-default); --muted: #656d76 (fg-muted).
+ *   - --border: #d0d7de (1px hairline — the structural backbone).
+ *   - --accent: #0969da (Primer Blue); --accent-hover: #0550ae.
+ *   - --success bound to GitHub green (#1a7f37) — merge / open state.
+ *   - --tracking-display: -0.01em (only display-size headings use it).
+ *   - --text-base: 14px (the 14px body IS GitHub's product density).
+ *   - --radius-sm: 6px (universal Primer radius for buttons/inputs).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #f6f8fa;              /* canvas-subtle — sidebar, input bg */
+  --surface-warm: var(--surface);       /* Primer has no warm tier */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #1f2328;                      /* fg-default — ink */
+  --fg-2: #1f2328;                      /* same ink; no B-slot split in Primer */
+  --muted: #656d76;                     /* fg-muted — captions, file paths */
+  --meta:  #656d76;                     /* same muted tier */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #d0d7de;              /* border-default — hairline structural */
+  --border-soft: #d8dee4;             /* border-muted — inner panel dividers */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #0969da;            /* Primer Blue — links, primary CTAs */
+  --accent-on:     #ffffff;
+  --accent-hover:  #0550ae;            /* darker pressed state */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #1a7f37;                  /* GitHub green — merge, open, success */
+  --warn:    #9a6700;                  /* attention amber text */
+  --danger:  #cf222e;                  /* closed / destructive red */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  /* System fonts only — no webfonts load in GitHub. */
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-body:    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale — DESIGN.md §Typography.
+   * GitHub's prose density: 14px body (not 16px). Display sits at 32px.
+   * h2 (20px) and h3 (16px) collapse close together for density. */
+  --text-xs:   12px;                   /* body-small — captions, metadata */
+  --text-sm:   14px;                   /* body — default UI (GitHub's base) */
+  --text-base: 14px;                   /* body baseline = 14px for density */
+  --text-lg:   16px;                   /* h3 / panel header */
+  --text-xl:   20px;                   /* h2 — section heading */
+  --text-2xl:  24px;                   /* h1 — page heading */
+  --text-3xl:  28px;                   /* subpage display */
+  --text-4xl:  32px;                   /* display — repo header / hero */
+
+  /* Leading + tracking.
+   * GitHub uses 1.25 for headings (tight-but-readable), 1.5 for body.
+   * Only display gets the -0.01em tracking. */
+  --leading-body:     1.5;
+  --leading-tight:    1.25;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 4px base grid — Primer spacing. Row padding 16px h, 12px v. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — GitHub marketing pages. */
+  --section-y-desktop: 64px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px is the universal Primer radius for all interactive elements. */
+  --radius-sm:   6px;
+  --radius-md:   6px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* GitHub uses hairline borders, not shadows, as the primary depth
+     signal. --elev-raised is a whisper for the rare floating element. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 1px 3px rgba(31, 35, 40, 0.12), 0 8px 24px rgba(66, 74, 83, 0.12);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Primer focus: 3px rgba ring on the accent color. */
+  --focus-ring: 0 0 0 3px rgba(9, 105, 218, 0.3);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  /* GitHub avoids animation. 80ms hover, 200ms open — short and purposeful. */
+  --motion-fast:   80ms;
+  --motion-base:   200ms;
+  --ease-standard: ease-out;
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

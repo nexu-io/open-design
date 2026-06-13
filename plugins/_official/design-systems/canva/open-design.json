@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-canva",
+  "title": "Canva",
+  "title_i18n": {
+    "zh-CN": "Canva",
+    "zh-TW": "Canva",
+    "ja": "Canva",
+    "ko": "Canva",
+    "de": "Canva",
+    "fr": "Canva",
+    "ru": "Canva",
+    "es": "Canva",
+    "pt-BR": "Canva",
+    "it": "Canva",
+    "vi": "Canva",
+    "pl": "Canva",
+    "id": "Canva",
+    "nl": "Canva",
+    "ar": "Canva",
+    "tr": "Canva",
+    "uk": "Canva",
+    "en": "Canva"
+  },
+  "version": "0.1.0",
+  "description": "Visual creation platform. Vivid purple-blue gradient, generous spacing, friendly geometry.",
+  "description_i18n": {
+    "zh-CN": "视觉创作平台。鲜艳的紫蓝渐变，宽松的间距，友好的几何形状。",
+    "zh-TW": "視覺創作平台。鮮豔的紫藍漸變，寬鬆的間距，友好的幾何形狀。",
+    "ja": "ビジュアル制作プラットフォーム。鮮やかな紫青グラデーション、ゆとりのある間隔、親しみやすい幾何学。",
+    "ko": "비주얼 제작 플랫폼. 선명한 보라-파랑 그라데이션, 넉넉한 여백, 친근한 기하학적 형태.",
+    "de": "Visuelle Kreationsplattform. Lebendiger Lila-Blau-Verlauf, großzügige Abstände, freundliche Geometrie.",
+    "fr": "Plateforme de création visuelle. Dégradé violet-bleu vif, espacement généreux, géométrie conviviale.",
+    "ru": "Платформа для визуального творчества. Яркий фиолетово-синий градиент, просторные отступы, дружелюбная геометрия.",
+    "es": "Plataforma de creación visual. Degradado púrpura-azul vívido, espaciado generoso, geometría amigable.",
+    "pt-BR": "Plataforma de criação visual. Gradiente roxo-azul vibrante, espaçamento generoso, geometria amigável.",
+    "it": "Piattaforma di creazione visiva. Gradiente viola-blu vivido, spaziatura generosa, geometria amichevole.",
+    "vi": "Nền tảng sáng tạo hình ảnh. Gradient tím-xanh sống động, khoảng cách rộng rãi, hình học thân thiện.",
+    "pl": "Platforma do tworzenia wizualnego. Żywy gradient fioletowo-niebieski, obszerne odstępy, przyjazna geometria.",
+    "id": "Platform kreasi visual. Gradien ungu-biru cerah, jarak yang luas, geometri ramah.",
+    "nl": "Visueel creatieplatform. Levendige paars-blauw verloop, royale afstand, vriendelijke geometrie.",
+    "ar": "منصة الإبداع البصري. تدرج أرجواني-أزرق حيوي، مسافات سخية، هندسة ودودة.",
+    "tr": "Görsel oluşturma platformu. Canlı mor-mavi degrade, bol boşluk, samimi geometri.",
+    "uk": "Платформа для візуальної творчості. Яскравий фіолетово-синій градієнт, щедрі відступи, дружня геометрія.",
+    "en": "Visual creation platform. Vivid purple-blue gradient, generous spacing, friendly geometry."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "design-creative"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Canva design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Canva design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "canva",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

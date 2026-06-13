@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-mongodb",
+  "title": "MongoDB",
+  "title_i18n": {
+    "zh-CN": "MongoDB",
+    "zh-TW": "MongoDB",
+    "ja": "MongoDB",
+    "ko": "MongoDB",
+    "de": "MongoDB",
+    "fr": "MongoDB",
+    "ru": "MongoDB",
+    "es": "MongoDB",
+    "pt-BR": "MongoDB",
+    "it": "MongoDB",
+    "vi": "MongoDB",
+    "pl": "MongoDB",
+    "id": "MongoDB",
+    "nl": "MongoDB",
+    "ar": "MongoDB",
+    "tr": "MongoDB",
+    "uk": "MongoDB",
+    "en": "MongoDB"
+  },
+  "version": "0.1.0",
+  "description": "Document database. Green leaf branding, developer documentation focus.",
+  "description_i18n": {
+    "zh-CN": "文档数据库。绿叶品牌标识，专注于开发者文档。",
+    "zh-TW": "文件資料庫。綠葉品牌標識，專注於開發者文件。",
+    "ja": "ドキュメントデータベース。緑の葉のブランディング、開発者向けドキュメント重視。",
+    "ko": "문서 데이터베이스. 녹색 잎 브랜딩, 개발자 문서 중심.",
+    "de": "Dokumentendatenbank. Grünes Blatt-Branding, Fokus auf Entwicklerdokumentation.",
+    "fr": "Base de données documentaire. Identité visuelle feuille verte, accent sur la documentation développeur.",
+    "ru": "Документная база данных. Брендинг с зелёным листом, акцент на документации для разработчиков.",
+    "es": "Base de datos de documentos. Branding de hoja verde, enfoque en documentación para desarrolladores.",
+    "pt-BR": "Banco de dados de documentos. Branding de folha verde, foco em documentação para desenvolvedores.",
+    "it": "Database documentale. Branding con foglia verde, focus sulla documentazione per sviluppatori.",
+    "vi": "Cơ sở dữ liệu tài liệu. Thương hiệu lá xanh, tập trung vào tài liệu dành cho nhà phát triển.",
+    "pl": "Dokumentowa baza danych. Branding z zielonym liściem, skupienie na dokumentacji dla deweloperów.",
+    "id": "Database dokumen. Branding daun hijau, fokus pada dokumentasi pengembang.",
+    "nl": "Documentdatabase. Groen blad branding, focus op ontwikkelaarsdocumentatie.",
+    "ar": "قاعدة بيانات المستندات. علامة تجارية بورقة خضراء، تركيز على وثائق المطورين.",
+    "tr": "Belge veritabanı. Yeşil yaprak markalaşması, geliştirici dokümantasyonu odaklı.",
+    "uk": "Документна база даних. Брендинг із зеленим листком, фокус на документації для розробників.",
+    "en": "Document database. Green leaf branding, developer documentation focus."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the MongoDB design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the MongoDB design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "mongodb",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

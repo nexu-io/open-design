@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Uber — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/uber. Every visible
+        value comes from tokens.css. Uber's signature moves: pure black
+        and white (no tints), UberMove bold headlines, UberMoveText body,
+        999px full-pill buttons, whisper-soft shadows (0.12 opacity)."
+    />
+
+    <style>
+      :root {
+        --bg:           #ffffff;
+        --surface:      #ffffff;
+        --surface-warm: #f8f8f8;
+
+        --fg:   #000000;
+        --fg-2: #000000;
+        --muted: #4b4b4b;
+        --meta:  #afafaf;
+
+        --border:      #000000;
+        --border-soft: rgba(0, 0, 0, 0.1);
+
+        --accent:        #000000;
+        --accent-on:     #ffffff;
+        --accent-hover:  #e2e2e2;
+        --accent-active: rgba(0, 0, 0, 0.08);
+
+        --success: #16a34a;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+
+        --font-display: "UberMove", "UberMoveText", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-body:    "UberMoveText", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 16px;
+        --text-lg:   18px;
+        --text-xl:   24px;
+        --text-2xl:  32px;
+        --text-3xl:  36px;
+        --text-4xl:  52px;
+
+        --leading-body:     1.50;
+        --leading-tight:    1.23;
+        --tracking-display: normal;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet:  48px;
+        --section-y-phone:   32px;
+
+        --radius-sm:   999px;
+        --radius-md:   8px;
+        --radius-lg:   12px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border-soft);
+        --elev-raised: rgba(0, 0, 0, 0.12) 0px 4px 16px 0px;
+
+        --focus-ring: rgb(255, 255, 255) 0px 0px 0px 2px inset;
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1136px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ─────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 700;              /* always bold — billboard force */
+        margin: 0;
+        color: var(--fg);
+        line-height: var(--leading-tight);
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        /* 52px display: line-height 1.23 (--leading-tight), no letter-spacing. */
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        /* 36px section heading: line-height 1.22. */
+        line-height: 1.22;
+      }
+      h3 {
+        font-size: var(--text-xl);
+        /* 24px sub-heading: line-height 1.33.
+           Overrides the shared 1.23 set above. */
+        line-height: 1.33;
+      }
+      p { margin: 0; }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — 999px full pill for all. ─── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);   /* 999px full pill */
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: none;
+        transition: background-color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-black {
+        background: var(--fg);
+        color: var(--accent-on);
+      }
+      .btn-black:hover { background: #222; }
+      .btn-white {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--border-soft);
+      }
+      .btn-white:hover { background: var(--accent-hover); }
+
+      /* ─── Chip / category pill ───────────────── */
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        background: #efefef;
+        color: var(--fg);
+        cursor: pointer;
+        border: none;
+        transition: background-color var(--motion-fast) var(--ease-standard);
+      }
+      .chip:hover { background: #e2e2e2; }
+      .chip.active { background: var(--fg); color: var(--accent-on); }
+
+      /* ─── Cards ──────────────────────────────── */
+      .card {
+        background: var(--bg);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        box-shadow: var(--elev-raised);
+      }
+      .card-featured {
+        border-radius: var(--radius-lg);
+      }
+
+      /* ─── Inputs ─────────────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
+      .field input {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--fg);
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus { border-color: var(--fg); box-shadow: 0 0 0 2px rgba(0,0,0,0.1); }
+
+      /* ─── Dark footer ────────────────────────── */
+      .footer-dark {
+        background: var(--fg);
+        color: var(--accent-on);
+        padding: var(--space-8) 0;
+        margin-inline: calc(var(--container-gutter-desktop) * -1);
+        padding-inline: var(--container-gutter-desktop);
+      }
+
+      /* ─── Layout ─────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-8);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; }
+      .chip-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero">
+        <div style="margin-bottom:var(--space-6)">
+          <div class="chip-row">
+            <button class="chip active">Ride</button>
+            <button class="chip">Drive</button>
+            <button class="chip">Business</button>
+            <button class="chip">Uber Eats</button>
+            <button class="chip">About</button>
+          </div>
+        </div>
+
+        <div class="hero-grid">
+          <div class="stack-4">
+            <h1>Get a ride in minutes.</h1>
+            <p class="body-muted" style="font-size:var(--text-lg);line-height:1.5;max-width:44ch;margin-top:var(--space-3)">
+              From your first trip to your thousandth, Uber is here for you.
+              Pure black-and-white, full-pill buttons, whisper-soft shadows.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-black">
+                See prices
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-white">Read the spec</a>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card card-featured">
+              <p style="font-size:var(--text-sm);font-weight:500;color:var(--muted);margin-bottom:var(--space-4)">Your trip</p>
+              <div class="field" style="margin-bottom:var(--space-3)">
+                <label for="pickup">Pickup</label>
+                <input id="pickup" type="text" placeholder="Enter pickup location" />
+              </div>
+              <div class="field" style="margin-bottom:var(--space-5)">
+                <label for="dest">Destination</label>
+                <input id="dest" type="text" placeholder="Where to?" />
+              </div>
+              <button class="btn btn-black" style="width:100%;justify-content:center">See prices</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section data-od-id="features">
+        <h2 style="max-width:26ch;margin-bottom:var(--space-6)">Uber for business, every day.</h2>
+
+        <div class="features-grid">
+          <article class="card stack-3">
+            <h3>Black on white</h3>
+            <p class="body-muted body-sm">
+              True #000000 and #ffffff — not near-black, not off-white.
+              The stark duality IS Uber. No warmth, no tint, no gradients.
+            </p>
+          </article>
+          <article class="card stack-3">
+            <h3>999px radius</h3>
+            <p class="body-muted body-sm">
+              Every button, chip, and navigation item uses full-pill geometry.
+              UberMove Bold (700) for all headings — billboard force.
+            </p>
+          </article>
+          <article class="card stack-3">
+            <h3>Whisper shadow</h3>
+            <p class="body-muted body-sm">
+              rgba(0,0,0,0.12) 0px 4px 16px — bare minimum lift.
+              Cards defined by shadow, not border. Never dramatic depth.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- DARK FOOTER -->
+      <section data-od-id="footer" style="padding-block:0">
+        <div class="footer-dark">
+          <h2 style="color:#ffffff;font-size:var(--text-xl);margin-bottom:var(--space-4)">Move the world forward.</h2>
+          <p style="font-size:var(--text-sm);color:var(--meta);max-width:44ch">
+            Uber's vision: transportation as reliable as running water, everywhere, for everyone.
+          </p>
+          <div style="display:flex;gap:var(--space-3);margin-top:var(--space-6);flex-wrap:wrap">
+            <a href="#" style="font-size:var(--text-sm);color:var(--meta);text-decoration:none">Company</a>
+            <a href="#" style="font-size:var(--text-sm);color:var(--meta);text-decoration:none">Newsroom</a>
+            <a href="#" style="font-size:var(--text-sm);color:var(--meta);text-decoration:none">Investors</a>
+            <a href="#" style="font-size:var(--text-sm);color:var(--meta);text-decoration:none">Blog</a>
+            <a href="#" style="font-size:var(--text-sm);color:var(--meta);text-decoration:none">Careers</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

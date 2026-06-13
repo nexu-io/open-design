@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-ethereal-blue-haired-fantasy-portrait",
+  "title": "Profile / Avatar - Ethereal Blue-Haired Fantasy Portrait",
+  "title_i18n": {
+    "zh-CN": "头像/个人资料 - 空灵蓝发奇幻肖像",
+    "zh-TW": "頭像/個人檔案 - 空靈藍髮奇幻肖像",
+    "ja": "プロフィール/アバター - 幻想的な青髪ファンタジーポートレート",
+    "ko": "프로필 / 아바타 - 몽환적인 청발 판타지 초상화",
+    "de": "Profil / Avatar - Ätherisches Fantasieportrait mit blauen Haaren",
+    "fr": "Profil / Avatar - Portrait Fantasy Éthéré aux Cheveux Bleus",
+    "ru": "Профиль / Аватар - Эфирный фэнтезийный портрет с синими волосами",
+    "es": "Perfil / Avatar - Retrato Fantástico Etéreo de Cabello Azul",
+    "pt-BR": "Perfil / Avatar - Retrato Fantástico Etéreo de Cabelo Azul",
+    "it": "Profilo / Avatar - Ritratto Fantasy Etereo con Capelli Blu",
+    "vi": "Hồ sơ / Avatar - Chân dung Fantasy Huyền Ảo Tóc Xanh",
+    "pl": "Profil / Awatar - Eteryczny Fantastyczny Portret z Niebieskimi Włosami",
+    "id": "Profil / Avatar - Potret Fantasi Ethereal Berambut Biru",
+    "nl": "Profiel / Avatar - Etherisch Fantasieportret met Blauw Haar",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة شخصية خيالية أثيرية بشعر أزرق",
+    "tr": "Profil / Avatar - Eteral Mavi Saçlı Fantezi Portresi",
+    "uk": "Профіль / Аватар - Ефірний фентезійний портрет з синім волоссям",
+    "en": "Profile / Avatar - Ethereal Blue-Haired Fantasy Portrait"
+  },
+  "version": "0.1.0",
+  "description": "This prompt generates a soft, luminous anime-style fantasy character portrait, ideal for creating elegant vertical key art or character illustrations with flowing hair and a dreamy spring atmosphere.",
+  "description_i18n": {
+    "zh-CN": "此提示词生成柔和发光的动漫风格奇幻角色肖像，适合创建飘逸秀发和梦幻春日氛围的优雅竖版主视觉图或角色插画。",
+    "zh-TW": "此提示詞生成柔和發光的動漫風格奇幻角色肖像，適合創建飄逸秀髮和夢幻春日氛圍的優雅直式主視覺圖或角色插畫。",
+    "ja": "柔らかく発光するアニメスタイルのファンタジーキャラクターポートレートを生成し、流れる髪と夢幻的な春の雰囲気を持つ縦型キービジュアルやキャラクターイラストの制作に最適です。",
+    "ko": "부드럽고 빛나는 애니메이션 스타일의 판타지 캐릭터 초상화를 생성하며, 흐르는 머리카락과 몽환적인 봄 분위기의 우아한 세로형 키 아트 또는 캐릭터 일러스트 제작에 이상적입니다.",
+    "de": "Erzeugt ein weiches, leuchtendes Fantasy-Charakterportrait im Anime-Stil, ideal für elegante vertikale Key-Art oder Charakterillustrationen mit fließendem Haar und verträumter Frühlingsatmosphäre.",
+    "fr": "Génère un portrait de personnage fantasy lumineux et doux dans un style anime, idéal pour créer des key arts verticaux élégants ou des illustrations de personnages avec des cheveux fluides et une atmosphère printanière onirique.",
+    "ru": "Создаёт мягкий, светящийся фэнтезийный портрет персонажа в стиле аниме, идеален для элегантных вертикальных ключевых артов или иллюстраций с развевающимися волосами и мечтательной весенней атмосферой.",
+    "es": "Genera un retrato de personaje de fantasía estilo anime suave y luminoso, ideal para crear arte clave vertical elegante o ilustraciones de personajes con cabello fluido y atmósfera primaveral de ensueño.",
+    "pt-BR": "Gera um retrato de personagem de fantasia em estilo anime suave e luminoso, ideal para criar key art vertical elegante ou ilustrações de personagens com cabelo fluido e atmosfera primaveril onírica.",
+    "it": "Genera un ritratto di personaggio fantasy in stile anime morbido e luminoso, ideale per creare key art verticali eleganti o illustrazioni di personaggi con capelli fluenti e un'atmosfera primaverile da sogno.",
+    "vi": "Tạo chân dung nhân vật fantasy phong cách anime mềm mại, phát sáng, lý tưởng để tạo key art dọc thanh lịch hoặc minh họa nhân vật với mái tóc bay bổng và bầu không khí mùa xuân mơ mộng.",
+    "pl": "Generuje miękki, świetlisty portret postaci fantasy w stylu anime, idealny do tworzenia eleganckiego pionowego key artu lub ilustracji postaci z rozwianymi włosami i oniryczną wiosenną atmosferą.",
+    "id": "Menghasilkan potret karakter fantasi bergaya anime yang lembut dan bercahaya, ideal untuk membuat key art vertikal yang elegan atau ilustrasi karakter dengan rambut mengalir dan suasana musim semi yang memukau.",
+    "nl": "Genereert een zacht, lichtgevend fantasy karakterportret in anime-stijl, ideaal voor het creëren van elegante verticale key art of karakterillustraties met vloeiend haar en een dromerige lentessfeer.",
+    "ar": "ينشئ صورة شخصية لشخصية خيالية ناعمة ومضيئة بأسلوب الأنمي، مثالية لإنشاء فن رئيسي رأسي أنيق أو رسوم توضيحية للشخصيات بشعر منساب وأجواء ربيعية حالمة.",
+    "tr": "Yumuşak, ışıltılı anime tarzı fantezi karakter portresi oluşturur; akan saçlar ve rüya gibi bir bahar atmosferine sahip zarif dikey key art veya karakter illüstrasyonları yaratmak için idealdir.",
+    "uk": "Генерує м'який, світлий фентезійний портрет персонажа в стилі аніме, ідеальний для створення елегантних вертикальних ключових артів або ілюстрацій персонажів з розвіяним волоссям та мрійливою весняною атмосферою.",
+    "en": "This prompt generates a soft, luminous anime-style fantasy character portrait, ideal for creating elegant vertical key art or character illustrations with flowing hair and a dreamy spring atmosphere."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "𝑳𝒊𝒊𝒈𝒋𝒎",
+    "url": "https://x.com/lchngjin91/status/2048836910676926484#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "anime",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777367299255_7e01qg_HG7uRRbbIAABIeT.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed anime fantasy portrait of {argument name=\"character name\" default=\"an elegant blue-haired fantasy woman\"}, shown from the back in a three-quarter pose, turning her head over her shoulder to look at the viewer with calm violet eyes and a soft, slightly distant expression. She has very long, flowing {argument name=\"hair color\" default=\"icy pastel blue\"} hair with layered wispy bangs, loose windblown strands, one small ahoge on top, and 1 dark curved horn with subtle crimson striping emerging from the left side of her head. Her outfit is a refined, backless fantasy gown with 4 visible main pieces: a dark fitted bodice, a white open-backed outer layer with ornate gold trim and pale embroidered patterns, 2 long detached sleeves that fade into translucent blue-violet pointed cuffs, and red-blue ribbon ornaments tied at the neck and waist. Add delicate jewel-like tassel details at the upper back and trailing ribbon ends drifting in the air. The scene is backlit by soft spring sunlight in a pale stone pavilion or arched balcony, with 1 large arch opening behind her and clusters of {argument name=\"flower type\" default=\"pink cherry blossoms\"} glowing in the top right background. Include a few drifting petals, luminous haze, subtle sparkles, and a dreamy pastel atmosphere. Composition is vertical, upper-thigh portrait, character centered slightly right, hair sweeping broadly across the left side of the frame. Render in a polished ethereal anime illustration style with soft bloom, translucent fabrics, glossy eyes, delicate linework, cool lavender and blue tones, gentle rim light, painterly background blur, and an emphasis on smooth elegant surfaces, clean fabric flow, and minimal wrinkling.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed anime fantasy portrait of {argument name=\"character name\" default=\"an elegant blue-haired fantasy woman\"}, shown from the back in a three-quarter pose, turning her head over her shoulder to look at the viewer with calm violet eyes and a soft, slightly distant expression. She has very long, flowing {argument name=\"hair color\" default=\"icy pastel blue\"} hair with layered wispy bangs, loose windblown strands, one small ahoge on top, and 1 dark curved horn with subtle crimson striping emerging from the left side of her head. Her outfit is a refined, backless fantasy gown with 4 visible main pieces: a dark fitted bodice, a white open-backed outer layer with ornate gold trim and pale embroidered patterns, 2 long detached sleeves that fade into translucent blue-violet pointed cuffs, and red-blue ribbon ornaments tied at the neck and waist. Add delicate jewel-like tassel details at the upper back and trailing ribbon ends drifting in the air. The scene is backlit by soft spring sunlight in a pale stone pavilion or arched balcony, with 1 large arch opening behind her and clusters of {argument name=\"flower type\" default=\"pink cherry blossoms\"} glowing in the top right background. Include a few drifting petals, luminous haze, subtle sparkles, and a dreamy pastel atmosphere. Composition is vertical, upper-thigh portrait, character centered slightly right, hair sweeping broadly across the left side of the frame. Render in a polished ethereal anime illustration style with soft bloom, translucent fabrics, glossy eyes, delicate linework, cool lavender and blue tones, gentle rim light, painterly background blur, and an emphasis on smooth elegant surfaces, clean fabric flow, and minimal wrinkling."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

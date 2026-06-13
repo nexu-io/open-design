@@ -1,0 +1,302 @@
+---
+/**
+ * Client-side enhancers for the Atelier Zero landing page.
+ *
+ * Why a shared component: the homepage is rendered from two entry points
+ * (`app/pages/index.astro` for the canonical `/`, and
+ * `app/pages/[locale]/index.astro` for every prefixed locale like
+ * `/zh-CN/`). Both need the *exact same* enhancement behavior:
+ *
+ *   - Headroom-style sticky header (hide on scroll down, reveal on up)
+ *   - Live GitHub stars + latest release version injection
+ *   - Live Wire contributors row (replaces the static fallback)
+ *   - IntersectionObserver-driven `data-reveal` choreography (without
+ *     this every section sits at `opacity: 0` and the page looks blank)
+ *
+ * Inlining this script in only one of the entry points causes the
+ * "blank landing page" bug on localized homepages, so we centralize it
+ * here. Keep the inline tag (`is:inline`) — Astro otherwise tries to
+ * bundle the script and our hand-crafted DOM-only helpers don't need
+ * the extra weight.
+ *
+ * SAFETY: This file owns the contract for the `data-github-version`,
+ * `data-github-stars`, `data-wire-contributors-*`, and `data-reveal`
+ * attributes. If you rename any of them in `page.tsx` / `wire.tsx`,
+ * update the selectors below in lockstep.
+ */
+---
+
+<script is:inline>
+  (() => {
+    const formatStars = (count) => {
+      if (!Number.isFinite(count) || count <= 0) return '0';
+      if (count < 1000) return String(count);
+      return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    };
+
+    // Pull a clean 'v0.3.0'-style label from a GitHub release record.
+    // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+    // what we hand-author; fall back to tag_name (e.g.
+    // 'open-design-v0.3.0') with the project prefix stripped.
+    //
+    // Expected input shapes (release.name / release.tag_name):
+    //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+    //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+    //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
+    //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
+    //   { name: null,                 tag_name: null }                  → null (caller skips)
+    const formatVersion = (release) => {
+      const fromTag = (tag) => {
+        if (typeof tag !== 'string') return null;
+        const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+        return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+      };
+      const fromName = (name) => {
+        if (typeof name !== 'string') return null;
+        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+    };
+
+    const enhanceHeader = () => {
+      const nav = document.querySelector('[data-nav-headroom]');
+      if (nav) {
+        // Wrap the scroll listener in requestAnimationFrame so a burst of
+        // scroll events (trackpads fire >60Hz) collapses to one DOM
+        // mutation per frame. PSI attributed ~700ms of "forced reflow" to
+        // the un-throttled version on the previous build.
+        let lastY = window.scrollY;
+        let ticking = false;
+        const showTopThreshold = 100;
+        const scrollDelta = 6;
+        window.addEventListener(
+          'scroll',
+          () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+              const y = window.scrollY;
+              const delta = y - lastY;
+              if (y <= showTopThreshold) nav.classList.remove('is-hidden');
+              else if (delta > scrollDelta) nav.classList.add('is-hidden');
+              else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
+              lastY = y;
+              ticking = false;
+            });
+          },
+          { passive: true },
+        );
+      }
+
+      const stars = document.querySelector('[data-github-stars]');
+      if (stars) {
+        fetch('https://api.github.com/repos/nexu-io/open-design', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+          .then((data) => {
+            if (typeof data?.stargazers_count === 'number') {
+              stars.textContent = formatStars(data.stargazers_count);
+            }
+          })
+          .catch(() => {});
+      }
+
+      // Latest stable release powers every "v0.x.y" badge on the page
+      // (topbar pulse, hero CTA-foot, footer download). Hits one
+      // unauthenticated API call per page view; the static fallback in
+      // each slot keeps the layout sane if the request fails or 403s.
+      const versionSlots = document.querySelectorAll('[data-github-version]');
+      if (versionSlots.length === 0) return;
+      fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatVersion(data);
+          if (!label) return;
+          for (const slot of versionSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    };
+
+    const enhanceWire = () => {
+      const track = document.querySelector('[data-wire-contributors-track]');
+      const count = document.querySelector('[data-wire-contributors-count]');
+      if (!track) return;
+
+      const roleOverrides = {
+        tw93: 'kami',
+        op7418: 'guizang',
+        alchaincyf: 'huashu',
+        OpenCoworkAI: 'codesign',
+        'nexu-io': 'studio',
+        lewislulu: 'html-ppt',
+      };
+      const roleFor = (login, contributions) =>
+        roleOverrides[login] ?? `${contributions} ${contributions === 1 ? 'commit' : 'commits'}`;
+      const isContributor = (value) =>
+        value &&
+        typeof value.login === 'string' &&
+        typeof value.html_url === 'string' &&
+        typeof value.type === 'string' &&
+        typeof value.contributions === 'number';
+      const renderContributor = (contributor, index) => {
+        const link = document.createElement('a');
+        link.className = 'wire-item is-link';
+        link.href = contributor.href;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.setAttribute('aria-label', `Open ${contributor.handle} on GitHub`);
+        link.dataset.liveWireItem = String(index);
+
+        const dot = document.createElement('span');
+        dot.className = 'wire-dot';
+        dot.textContent = '·';
+        const handle = document.createElement('span');
+        handle.className = 'wire-handle';
+        handle.textContent = `@${contributor.handle}`;
+        const role = document.createElement('span');
+        role.className = 'wire-role';
+        role.textContent = contributor.role;
+
+        link.append(dot, handle, role);
+        return link;
+      };
+
+      fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=12', {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          if (!Array.isArray(data)) return;
+          const live = data
+            .filter(isContributor)
+            .filter((c) => c.type !== 'Bot' && !c.login.endsWith('[bot]'))
+            .slice(0, 12)
+            .map((c) => ({
+              handle: c.login,
+              role: roleFor(c.login, c.contributions),
+              href: c.html_url,
+            }));
+          if (live.length === 0) return;
+          live.push({
+            handle: 'you',
+            role: 'be next',
+            href: 'https://github.com/nexu-io/open-design/graphs/contributors',
+          });
+          if (count) count.textContent = String(Math.max(0, live.length - 1));
+          track.replaceChildren(
+            ...[...live, ...live].map((contributor, index) => renderContributor(contributor, index)),
+          );
+        })
+        .catch(() => {});
+    };
+
+    // Platform-aware hero download button. Detects OS and — on macOS — the chip
+    // family (Apple Silicon vs Intel), resolves the matching asset from the
+    // latest GitHub release, and rewrites the [data-download-cta] button's href
+    // to a direct download, appending the detected chip label. Falls back to
+    // the server-rendered releases-page href when detection or the API fails.
+    const enhanceDownloadCta = () => {
+      // Skip `[data-download-page]` CTAs (e.g. the nav "Download" button) — they
+      // must keep their /download/ page href; only direct-download CTAs rewrite.
+      const btn = document.querySelector('[data-download-cta]:not([data-download-page])');
+      if (!btn) return;
+      const ua = navigator.userAgent || '';
+      const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
+      const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
+
+      const labelChip = (text) => {
+        let chip = btn.querySelector('[data-download-chip]');
+        if (!chip) {
+          chip = document.createElement('span');
+          chip.setAttribute('data-download-chip', '');
+          chip.style.opacity = '0.7';
+          chip.style.fontWeight = '400';
+          const arrow = btn.querySelector('.arrow');
+          if (arrow) btn.insertBefore(chip, arrow);
+          else btn.appendChild(chip);
+        }
+        chip.textContent = ' · ' + text;
+      };
+
+      const resolveAsset = (chipLabel, matcher) => {
+        fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((rel) => {
+            if (!rel || !Array.isArray(rel.assets)) return;
+            const asset = rel.assets.find((a) => matcher(a.name || ''));
+            if (asset && asset.browser_download_url) {
+              btn.href = asset.browser_download_url;
+              btn.setAttribute('download', '');
+              labelChip(chipLabel);
+            }
+          })
+          .catch(() => {});
+      };
+
+      const detectMacArch = async () => {
+        // Chromium exposes the real architecture; Safari does not, so fall back
+        // to the WebGL renderer string (Apple Silicon reports an "Apple" GPU).
+        try {
+          const uad = navigator.userAgentData;
+          if (uad && typeof uad.getHighEntropyValues === 'function') {
+            const hv = await uad.getHighEntropyValues(['architecture']);
+            if (hv && hv.architecture) return hv.architecture === 'arm' ? 'arm64' : 'x64';
+          }
+        } catch (e) {}
+        try {
+          const cvs = document.createElement('canvas');
+          const gl = cvs.getContext('webgl') || cvs.getContext('experimental-webgl');
+          if (gl) {
+            const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+            if (/apple/i.test(renderer) && !/intel|amd|radeon|nvidia/i.test(renderer)) return 'arm64';
+            if (/intel|amd|radeon|nvidia/i.test(renderer)) return 'x64';
+          }
+        } catch (e) {}
+        return null;
+      };
+
+      if (isWin) {
+        resolveAsset('Windows', (n) => /win-x64-setup\.exe$/i.test(n));
+      } else if (isMac) {
+        detectMacArch().then((arch) => {
+          if (arch === 'arm64') resolveAsset('Apple Silicon', (n) => /mac-arm64\.dmg$/i.test(n));
+          else if (arch === 'x64') resolveAsset('Intel', (n) => /mac-x64\.dmg$/i.test(n));
+          // undetermined → keep the releases-page fallback
+        });
+      }
+      // Linux / other → keep the releases-page fallback
+    };
+
+    const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
+    enhanceHeader();
+    enhanceWire();
+    enhanceDownloadCta();
+    if (elements.length === 0) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      for (const el of elements) el.dataset.revealed = 'true';
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.dataset.revealed = 'true';
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -8% 0px' },
+    );
+
+    for (const el of elements) observer.observe(el);
+  })();
+</script>

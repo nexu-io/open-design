@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit · Daily Digest · May 6</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-mono: 'Berkeley Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+}
+
+[data-theme="light"] {
+  --bg: #f4f5f6; --surface: #ffffff; --surface-raised: #ffffff;
+  --surface-2: #f0f1f3; --surface-inset: #f8f9fa;
+  --fg: #1b1c1f; --fg-2: #37393e; --fg-3: #6c6f78; --fg-4: #9ea1a9;
+  --border: rgba(0,0,0,0.06); --border-card: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.12); --border-focus: rgba(94,106,210,0.35);
+  --hover: rgba(0,0,0,0.025); --active: rgba(0,0,0,0.05);
+  --accent: #5e6ad2; --accent-light: #6c78e2; --accent-bg: rgba(94,106,210,0.06);
+  --tag: rgba(0,0,0,0.045); --tag-border: rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05);
+  --shadow-card-hover: 0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.08);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+  --status-backlog: #9ea1a9; --status-todo: #d4940e;
+  --status-progress: #2b80c5; --status-review: #8759c7; --status-done: #1a8d3a;
+  --pri-on: #505259; --pri-off: rgba(0,0,0,0.08);
+  --pri-high: #c77d1a; --pri-urgent: #d4513a;
+  --scroll-thumb: rgba(0,0,0,0.08);
+  --attention-accent: #c77d1a; --attention-bg: rgba(212,148,14,0.06);
+  --code-bg: rgba(0,0,0,0.04);
+}
+[data-theme="dark"] {
+  --bg: #0f0f12; --surface: #18181c; --surface-raised: #1e1e23;
+  --surface-2: #242429; --surface-inset: #141417;
+  --fg: #ededef; --fg-2: #c5c7cc; --fg-3: #8b8d95; --fg-4: #5f616a;
+  --border: rgba(255,255,255,0.06); --border-card: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.11); --border-focus: rgba(94,106,210,0.45);
+  --hover: rgba(255,255,255,0.035); --active: rgba(255,255,255,0.06);
+  --accent: #7b83eb; --accent-light: #8b93f5; --accent-bg: rgba(123,131,235,0.08);
+  --tag: rgba(255,255,255,0.055); --tag-border: rgba(255,255,255,0.07);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-card-hover: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.08);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
+  --status-backlog: #5f616a; --status-todo: #e5a72f;
+  --status-progress: #4da0ee; --status-review: #a87ce0; --status-done: #2eae4e;
+  --pri-on: #b8bac2; --pri-off: rgba(255,255,255,0.08);
+  --pri-high: #e5a72f; --pri-urgent: #ef6b4a;
+  --scroll-thumb: rgba(255,255,255,0.08);
+  --attention-accent: #e5a72f; --attention-bg: rgba(229,167,47,0.06);
+  --code-bg: rgba(255,255,255,0.06);
+}
+
+html { background: var(--bg); }
+body {
+  font-family: var(--font-sans); font-feature-settings: "cv01", "ss03";
+  color: var(--fg); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; min-height: 100vh;
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+.page { max-width: 680px; margin: 0 auto; padding: 56px 20px 96px; }
+
+.header { margin-bottom: 40px; }
+.header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+.brand { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 510; color: var(--fg-4); letter-spacing: -0.01em; }
+.brand .logo { width: 18px; height: 18px; opacity: 0.45; }
+.brand .sep { color: var(--fg-4); opacity: 0.4; margin: 0 1px; }
+.brand .current { color: var(--fg-3); }
+
+.theme-btn {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg-4); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; transition: all 0.15s;
+}
+.theme-btn:hover { background: var(--hover); border-color: var(--border-strong); color: var(--fg-3); }
+
+.greeting { margin-bottom: 24px; }
+.greeting h1 {
+  font-size: 24px; font-weight: 590; letter-spacing: -0.4px;
+  color: var(--fg); line-height: 1.2; margin-bottom: 4px;
+}
+.greeting p { font-size: 13px; color: var(--fg-4); font-weight: 400; letter-spacing: -0.01em; }
+
+.cycle-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.cycle-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--accent-bg); display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cycle-icon svg { color: var(--accent); }
+.cycle-info { flex: 1; min-width: 0; }
+.cycle-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cycle-label { font-size: 13px; font-weight: 590; color: var(--fg); letter-spacing: -0.01em; }
+.cycle-meta { font-size: 12px; color: var(--fg-4); font-weight: 400; }
+.cycle-track { height: 4px; border-radius: 2px; background: var(--pri-off); overflow: hidden; }
+.cycle-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+
+.section { margin-bottom: 36px; }
+.section-header {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 590; color: var(--fg-4);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 8px; padding: 0 4px;
+}
+.section-header .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.section.attention .dot { background: var(--attention-accent); }
+.section.updates .dot { background: var(--fg-4); opacity: 0.5; }
+.section-header .count {
+  font-weight: 400; color: var(--fg-4); opacity: 0.7;
+  text-transform: none; letter-spacing: 0;
+}
+
+.issue-list { display: flex; flex-direction: column; gap: 4px; }
+
+.issue {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px; border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  cursor: pointer; transition: all 0.12s ease;
+  position: relative;
+}
+.issue:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-0.5px); }
+.issue.expanded { box-shadow: var(--shadow-card-hover); }
+
+.issue-status { padding-top: 2px; flex-shrink: 0; width: 16px; height: 16px; }
+.issue-status svg { display: block; }
+
+.issue-body { flex: 1; min-width: 0; }
+.issue-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 1px; }
+.issue-id {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-4);
+  flex-shrink: 0; font-weight: 400; letter-spacing: -0.02em;
+}
+.issue-title {
+  font-size: 13.5px; font-weight: 510; color: var(--fg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.issue-sub {
+  font-size: 12px; color: var(--fg-4); line-height: 1.5;
+  margin-top: 1px; letter-spacing: -0.005em;
+}
+.issue-sub strong { color: var(--fg-3); font-weight: 510; }
+
+.issue-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+  flex-shrink: 0; padding-top: 1px;
+}
+.issue-time { font-size: 11px; color: var(--fg-4); white-space: nowrap; font-weight: 400; }
+
+.pri { display: flex; gap: 1.5px; align-items: flex-end; }
+.pri i { width: 3px; border-radius: 0.75px; background: var(--pri-off); display: block; font-style: normal; }
+.pri i.on { background: var(--pri-on); }
+.pri.high i.on { background: var(--pri-high); }
+.pri.urgent i.on { background: var(--pri-urgent); }
+.pri i:nth-child(1) { height: 5px; }
+.pri i:nth-child(2) { height: 7px; }
+.pri i:nth-child(3) { height: 9px; }
+.pri i:nth-child(4) { height: 11px; }
+
+.tags { display: flex; gap: 4px; margin-top: 7px; flex-wrap: wrap; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 510;
+  background: var(--tag); color: var(--fg-3); letter-spacing: -0.01em;
+}
+.pill .d { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+.issue-detail {
+  display: none; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.issue.expanded .issue-detail { display: block; }
+
+.detail-desc {
+  font-size: 13px; color: var(--fg-2); line-height: 1.65;
+  letter-spacing: -0.005em; margin-bottom: 14px;
+}
+.detail-desc code {
+  font-family: var(--font-mono); font-size: 12px;
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--code-bg); color: var(--fg);
+}
+
+.props {
+  display: grid; grid-template-columns: 76px 1fr; gap: 8px 0;
+  font-size: 12px; margin-bottom: 16px;
+  padding: 10px 12px; border-radius: 8px;
+  background: var(--surface-inset);
+}
+.props .k { color: var(--fg-4); font-weight: 400; padding-top: 1px; }
+.props .v { color: var(--fg-2); font-weight: 510; display: flex; align-items: center; gap: 5px; }
+
+.activity-label {
+  font-size: 11px; font-weight: 590; color: var(--fg-4);
+  text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px;
+}
+.act {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 0; position: relative;
+}
+.act + .act { border-top: 1px solid var(--border); }
+.act-av {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: var(--tag); display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 590; color: var(--fg-3);
+}
+.act-av.orbit { background: var(--accent-bg); color: var(--accent); }
+.act-text { font-size: 12px; color: var(--fg-3); line-height: 1.5; flex: 1; }
+.act-text strong { color: var(--fg-2); font-weight: 510; }
+.act-text .t { color: var(--fg-4); font-size: 11px; margin-left: 2px; }
+
+.footer {
+  margin-top: 52px; padding-top: 16px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: var(--fg-4); letter-spacing: -0.005em;
+}
+.footer .mark { display: flex; align-items: center; gap: 5px; }
+.footer .mark svg { opacity: 0.35; }
+
+.kb {
+  position: fixed; bottom: 14px; right: 14px;
+  display: flex; gap: 10px; align-items: center;
+  background: var(--surface-raised); box-shadow: var(--shadow-elevated);
+  border-radius: 10px; padding: 6px 12px;
+  font-size: 11px; color: var(--fg-4); z-index: 100;
+}
+.kb kbd {
+  font-family: var(--font-sans); font-size: 10px; font-weight: 590;
+  padding: 2px 5px; border-radius: 4px;
+  background: var(--surface-2); color: var(--fg-4);
+  line-height: 1.3; letter-spacing: 0;
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <svg class="logo" width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" opacity="0.5"/>
+          <circle cx="9" cy="9" r="2" fill="currentColor" opacity="0.5"/>
+          <ellipse cx="9" cy="9" rx="7" ry="3.5" stroke="currentColor" stroke-width="1" opacity="0.3" transform="rotate(-30 9 9)"/>
+        </svg>
+        Orbit <span class="sep">/</span> <span class="current">Daily Digest</span>
+      </div>
+      <button class="theme-btn" id="themeToggle" title="Toggle theme (T)">☀</button>
+    </div>
+
+    <div class="greeting">
+      <h1>Good morning, Eli</h1>
+      <p>Tuesday, May 6, 2026 — here's what changed in Linear overnight.</p>
+    </div>
+
+    <div class="cycle-card">
+      <div class="cycle-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="8" cy="8" r="5.5"/><path d="M8 4.5v3.5l2.5 1.5"/>
+        </svg>
+      </div>
+      <div class="cycle-info">
+        <div class="cycle-top">
+          <span class="cycle-label">Cycle 12</span>
+          <span class="cycle-meta">60% complete · 3 days left</span>
+        </div>
+        <div class="cycle-track"><div class="cycle-fill" style="width:60%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section attention">
+    <div class="section-header">
+      <span class="dot"></span> Needs your attention <span class="count">3</span>
+    </div>
+    <div class="issue-list">
+
+      <div class="issue expanded" data-id="0" onclick="toggle(this)">
+        <div class="issue-status">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5.5" stroke="var(--status-progress)" stroke-width="1.8" stroke-dasharray="17.3 17.3" stroke-dashoffset="-8.65" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="issue-body">
+          <div class="issue-top">
+            <span class="issue-id">ENG-148</span>
+            <span class="issue-title">Auth middleware refactor</span>
+          </div>
+          <div class="issue-sub">Assigned to <strong>you</strong> · 5 days without update</div>
+          <div class="tags">
+            <span class="pill"><span class="d" style="background:#c77d1a"></span>backend</span>
+            <span class="pill"><span class="d" style="background:#d4513a"></span>auth</span>
+          </div>
+          <div class="issue-detail">
+            <p class="detail-desc">Refactor the auth middleware to use the new <code>session-v2</code> token format. The current implementation relies on legacy JWT claims incompatible with the updated identity service. Migrate all routes under <code>/api/v3/*</code> and ensure backward compat for mobile clients still on v2.</p>
+            <div class="props">
+              <span class="k">Priority</span>
+              <span class="v"><span class="pri high"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> High</span>
+              <span class="k">Cycle</span><span class="v">Cycle 12</span>
+              <span class="k">Created</span><span class="v" style="font-weight:400;color:var(--fg-4);">May 1, 2026</span>
+            </div>
+            <div class="activity-label">Activity</div>
+            <div class="act">
+              <div class="act-av orbit">O</div>
+              <div class="act-text"><strong>Orbit</strong> flagged — 5 days without update <span class="t">· today 06:42</span></div>
+            </div>
+            <div class="act">
+              <div class="act-av">S</div>
+              <div class="act-text"><strong>Sara</strong> added label <em>auth</em> <span class="t">· May 1</span></div>
+            </div>
+            <div class="act">
+              <div class="act-av">E</div>
+              <div class="act-text"><strong>Eli</strong> moved to In Progress <span class="t">· May 1</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="issue-right">
+          <span class="issue-time">5d</span>
+          <div class="pri high"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+        </div>
+      </div>
+
+      <div class="issue" data-id="1" onclick="toggle(this)">
+        <div class="issue-status">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5" fill="var(--status-review)"/>
+            <circle cx="8" cy="8" r="2" fill="var(--surface)"/>
+          </svg>
+        </div>
+        <div class="issue-body">
+          <div class="issue-top">
+            <span class="issue-id">DES-22</span>
+            <span class="issue-title">Login v2 design</span>
+          </div>
+          <div class="issue-sub"><strong>Marie</strong> moved to In Review</div>
+          <div class="issue-detail">
+            <p class="detail-desc">Updated login flow with SSO support, passkey prompt, and new branding. 4 screens: email entry, SSO redirect, passkey, and error state.</p>
+            <div class="props">
+              <span class="k">Assignee</span><span class="v">Marie</span>
+              <span class="k">Priority</span><span class="v"><span class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></span> Medium</span>
+              <span class="k">Cycle</span><span class="v">Cycle 12</span>
+              <span class="k">Labels</span>
+              <span class="v" style="gap:4px"><span class="pill"><span class="d" style="background:var(--status-review)"></span>design</span><span class="pill"><span class="d" style="background:var(--status-progress)"></span>login</span></span>
+            </div>
+            <div class="activity-label">Activity</div>
+            <div class="act">
+              <div class="act-av">M</div>
+              <div class="act-text"><strong>Marie</strong> moved to In Review <span class="t">· May 5, 18:22</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="issue-right">
+          <span class="issue-time">6h</span>
+          <div class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+
+      <div class="issue" data-id="2" onclick="toggle(this)">
+        <div class="issue-status">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5.5" stroke="var(--status-backlog)" stroke-width="1.5" stroke-dasharray="2.5 2.5"/>
+          </svg>
+        </div>
+        <div class="issue-body">
+          <div class="issue-top">
+            <span class="issue-id">ENG-201</span>
+            <span class="issue-title">CI flaky test</span>
+          </div>
+          <div class="issue-sub">New issue — no assignee yet</div>
+          <div class="issue-detail">
+            <p class="detail-desc"><code>test_rate_limit_concurrent</code> fails intermittently on CI (~15% of runs). Likely a race condition in the test fixture teardown.</p>
+            <div class="props">
+              <span class="k">Assignee</span><span class="v" style="color:var(--fg-4);font-weight:400">Unassigned</span>
+              <span class="k">Priority</span><span class="v"><span class="pri"><i class="on"></i><i></i><i></i><i></i></span> Low</span>
+              <span class="k">Labels</span>
+              <span class="v" style="gap:4px"><span class="pill"><span class="d" style="background:var(--fg-4)"></span>ci</span><span class="pill"><span class="d" style="background:#d4513a"></span>flaky</span></span>
+            </div>
+            <div class="activity-label">Activity</div>
+            <div class="act">
+              <div class="act-av">⚙</div>
+              <div class="act-text"><strong>Linear</strong> issue created <span class="t">· May 5, 21:08</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="issue-right">
+          <span class="issue-time">1d</span>
+          <div class="pri"><i class="on"></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section updates">
+    <div class="section-header">
+      <span class="dot"></span> Updated yesterday <span class="count">2</span>
+    </div>
+    <div class="issue-list">
+
+      <div class="issue" data-id="3" onclick="toggle(this)">
+        <div class="issue-status">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5.5" fill="var(--status-done)"/>
+            <path d="M5.5 8l1.8 1.8 3.2-3.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="issue-body">
+          <div class="issue-top">
+            <span class="issue-id">ENG-178</span>
+            <span class="issue-title">API rate limit</span>
+          </div>
+          <div class="issue-sub">Marked as <strong>Done</strong></div>
+          <div class="issue-detail">
+            <p class="detail-desc">Sliding-window rate limiting on all public API endpoints. 120 req/min per API key, returns <code>429</code> with <code>Retry-After</code> header.</p>
+            <div class="props">
+              <span class="k">Assignee</span><span class="v">Eli</span>
+              <span class="k">Priority</span><span class="v"><span class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></span> Medium</span>
+              <span class="k">Cycle</span><span class="v">Cycle 12</span>
+            </div>
+            <div class="activity-label">Activity</div>
+            <div class="act">
+              <div class="act-av">E</div>
+              <div class="act-text"><strong>Eli</strong> marked as Done <span class="t">· 22:14</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="issue-right">
+          <span class="issue-time">22:14</span>
+          <div class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+
+      <div class="issue" data-id="4" onclick="toggle(this)">
+        <div class="issue-status">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5.5" stroke="var(--status-progress)" stroke-width="1.8" stroke-dasharray="17.3 17.3" stroke-dashoffset="-8.65" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="issue-body">
+          <div class="issue-top">
+            <span class="issue-id">DES-19</span>
+            <span class="issue-title">Pricing page tokens</span>
+          </div>
+          <div class="issue-sub">Status changed to <strong>In Progress</strong></div>
+          <div class="issue-detail">
+            <p class="detail-desc">Extract pricing page color and spacing values into design tokens. Align with the new DS token naming convention (<code>--price-*</code> namespace).</p>
+            <div class="props">
+              <span class="k">Assignee</span><span class="v">Marie</span>
+              <span class="k">Priority</span><span class="v"><span class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></span> Medium</span>
+              <span class="k">Cycle</span><span class="v">Cycle 12</span>
+            </div>
+            <div class="activity-label">Activity</div>
+            <div class="act">
+              <div class="act-av">M</div>
+              <div class="act-text"><strong>Marie</strong> changed status to In Progress <span class="t">· 16:40</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="issue-right">
+          <span class="issue-time">16:40</span>
+          <div class="pri"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="mark">
+      <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2"/>
+        <circle cx="9" cy="9" r="2" fill="currentColor"/>
+      </svg>
+      Open Orbit · auto-generated 06:42
+    </div>
+    <span>Linear only</span>
+  </div>
+</div>
+
+<div class="kb">
+  <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+  <span><kbd>↵</kbd> expand</span>
+  <span><kbd>T</kbd> theme</span>
+</div>
+
+<script>
+function toggle(el) {
+  const was = el.classList.contains('expanded');
+  document.querySelectorAll('.issue.expanded').forEach(i => i.classList.remove('expanded'));
+  if (!was) el.classList.add('expanded');
+}
+const tog = document.getElementById('themeToggle');
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  tog.textContent = t === 'dark' ? '☽' : '☀';
+  localStorage.setItem('orbit-theme', t);
+}
+tog.addEventListener('click', () => {
+  setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+const saved = localStorage.getItem('orbit-theme');
+if (saved) setTheme(saved);
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 't' || e.key === 'T') { tog.click(); return; }
+  const all = [...document.querySelectorAll('.issue')];
+  const cur = all.findIndex(i => i.classList.contains('expanded'));
+  if (e.key === 'ArrowDown') { e.preventDefault(); toggle(all[cur < all.length - 1 ? cur + 1 : 0]); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); toggle(all[cur > 0 ? cur - 1 : all.length - 1]); }
+  if (e.key === 'Enter' && cur >= 0) { e.preventDefault(); toggle(all[cur]); }
+});
+
+// Add an "Open in Linear ↗" anchor on every issue row that opens the
+// linear.app URL constructed from the issue identifier.
+const TEAM = 'nexu';
+document.querySelectorAll('.issue').forEach(issue => {
+  const id = issue.querySelector('.issue-id')?.textContent?.trim();
+  if (!id) return;
+  const url = `https://linear.app/${TEAM}/issue/${id}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = '↗';
+  a.title = `Open ${id} in Linear`;
+  a.style.cssText = 'margin-left:8px;color:var(--accent);text-decoration:none;font-weight:600;font-size:13px;opacity:0.7;';
+  a.addEventListener('mouseenter', () => a.style.opacity = '1');
+  a.addEventListener('mouseleave', () => a.style.opacity = '0.7');
+  a.addEventListener('click', e => e.stopPropagation()); // don't trigger toggle
+  const right = issue.querySelector('.issue-right');
+  if (right) right.appendChild(a);
+});
+</script>
+</body>
+</html>

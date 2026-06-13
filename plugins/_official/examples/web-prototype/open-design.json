@@ -1,0 +1,172 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-web-prototype",
+  "title": "Web Prototype",
+  "title_i18n": {
+    "zh-CN": "网页原型",
+    "zh-TW": "網頁原型",
+    "ja": "Webプロトタイプ",
+    "ko": "웹 프로토타입",
+    "de": "Web-Prototyp",
+    "fr": "Prototype Web",
+    "ru": "Веб-прототип",
+    "es": "Prototipo Web",
+    "pt-BR": "Protótipo Web",
+    "it": "Prototipo Web",
+    "vi": "Nguyên mẫu Web",
+    "pl": "Prototyp Web",
+    "id": "Prototipe Web",
+    "nl": "Webprototype",
+    "ar": "نموذج ويب أولي",
+    "tr": "Web Prototipi",
+    "uk": "Веб-прототип",
+    "en": "Web Prototype"
+  },
+  "version": "0.1.1",
+  "description": "General-purpose desktop web prototype. Single self-contained HTML file built\nby copying the seed `assets/template.html` and pasting section layouts from\n`references/layouts.md`. Default for any landing / marketing / docs / SaaS\npage when no more specific skill matches.",
+  "description_i18n": {
+    "zh-CN": "通用桌面网页原型。通过复制种子文件 `assets/template.html` 并粘贴 `references/layouts.md` 中的布局生成单个独立 HTML 文件。适用于落地页、营销页、文档或 SaaS 页面的默认选项。",
+    "zh-TW": "通用桌面網頁原型。透過複製種子檔案 `assets/template.html` 並貼上 `references/layouts.md` 中的版面配置生成單一獨立 HTML 檔案。適用於著陸頁、行銷頁、文件或 SaaS 頁面的預設選項。",
+    "ja": "汎用デスクトップWebプロトタイプ。`assets/template.html` をコピーし、`references/layouts.md` のレイアウトを貼り付けて単一の自己完結型 HTML ファイルを生成。ランディングページ、マーケティング、ドキュメント、SaaS ページのデフォルトオプション。",
+    "ko": "범용 데스크톱 웹 프로토타입. `assets/template.html`을 복사하고 `references/layouts.md`의 레이아웃을 붙여넣어 단일 독립형 HTML 파일 생성. 랜딩/마케팅/문서/SaaS 페이지의 기본 옵션.",
+    "de": "Allzweck-Desktop-Web-Prototyp. Einzelne eigenständige HTML-Datei durch Kopieren von `assets/template.html` und Einfügen von Layouts aus `references/layouts.md` erstellt. Standard für Landing-, Marketing-, Dokumentations- oder SaaS-Seiten.",
+    "fr": "Prototype web de bureau polyvalent. Fichier HTML autonome créé en copiant `assets/template.html` et en collant les mises en page de `references/layouts.md`. Option par défaut pour les pages de destination, marketing, documentation ou SaaS.",
+    "ru": "Универсальный веб-прототип для десктопа. Автономный HTML-файл создаётся копированием `assets/template.html` и вставкой макетов из `references/layouts.md`. По умолчанию для лендингов, маркетинга, документации и SaaS-страниц.",
+    "es": "Prototipo web de escritorio de propósito general. Archivo HTML autocontenido creado copiando `assets/template.html` y pegando diseños de `references/layouts.md`. Opción predeterminada para páginas de destino, marketing, documentación o SaaS.",
+    "pt-BR": "Protótipo web desktop de uso geral. Arquivo HTML autocontido criado copiando `assets/template.html` e colando layouts de `references/layouts.md`. Padrão para landing pages, marketing, documentação ou páginas SaaS.",
+    "it": "Prototipo web desktop generico. File HTML autonomo creato copiando `assets/template.html` e incollando layout da `references/layouts.md`. Opzione predefinita per landing page, marketing, documentazione o pagine SaaS.",
+    "vi": "Nguyên mẫu web desktop đa năng. Tệp HTML độc lập được tạo bằng cách sao chép `assets/template.html` và dán bố cục từ `references/layouts.md`. Mặc định cho trang đích, marketing, tài liệu hoặc SaaS.",
+    "pl": "Uniwersalny prototyp internetowy na desktop. Samodzielny plik HTML tworzony przez skopiowanie `assets/template.html` i wklejenie layoutów z `references/layouts.md`. Domyślny dla stron docelowych, marketingowych, dokumentacji lub SaaS.",
+    "id": "Prototipe web desktop serbaguna. File HTML mandiri yang dibuat dengan menyalin `assets/template.html` dan menempelkan layout dari `references/layouts.md`. Default untuk halaman landing, marketing, dokumentasi, atau SaaS.",
+    "nl": "Algemeen desktop webprototype. Zelfstandig HTML-bestand gemaakt door `assets/template.html` te kopiëren en lay-outs uit `references/layouts.md` te plakken. Standaard voor landingspagina's, marketing, documentatie of SaaS-pagina's.",
+    "ar": "نموذج أولي لموقع ويب سطح المكتب متعدد الأغراض. ملف HTML مستقل يتم إنشاؤه بنسخ `assets/template.html` ولصق التخطيطات من `references/layouts.md`. الخيار الافتراضي للصفحات المقصودة والتسويقية والتوثيقية أو SaaS.",
+    "tr": "Genel amaçlı masaüstü web prototipi. `assets/template.html` kopyalanıp `references/layouts.md` içindeki düzenler yapıştırılarak oluşturulan bağımsız HTML dosyası. Açılış, pazarlama, dokümantasyon veya SaaS sayfaları için varsayılan.",
+    "uk": "Універсальний веб-прототип для десктопа. Автономний HTML-файл створюється копіюванням `assets/template.html` та вставкою макетів з `references/layouts.md`. За замовчуванням для посадкових, маркетингових, документаційних або SaaS-сторінок.",
+    "en": "General-purpose desktop web prototype. Single self-contained HTML file built\nby copying the seed `assets/template.html` and pasting section layouts from\n`references/layouts.md`. Default for any landing / marketing / docs / SaaS\npage when no more specific skill matches."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/web-prototype",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "mockup",
+    "landing",
+    "single-page",
+    "marketing-page",
+    "homepage"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a premium product-studio {{fidelity}} {{artifactKind}} for {{audience}}: sharp information architecture, elegant visual hierarchy, polished interaction states, and a refined design-system-driven interface that feels shipped by a top-tier product team. Use {{designSystem}} as the design-system direction and start from {{template}}. Build one self-contained HTML file by copying the seed `assets/template.html` and pasting layouts from `references/layouts.md`.",
+        "zh-CN": "用高端产品工作室的完成度，为 {{audience}} 打磨一个 {{fidelity}} 的 {{artifactKind}}：信息架构清晰、视觉层级优雅、交互状态完整，整体像顶级产品团队交付的可演示原型。设计系统方向使用 {{designSystem}}，从 {{template}} 开始。使用 `assets/template.html` 种子并从 `references/layouts.md` 粘贴版面，输出单文件 HTML。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Web Prototype"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "string",
+        "required": true,
+        "placeholder": "SaaS landing page",
+        "default": "web prototype"
+      },
+      {
+        "name": "fidelity",
+        "label": "Fidelity",
+        "type": "select",
+        "required": true,
+        "options": [
+          "wireframe",
+          "high-fidelity"
+        ],
+        "default": "high-fidelity"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "startup founders evaluating an AI CRM",
+        "default": "product evaluators"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "OpenAI, Linear, shadcn, or custom brand notes",
+        "default": "the active project design system"
+      },
+      {
+        "name": "template",
+        "label": "Template",
+        "type": "string",
+        "placeholder": "marketing homepage, dashboard, docs page",
+        "default": "the bundled web prototype seed"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/layouts.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

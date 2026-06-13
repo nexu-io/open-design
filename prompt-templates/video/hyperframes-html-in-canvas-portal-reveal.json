@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-html-in-canvas-portal-reveal",
+  "surface": "video",
+  "title": "HyperFrames HTML-in-Canvas: Portal Reveal Dashboard",
+  "summary": "A 10-second dimensional portal opens onto a live data dashboard — DOM captured in real time, volumetric light spill, portal-edge particles. Built on the vfx-portal catalog block. Designed for keynote-style data hero shots.",
+  "category": "VFX / HTML-in-Canvas",
+  "tags": ["hyperframes", "html-in-canvas", "portal", "dashboard", "keynote"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 10-second HyperFrames composition (1920×1080, 30fps) titled \"portal-reveal-dashboard\". Pull the catalog block first: `npx hyperframes add vfx-portal`.\n\nVisual identity: jet canvas #050609, single electric accent #7df9ff for portal rim and volumetric light, secondary magenta #ff4ecd as chromatic edge tint, off-white text #f5f7fa. Display face: \"PP Editorial New\" 132px italic; body \"GT America\" 24px; mono \"GT America Mono\" 18px tabular-nums on every digit.\n\nTwo nested canvases:\n• `dashboard-source` — a `<canvas layoutsubtree width=\"1920\" height=\"1080\">` containing a real-looking analytics dashboard DOM: top KPI strip (4 stats, large numerals), a primary line chart (animated SVG path, 12 data points), a secondary bar chart, a live counter that increments 1247 → 1392 over the composition. Use actual CSS Grid for layout, `backdrop-filter` on the KPI cards, and tabular-nums on every numeral.\n• `theater` — WebGL canvas running the vfx-portal shader on that captured texture.\n\nTimeline (paused: true, window.__timelines.main, data-duration=10):\n\n0.0–2.4s OPEN — portal radius 0 → 1.0 (ease expo.out 1.4s, slight overshoot 1.05 → 1.0). Volumetric light cone intensity 0 → 1.6 → 1.0. Edge particles spawn count ramps 0 → 240 over 1.6s with deterministic seeded mulberry32(1337). Dashboard texture is captured every frame from 0.6s onward; before that the portal is opaque rim.\n\n2.4–7.6s INSPECT — portal stable at 1.0. Camera pushes in gently (z 0 → -120, ease sine.inOut 5.2s). Inside the source DOM, drive the live counter and chart path animations on the same window.__timelines.main timeline so they sync with the camera push. Add a subtle headline outside the portal (\"the numbers, in real time\") fading in at 3.2s and a single mono kicker (\"+11.6% week over week\") with the css-patterns marker sweep at 5.0s.\n\n7.6–10.0s SETTLE — portal radius 1.0 → 1.04 (gentle breathe), light cone tapers to 0.7 intensity, edge particles settle. Final 0.4s holds the hero. No opacity-to-0 exits — the portal IS the frame.\n\nFeature detection: if `drawElementImage` is unavailable, render the dashboard DOM directly without the portal, with a single text overlay \"open in HyperFrames render for the full effect\". Studio preview must never go black.\n\nNon-negotiables: deterministic seeds, no `repeat: -1`, no async timeline construction, no `<br>` in content text — let it wrap. Min font 60px on the headline, 36px on KPI numerals, tabular-nums everywhere. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 12 --at 1,2,3,5,7,9` before render. Output: `portal-reveal-dashboard.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-portal.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-portal.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/blocks/vfx-portal"
+  }
+}

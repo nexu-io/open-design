@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Swiss Creative Mode Example</title>
+  <style>
+    body { margin: 0; font-family: Inter, "Helvetica Neue", Arial, sans-serif; background: #f3efe4; color: #0b0b0b; }
+    .wrap { width: min(1120px, 94vw); margin: 24px auto; border: 3px solid #0b0b0b; background: #f3efe4; padding: 20px; box-shadow: 8px 8px 0 #0b0b0b; }
+    .kicker { font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { margin: 12px 0 18px; font-size: clamp(42px, 8vw, 102px); line-height: .92; text-transform: uppercase; letter-spacing: -.03em; }
+    h1 span { color: #ff7f2a; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card { border: 3px solid #0b0b0b; min-height: 220px; padding: 14px; box-shadow: 6px 6px 0 #0b0b0b; }
+    .c1 { background: #fff; }
+    .c2 { background: #f28cc2; }
+    .c3 { background: #f1cb3c; }
+    .c4 { background: #188f5a; color: #f3efe4; }
+    .num { font-size: 52px; font-weight: 900; line-height: 1; }
+    .ttl { font-size: 28px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; margin-top: 8px; }
+    .txt { font-size: 16px; line-height: 1.45; font-weight: 600; margin-top: 10px; }
+    .stack { margin-top: 18px; border: 3px solid #0b0b0b; padding: 16px; background: #188f5a; box-shadow: 8px 8px 0 #0b0b0b; }
+    .bar { border: 3px solid #0b0b0b; padding: 12px; margin: 10px 0; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; box-shadow: 6px 6px 0 #0b0b0b; }
+    .b1 { width: 68%; background: #f28cc2; }
+    .b2 { width: 78%; background: #f1cb3c; margin-left: 6%; }
+    .b3 { width: 86%; background: #ff7f2a; margin-left: 10%; }
+    .b4 { width: 92%; background: #f3efe4; margin-left: 14%; }
+    .foot { margin-top: 18px; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 800; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <p class="kicker">Swiss Creative Mode / Example</p>
+    <h1>Creative <span>Mode</span></h1>
+    <div class="grid">
+      <article class="card c1">
+        <div class="num">01</div>
+        <div class="ttl">Discover</div>
+        <p class="txt">Scan constraints and define the opportunity window with factual context.</p>
+      </article>
+      <article class="card c2">
+        <div class="num">02</div>
+        <div class="ttl">Define</div>
+        <p class="txt">Choose narrative structure, visual hierarchy, and interaction assumptions.</p>
+      </article>
+      <article class="card c3">
+        <div class="num">03</div>
+        <div class="ttl">Develop</div>
+        <p class="txt">Compose responsive sections, feedback states, and micro-interactions.</p>
+      </article>
+      <article class="card c4">
+        <div class="num">04</div>
+        <div class="ttl">Deliver</div>
+        <p class="txt">Ship a reusable template with credible content and presentation polish.</p>
+      </article>
+    </div>
+    <section class="stack">
+      <div class="bar b1">Layer / 01</div>
+      <div class="bar b2">Layer / 02</div>
+      <div class="bar b3">Layer / 03</div>
+      <div class="bar b4">Layer / 04</div>
+    </section>
+    <div class="foot">
+      <span>Template preview only</span>
+      <span>01 · 08</span>
+    </div>
+  </main>
+</body>
+</html>

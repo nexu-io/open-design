@@ -1,0 +1,268 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/x-ai/tokens.css
+ *
+ * Structured token bindings for "x-ai" — the dark-first, monospace-driven
+ * brutalist minimalism of Elon Musk's AI lab. A design system that
+ * communicates through absence: pure white on warm near-black, GeistMono
+ * as the display voice, zero shadows, zero gradients, zero accent color.
+ * Restraint as sophistication.
+ *
+ * Brand identity in three sentences:
+ *   1. Dark-first canvas at #1f2228 (warm near-black with a subtle blue
+ *      undertone, NEVER pure #000000) carries pure-white text as "the
+ *      voice", with hierarchy expressed through opacity (100 / 70 / 50 / 30)
+ *      rather than hue. There is no gray middle ground.
+ *   2. GeistMono runs at display sizes (up to a hero-only 320px at weight
+ *      300) and as the uppercase, letter-spaced button face. universalSans
+ *      handles body and section headings. The monospace-as-display choice
+ *      is the brand: terminal aesthetic as luxury.
+ *   3. Zero box-shadows, zero gradients, near-zero radii (0px default,
+ *      4px occasional softening). Depth comes from opacity-based borders
+ *      and surface tints, not from simulated light. The single chromatic
+ *      exception is the keyboard focus ring (Tailwind's default blue).
+ *
+ * Brand-specific schema decisions (each bends a schema convention to
+ * match xAI's voice rather than the cross-brand default):
+ *
+ *   1. `--bg` is `#1f2228`, NOT `#000000`. DESIGN.md §2 names this hue
+ *      explicitly: "This specific hue prevents the harsh eye strain of
+ *      `#000000` while maintaining deep darkness." Pure black is
+ *      forbidden by the brand.
+ *
+ *   2. `--accent` is `#ffffff`, not a chromatic color. xAI has no
+ *      accent palette — white IS the chromatic move. Primary CTAs render
+ *      with `var(--accent)` as background and `var(--accent-on)` as
+ *      foreground, producing the signature white-on-dark button. The
+ *      "≤2 accent uses per screen" lint still holds; the primary CTA and
+ *      the focus indicator are the only places white reverses against
+ *      the canvas.
+ *
+ *   3. `--font-display` is a GeistMono stack. Monospace AS the display
+ *      face is the defining aesthetic decision (DESIGN.md §3) — it
+ *      positions xAI not as a consumer product but as infrastructure,
+ *      as something built by people who live in terminals. `--font-mono`
+ *      aliases the same stack because GeistMono IS the monospace face
+ *      used for code, kbd, and tabular metrics.
+ *
+ *   4. The four-level foreground ramp is opacity-based (rgba 1.0 / 0.7
+ *      / 0.5 / 0.3), NOT a grayscale hex ramp. DESIGN.md §2 documents
+ *      the system literally as "white at α". Binding `--fg-2`, `--muted`,
+ *      and `--meta` as `rgba(255,255,255,α)` preserves the "white over
+ *      canvas" voice and keeps the tiers chromatically locked to the
+ *      single foreground color.
+ *
+ *   5. `--border` is `rgba(255, 255, 255, 0.1)` — DESIGN.md §2's default
+ *      "Border Default" alpha, NOT a solid hex. `--border-soft` drops to
+ *      0.05 for inner-row separators. The 0.2 "Border Strong" tier from
+ *      DESIGN.md lives inline per-component (hover/active state edges).
+ *
+ *   6. Radii are aggressively small: 0 / 0 / 4 / 9999. DESIGN.md §5:
+ *      "The near-zero radius philosophy is core to the brand's brutalist
+ *      identity." Buttons, inputs, and cards all default to 0px;
+ *      `--radius-lg` softens to 4px for the rare secondary container
+ *      (DESIGN.md's "Subtle (4px) occasional"). `--radius-pill` stays at
+ *      9999px because the schema slot requires a pill value, even though
+ *      xAI rarely renders one.
+ *
+ *   7. `--elev-raised` is literally `none`. DESIGN.md §6: "xAI rejects
+ *      the conventional shadow-based elevation system entirely. There
+ *      are no box-shadows anywhere on the site." Depth is communicated
+ *      through three other mechanisms documented in the same section:
+ *      opacity-based borders that brighten on interaction, subtle
+ *      background-opacity shifts (0.03 → 0.08), and the massive
+ *      typographic scale contrast. `--elev-ring` is kept as a hairline
+ *      border-as-shadow so components that target the elevation token
+ *      still get a visible edge.
+ *
+ *   8. `--focus-ring` is the ONLY chromatic exception to the otherwise
+ *      strictly monochromatic palette. DESIGN.md §2 names Tailwind's
+ *      default `--tw-ring-color` (`rgb(59, 130, 246) / 0.5`) as the
+ *      keyboard focus indicator. We reproduce it as a 3px halo
+ *      (Tailwind's `ring-2` shape) — the blue is intentional and
+ *      non-negotiable for a11y, even though the rest of the system is
+ *      achromatic.
+ *
+ *   9. The type scale tops out at 64px (`--text-4xl`), NOT the 320px
+ *      hero display DESIGN.md §3 names. 320px is a hero-only treatment,
+ *      not a token tier — components.html overrides `font-size` inline
+ *      for that one cinematic moment. Reserving `--text-4xl` at 64px
+ *      keeps the slot useful as the H1-equivalent ceiling for cards,
+ *      sections, and modals across the system. (See vercel/tokens.css
+ *      §6 for the same reasoning: tokens encode reusable tiers, not
+ *      one-off hero crops.)
+ *
+ *  10. `--tracking-display` stays `normal`. GeistMono at display scale
+ *      does NOT compress letter-spacing — the monospace grid is part of
+ *      the aesthetic and tightening would collapse it. The uppercase
+ *      button tracking (`1.4px`, DESIGN.md §4) is an interaction-specific
+ *      value that lives inline on `.btn` since it applies only to
+ *      command-line-styled labels, not display headlines.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the shared schema. The GeistMono and universalSans
+ * faces are referenced by name only — artifacts that render acceptably
+ * fall back to the OS monospace and sans-serif stacks listed inside the
+ * font-family declarations.
+ * ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * #1f2228 is the singular canvas — warm near-black with a subtle
+   * blue undertone. `--surface` is the barely-visible 0.03 white tint
+   * that cards sit on; `--surface-warm` rises to 0.05 for hover and
+   * elevated rows. DESIGN.md §6's elevation ramp uses both values
+   * verbatim as "Surface (Level 1)" and "Surface Hover". */
+  --bg:           #1f2228;                       /* warm near-black canvas — NEVER #000 */
+  --surface:      rgba(255, 255, 255, 0.03);     /* subtle card surface */
+  --surface-warm: rgba(255, 255, 255, 0.05);     /* hover / elevated tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Four-level opacity ramp per DESIGN.md §2. Pure white is "the
+   * voice"; subsequent tiers express hierarchy by dimming rather
+   * than by hue. Binding as rgba (not hex) keeps the ramp locked
+   * chromatically to the single foreground color. */
+  --fg:    #ffffff;                              /* primary — headings, links, body */
+  --fg-2:  rgba(255, 255, 255, 0.7);             /* secondary — descriptions */
+  --muted: rgba(255, 255, 255, 0.5);             /* tertiary — captions, timestamps */
+  --meta:  rgba(255, 255, 255, 0.3);             /* quaternary — disabled, annotations */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Opacity-based borders — barely visible, never absent. 0.1 is the
+   * default card / divider edge; 0.05 is the inner-row separator
+   * that should not visually compete. The 0.2 "strong" tier from
+   * DESIGN.md §2 lives inline per-component (hover/active states). */
+  --border:      rgba(255, 255, 255, 0.1);       /* default card / divider */
+  --border-soft: rgba(255, 255, 255, 0.05);      /* inner row separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * White IS the accent. There is no chromatic color in xAI's
+   * monochromatic palette — primary CTAs are white-on-dark.
+   * `--accent-hover` dims to 0.9 alpha per DESIGN.md §4 (primary
+   * button hover); `--accent-active` drops a further step. The
+   * convention is REVERSED from most systems: hover dims, it does
+   * not brighten. */
+  --accent:        #ffffff;                      /* the voice as bg */
+  --accent-on:     #1f2228;                      /* canvas as fg on accent */
+  --accent-hover:  rgba(255, 255, 255, 0.9);     /* slight dimming on hover (DESIGN.md §4) */
+  --accent-active: rgba(255, 255, 255, 0.8);     /* deeper dim on press */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * DESIGN.md §7 actively discourages colored status indicators
+   * ("Don't use colored status indicators unless absolutely
+   * necessary — keep everything in the white/dark spectrum"). We
+   * inherit schema defaults so the slots remain useful for the rare
+   * cases where status truly must render chromatically — but
+   * components should prefer monochrome cues (opacity, weight). */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography — fonts ──────────────────────────────────────────
+   * GeistMono is the brand's defining typographic decision: a
+   * monospace face used at display sizes. universalSans handles
+   * body and section headings. `--font-mono` aliases the display
+   * stack because GeistMono IS the monospace face — there is no
+   * separate code typeface. */
+  --font-display: "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  --font-body:    "universalSans", "universalSans Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy table.
+   * The 320px display hero is intentionally NOT a token tier;
+   * components.html overrides `font-size` inline for that one
+   * cinematic treatment. `--text-4xl` instead caps at 64px, the
+   * realistic ceiling for marketing H1s across cards/sections.
+   * `--text-2xl` (30px) matches DESIGN.md's "Section Heading" tier. */
+  --text-xs:   12px;                             /* small / meta — timestamps, footnotes */
+  --text-sm:   14px;                             /* button label / caption */
+  --text-base: 16px;                             /* body — universalSans 1.5 */
+  --text-lg:   20px;                             /* body large / introductions */
+  --text-xl:   24px;                             /* card title */
+  --text-2xl:  30px;                             /* section heading — DESIGN.md §3 */
+  --text-3xl:  40px;                             /* H1 */
+  --text-4xl:  64px;                             /* display ceiling (320px hero is inline-only) */
+
+  /* Leading + tracking.
+   * `--leading-body: 1.5` is universalSans body (DESIGN.md §3).
+   * `--leading-tight: 1.2` matches the 30px section heading.
+   * `--tracking-display: normal` because GeistMono at scale does
+   * NOT compress letter-spacing — the monospace grid is the
+   * aesthetic and tightening would collapse it. */
+  --leading-body:     1.5;
+  --leading-tight:    1.2;
+  --tracking-display: normal;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * DESIGN.md §5 documents a deliberately sparse scale concentrated
+   * at the small end: 4 / 8 / 24 / 48. We bind the full schema slot
+   * range — components reach for 1/2/6/12 most often; the
+   * intermediate tiers are preserved for edge cases where a
+   * narrower step is structurally required. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "generous section padding 48px–
+   * 96px". 96 desktop / 64 tablet / 48 phone preserves the
+   * cinematic emptiness that is itself a design statement; the
+   * absence of decoration means whitespace is the primary structural
+   * tool. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Brutalist precision. DESIGN.md §5: "Sharp (0px) primary
+   * treatment for buttons, cards, inputs — the default. Subtle (4px)
+   * occasional softening on secondary containers." `--radius-pill`
+   * stays at 9999px because the schema slot requires a pill value,
+   * even though xAI rarely renders one. */
+  --radius-sm:   0px;                            /* buttons, inputs — sharp */
+  --radius-md:   0px;                            /* cards — sharp */
+  --radius-lg:   4px;                            /* occasional secondary softening */
+  --radius-pill: 9999px;                         /* schema-required slot */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Shadow-free system per DESIGN.md §6: "xAI rejects the
+   * conventional shadow-based elevation system entirely. There are
+   * no box-shadows anywhere on the site." `--elev-raised` is
+   * literally `none`; depth comes from opacity-based borders and
+   * background tints. `--elev-ring` preserves the hairline edge for
+   * components that read the elevation token. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: none;
+
+  /* ─── Focus ───────────────────────────────────────────────────────
+   * The single chromatic exception. Tailwind's default
+   * `--tw-ring-color` (DESIGN.md §2 "Ring Blue") at 50% opacity, as
+   * a 3px halo matching the `ring-2` shape xAI uses for keyboard
+   * accessibility focus states. Non-negotiable for a11y. */
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Schema defaults. xAI does not choreograph — transitions are
+   * short, purposeful, utilitarian. No long-form entrances. */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * DESIGN.md §5: "Max content width: approximately 1200px." Gutters
+   * narrow on mobile so the dense-but-deliberate vertical rhythm
+   * keeps reading even when the dark canvas reaches the edge. */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}

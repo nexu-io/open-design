@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-shopify",
+  "title": "Shopify",
+  "title_i18n": {
+    "zh-CN": "Shopify",
+    "zh-TW": "Shopify",
+    "ja": "Shopify",
+    "ko": "Shopify",
+    "de": "Shopify",
+    "fr": "Shopify",
+    "ru": "Shopify",
+    "es": "Shopify",
+    "pt-BR": "Shopify",
+    "it": "Shopify",
+    "vi": "Shopify",
+    "pl": "Shopify",
+    "id": "Shopify",
+    "nl": "Shopify",
+    "ar": "Shopify",
+    "tr": "Shopify",
+    "uk": "Shopify",
+    "en": "Shopify"
+  },
+  "version": "0.1.0",
+  "description": "E-commerce platform. Dark-first cinematic, neon green accent, ultra-light type.",
+  "description_i18n": {
+    "zh-CN": "电商平台。深色优先电影感，霓虹绿强调色，超轻字体。",
+    "zh-TW": "電商平台。深色優先電影感，霓虹綠強調色，超輕字體。",
+    "ja": "Eコマースプラットフォーム。ダークファーストのシネマティックスタイル、ネオングリーンアクセント、極細フォント。",
+    "ko": "전자상거래 플랫폼. 다크 우선 시네마틱, 네온 그린 강조, 초경량 서체.",
+    "de": "E-Commerce-Plattform. Dark-First-Cinematic-Design, neongrüner Akzent, ultraleichte Schrift.",
+    "fr": "Plateforme e-commerce. Style cinématique sombre, accent vert néon, typographie ultra-légère.",
+    "ru": "Платформа электронной коммерции. Темный кинематографичный дизайн, неоново-зеленый акцент, сверхлегкий шрифт.",
+    "es": "Plataforma de comercio electrónico. Diseño cinemático oscuro, acento verde neón, tipografía ultraligera.",
+    "pt-BR": "Plataforma de e-commerce. Design cinemático escuro, destaque verde neon, tipografia ultraleve.",
+    "it": "Piattaforma e-commerce. Stile cinematico scuro, accento verde neon, carattere ultraleggero.",
+    "vi": "Nền tảng thương mại điện tử. Phong cách điện ảnh tối, điểm nhấn xanh neon, kiểu chữ siêu nhẹ.",
+    "pl": "Platforma e-commerce. Ciemny kinowy styl, akcent neonowej zieleni, ultraciężka czcionka.",
+    "id": "Platform e-commerce. Desain sinematik gelap, aksen hijau neon, tipografi sangat ringan.",
+    "nl": "E-commerce platform. Dark-first cinematisch, neongroen accent, ultralicht lettertype.",
+    "ar": "منصة التجارة الإلكترونية. تصميم سينمائي داكن، لون تمييز أخضر نيون، خط فائق الخفة.",
+    "tr": "E-ticaret platformu. Koyu öncelikli sinematik tasarım, neon yeşil vurgu, ultra hafif yazı tipi.",
+    "uk": "Платформа електронної комерції. Темний кінематографічний дизайн, неоново-зелений акцент, ультралегкий шрифт.",
+    "en": "E-commerce platform. Dark-first cinematic, neon green accent, ultra-light type."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "e-commerce-retail"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Shopify design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Shopify design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "shopify",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

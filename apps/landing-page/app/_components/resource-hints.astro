@@ -1,0 +1,37 @@
+---
+/*
+ * Resource hints — preconnect to third-party origins the page is about
+ * to talk to, so the TLS handshake completes before the first fetch().
+ *
+ * Why preconnect instead of dns-prefetch:
+ *   preconnect performs DNS + TCP + TLS warmup; dns-prefetch only the
+ *   DNS lookup. For api.github.com we issue 2-3 fetch() calls from
+ *   the inline enhancer scripts almost immediately on page load
+ *   (stars / latest release / contributors), so the full TLS warmup
+ *   saves ~150-300ms per fetch on first visit. After that all calls
+ *   share the same warmed connection via HTTP/2 multiplexing.
+ *
+ * Why `crossorigin`:
+ *   GitHub API responds with CORS. Without the crossorigin attribute
+ *   the browser opens a separate (non-CORS) connection, then opens
+ *   another (CORS) one when fetch() runs, and the preconnect is wasted.
+ */
+---
+
+<link rel='preconnect' href='https://api.github.com' crossorigin />
+
+<!--
+  Preload the primary above-the-fold typeface (Albert Sans, woff2 ≈50KB) so the
+  LCP heading/body text swaps to the brand face without a late round-trip.
+  Paired with `font-display: swap` this keeps text painting immediately while
+  the brand font streams in at high priority. `crossorigin` is required for font
+  preloads even same-origin, or the browser opens a second connection and the
+  preload is wasted.
+-->
+<link
+  rel='preload'
+  href='/skill-assets/AlbertSans-VariableFont_wght.woff2'
+  as='font'
+  type='font/woff2'
+  crossorigin
+/>

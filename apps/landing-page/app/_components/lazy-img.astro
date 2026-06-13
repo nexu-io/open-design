@@ -1,0 +1,96 @@
+---
+/*
+ * <LazyImg> — the only image primitive used for non-LCP thumbnails on this
+ * site. Replaces every previous `<img loading="lazy">` site-wide.
+ *
+ * Modes:
+ *   - default (precise): outputs `<img data-precise-src>` with a 120-byte
+ *     transparent SVG as the initial `src`. The global IntersectionObserver
+ *     in `precise-lazyload.astro` swaps `data-precise-src` → `src` once the
+ *     element enters viewport ± 300px. Use this for *every* thumbnail
+ *     below the fold. Net effect vs. `loading="lazy"`: Chrome stops
+ *     over-prefetching (default rootMargin 1250–3000px), Safari stops
+ *     under-prefetching (essentially in-viewport), and CLS is unaffected
+ *     because callers wrap us in an aspect-ratio container.
+ *
+ *   - priority: outputs `<img src loading="eager" fetchpriority="high">`
+ *     for the rare thumbnail that's known to be above the fold AND on the
+ *     LCP candidate path. Use sparingly — the hero image on `/` is the
+ *     canonical case (and is hand-written, not via this component).
+ *
+ *   - eager (default for above-the-fold non-LCP): outputs `<img src>` with
+ *     no lazy behavior. Faster than precise mode for the first row of a
+ *     visible grid; doesn't compete with the LCP for fetchpriority.
+ *
+ * Why a component and not a helper function:
+ *   `srcset` + `sizes` are awkward to inline in JSX/Astro; a component
+ *   gives us one place to type-check and apply width/height (for CLS).
+ */
+import { PRECISE_LAZY_PLACEHOLDER } from '../image-assets';
+
+export interface Props {
+  src: string;
+  alt: string;
+  /**
+   * 'precise' (default): wait until viewport ± 300px.
+   * 'eager': load immediately, normal priority.
+   * 'priority': load immediately, fetchpriority="high".
+   */
+  loading?: 'precise' | 'eager' | 'priority';
+  srcset?: string;
+  sizes?: string;
+  width?: number | string;
+  height?: number | string;
+  class?: string;
+}
+
+const {
+  src,
+  alt,
+  loading = 'precise',
+  srcset,
+  sizes,
+  width,
+  height,
+  class: className,
+} = Astro.props;
+---
+
+{loading === 'precise' ? (
+  <img
+    src={PRECISE_LAZY_PLACEHOLDER}
+    data-precise-src={src}
+    data-precise-srcset={srcset}
+    sizes={sizes}
+    alt={alt}
+    width={width}
+    height={height}
+    class={className}
+    decoding="async"
+  />
+) : loading === 'priority' ? (
+  <img
+    src={src}
+    srcset={srcset}
+    sizes={sizes}
+    alt={alt}
+    width={width}
+    height={height}
+    class={className}
+    loading="eager"
+    fetchpriority="high"
+    decoding="async"
+  />
+) : (
+  <img
+    src={src}
+    srcset={srcset}
+    sizes={sizes}
+    alt={alt}
+    width={width}
+    height={height}
+    class={className}
+    loading="eager"
+    decoding="async"
+  />
+)}

@@ -1,0 +1,17 @@
+{
+  "global": {
+    "responsive_web_grok_annotations_enabled": false,
+    "post_ctas_fetch_enabled": true,
+    "responsive_web_graphql_exclude_directive_enabled": true
+  },
+  "sets": {
+    "lists": {
+      "blue_business_profile_image_shape_enabled": true,
+      "tweetypie_unmention_optimization_enabled": true,
+      "responsive_web_text_conversations_enabled": false,
+      "interactive_text_enabled": true,
+      "vibe_api_enabled": true,
+      "responsive_web_twitter_blue_verified_badge_is_enabled": true
+    }
+  }
+}

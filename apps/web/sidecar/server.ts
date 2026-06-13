@@ -50,6 +50,11 @@ type NextApp = {
   prepare(): Promise<void>;
 };
 
+type NextBundlerOptions = {
+  turbopack?: boolean;
+  webpack?: boolean;
+};
+
 type StandaloneBackend = {
   exitReason(): string | null;
   isRunning(): boolean;
@@ -57,9 +62,16 @@ type StandaloneBackend = {
   stop(): Promise<void>;
 };
 
-function createNextApp(options: { dev: boolean; dir: string }): NextApp {
-  const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string }) => NextApp;
+function createNextApp(options: { dev: boolean; dir: string } & NextBundlerOptions): NextApp {
+  const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string } & NextBundlerOptions) => NextApp;
   return createNextServer(options);
+}
+
+export function resolveNextBundlerOptions(isDev: boolean): NextBundlerOptions {
+  if (!isDev) return {};
+  const configured = (process.env.OD_WEB_DEV_BUNDLER ?? "webpack").trim().toLowerCase();
+  if (configured === "turbopack" || configured === "turbo") return { turbopack: true };
+  return { webpack: true };
 }
 
 export type WebSidecarHandle = {
@@ -168,10 +180,9 @@ function resolveConfiguredStandaloneRoot(): string | null {
 }
 
 export function resolveStandaloneServerEntry(
-  webRoot: string = resolveWebRoot(),
+  webRoot: string | null = resolveWebRoot(),
   standaloneRoot: string | null = resolveConfiguredStandaloneRoot(),
 ): string | null {
-  const distDir = resolveWebDistDir(webRoot);
   const configuredRoot = standaloneRoot == null || standaloneRoot.length === 0
     ? null
     : isAbsolute(standaloneRoot)
@@ -184,8 +195,12 @@ export function resolveStandaloneServerEntry(
         join(configuredRoot, "apps", "web", "server.js"),
         join(configuredRoot, "server.js"),
       ]),
-    join(distDir, "standalone", "apps", "web", "server.js"),
-    join(distDir, "standalone", "server.js"),
+    ...(webRoot == null
+      ? []
+      : [
+        join(resolveWebDistDir(webRoot), "standalone", "apps", "web", "server.js"),
+        join(resolveWebDistDir(webRoot), "standalone", "server.js"),
+      ]),
   ];
 
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
@@ -239,6 +254,7 @@ function resolveHttpProxyTarget(
 export function normalizeDaemonProxyOriginHeader(options: {
   daemonOrigin: string;
   origin: string | undefined;
+  requestHost?: string | string[];
   webPort: number;
 }): string | undefined {
   if (options.origin == null || options.origin.length === 0) return options.origin;
@@ -249,7 +265,137 @@ export function normalizeDaemonProxyOriginHeader(options: {
     schemes.flatMap((scheme) => loopbackHosts.map((host) => `${scheme}://${host}:${options.webPort}`)),
   );
 
-  return allowedWebOrigins.has(options.origin) ? options.daemonOrigin : options.origin;
+  if (allowedWebOrigins.has(options.origin)) return options.daemonOrigin;
+
+  const parsedOrigin = parseHttpOrigin(options.origin);
+  if (
+    parsedOrigin != null &&
+    isSameBrowserHostOrigin({
+      origin: parsedOrigin,
+      requestHost: options.requestHost,
+      webPort: options.webPort,
+    })
+  ) {
+    return options.daemonOrigin;
+  }
+
+  return options.origin;
+}
+
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseHostHeader(value: string | string[] | undefined): URL | null {
+  const raw = firstHeaderValue(value)?.trim();
+  if (raw == null || raw.length === 0) return null;
+  try {
+    return new URL(`http://${raw}`);
+  } catch {
+    return null;
+  }
+}
+
+function parseHttpOrigin(value: string): URL | null {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseAllowedDevHost(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  try {
+    return new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    try {
+      return new URL(`http://${trimmed}`).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+}
+
+function configuredAllowedDevHosts(): Set<string> {
+  return new Set(
+    (process.env.OD_ALLOWED_DEV_ORIGINS ?? "")
+      .split(",")
+      .map(parseAllowedDevHost)
+      .filter((host): host is string => host != null),
+  );
+}
+
+function isAllowedDevHost(hostname: string, allowedHosts: Set<string>): boolean {
+  const host = hostname.toLowerCase();
+  if (allowedHosts.has(host)) return true;
+
+  for (const allowedHost of allowedHosts) {
+    if (!allowedHost.startsWith("*.")) continue;
+    const suffix = allowedHost.slice(1);
+    if (host.endsWith(suffix) && host.length > suffix.length) return true;
+  }
+
+  return false;
+}
+
+function parseIpv4(value: string): [number, number, number, number] | null {
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  if (!parts.every((part) => /^\d+$/.test(part))) return null;
+  const octets = parts.map((part) => Number(part));
+  if (!octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) return null;
+  return octets as [number, number, number, number];
+}
+
+function isPrivateLanIpv4(value: string): boolean {
+  const octets = parseIpv4(value);
+  if (octets == null) return false;
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+function isLoopbackOrPrivateLanHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    host === "0.0.0.0" ||
+    host === "::" ||
+    isPrivateLanIpv4(host)
+  );
+}
+
+function defaultPortForProtocol(protocol: string): string {
+  return protocol === "https:" ? "443" : "80";
+}
+
+function isSameBrowserHostOrigin(options: {
+  origin: URL;
+  requestHost?: string | string[];
+  webPort: number;
+}): boolean {
+  const requestHost = parseHostHeader(options.requestHost);
+  if (requestHost == null) return false;
+
+  const originPort = options.origin.port || defaultPortForProtocol(options.origin.protocol);
+  const requestPort = requestHost.port || "80";
+  if (originPort !== String(options.webPort) || requestPort !== originPort) return false;
+  if (requestHost.hostname.toLowerCase() !== options.origin.hostname.toLowerCase()) return false;
+
+  const allowedDevHosts = configuredAllowedDevHosts();
+  const originHost = options.origin.hostname.toLowerCase();
+  return isLoopbackOrPrivateLanHost(originHost) || isAllowedDevHost(originHost, allowedDevHosts);
 }
 
 async function proxyHttpRequest(
@@ -264,6 +410,7 @@ async function proxyHttpRequest(
     const origin = normalizeDaemonProxyOriginHeader({
       daemonOrigin: target.origin,
       origin: typeof request.headers.origin === "string" ? request.headers.origin : undefined,
+      requestHost: request.headers.host,
       webPort: options.daemonWebPort,
     });
     if (origin == null || origin.length === 0) {
@@ -414,10 +561,14 @@ async function waitForStandaloneBackendReady(
   throw new Error(`timed out after ${timeoutMs}ms waiting for standalone Next.js server at ${origin}; override with ${STANDALONE_STARTUP_TIMEOUT_ENV}`);
 }
 
-async function startStandaloneBackend(webRoot: string): Promise<StandaloneBackend> {
+async function startStandaloneBackend(webRoot: string | null): Promise<StandaloneBackend> {
   const entryPath = resolveStandaloneServerEntry(webRoot);
   if (entryPath == null) {
-    throw new Error(`missing Next.js standalone server under ${resolveWebDistDir(webRoot)}; rebuild with ${WEB_OUTPUT_MODE_ENV}=standalone`);
+    throw new Error(
+      webRoot == null
+        ? `missing Next.js standalone server under ${WEB_STANDALONE_ROOT_ENV}; configure ${WEB_STANDALONE_ROOT_ENV} or install @open-design/web`
+        : `missing Next.js standalone server under ${resolveWebDistDir(webRoot)}; rebuild with ${WEB_OUTPUT_MODE_ENV}=standalone`,
+    );
   }
 
   const port = await reserveTcpPort(STANDALONE_BACKEND_HOST);
@@ -611,7 +762,8 @@ async function startRegularNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
   webRoot: string,
 ): Promise<WebSidecarHandle> {
-  const app = createNextApp({ dev: process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev", dir: webRoot });
+  const dev = process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev";
+  const app = createNextApp({ dev, dir: webRoot, ...resolveNextBundlerOptions(dev) });
   await prepareNextApp(app, webRoot);
 
   const daemonOrigin = resolveDaemonOrigin();
@@ -625,7 +777,7 @@ async function startRegularNextSidecar(
 
 async function startStandaloneNextSidecar(
   runtime: SidecarRuntimeContext<SidecarStamp>,
-  webRoot: string,
+  webRoot: string | null,
 ): Promise<WebSidecarHandle> {
   const daemonOrigin = resolveDaemonOrigin();
   const backend = await startStandaloneBackend(webRoot);
@@ -653,10 +805,11 @@ async function startStandaloneNextSidecar(
 }
 
 export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
-  const webRoot = resolveWebRoot();
   if (shouldUseStandaloneOutput(runtime)) {
+    const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
     return await startStandaloneNextSidecar(runtime, webRoot);
   }
 
+  const webRoot = resolveWebRoot();
   return await startRegularNextSidecar(runtime, webRoot);
 }

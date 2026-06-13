@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.4.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -21,32 +21,47 @@
     "src"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "build:sidecar": "tsc -p tsconfig.sidecar.json",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run -c vitest.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "0.32.1",
+    "@formkit/auto-animate": "0.9.0",
+    "@lexical/react": "0.36.2",
+    "@lexical/utils": "0.36.2",
+    "@open-design/components": "workspace:*",
     "@open-design/contracts": "workspace:*",
+    "@open-design/host": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "next": "^16.2.4",
-    "openai": "^6.35.0",
-    "pdfjs-dist": "^5.7.284",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "lexical": "0.36.2",
+    "lucide-react": "1.16.0",
+    "motion": "12.40.0",
+    "next": "16.2.6",
+    "openai": "6.38.0",
+    "posthog-js": "1.374.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "shiki": "4.1.0"
   },
   "devDependencies": {
-    "@types/jsdom": "^28.0.1",
-    "@types/node": "^20.17.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "jsdom": "^29.1.0",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "@tailwindcss/postcss": "4.3.0",
+    "@testing-library/react": "16.3.2",
+    "@types/jsdom": "28.0.3",
+    "@types/node": "20.19.39",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "jsdom": "29.1.1",
+    "postcss": "8.5.15",
+    "tailwindcss": "4.3.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   },
   "engines": {
     "node": "~24"

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-casual-fashion-grid-photoshoot",
+  "title": "Profile / Avatar - Casual Fashion Grid Photoshoot",
+  "title_i18n": {
+    "zh-CN": "个人资料/头像 - 休闲时尚网格照片拍摄",
+    "zh-TW": "個人資料/頭像 - 休閒時尚網格攝影",
+    "ja": "プロフィール/アバター - カジュアルファッショングリッド撮影",
+    "ko": "프로필 / 아바타 - 캐주얼 패션 그리드 포토슈트",
+    "de": "Profil / Avatar - Casual Fashion Grid Fotoshooting",
+    "fr": "Profil / Avatar - Shooting Photo Mode Décontractée en Grille",
+    "ru": "Профиль / Аватар - Фотосессия Повседневной Моды в Сетке",
+    "es": "Perfil / Avatar - Sesión Fotográfica de Moda Casual en Cuadrícula",
+    "pt-BR": "Perfil / Avatar - Ensaio Fotográfico de Moda Casual em Grade",
+    "it": "Profilo / Avatar - Servizio Fotografico Moda Casual a Griglia",
+    "vi": "Hồ Sơ / Ảnh Đại Diện - Chụp Ảnh Thời Trang Thoải Mái Dạng Lưới",
+    "pl": "Profil / Awatar - Sesja Zdjęciowa Casualowej Mody w Siatce",
+    "id": "Profil / Avatar - Pemotretan Fashion Kasual Grid",
+    "nl": "Profiel / Avatar - Casual Fashion Grid Fotoshoot",
+    "ar": "الملف الشخصي / الصورة الرمزية - جلسة تصوير أزياء غير رسمية شبكية",
+    "tr": "Profil / Avatar - Gündelik Moda Izgara Fotoğraf Çekimi",
+    "uk": "Профіль / Аватар - Фотосесія Повсякденної Моди в Сітці",
+    "en": "Profile / Avatar - Casual Fashion Grid Photoshoot"
+  },
+  "version": "0.1.0",
+  "description": "A structured JSON prompt for a 4-photo collage of a casual fashion photoshoot with detailed subject and lighting parameters.",
+  "description_i18n": {
+    "zh-CN": "生成4张休闲时尚照片拼贴的结构化JSON提示词，包含详细的主体和光照参数。",
+    "zh-TW": "生成4張休閒時尚照片拼貼的結構化JSON提示詞，包含詳細的主體和光照參數。",
+    "ja": "カジュアルファッション撮影の4枚写真コラージュを生成する構造化JSONプロンプト。被写体とライティングパラメータを詳細設定可能。",
+    "ko": "캐주얼 패션 촬영의 4장 사진 콜라주를 생성하는 구조화된 JSON 프롬프트로, 피사체 및 조명 매개변수 설정 가능.",
+    "de": "Ein strukturierter JSON-Prompt für eine 4-Foto-Collage eines Casual-Fashion-Fotoshootings mit detaillierten Motiv- und Lichtparametern.",
+    "fr": "Un prompt JSON structuré pour un collage de 4 photos d'un shooting mode décontractée avec paramètres détaillés du sujet et de l'éclairage.",
+    "ru": "Структурированный JSON-промпт для создания коллажа из 4 фото повседневной модной фотосессии с детальными параметрами объекта и освещения.",
+    "es": "Un prompt JSON estructurado para un collage de 4 fotos de una sesión fotográfica de moda casual con parámetros detallados de sujeto e iluminación.",
+    "pt-BR": "Um prompt JSON estruturado para uma colagem de 4 fotos de um ensaio de moda casual com parâmetros detalhados de sujeito e iluminação.",
+    "it": "Un prompt JSON strutturato per un collage di 4 foto di un servizio fotografico di moda casual con parametri dettagliati del soggetto e dell'illuminazione.",
+    "vi": "Prompt JSON có cấu trúc để tạo collage 4 ảnh chụp thời trang thoải mái với các tham số chi tiết về chủ thể và ánh sáng.",
+    "pl": "Ustrukturyzowany prompt JSON do kolażu z 4 zdjęć casualowej sesji modowej ze szczegółowymi parametrami obiektu i oświetlenia.",
+    "id": "Prompt JSON terstruktur untuk kolase 4 foto pemotretan fashion kasual dengan parameter subjek dan pencahayaan yang detail.",
+    "nl": "Een gestructureerde JSON-prompt voor een collage van 4 foto's van een casual fashion fotoshoot met gedetailleerde onderwerp- en lichtparameters.",
+    "ar": "موجه JSON منظم لإنشاء كولاج من 4 صور لجلسة تصوير أزياء غير رسمية مع معاملات تفصيلية للموضوع والإضاءة.",
+    "tr": "Gündelik moda fotoğraf çekiminin 4 fotoğraflık kolajı için detaylı konu ve aydınlatma parametreleriyle yapılandırılmış JSON prompt.",
+    "uk": "Структурований JSON-промпт для створення колажу з 4 фото повсякденної модної фотосесії з детальними параметрами об'єкта та освітлення.",
+    "en": "A structured JSON prompt for a 4-photo collage of a casual fashion photoshoot with detailed subject and lighting parameters."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Keskin",
+    "url": "https://x.com/craftian_keskin/status/2048848908999135645"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777367267771_teyn0r_HG74_nJaoAEM5oD.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "{ \n  \"scene_type\": \"smartphone fashion portrait series\",\n  \"composition\": {\n    \"layout\": \"4-photo grid collage\",\n    \"camera\": \"smartphone photography\",\n    \"framing\": [\n      \"full body standing\",\n      \"crouching pose\",\n      \"casual seated pose\",\n      \"upper body portrait\"\n    ],\n    \"angle\": \"eye-level, natural perspective\",\n    \"aspect_ratio\": \"1:1 collage\"\n  },\n  \"subject\": {\n    \"gender\": \"{argument name=\"gender\" default=\"female\"}\",\n    \"age\": \"{argument name=\"age\" default=\"early 20s\"}\",\n    \"aesthetic\": \"extremely beautiful, sensual, candid\",\n    \"appearance\": {\n      \"skin_tone\": \"smooth light complexion\",\n      \"face\": \"soft feminine features, natural symmetry, bright smile\",\n      \"expression\": \"playful, warm, confident, subtly sensual\",\n      \"eyes\": \"expressive, gentle gaze\",\n      \"hair\": {\n        \"color\": \"{argument name=\"hair color\" default=\"deep black\"}\",\n        \"style\": \"long, loose waves\",\n        \"texture\": \"soft, natural shine\"\n      },\n      \"makeup\": \"natural glam, dewy skin, soft blush, subtle lip tint\"\n    },\n    \"outfit\": {\n      \"top\": \"white fitted sleeveless crop top\",\n      \"bottom\": \"loose straight-leg blue jeans\",\n      \"shoes\": \"casual white sneakers\",\n      \"style\": \"minimal, effortless, modern casual\"\n    },\n    \"pose_style\": \"relaxed, candid, playful fashion poses\",\n    \"body_language\": \"confident yet soft, natural movements, gentle sensual elegance\"\n  },\n  \"environment\": {\n    \"location\": \"minimal studio backdrop\",\n    \"background\": \"clean light gray seamless wall\",\n    \"floor\": \"neutral studio floor\",\n    \"lighting\": {\n      \"type\": \"soft diffused studio lighting\",\n      \"tone\": \"neutral\",\n      \"shadows\": \"soft and natural\",\n      \"highlights\": \"subtle skin glow\"\n    }\n  },\n  \"style\": {\n    \"photography_type\": \"smartphone editorial fashion\",\n    \"visual_tone\": \"minimalist, airy, modern\",\n    \"mood\": \"candid, sensual elegance, fresh and confident\",\n    \"color_palette\": \"white, denim blue, soft gray\",\n    \"contrast\": \"low to medium\",\n    \"grain\": \"very light natural grain\"\n  },\n  \"rendering\": {\n    \"realism\": \"ultra-realistic\",\n    \"detail_level\": \"high skin and fabric texture detail\",\n    \"sharpness\": \"high\",\n    \"depth_of_field\": \"natural\",\n    \"post_processing\": \"minimal, clean, slightly soft finish\"\n  },\n  \"atmosphere\": \"modern, youthful, effortless beauty, subtle sensual charm\"\n}",
+        "zh-CN": "使用这个插件完成以下任务：{ \n  \"scene_type\": \"smartphone fashion portrait series\",\n  \"composition\": {\n    \"layout\": \"4-photo grid collage\",\n    \"camera\": \"smartphone photography\",\n    \"framing\": [\n      \"full body standing\",\n      \"crouching pose\",\n      \"casual seated pose\",\n      \"upper body portrait\"\n    ],\n    \"angle\": \"eye-level, natural perspective\",\n    \"aspect_ratio\": \"1:1 collage\"\n  },\n  \"subject\": {\n    \"gender\": \"{argument name=\"gender\" default=\"female\"}\",\n    \"age\": \"{argument name=\"age\" default=\"early 20s\"}\",\n    \"aesthetic\": \"extremely beautiful, sensual, candid\",\n    \"appearance\": {\n      \"skin_tone\": \"smooth light complexion\",\n      \"face\": \"soft feminine features, natural symmetry, bright smile\",\n      \"expression\": \"playful, warm, confident, subtly sensual\",\n      \"eyes\": \"expressive, gentle gaze\",\n      \"hair\": {\n        \"color\": \"{argument name=\"hair color\" default=\"deep black\"}\",\n        \"style\": \"long, loose waves\",\n        \"texture\": \"soft, natural shine\"\n      },\n      \"makeup\": \"natural glam, dewy skin, soft blush, subtle lip tint\"\n    },\n    \"outfit\": {\n      \"top\": \"white fitted sleeveless crop top\",\n      \"bottom\": \"loose straight-leg blue jeans\",\n      \"shoes\": \"casual white sneakers\",\n      \"style\": \"minimal, effortless, modern casual\"\n    },\n    \"pose_style\": \"relaxed, candid, playful fashion poses\",\n    \"body_language\": \"confident yet soft, natural movements, gentle sensual elegance\"\n  },\n  \"environment\": {\n    \"location\": \"minimal studio backdrop\",\n    \"background\": \"clean light gray seamless wall\",\n    \"floor\": \"neutral studio floor\",\n    \"lighting\": {\n      \"type\": \"soft diffused studio lighting\",\n      \"tone\": \"neutral\",\n      \"shadows\": \"soft and natural\",\n      \"highlights\": \"subtle skin glow\"\n    }\n  },\n  \"style\": {\n    \"photography_type\": \"smartphone editorial fashion\",\n    \"visual_tone\": \"minimalist, airy, modern\",\n    \"mood\": \"candid, sensual elegance, fresh and confident\",\n    \"color_palette\": \"white, denim blue, soft gray\",\n    \"contrast\": \"low to medium\",\n    \"grain\": \"very light natural grain\"\n  },\n  \"rendering\": {\n    \"realism\": \"ultra-realistic\",\n    \"detail_level\": \"high skin and fabric texture detail\",\n    \"sharpness\": \"high\",\n    \"depth_of_field\": \"natural\",\n    \"post_processing\": \"minimal, clean, slightly soft finish\"\n  },\n  \"atmosphere\": \"modern, youthful, effortless beauty, subtle sensual charm\"\n}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

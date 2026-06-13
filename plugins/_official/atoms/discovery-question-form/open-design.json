@@ -1,0 +1,34 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "discovery-question-form",
+  "title": "Discovery question form",
+  "version": "0.1.0",
+  "description": "Turn-1 discovery question form for ambiguous briefs.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/discovery-question-form",
+  "tags": [
+    "atom",
+    "first-party",
+    "discovery"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "scenario": "general",
+    "mode": "discovery",
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

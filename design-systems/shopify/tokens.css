@@ -1,0 +1,141 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/shopify/tokens.css
+ *
+ * Structured token bindings for the "Shopify" brand — dark-first cinematic,
+ * ethereal ultra-light display type, neon green accent.
+ *
+ * Brand identity in three sentences:
+ *   1. Darkness as theatre — deep forest-teal surfaces (not pure black:
+ *      #000000 root, #02090A cards, #061A1C sections, #102620 elevated)
+ *      create a nocturnal keynote atmosphere, staged like a product reveal.
+ *   2. NeueHaasGrotesk variable at monumental scale (96px) with impossible
+ *      lightness (weight 330–400, OpenType ss03); Inter Variable handles
+ *      body at unusual weights (420/450/550); combined they feel etched.
+ *   3. Neon Green (#36F4A4) is the singular high-energy accent — pulsing
+ *      like a bioluminescent signal exclusively for focus rings and accent
+ *      highlights; white is the only text color on dark.
+ *
+ * Schema decisions:
+ *   - --bg: #000000 (void — root page background, true black).
+ *   - --surface: #02090A (deep teal — card surfaces).
+ *   - --surface-warm: #061A1C (dark forest — section backgrounds).
+ *   - --fg: #ffffff (white — the only text color on dark).
+ *   - --fg-2: #ffffff (same; no secondary ink split on dark canvas).
+ *   - --muted: #a1a1aa (muted zinc — secondary text, descriptions).
+ *   - --meta: #71717a (shade-50 — timestamps, tertiary info).
+ *   - --border: #1e2c31 (dark card border); --border-soft: #3f3f46.
+ *   - --accent: #36F4A4 (neon green — focus/accent only, not bg).
+ *   - --accent-on: #000000 (black text on neon green).
+ *   - --tracking-display: 0em (NeueHaasGrotesk at 96px tracks neutral).
+ *   - --leading-tight: 1.00 (display XL line-height at 96px).
+ *   - --radius-sm: 9999px (full pill for all CTAs per brand identity).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #000000;             /* void — true black root */
+  --surface:      #02090a;             /* deep teal — card surfaces */
+  --surface-warm: #061a1c;             /* dark forest — section backgrounds */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #ffffff;                     /* white — only text color on dark */
+  --fg-2: #ffffff;                     /* same; no secondary ink split */
+  --muted: #a1a1aa;                    /* muted zinc — secondary text */
+  --meta:  #71717a;                    /* shade-50 — timestamps, tertiary */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #1e2c31;             /* dark card border */
+  --border-soft: #3f3f46;             /* shade-70 — subtle dividers */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* Neon Green is precious — focus rings and critical accent highlights only.
+     It never fills large surfaces. --accent-on is black for contrast. */
+  --accent:        #36f4a4;           /* neon green */
+  --accent-on:     #000000;
+  --accent-hover:  #2de097;           /* slightly darker neon on hover */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #36f4a4;                 /* neon green — success state */
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "NeueHaasGrotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    "Inter Variable", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * NeueHaasGrotesk from 96px (display XL) to 24px (heading 6).
+   * Inter Variable from 20px (body large) to 12px (label).
+   * Schema spine maps the key stops. */
+  --text-xs:   12px;                  /* label — uppercase, wide-tracked */
+  --text-sm:   14px;                  /* caption — metadata */
+  --text-base: 18px;                  /* body — standard Inter reading */
+  --text-lg:   20px;                  /* body large — lead paragraphs */
+  --text-xl:   32px;                  /* heading 4 — card headings */
+  --text-2xl:  48px;                  /* heading 3 — feature titles */
+  --text-3xl:  70px;                  /* heading 1 — section titles */
+  --text-4xl:  96px;                  /* display XL — cinematic hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: display XL at 96px.
+   * h2 (70px) → 1.00; h3 (48px) → 1.14 per DESIGN.md.
+   * --tracking-display: 0em (NeueHaasGrotesk tracks neutral at display).
+   * NB: positive tracking (0.32px–2.4px) exists at smaller NeueHaas sizes
+   * and is set inline in components.html. */
+  --leading-body:     1.56;
+  --leading-tight:    1.00;
+  --tracking-display: 0em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 8px base unit per DESIGN.md §Spacing System. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  28px;
+  --space-8:  36px;
+  --space-12: 64px;
+
+  /* Section rhythm — theatrical pacing: vast dark expanse between sections. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Full pill for all primary CTAs — non-negotiable brand identity.
+     Cards: 8px standard, 12px featured. */
+  --radius-sm:   9999px;              /* full pill — all CTA buttons */
+  --radius-md:   8px;                 /* standard cards, inputs */
+  --radius-lg:   12px;                /* featured cards */
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Multi-layered shadow: 1px ring + progressive blur + inset white glow.
+     Shadows are "ambient occlusion" on dark surfaces, not traditional lift. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.1) 0px 0px 0px 1px,
+    rgba(0, 0, 0, 0.1) 0px 2px 2px,
+    rgba(0, 0, 0, 0.1) 0px 4px 4px,
+    rgba(0, 0, 0, 0.1) 0px 8px 8px,
+    rgba(255, 255, 255, 0.03) 0px 1px 0px inset;
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Neon Green focus ring — 2px ring, brand signature. */
+  --focus-ring: 0 0 0 2px #36f4a4;
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: ease;
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1280px;
+  --container-gutter-desktop: 64px;
+  --container-gutter-tablet:  32px;
+  --container-gutter-phone:   16px;
+}

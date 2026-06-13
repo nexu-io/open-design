@@ -181,6 +181,7 @@ describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
 describe('spawn wiring - stream format gating (Defect 1)', () => {
   const NON_PLAIN_FORMATS = [
     'claude-stream-json',
+    'qoder-stream-json',
     'copilot-stream-json',
     'json-event-stream',
     'acp-json-rpc',

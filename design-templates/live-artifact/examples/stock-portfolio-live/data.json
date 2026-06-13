@@ -1,0 +1,453 @@
+{
+  "summary": {
+    "brand": "quiver",
+    "pro": "Live",
+    "marketState": "NYSE Open · 14:32:18 EST",
+    "lastSync": "14:32:18 EST",
+    "totalLabel": "Total portfolio value · USD",
+    "accountsLabel": "All accounts (Robinhood + IBKR)",
+    "totalValue": "$284,521.64",
+    "todayPnl": "+$3,182.40",
+    "todayPct": "+1.13%",
+    "todayDirClass": "up",
+    "todayArrow": "▲",
+    "allTimePnl": "+$84,521.64",
+    "allTimePct": "+42.3%",
+    "allTimeDirClass": "up",
+    "allTimeArrow": "▲",
+    "alphaLabel": "vs S&P · YTD",
+    "alpha": "+18.7pp",
+    "areaPoints": "10,150 10,128 60,124 110,116 160,118 210,108 260,114 310,98 360,90 410,96 460,80 510,72 560,76 610,60 660,54 710,46 760,40 810,32 860,28 870,28 870,150",
+    "linePoints": "10,128 60,124 110,116 160,118 210,108 260,114 310,98 360,90 410,96 460,80 510,72 560,76 610,60 660,54 710,46 760,40 810,32 860,28",
+    "markerX": "860",
+    "markerY": "28",
+    "axisTicks": [
+      { "label": "May '24" },
+      { "label": "Jul" },
+      { "label": "Sep" },
+      { "label": "Nov" },
+      { "label": "Jan '25" },
+      { "label": "Mar" },
+      { "label": "Today" }
+    ]
+  },
+
+  "kpis": [
+    {
+      "label": "Today's P&L",
+      "value": "+$3,182.40",
+      "valueClass": "up",
+      "sub": "+1.13% · 8 winners / 2 losers",
+      "subClass": "up"
+    },
+    {
+      "label": "Buying power",
+      "value": "$12,438.21",
+      "valueClass": "",
+      "sub": "Cash + 2× margin available",
+      "subClass": ""
+    },
+    {
+      "label": "Best position · NVDA",
+      "value": "+187.4%",
+      "valueClass": "up",
+      "sub": "Avg cost $321.55 · Now $924.31",
+      "subClass": "up"
+    },
+    {
+      "label": "Alpha vs S&P 500 · YTD",
+      "value": "+18.7pp",
+      "valueClass": "alpha",
+      "sub": "Sharpe 1.42 · Beta 1.18 · Max DD −9.4%",
+      "subClass": ""
+    }
+  ],
+
+  "featured": {
+    "iconText": "N",
+    "iconBg": "linear-gradient(135deg,#76b900,#4d8400)",
+    "iconFg": "#0a1502",
+    "symbol": "NVDA",
+    "name": "NVIDIA Corporation",
+    "sector": "Semiconductors · Mkt cap $2.27T",
+    "exchangeName": "NASDAQ",
+    "exchangeUrl": "https://www.nasdaq.com/market-activity/stocks/nvda",
+    "yahooUrl": "https://finance.yahoo.com/quote/NVDA",
+    "tradingViewUrl": "https://www.tradingview.com/symbols/NASDAQ-NVDA/",
+    "price": "$924.31",
+    "delta": "▲ +$21.74  +2.41% today",
+    "dirClass": "up",
+    "stats": [
+      { "label": "Open", "value": "906.80" },
+      { "label": "High", "value": "929.18" },
+      { "label": "Low", "value": "902.44" },
+      { "label": "Volume", "value": "38.42M" },
+      { "label": "P/E", "value": "62.4" },
+      { "label": "52W range", "value": "412 — 974" }
+    ],
+    "areaPoints": "40,260 40,220 80,210 120,200 160,194 200,184 240,180 280,170 320,160 360,150 400,138 440,128 480,120 520,108 560,100 600,86 640,76 680,64 720,56 760,48 800,40 840,30 850,30 850,260",
+    "linePoints": "40,220 80,210 120,200 160,194 200,184 240,180 280,170 320,160 360,150 400,138 440,128 480,120 520,108 560,100 600,86 640,76 680,64 720,56 760,48 800,40 840,30",
+    "priceY": "30",
+    "priceLabelY": "21",
+    "priceLabelTextY": "34",
+    "priceLabelText": "924.31"
+  },
+
+  "ai": {
+    "tag": "Quiver AI · Signal #2417",
+    "headlineAccent": "Add to NVDA",
+    "headlineRest": "on Blackwell ramp + AI capex inflection.",
+    "sub": "Three converging catalysts and resilient channel checks. Conviction has stepped up since last week's hyperscaler guidance.",
+    "conviction": "87%",
+    "convictionWidth": "87%",
+    "targetLabel": "12-mo target",
+    "target": "$1,050",
+    "upside": "+13.6%",
+    "size": "+12 sh",
+    "sizeSub": "≈ $11,092 · 4.2% port",
+    "catalysts": [
+      {
+        "n": "01",
+        "title": "Blackwell shipments accelerating",
+        "text": "Foxconn and Wiwynn guidance both implied an Aug volume step-up. Backlog visibility extends through Q1 '26."
+      },
+      {
+        "n": "02",
+        "title": "Hyperscaler capex revised up",
+        "text": "MSFT, META, AMZN combined FY '25 capex now +34% YoY. AI infra is the binding allocation."
+      },
+      {
+        "n": "03",
+        "title": "Sentiment de-risked",
+        "text": "Short interest at 6-month high but RSI cooling from overbought. Setup mirrors the May '24 base before the +47% leg."
+      }
+    ]
+  },
+
+  "holdingsPanel": {
+    "title": "Holdings · 9 positions",
+    "subtitle": "Live · last quote 14:32:18 EST"
+  },
+  "holdings": [
+    {
+      "symbol": "NVDA",
+      "companyName": "NVIDIA Corporation",
+      "icon": "N",
+      "iconBg": "linear-gradient(135deg,#76b900,#3d6800)",
+      "iconFg": "#0a1502",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/nvda",
+      "shares": "100",
+      "avgCost": "321.55",
+      "last": "924.31",
+      "marketValue": "$92,431",
+      "pnl": "+$60,276",
+      "pnlPct": "+187.4%",
+      "dirClass": "up",
+      "alloc": "32.5%",
+      "allocWidth": "32%"
+    },
+    {
+      "symbol": "AAPL",
+      "companyName": "Apple Inc.",
+      "icon": "A",
+      "iconBg": "linear-gradient(135deg,#0c0c0c,#3a3a3a)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/aapl",
+      "shares": "220",
+      "avgCost": "152.10",
+      "last": "228.74",
+      "marketValue": "$50,323",
+      "pnl": "+$16,861",
+      "pnlPct": "+50.4%",
+      "dirClass": "up",
+      "alloc": "17.7%",
+      "allocWidth": "18%"
+    },
+    {
+      "symbol": "MSFT",
+      "companyName": "Microsoft Corp.",
+      "icon": "M",
+      "iconBg": "linear-gradient(135deg,#0078d4,#005a9e)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/msft",
+      "shares": "85",
+      "avgCost": "328.40",
+      "last": "438.12",
+      "marketValue": "$37,240",
+      "pnl": "+$9,326",
+      "pnlPct": "+33.4%",
+      "dirClass": "up",
+      "alloc": "13.1%",
+      "allocWidth": "13%"
+    },
+    {
+      "symbol": "META",
+      "companyName": "Meta Platforms",
+      "icon": "M",
+      "iconBg": "linear-gradient(135deg,#1877f2,#0c5fc3)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/meta",
+      "shares": "55",
+      "avgCost": "312.20",
+      "last": "596.18",
+      "marketValue": "$32,790",
+      "pnl": "+$15,619",
+      "pnlPct": "+91.0%",
+      "dirClass": "up",
+      "alloc": "11.5%",
+      "allocWidth": "11%"
+    },
+    {
+      "symbol": "GOOGL",
+      "companyName": "Alphabet Class A",
+      "icon": "G",
+      "iconBg": "linear-gradient(135deg,#4285f4,#34a853)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/googl",
+      "shares": "160",
+      "avgCost": "128.90",
+      "last": "186.40",
+      "marketValue": "$29,824",
+      "pnl": "+$9,200",
+      "pnlPct": "+44.6%",
+      "dirClass": "up",
+      "alloc": "10.5%",
+      "allocWidth": "10%"
+    },
+    {
+      "symbol": "AMZN",
+      "companyName": "Amazon.com Inc.",
+      "icon": "A",
+      "iconBg": "linear-gradient(135deg,#ff9900,#cc7a00)",
+      "iconFg": "#1a0e00",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/amzn",
+      "shares": "90",
+      "avgCost": "142.50",
+      "last": "218.94",
+      "marketValue": "$19,705",
+      "pnl": "+$6,880",
+      "pnlPct": "+53.6%",
+      "dirClass": "up",
+      "alloc": "6.9%",
+      "allocWidth": "7%"
+    },
+    {
+      "symbol": "TSLA",
+      "companyName": "Tesla, Inc.",
+      "icon": "T",
+      "iconBg": "linear-gradient(135deg,#cc0000,#660000)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/tsla",
+      "shares": "42",
+      "avgCost": "288.40",
+      "last": "312.55",
+      "marketValue": "$13,127",
+      "pnl": "+$1,015",
+      "pnlPct": "+8.4%",
+      "dirClass": "up",
+      "alloc": "4.6%",
+      "allocWidth": "5%"
+    },
+    {
+      "symbol": "AMD",
+      "companyName": "Advanced Micro Devices",
+      "icon": "A",
+      "iconBg": "linear-gradient(135deg,#ed1c24,#7a0000)",
+      "iconFg": "#ffffff",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/amd",
+      "shares": "52",
+      "avgCost": "158.90",
+      "last": "142.06",
+      "marketValue": "$7,387",
+      "pnl": "−$876",
+      "pnlPct": "−10.6%",
+      "dirClass": "down",
+      "alloc": "2.6%",
+      "allocWidth": "3%"
+    },
+    {
+      "symbol": "USD",
+      "companyName": "Settled cash",
+      "icon": "$",
+      "iconBg": "linear-gradient(135deg,#facc15,#a17400)",
+      "iconFg": "#1a1100",
+      "exchName": "—",
+      "exchUrl": "#",
+      "shares": "—",
+      "avgCost": "—",
+      "last": "1.00",
+      "marketValue": "$1,694",
+      "pnl": "—",
+      "pnlPct": "—",
+      "dirClass": "",
+      "alloc": "0.6%",
+      "allocWidth": "1%"
+    }
+  ],
+
+  "watchlistPanel": {
+    "title": "Watchlist · curated",
+    "subtitle": "12 tickers · 14:32 EST"
+  },
+  "watchlist": [
+    {
+      "symbol": "PLTR",
+      "companyName": "Palantir",
+      "price": "$58.42",
+      "pct": "▲ 4.81%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,28 20,30 40,26 60,24 80,28 100,22 120,18 140,20 160,14 180,10 200,6",
+      "volume": "4.21M",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/pltr"
+    },
+    {
+      "symbol": "SHOP",
+      "companyName": "Shopify",
+      "price": "$112.84",
+      "pct": "▲ 2.13%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,26 20,28 40,22 60,24 80,20 100,22 120,18 140,16 160,12 180,14 200,10",
+      "volume": "6.84M",
+      "exchName": "NYSE",
+      "exchUrl": "https://www.nyse.com/quote/XNYS:SHOP"
+    },
+    {
+      "symbol": "TSM",
+      "companyName": "TSMC",
+      "price": "$208.77",
+      "pct": "▲ 1.62%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,24 20,22 40,26 60,20 80,18 100,20 120,16 140,14 160,12 180,10 200,8",
+      "volume": "12.4M",
+      "exchName": "NYSE",
+      "exchUrl": "https://www.nyse.com/quote/XNYS:TSM"
+    },
+    {
+      "symbol": "COIN",
+      "companyName": "Coinbase",
+      "price": "$236.10",
+      "pct": "▲ 3.48%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,28 20,30 40,26 60,28 80,22 100,18 120,20 140,14 160,10 180,12 200,6",
+      "volume": "8.92M",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/coin"
+    },
+    {
+      "symbol": "CRWD",
+      "companyName": "CrowdStrike",
+      "price": "$352.09",
+      "pct": "▼ 1.24%",
+      "dirClass": "down",
+      "sparkColor": "#ff4f6d",
+      "sparkPoints": "0,14 20,12 40,16 60,14 80,18 100,20 120,18 140,22 160,24 180,28 200,30",
+      "volume": "3.24M",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/crwd"
+    },
+    {
+      "symbol": "SMCI",
+      "companyName": "Super Micro",
+      "price": "$48.93",
+      "pct": "▲ 5.62%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,30 20,32 40,28 60,30 80,26 100,20 120,16 140,18 160,12 180,8 200,4",
+      "volume": "18.2M",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/smci"
+    },
+    {
+      "symbol": "UBER",
+      "companyName": "Uber Technologies",
+      "price": "$72.41",
+      "pct": "▲ 1.18%",
+      "dirClass": "up",
+      "sparkColor": "#22e58c",
+      "sparkPoints": "0,24 20,26 40,22 60,20 80,22 100,18 120,16 140,18 160,14 180,12 200,12",
+      "volume": "7.42M",
+      "exchName": "NYSE",
+      "exchUrl": "https://www.nyse.com/quote/XNYS:UBER"
+    },
+    {
+      "symbol": "NFLX",
+      "companyName": "Netflix",
+      "price": "$728.50",
+      "pct": "▼ 0.66%",
+      "dirClass": "down",
+      "sparkColor": "#ff4f6d",
+      "sparkPoints": "0,16 20,14 40,18 60,16 80,18 100,16 120,20 140,18 160,22 180,20 200,24",
+      "volume": "2.86M",
+      "exchName": "NASDAQ",
+      "exchUrl": "https://www.nasdaq.com/market-activity/stocks/nflx"
+    }
+  ],
+
+  "newsPanel": {
+    "title": "Live signals & news",
+    "subtitle": "Filtered to your book"
+  },
+  "news": [
+    {
+      "time": "14:31",
+      "source": "AI · Quiver Research",
+      "headline": "▲ Hyperscaler capex tracker rolls forward — MSFT + META combined FY '25 guide now +34% YoY, reinforcing NVDA/SMCI thesis.",
+      "impactLabel": "+ Bull",
+      "impactClass": "pos"
+    },
+    {
+      "time": "14:18",
+      "source": "Bloomberg",
+      "headline": "Tesla cuts Model Y prices in China by 6% as BYD pressure intensifies in Q2 sales window.",
+      "impactLabel": "High risk",
+      "impactClass": "high"
+    },
+    {
+      "time": "13:54",
+      "source": "Reuters",
+      "headline": "FOMC minutes signal one more cut probable in Sept — yields fall 9 bps on the long end.",
+      "impactLabel": "+ Bull",
+      "impactClass": "pos"
+    },
+    {
+      "time": "13:30",
+      "source": "AI · Earnings whisper",
+      "headline": "CRWD whisper revised −2.1% after channel checks show enterprise renewal slippage.",
+      "impactLabel": "Watch",
+      "impactClass": "med"
+    },
+    {
+      "time": "12:48",
+      "source": "CNBC",
+      "headline": "Apple confirms Vision Pro 2 component orders for Q4 — 1.4M unit run rate implied.",
+      "impactLabel": "+ Bull",
+      "impactClass": "pos"
+    },
+    {
+      "time": "11:22",
+      "source": "AI · Anomaly detector",
+      "headline": "▲ SMCI dark-pool prints up 220% vs 30-day baseline — likely block accumulation.",
+      "impactLabel": "Watch",
+      "impactClass": "med"
+    }
+  ],
+
+  "footer": {
+    "live": "Live data — refresh on demand",
+    "source": "Quotes via IEX Cloud · Robinhood + IBKR linked",
+    "version": "Quiver Live · v1.4.0"
+  }
+}

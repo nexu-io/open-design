@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-framer",
+  "title": "Framer",
+  "title_i18n": {
+    "zh-CN": "Framer",
+    "zh-TW": "Framer",
+    "ja": "Framer",
+    "ko": "Framer",
+    "de": "Framer",
+    "fr": "Framer",
+    "ru": "Framer",
+    "es": "Framer",
+    "pt-BR": "Framer",
+    "it": "Framer",
+    "vi": "Framer",
+    "pl": "Framer",
+    "id": "Framer",
+    "nl": "Framer",
+    "ar": "Framer",
+    "tr": "Framer",
+    "uk": "Framer",
+    "en": "Framer"
+  },
+  "version": "0.1.0",
+  "description": "Website builder. Bold black and blue, motion-first, design-forward.",
+  "description_i18n": {
+    "zh-CN": "网站构建工具。大胆的黑色和蓝色，动效优先，设计前沿。",
+    "zh-TW": "網站建構工具。大膽的黑色和藍色，動效優先，設計前衛。",
+    "ja": "ウェブサイトビルダー。大胆な黒と青、モーション優先、デザイン重視。",
+    "ko": "웹사이트 빌더. 대담한 블랙과 블루, 모션 우선, 디자인 중심.",
+    "de": "Website-Builder. Mutig in Schwarz und Blau, Motion-first, Design-orientiert.",
+    "fr": "Constructeur de sites web. Noir et bleu audacieux, axé sur le mouvement, orienté design.",
+    "ru": "Конструктор сайтов. Смелые чёрный и синий, фокус на анимации, дизайн-ориентированный.",
+    "es": "Constructor de sitios web. Negro y azul audaces, enfoque en movimiento, orientado al diseño.",
+    "pt-BR": "Construtor de sites. Preto e azul ousados, foco em movimento, voltado para design.",
+    "it": "Costruttore di siti web. Nero e blu audaci, orientato al movimento, incentrato sul design.",
+    "vi": "Công cụ xây dựng website. Màu đen và xanh đậm, ưu tiên chuyển động, hướng đến thiết kế.",
+    "pl": "Kreator stron internetowych. Odważna czerń i błękit, nastawienie na ruch, projektowo zorientowany.",
+    "id": "Pembuat website. Hitam dan biru berani, mengutamakan gerakan, fokus pada desain.",
+    "nl": "Websitebouwer. Gedurfd zwart en blauw, motion-first, design-gericht.",
+    "ar": "أداة بناء مواقع الويب. أسود وأزرق جريء، يركز على الحركة، موجه نحو التصميم.",
+    "tr": "Web sitesi oluşturucu. Cesur siyah ve mavi, hareket odaklı, tasarım öncelikli.",
+    "uk": "Конструктор сайтів. Сміливі чорний і синій, фокус на анімації, дизайн-орієнтований.",
+    "en": "Website builder. Bold black and blue, motion-first, design-forward."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "design-creative"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Framer design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Framer design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "framer",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

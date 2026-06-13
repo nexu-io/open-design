@@ -36,15 +36,23 @@ function externalConnector(overrides: Partial<ConnectorCatalogDefinition> = {}):
 }
 
 class TestConnectorService extends ConnectorService {
+  public listDefinitionsCallCount = 0;
+
   constructor(
     private readonly definition: ConnectorCatalogDefinition,
     statusService: ConnectorStatusService,
+    private readonly includeInFastDefinitions = false,
   ) {
     super(statusService);
   }
 
   override async listDefinitions(): Promise<ConnectorCatalogDefinition[]> {
+    this.listDefinitionsCallCount += 1;
     return [this.definition];
+  }
+
+  override listFastDefinitions(): ConnectorCatalogDefinition[] {
+    return this.includeInFastDefinitions ? [this.definition] : [];
   }
 
   override async getDefinition(connectorId: string): Promise<ConnectorCatalogDefinition | undefined> {
@@ -66,6 +74,20 @@ class OutputTestConnectorService extends TestConnectorService {
   }
 }
 
+class FailingConnectorService extends TestConnectorService {
+  constructor(
+    definition: ConnectorCatalogDefinition,
+    statusService: ConnectorStatusService,
+    private readonly error: Error,
+  ) {
+    super(definition, statusService, true);
+  }
+
+  protected override async executeConnectorProviderTool(_request: ConnectorExecuteRequest, _context: ConnectorExecutionContext): Promise<BoundedJsonObject> {
+    throw this.error;
+  }
+}
+
 function readOnlyDefinition(): ConnectorCatalogDefinition {
   return externalConnector({
     tools: [{
@@ -77,6 +99,33 @@ function readOnlyDefinition(): ConnectorCatalogDefinition {
     }],
     allowedToolNames: ['docs.search'],
     minimumApproval: 'auto',
+  });
+}
+
+function githubReadDefinition(): ConnectorCatalogDefinition {
+  return externalConnector({
+    id: 'github',
+    name: 'GitHub',
+    provider: 'composio',
+    category: 'Developer',
+    authentication: 'composio',
+    providerConnectorId: 'github',
+    tools: [{
+      name: 'github.search',
+      title: 'Search GitHub',
+      requiredScopes: ['repo:read'],
+      safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only GitHub search' },
+      refreshEligible: true,
+    }],
+    allowedToolNames: ['github.search'],
+    minimumApproval: 'auto',
+  });
+}
+
+function connectGithub(statusService: ConnectorStatusService): void {
+  statusService.connect(githubReadDefinition(), 'octocat@example.com', {
+    provider: 'composio',
+    providerConnectionId: 'ca_stale_github',
   });
 }
 
@@ -203,11 +252,107 @@ describe('connector read-only safety classification', () => {
     expect(isRefreshEligibleConnectorToolSafety(safety)).toBe(true);
   });
 
+  it('does not let response-size wording override a read-only search name', () => {
+    const safety = classifyConnectorToolSafety({
+      name: 'notion.notion_search_notion_page',
+      title: 'Search Notion pages and databases',
+      description:
+        'Searches Notion pages and databases by title. Database pages can create large responses for databases with many properties.',
+    });
+
+    expect(safety).toMatchObject({ sideEffect: 'read', approval: 'auto' });
+    expect(isRefreshEligibleConnectorToolSafety(safety)).toBe(true);
+  });
+
   it('fails closed for unknown tools', () => {
     const safety = classifyConnectorToolSafety({ name: 'provider.sync' });
 
     expect(safety).toMatchObject({ sideEffect: 'write', approval: 'confirm' });
     expect(isRefreshEligibleConnectorToolSafety(safety)).toBe(false);
+  });
+});
+
+describe('connector detail responses', () => {
+  it('keeps non-read tools in connector list/detail discovery responses', async () => {
+    const definition = externalConnector({
+      tools: [
+        {
+          name: 'docs.search',
+          title: 'Search docs',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only docs search' },
+          refreshEligible: true,
+        },
+        {
+          name: 'docs.update_page',
+          title: 'Update page',
+          requiredScopes: ['docs:write'],
+          safety: { sideEffect: 'write', approval: 'confirm', reason: 'write-capable docs update' },
+          refreshEligible: false,
+        },
+        {
+          name: 'docs.delete_page',
+          title: 'Delete page',
+          requiredScopes: ['docs:write'],
+          safety: { sideEffect: 'destructive', approval: 'disabled', reason: 'destructive docs delete' },
+          refreshEligible: false,
+        },
+        {
+          name: 'docs.sync',
+          title: 'Sync docs',
+          requiredScopes: [],
+          safety: { sideEffect: 'unknown', approval: 'confirm', reason: 'unknown safety' },
+          refreshEligible: false,
+        },
+      ],
+      allowedToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      minimumApproval: 'auto',
+    });
+    const service = new TestConnectorService(definition, new ConnectorStatusService(), true);
+
+    await expect(service.listConnectors()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [
+          expect.objectContaining({ name: 'docs.search' }),
+          expect.objectContaining({ name: 'docs.update_page' }),
+          expect.objectContaining({ name: 'docs.delete_page' }),
+          expect.objectContaining({ name: 'docs.sync' }),
+        ],
+        featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      }),
+    ]);
+
+    await expect(service.listConnectorDiscovery()).resolves.toEqual(
+      expect.objectContaining({
+        connectors: [
+          expect.objectContaining({
+            id: 'external_docs',
+            tools: [
+              expect.objectContaining({ name: 'docs.search' }),
+              expect.objectContaining({ name: 'docs.update_page' }),
+              expect.objectContaining({ name: 'docs.delete_page' }),
+              expect.objectContaining({ name: 'docs.sync' }),
+            ],
+            featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+          }),
+        ],
+      }),
+    );
+
+    await expect(service.getConnector('external_docs')).resolves.toEqual(
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [
+          expect.objectContaining({ name: 'docs.search' }),
+          expect.objectContaining({ name: 'docs.update_page' }),
+          expect.objectContaining({ name: 'docs.delete_page' }),
+          expect.objectContaining({ name: 'docs.sync' }),
+        ],
+        featuredToolNames: ['docs.search', 'docs.update_page', 'docs.delete_page', 'docs.sync'],
+      }),
+    );
   });
 });
 
@@ -255,6 +400,88 @@ describe('connector execution policy', () => {
         tools: [expect.objectContaining({ name: 'docs.search' })],
       }),
     ]);
+  });
+
+  it('filters connector tools by curated use case when requested', async () => {
+    const definition = externalConnector({
+      tools: [
+        {
+          name: 'docs.recent_changes',
+          title: 'Recent changes',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only recent changes' },
+          refreshEligible: true,
+          curation: { useCases: ['personal_daily_digest'], reason: 'Recent changes fit a daily digest.' },
+        },
+        {
+          name: 'docs.search',
+          title: 'Search docs',
+          requiredScopes: ['docs:read'],
+          safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only docs search' },
+          refreshEligible: true,
+        },
+      ],
+      allowedToolNames: ['docs.recent_changes', 'docs.search'],
+      minimumApproval: 'auto',
+    });
+    const statusService = new ConnectorStatusService();
+    statusService.connect(definition, 'docs@example.com');
+    const service = new TestConnectorService(definition, statusService, true);
+
+    await expect(listConnectorTools({
+      grant: {
+        token: 'test-token',
+        projectId: 'project-a',
+        runId: 'run-a',
+        allowedEndpoints: [],
+        allowedOperations: [],
+        issuedAt: '2026-04-30T00:00:00.000Z',
+        expiresAt: '2026-04-30T00:15:00.000Z',
+      },
+      projectsRoot: '/tmp/open-design-test',
+      service,
+      useCase: 'personal_daily_digest',
+    })).resolves.toEqual([
+      expect.objectContaining({
+        id: 'external_docs',
+        tools: [expect.objectContaining({ name: 'docs.recent_changes', curation: expect.objectContaining({ useCases: ['personal_daily_digest'] }) })],
+      }),
+    ]);
+  });
+
+  it('does not force dynamic definitions when curated fast definitions are available', async () => {
+    const definition = externalConnector({
+      tools: [{
+        name: 'docs.recent_changes',
+        title: 'Recent changes',
+        requiredScopes: ['docs:read'],
+        safety: { sideEffect: 'read', approval: 'auto', reason: 'read-only recent changes' },
+        refreshEligible: true,
+        curation: { useCases: ['personal_daily_digest'] },
+      }],
+      allowedToolNames: ['docs.recent_changes'],
+      minimumApproval: 'auto',
+    });
+    const statusService = new ConnectorStatusService();
+    statusService.connect(definition, 'docs@example.com');
+    const service = new TestConnectorService(definition, statusService, true);
+
+    await listConnectorTools({
+      grant: {
+        token: 'test-token',
+        projectId: 'project-a',
+        runId: 'run-a',
+        allowedEndpoints: [],
+        allowedOperations: [],
+        issuedAt: '2026-04-30T00:00:00.000Z',
+        expiresAt: '2026-04-30T00:15:00.000Z',
+      },
+      projectsRoot: '/tmp/open-design-test',
+      service,
+      useCase: 'personal_daily_digest',
+    });
+
+    expect(service.listDefinitionsCallCount).toBe(0);
   });
 
   it('rejects connector inputs that no longer match the current tool schema', async () => {
@@ -350,6 +577,93 @@ describe('connector execution policy', () => {
       { connectorId: 'external_docs', toolName: 'docs.search', input: {}, expectedAccountLabel: 'old-account@example.com' },
       { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
     )).rejects.toMatchObject({ code: 'CONNECTOR_NOT_CONNECTED' });
+  });
+
+  it('marks a persisted Composio connector as errored when tool execution reports stale auth', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio tool execution failed', 502, {
+        connectorId: 'github',
+        toolName: 'github.search',
+        error: {
+          message: 'Bad credentials',
+          documentation_url: 'https://docs.github.com/rest',
+          status: '401',
+        },
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED' });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'error',
+      accountLabel: 'octocat@example.com',
+      lastError: 'GitHub authorization expired. Reconnect GitHub.',
+    });
+    expect(service.getCredential('github')).toBeUndefined();
+  });
+
+  it('keeps connector credentials when Composio platform auth fails before tool execution', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio request failed with HTTP 401', 401, {
+        httpStatus: 401,
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED', status: 401 });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'connected',
+      accountLabel: 'octocat@example.com',
+    });
+    expect(service.getCredential('github')).toBeDefined();
+  });
+
+  it('keeps connector credentials when tool execution fails without auth-stale payload', async () => {
+    const definition = githubReadDefinition();
+    const credentialStore = new InMemoryConnectorCredentialStore();
+    const statusService = new ConnectorStatusService({ credentialStore });
+    connectGithub(statusService);
+    const service = new FailingConnectorService(
+      definition,
+      statusService,
+      new ConnectorServiceError('CONNECTOR_EXECUTION_FAILED', 'Composio tool execution failed', 502, {
+        connectorId: 'github',
+        toolName: 'github.search',
+        error: {
+          message: 'Not Found',
+          status: '404',
+        },
+      }),
+    );
+
+    await expect(service.execute(
+      { connectorId: 'github', toolName: 'github.search', input: {} },
+      { projectsRoot: '/tmp/open-design-test', projectId: 'project-a', purpose: 'artifact_refresh' },
+    )).rejects.toMatchObject({ code: 'CONNECTOR_EXECUTION_FAILED', status: 502 });
+
+    await expect(service.getConnector('github')).resolves.toMatchObject({
+      status: 'connected',
+      accountLabel: 'octocat@example.com',
+    });
+    expect(service.getCredential('github')).toBeDefined();
   });
 
   it('rejects non-auto connector tools during artifact refresh', async () => {
@@ -464,5 +778,159 @@ describe('connector execution policy', () => {
 
     vi.advanceTimersByTime(CONNECTOR_RUN_LIMIT_TTL_MS);
     await expect(service.execute(request, context)).resolves.toMatchObject({ ok: true });
+  });
+});
+
+// Issue #748: connector card badges (and other UIs that surface a single
+// tool count) need a stable number that doesn't lurch from ~2 hardcoded
+// fallback tools to several hundred provider-discovered tools the moment
+// a Composio API key is configured. The fix is to expose
+// `allowedToolNames` on the wire `ConnectorDetail` and have UIs use that
+// for the count instead of `tools.length`. These tests pin the contract.
+describe('ConnectorDetail.allowedToolNames (issue #748)', () => {
+  it('exposes allowedToolNames on getConnector() so UIs can render a stable count', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(detail.allowedToolNames).toEqual(['docs.search']);
+  });
+
+  it('returns allowedToolNames as a defensive copy (mutating the result must not affect the source)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    detail.allowedToolNames!.push('docs.evil_inject');
+    expect(definition.allowedToolNames).toEqual(['docs.search']);
+
+    const detailAgain = await service.getConnector('external_docs');
+    expect(detailAgain.allowedToolNames).toEqual(['docs.search']);
+  });
+
+  it('keeps allowedToolNames small even when tools.length holds the full provider inventory (the #748 regression guard)', async () => {
+    const statusService = new ConnectorStatusService();
+    // Simulate Composio's post-hydration shape: catalog ships ~2 curated
+    // tools but the provider inventory expands to hundreds. The real
+    // composio adapter only auto-allows live tools when their classified
+    // safety is read+auto, so most of those hundreds stay out of the
+    // allowlist. Reproduce that shape directly here so the test pins the
+    // invariant without depending on Composio's network path.
+    const provisionedTools = Array.from({ length: 800 }, (_, index) => ({
+      name: `external_docs.bulk_op_${index}`,
+      title: `Bulk op ${index}`,
+      requiredScopes: ['docs:write'],
+      // Mark these as write — i.e. NOT auto-allowed for the agent — so
+      // they belong in `tools` but never in `allowedToolNames`. This
+      // mirrors the Composio shape where most provider-discovered tools
+      // are write/destructive and therefore get gated out of the
+      // execution-safe subset (see catalog.ts:isRefreshEligible…).
+      safety: classifyConnectorToolSafety({ name: `external_docs.bulk_op_${index}`, title: `Bulk op ${index}`, requiredScopes: ['docs:write'] }),
+      refreshEligible: false,
+    }));
+    const definition: ConnectorCatalogDefinition = {
+      ...readOnlyDefinition(),
+      tools: [...readOnlyDefinition().tools, ...provisionedTools],
+      allowedToolNames: ['docs.search'],
+    };
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+
+    // The badge in apps/web/src/components/EntryView.tsx uses
+    // `connector.allowedToolNames?.length ?? connector.tools.length`,
+    // so this single number is the one users see in the connector card.
+    expect(detail.allowedToolNames!.length).toBe(1);
+    // Sanity: the wider inventory is still on the wire for the detail
+    // drawer to enumerate — we're just no longer using its length for
+    // the badge.
+    expect(detail.tools.length).toBe(801);
+
+    // Spot-check that none of the bulk write tools accidentally leaked
+    // into the allowlist.
+    expect(detail.allowedToolNames).not.toContain('external_docs.bulk_op_0');
+    expect(detail.allowedToolNames).not.toContain('external_docs.bulk_op_799');
+
+    // refreshEligible classification stays a property of the definition,
+    // not of the badge surface — confirm the helper still agrees so a
+    // future refactor can't quietly let write tools into the allowlist
+    // via a different code path. Bind through a defined-checked local so
+    // the daemon's `noUncheckedIndexedAccess` strict tsconfig doesn't
+    // type the index access as `T | undefined`.
+    const firstProvisionedTool = provisionedTools[0];
+    expect(firstProvisionedTool).toBeDefined();
+    expect(isRefreshEligibleConnectorToolSafety(firstProvisionedTool!.safety)).toBe(false);
+  });
+
+  it('treats an empty allowedToolNames as a real "0 tools" badge value (not a missing field)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = externalConnector();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(Array.isArray(detail.allowedToolNames)).toBe(true);
+    expect(detail.allowedToolNames!.length).toBe(0);
+  });
+
+  it('exposes curatedToolNames on the wire and falls it back to allowedToolNames for non-Composio connectors (#767 review)', async () => {
+    // Non-Composio connectors don't have a discovery layer that grows
+    // allowedToolNames at runtime, so curatedToolNames is equivalent
+    // to allowedToolNames. The wire field should still be present
+    // (badge consumers expect it) and equal to the catalog set.
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    expect(Array.isArray(detail.curatedToolNames)).toBe(true);
+    expect(detail.curatedToolNames).toEqual(['docs.search']);
+    // For a non-Composio connector with no curatedToolNames override,
+    // the two fields are intentionally identical.
+    expect(detail.curatedToolNames).toEqual(detail.allowedToolNames);
+  });
+
+  it('keeps curatedToolNames at the catalog size even when allowedToolNames is dynamically extended (#748 / #767 stability guarantee)', async () => {
+    // Simulate the Composio post-hydration shape that motivated the
+    // #767 review: the catalog ships 1 curated tool, but the live
+    // discovery layer auto-allows ~50 read+auto-approval tools, so
+    // `allowedToolNames` swells. The badge should pin to the catalog
+    // size; only the runtime execution gate sees the wider list.
+    const autoAllowedReadTools = Array.from({ length: 50 }, (_, index) => `docs.read_op_${index}`);
+    const definition: ConnectorCatalogDefinition = {
+      ...readOnlyDefinition(),
+      // `curatedToolNames` is the source of truth for the badge.
+      curatedToolNames: ['docs.search'],
+      // `allowedToolNames` is the runtime execution gate — extended
+      // by the (simulated) auto-allow path.
+      allowedToolNames: ['docs.search', ...autoAllowedReadTools],
+    };
+    const statusService = new ConnectorStatusService();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+
+    // The "N tools" badge surface: catalog size only, no growth.
+    expect(detail.curatedToolNames!.length).toBe(1);
+    // The agent execution allowlist: full grown set.
+    expect(detail.allowedToolNames!.length).toBe(51);
+    // Sanity: the two arrays are intentionally diverging on this
+    // shape; that divergence is exactly what the badge stability
+    // depends on.
+    expect(detail.curatedToolNames).not.toEqual(detail.allowedToolNames);
+  });
+
+  it('returns curatedToolNames as a defensive copy (mutating the wire result must not affect the source)', async () => {
+    const statusService = new ConnectorStatusService();
+    const definition = readOnlyDefinition();
+    const service = new TestConnectorService(definition, statusService);
+
+    const detail = await service.getConnector('external_docs');
+    detail.curatedToolNames!.push('docs.evil_inject');
+    expect(definition.allowedToolNames).toEqual(['docs.search']);
+
+    const detailAgain = await service.getConnector('external_docs');
+    expect(detailAgain.curatedToolNames).toEqual(['docs.search']);
   });
 });

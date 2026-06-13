@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-storytelling",
+  "title": "Storytelling",
+  "title_i18n": {
+    "zh-CN": "故事叙述",
+    "zh-TW": "故事敘述",
+    "ja": "ストーリーテリング",
+    "ko": "스토리텔링",
+    "de": "Storytelling",
+    "fr": "Storytelling",
+    "ru": "Сторителлинг",
+    "es": "Storytelling",
+    "pt-BR": "Storytelling",
+    "it": "Storytelling",
+    "vi": "Storytelling",
+    "pl": "Storytelling",
+    "id": "Storytelling",
+    "nl": "Storytelling",
+    "ar": "السرد القصصي",
+    "tr": "Storytelling",
+    "uk": "Сторітелінг",
+    "en": "Storytelling"
+  },
+  "version": "0.1.0",
+  "description": "Narrative-driven design using visuals, copy, and interaction to guide users through engaging, emotionally resonant journeys.",
+  "description_i18n": {
+    "zh-CN": "通过视觉、文案和交互设计打造叙事驱动的体验，引导用户完成引人入胜且情感共鸣的旅程。",
+    "zh-TW": "透過視覺、文案與互動設計打造敘事驅動的體驗，引導使用者完成引人入勝且情感共鳴的旅程。",
+    "ja": "ビジュアル、コピー、インタラクションを活用した物語駆動型デザインで、ユーザーを魅力的で感情に訴える体験へと導きます。",
+    "ko": "비주얼, 카피, 인터랙션을 활용한 내러티브 중심 디자인으로 사용자를 매력적이고 감성적인 여정으로 안내합니다.",
+    "de": "Narrativ-getriebenes Design mit Visuals, Texten und Interaktionen, das Nutzer durch ansprechende, emotional resonante Erlebnisse führt.",
+    "fr": "Design narratif utilisant visuels, textes et interactions pour guider les utilisateurs à travers des parcours engageants et émotionnellement résonnants.",
+    "ru": "Нарративный дизайн с использованием визуала, текста и взаимодействий для создания увлекательных и эмоционально резонирующих пользовательских путей.",
+    "es": "Diseño narrativo que usa visuales, textos e interacciones para guiar a los usuarios a través de experiencias atractivas y emocionalmente resonantes.",
+    "pt-BR": "Design narrativo usando visuais, textos e interações para guiar usuários através de jornadas envolventes e emocionalmente ressonantes.",
+    "it": "Design narrativo che utilizza elementi visivi, testi e interazioni per guidare gli utenti attraverso esperienze coinvolgenti ed emozionalmente risonanti.",
+    "vi": "Thiết kế theo hướng kể chuyện sử dụng hình ảnh, nội dung và tương tác để dẫn dắt người dùng qua những hành trình hấp dẫn và gây được sự đồng cảm.",
+    "pl": "Design oparty na narracji wykorzystujący elementy wizualne, teksty i interakcje do prowadzenia użytkowników przez angażujące i emocjonalnie rezonujące doświadczenia.",
+    "id": "Desain berbasis narasi menggunakan visual, teks, dan interaksi untuk memandu pengguna melalui perjalanan yang menarik dan beresonansi emosional.",
+    "nl": "Narratief-gedreven design met visuals, teksten en interacties om gebruikers door boeiende, emotioneel resonerende ervaringen te leiden.",
+    "ar": "تصميم قائم على السرد يستخدم العناصر المرئية والنصوص والتفاعلات لإرشاد المستخدمين عبر رحلات جذابة ومؤثرة عاطفياً.",
+    "tr": "Görseller, metinler ve etkileşimler kullanarak kullanıcıları ilgi çekici ve duygusal olarak yankı uyandıran yolculuklarda yönlendiren anlatı odaklı tasarım.",
+    "uk": "Наративний дизайн з використанням візуалу, тексту та взаємодій для створення захоплюючих та емоційно резонуючих користувацьких подорожей.",
+    "en": "Narrative-driven design using visuals, copy, and interaction to guide users through engaging, emotionally resonant journeys."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "creative-artistic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Storytelling design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Storytelling design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "storytelling",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

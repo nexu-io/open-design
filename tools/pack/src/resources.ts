@@ -35,11 +35,14 @@ export const macResources = {
   icon: join(resourcesRoot, "mac", "icon.icns"),
   iconPng: join(resourcesRoot, "mac", "icon.png"),
   notarizeHook: join(resourcesRoot, "mac", "notarize.cjs"),
-  webStandaloneAfterPackHook: join(resourcesRoot, "mac", "web-standalone-after-pack.cjs"),
+  webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
 } as const;
 
 export const winResources = {
   icon: join(resourcesRoot, "win", "icon.ico"),
+  sevenZipDll: join(resourcesRoot, "win", "7zip", "7z.dll"),
+  sevenZipExe: join(resourcesRoot, "win", "7zip", "7z.exe"),
+  webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
 } as const;
 
 export const linuxResources = {
@@ -49,11 +52,24 @@ export const linuxResources = {
 
 const BUNDLED_RESOURCE_TREES = [
   { from: "skills", to: "skills" },
+  // After the skills/design-templates split (specs/current/skills-and-design-templates.md)
+  // the rendering catalogue lives under its own root and the daemon
+  // resolves it via DESIGN_TEMPLATES_DIR. Bundle it like any other
+  // first-class resource so packaged builds carry the full template set.
+  { from: "design-templates", to: "design-templates" },
   { from: "design-systems", to: "design-systems" },
   { from: "craft", to: "craft" },
+  { from: join("plugins", "_official"), to: join("plugins", "_official") },
+  { from: join("plugins", "registry"), to: join("plugins", "registry") },
   { from: join("assets", "frames"), to: "frames" },
   { from: join("assets", "community-pets"), to: "community-pets" },
   { from: "prompt-templates", to: "prompt-templates" },
+  // Baked plugin-preview manifest. The gallery's pre-rendered hover-pan clips
+  // live on R2; the daemon needs this checked-in manifest to map each plugin to
+  // its clip (it serves clips from R2 when the files aren't on disk, which is the
+  // packaged case). Without it the packaged daemon reads an empty manifest and the
+  // gallery falls back to live, GPU-expensive iframes instead of the baked clips.
+  { from: join("data", "plugin-previews"), to: join("data", "plugin-previews") },
 ] as const;
 
 export async function copyBundledResourceTrees({

@@ -1,0 +1,138 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/loom/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Loom".
+ * Async video for work: bright neutral canvas, signature purple (#625df5),
+ * soft-rounded geometry, Inter typography, video-thumbnail-centric layouts.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure white (#ffffff) canvas with cool-neutral Snow (#f7f7f8) surfaces
+ *   - Loom Purple (#625df5) — signals creativity and "record" without shouting
+ *   - Three-tier text stack: ink #1f1f23 → slate #6b6d76 → mist #9b9ca3
+ *   - Soft-rounded geometry: 4 / 6 / 8 px ladder — friendly, not corporate
+ *   - Inter throughout with broad system fallback — system-native if Inter absent
+ *   - Shadow-only depth (DESIGN.md §6 forbids borders on cards)
+ *   - 200ms ease-out card hover, 100ms button press (DESIGN.md §9)
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Bright white canvas — Loom is used in office light. Snow surfaces
+   * are cool-neutral, never warm — keeps focus on the video frame. */
+  --bg: #ffffff;
+  --surface: #f7f7f8;        /* Snow — sidebars, cards, lifted panels */
+  --surface-warm: var(--surface); /* alias — no warm tier in the cool-neutral palette */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Three text tiers: ink for primary, slate for metadata, mist
+   * reserved for placeholders / disabled (DESIGN.md §7 forbids it
+   * for body copy). --fg-2 collapses to --fg — Loom uses a single
+   * emphatic text weight on headings, not a softer secondary. */
+  --fg: #1f1f23;             /* Ink — primary text, all headings */
+  --fg-2: var(--fg);         /* alias — single emphatic text tier */
+  --muted: #6b6d76;          /* Slate — timestamps, secondary copy (4.5:1 on white) */
+  --meta: #9b9ca3;           /* Mist — placeholders, disabled, micro-metadata only */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Cool light gray — present enough to delineate inputs without
+   * stealing focus from the video thumbnail. Cards rely on shadow
+   * instead of border (DESIGN.md §6). */
+  --border: #e4e4e7;
+  --border-soft: var(--border); /* alias — single border tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Loom Purple — the brand's emotional center. Used for CTAs,
+   * the record button, active states, and video-progress fills. */
+  --accent: #625df5;
+  --accent-on: #ffffff;
+  --accent-hover: #5048e5;   /* DESIGN.md §2 — explicit hover binding */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Loom's danger is a pink-leaning red (#d64770) chosen to live
+   * peacefully with the purple accent. DESIGN.md §7 warns it must
+   * pair with a light surface — never use as body text on white. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #d64770;         /* Loom Error — use only with tinted surface */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Inter throughout, with broad system fallbacks so the friendly
+   * geometric sans appears even before web-font load. Mono stack
+   * matches DESIGN.md §3 byte-for-byte (SFMono-Regular, no JetBrains). */
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale — derived from DESIGN.md §3 (11/12/14/18/22/28).
+   * --text-lg interpolated at 16px (featured body / intro paragraphs).
+   * --text-4xl extended to 40px for marketing hero surfaces — product
+   * UI tops out at the 28px Display tier called out in DESIGN.md. */
+  --text-xs: 11px;           /* Micro — keyboard hints, status chips */
+  --text-sm: 12px;           /* Caption — timestamps, helper text */
+  --text-base: 14px;         /* Body / Button (DESIGN.md baseline) */
+  --text-lg: 16px;           /* Featured body — intro paragraphs */
+  --text-xl: 18px;           /* H2 — feature titles */
+  --text-2xl: 22px;          /* H1 — section heading */
+  --text-3xl: 28px;          /* Display — DESIGN.md ceiling for product UI */
+  --text-4xl: 40px;          /* Hero — marketing-surface extension */
+
+  --leading-body: 1.5;       /* DESIGN.md body */
+  --leading-tight: 1.2;      /* DESIGN.md display / button (§7 forbids 1.0) */
+  --tracking-display: -0.01em; /* Subtle — Inter is friendly, not aggressive */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4 / 8 base unit. Loom's signature rhythm is the 16px gap
+   * (--space-4) called out explicitly in DESIGN.md §5. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Generous whitespace — Loom is content-first, never crowded.
+   * Sits between Cohere's 60px and Mistral's 80px. */
+  --section-y-desktop: 72px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * The 4 / 6 / 8 ladder IS the Loom geometry signature: friendly
+   * without being childish. DESIGN.md §4 binds each tier explicitly:
+   *   sm 4px → inputs · md 6px → buttons · lg 8px → cards / thumbnails */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;     /* Avatars, status dots, badges */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Two-layer shadow gives lifted feel without harsh edges. Values
+   * match DESIGN.md §2 --shadow-card byte-for-byte. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 1px 3px rgba(31, 31, 35, 0.08), 0 4px 12px rgba(31, 31, 35, 0.04);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * 3px purple halo at ~15% — DESIGN.md §4 input-field spec.
+   * color-mix(transparent 85%) ≈ rgba(98, 93, 245, 0.15). */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 85%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Ease-out throughout (DESIGN.md §9): 100ms button press,
+   * 200ms card hover. Snappy but not sudden — async tool feel. */
+  --motion-fast: 100ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px container — comfortable for two-up video grids without
+   * pushing thumbnails to the edge. Gutters scale gently. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 16px;
+}

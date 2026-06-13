@@ -1,15 +1,8 @@
-// @ts-nocheck
-// TypeScript is suppressed because @modelcontextprotocol/sdk@1.x expects
-// Zod schemas for tool definitions, but we pass plain JSON Schema objects.
-// The runtime contract is identical; there is no type-safety regression -
-// the nocheck just avoids a blanket of incorrect Zod-vs-object type errors
-// that would obscure real mistakes. Remove once the SDK adds a JSON Schema
-// overload or we migrate to a Zod-based schema builder.
-//
-// `od mcp` - stdio MCP server that proxies read-only tool calls to the
+// `od mcp` - stdio MCP server that proxies project tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
 // (Claude Code, Cursor, Zed) pull files from a local Open Design
-// project without the export-zip-import dance.
+// project and create project-scoped artifacts without the
+// export-zip-import dance.
 //
 // The server itself holds no state and never touches the filesystem;
 // every tool resolves to a fetch() against `OD_DAEMON_URL`. Spawn the
@@ -25,9 +18,30 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+
+import { postCreateArtifactRequest } from './artifact-create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
+
+type JsonObject = Record<string, unknown>;
+interface RunMcpOptions { daemonUrl: string | URL }
+interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
+interface SkillsPayload { skills?: CatalogItem[] }
+interface PluginsPayload { plugins?: CatalogItem[] }
+interface DesignSystemsPayload { designSystems?: CatalogItem[] }
+interface ResourcePayload { skill?: { body?: string; content?: string }; designSystem?: { body?: string; content?: string }; body?: string; content?: string }
+interface ProjectSummary { id: string; name: string; metadata?: JsonObject }
+interface ProjectsPayload { projects?: ProjectSummary[] }
+interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string; metadata?: JsonObject; resolvedDir?: string }
+interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
+type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
+interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; includeUnavailable?: unknown }
+interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
+interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
+interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
 
 // Mimes whose body we surface as MCP `text` content. Everything else
 // returns a clear error directing the caller at list_files for
@@ -51,6 +65,13 @@ const TEXTUAL_MIME_PATTERNS = [
 const READ_ANNOTATIONS = {
   readOnlyHint: true,
   idempotentHint: true,
+  openWorldHint: false,
+};
+
+const WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  idempotentHint: false,
+  destructiveHint: false,
   openWorldHint: false,
 };
 
@@ -109,7 +130,7 @@ const TOOL_DEFS = [
   {
     name: 'get_project',
     description:
-      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps.',
+      'Single project metadata: name, active skill/design-system ids, entryFile, kind, timestamps, resolvedDir, and (when it has an entry file) a browser-openable previewUrl.',
     inputSchema: {
       type: 'object',
       properties: { project: PROJECT_ARG },
@@ -186,16 +207,231 @@ const TOOL_DEFS = [
     },
     annotations: { ...READ_ANNOTATIONS, title: 'List project files' },
   },
-  // Catalog (skills, design systems) is intentionally NOT exposed as
-  // MCP tools. Skills are recipes that Open Design itself uses to
-  // generate artifacts; an external coding agent consuming Open
-  // Design's output can't run them. Design systems are reference material a
-  // user can opt into via the resource URIs (od://design-systems/...)
-  // when they actually want them, instead of paying tool-description
-  // tokens on every turn.
+  {
+    name: 'create_artifact',
+    description:
+      'Create one normal Open Design project artifact entry file. Writes name+content, rejects existing targets, and persists artifactManifest when supplied. HTML, Markdown, and SVG entries get a default manifest when omitted. Project optional; defaults to the active project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        name: {
+          type: 'string',
+          description: 'Output path relative to the project root, for example "codex-product/index.html" or "deck.html".',
+        },
+        content: {
+          type: 'string',
+          description: 'Entry file contents. Use encoding="base64" for base64 content.',
+        },
+        encoding: {
+          type: 'string',
+          enum: ['utf8', 'base64'],
+          description: 'utf8 (default) | base64',
+        },
+        artifactManifest: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Optional ArtifactManifest sidecar. If omitted, Open Design infers one for HTML, Markdown, or SVG entry files.',
+        },
+      },
+      required: ['name', 'content'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design artifact' },
+  },
+  {
+    name: 'write_file',
+    description:
+      'Write (or overwrite) a project file. Unlike create_artifact this does not require an ArtifactManifest and tolerates existing targets, so it is the right tool for iterating on a file the agent (or the user) already created. Project optional; defaults to the active project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        path: {
+          type: 'string',
+          description: 'Output path relative to the project root, e.g. "deck.html" or "components/Hero.tsx".',
+        },
+        content: {
+          type: 'string',
+          description: 'File contents. Use encoding="base64" for binary payloads.',
+        },
+        encoding: {
+          type: 'string',
+          enum: ['utf8', 'base64'],
+          description: 'utf8 (default) | base64',
+        },
+      },
+      required: ['path', 'content'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Write Open Design project file' },
+  },
+  {
+    name: 'delete_file',
+    description:
+      'Delete one file from a project. Supports nested paths (e.g. "codex-product/index.html"). Project optional; defaults to the active project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        path: {
+          type: 'string',
+          description: 'Project-relative path of the file to delete.',
+        },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Open Design project file' },
+  },
+  {
+    name: 'delete_project',
+    description:
+      'Permanently delete an Open Design project including its files and conversations. Requires both an explicit project id/name AND confirm:true — there is no active-project fallback because the operation is irreversible.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project id (UUID) or name substring. Required — active-context fallback is intentionally disabled.',
+        },
+        confirm: {
+          type: 'boolean',
+          description: 'Must be literally true. Guards against an agent accidentally deleting a project while cleaning up.',
+        },
+      },
+      required: ['project', 'confirm'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true, title: 'Delete Open Design project' },
+  },
+  {
+    name: 'create_project',
+    description:
+      'Create a new empty Open Design project to generate into, then call start_run against it. Returns the project (with its id) plus a conversationId. The id is derived from name unless you pass one explicitly.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Human-readable project name.' },
+        id: {
+          type: 'string',
+          description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted.',
+        },
+        designSystem: {
+          type: 'string',
+          description: 'Optional design system id to attach (see the od://design-systems/... resources).',
+        },
+        skill: { type: 'string', description: 'Optional skill id to seed the project with.' },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+  },
+  // Discovery + generation. An external coding agent does NOT run a
+  // skill itself — it commissions Open Design to, via start_run. The
+  // daemon then spawns ITS OWN agent (Claude Code / API fallback /…)
+  // to do the work. So list_skills / list_plugins exist purely so the
+  // caller can discover what it can ask OD to generate; start_run
+  // kicks off the run and get_run polls it to completion. Design
+  // systems stay resource-only (od://design-systems/...) since they're
+  // reference material the caller opts into, not something to run.
+  {
+    name: 'list_skills',
+    description: 'List Open Design skills you can pass to start_run as a recipe. Discovery only — Open Design runs the skill, not you.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design skills' },
+  },
+  {
+    name: 'list_plugins',
+    description: 'List installed Open Design plugins (packaged design workflows) you can pass to start_run as plugin + inputs.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design plugins' },
+  },
+  {
+    name: 'start_run',
+    description:
+      'Commission Open Design to generate or refine a design. Open Design spawns its own agent to do the work and returns a runId immediately. Poll get_run(runId) until status is terminal, then get_artifact to pull the result. Project optional; defaults to the active project. Requires an existing project (create one first with create_project).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        prompt: {
+          type: 'string',
+          description: 'What to make or change, in natural language. Optional when a plugin supplies its own brief.',
+        },
+        skill: {
+          type: 'string',
+          description: 'Skill id from list_skills to drive the run. Optional.',
+        },
+        plugin: {
+          type: 'string',
+          description: 'Plugin id from list_plugins to drive the run. Optional.',
+        },
+        inputs: {
+          type: 'object',
+          additionalProperties: true,
+          description: 'Plugin inputs object (only meaningful with plugin). Optional.',
+        },
+        agent: {
+          type: 'string',
+          description: "Which agent Open Design should run, e.g. 'claude' | 'codex' | 'gemini'. Optional; defaults to the user's configured agent.",
+        },
+        model: {
+          type: 'string',
+          description: 'Model id override for the run. Optional.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Generate with Open Design' },
+  },
+  {
+    name: 'get_run',
+    description:
+      'Poll a run started by start_run. Returns status (queued|running|succeeded|failed|canceled) plus error info. On success, adds previewUrl (open it in a browser to view the rendered design) and agentMessage (the inner agent\'s textual output reassembled from the event stream — show this when there is no previewUrl, e.g. when the agent asked the user a clarifying question instead of producing files).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Check Open Design run' },
+  },
+  {
+    name: 'cancel_run',
+    description: 'Request cancellation of an in-flight run started by start_run.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Cancel Open Design run' },
+  },
+  {
+    name: 'list_agents',
+    description:
+      'List the agent CLIs Open Design can run for start_run.agent. Returns only installed (available) agents by default — pass includeUnavailable:true to also see agents we know about but that are not on PATH (each carries an installUrl for the user). Each entry includes id, name, version, and up to 10 sample models (modelsCount carries the real total).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeUnavailable: {
+          type: 'boolean',
+          description: 'When true, include agents whose binary is not installed. Defaults to false.',
+        },
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List Open Design agents' },
+  },
 ];
 
-export async function runMcpStdio({ daemonUrl }) {
+export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
 
   const server = new Server(
@@ -228,9 +464,54 @@ export async function runMcpStdio({ daemonUrl }) {
         ' - search_files(query) to find a class/component/copy string',
         '    without fetching every file.',
         ' - list_files for metadata only.',
+        ' - create_artifact(name, content) to create one normal artifact',
+        '    entry file in the active or specified project. It rejects',
+        '    existing targets and can accept an artifactManifest sidecar.',
+        ' - write_file(path, content) to overwrite or freshly create any',
+        '    project file when an ArtifactManifest is not required.',
+        '    Use this to iterate on a file create_artifact already wrote.',
+        ' - delete_file(path) to remove one project file (nested paths ok).',
+        ' - delete_project(project, confirm:true) for irreversible project',
+        '    removal — requires explicit project + confirm:true.',
         ' - list_projects to discover what is available on this daemon.',
         ' - get_active_context() if you want the active project/file',
         '    explicitly without making any other tool call.',
+        '',
+        'To make Open Design GENERATE or refine a design (rather than just',
+        'read/edit files), commission a run - you do not run skills yourself:',
+        ' - list_skills / list_plugins to see what you can ask OD to make.',
+        ' - list_agents when you need to pass start_run.agent — do not',
+        '    guess "claude" / "codex" / "gemini"; only agents in the',
+        '    returned list will actually spawn on this machine.',
+        ' - create_project(name) first if you need a fresh project to',
+        '    generate into; start_run requires an existing project.',
+        ' - start_run(prompt, [skill], [plugin], [inputs]) kicks off generation in',
+        '    the active or named project and returns a runId immediately.',
+        '    Open Design spawns its own agent to do the work.',
+        ' - get_run(runId) polls until status is succeeded/failed/canceled;',
+        '    on success it returns a previewUrl you can open in a browser',
+        '    and a hint to pull the files with get_artifact.',
+        ' - cancel_run(runId) aborts an in-flight run.',
+        '',
+        'Generation patience: Open Design runs typically take 5–30',
+        'minutes. Polls returning status:running with unchanged file',
+        'mtimes is the inner agent thinking, not a hang. Do NOT cancel',
+        'and substitute write_file as a "faster" workaround — that',
+        'throws away the pipeline\'s design quality and is exactly the',
+        'failure mode this surface is meant to avoid. Poll every 30–60',
+        'seconds, tell the user "still working" between polls, and let',
+        'the run finish. Only call cancel_run if the user explicitly',
+        'asks you to abort.',
+        '',
+        'Ambiguous-format requests: words like "PPT" / "deck" / "slides" /',
+        '"presentation" / "document" / "PDF" / "doc" map to two different',
+        'deliverables — Open Design natively produces browser-viewable',
+        'HTML/SVG (including HTML-rendered decks), but the user may want a',
+        'real binary file (.pptx / .docx / .pdf) which Open Design does NOT',
+        'produce and which you would have to export yourself from OD\'s',
+        'output. When the user\'s request is ambiguous, ASK them which one',
+        'they want before kicking off work; do not silently pick one and do',
+        'not run both paths in parallel.',
         '',
         'Project arguments accept either a UUID or a name substring',
         '(e.g. "recaptr"); the server resolves the latter. When a project',
@@ -257,8 +538,8 @@ export async function runMcpStdio({ daemonUrl }) {
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     const [skillsData, dsData] = await Promise.all([
-      getJson(`${baseUrl}/api/skills`).catch(() => ({ skills: [] })),
-      getJson(`${baseUrl}/api/design-systems`).catch(() => ({ designSystems: [] })),
+      getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
+      getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
     ]);
     const resources = [
       {
@@ -272,7 +553,7 @@ export async function runMcpStdio({ daemonUrl }) {
       resources.push({
         uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
         name: `Skill: ${s.name || s.id}`,
-        description: oneLine(s.description),
+        description: oneLine(s.description) ?? '',
         mimeType: 'text/markdown',
       });
     }
@@ -280,7 +561,7 @@ export async function runMcpStdio({ daemonUrl }) {
       resources.push({
         uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
         name: `Design system: ${d.title || d.name || d.id}`,
-        description: oneLine(d.summary),
+        description: oneLine(d.summary) ?? '',
         mimeType: 'text/markdown',
       });
     }
@@ -290,7 +571,7 @@ export async function runMcpStdio({ daemonUrl }) {
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
-      const data = await getJson(`${baseUrl}/api/active`);
+      const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
       return {
         contents: [
           {
@@ -305,9 +586,9 @@ export async function runMcpStdio({ daemonUrl }) {
     if (!m) {
       throw new Error(`unsupported resource URI: ${uri}`);
     }
-    const [, kind, id] = m;
+    const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
     const route = kind === 'skills' ? 'skills' : 'design-systems';
-    const data = await getJson(
+    const data = await getJson<ResourcePayload>(
       `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
     );
     const text =
@@ -331,89 +612,8 @@ export async function runMcpStdio({ daemonUrl }) {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const name = req.params?.name;
-    const args = req.params?.arguments ?? {};
-    try {
-      switch (name) {
-        case 'list_projects':
-          return ok(await getJson(`${baseUrl}/api/projects`));
-        case 'get_active_context': {
-          const data = await getJson(`${baseUrl}/api/active`);
-          if (!data || data.active === false) {
-            return ok({
-              active: false,
-              hint: 'Open Design has no active project right now. The active context expires about 5 minutes after the last user interaction with Open Design, so the user may need to click into a project (or switch tabs inside one) to wake it up. Alternatively, pass project="<id-or-name>" to other tools to bypass active context entirely.',
-            });
-          }
-          return ok(data);
-        }
-        case 'get_project': {
-          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-          const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
-          const project = data?.project ?? data;
-          return ok(
-            withActiveEcho(
-              {
-                ...project,
-                entryFile: project?.metadata?.entryFile ?? null,
-                kind: project?.metadata?.kind ?? null,
-              },
-              active,
-              resolved,
-            ),
-          );
-        }
-        case 'list_files': {
-          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-          const params = new URLSearchParams();
-          if (Number.isFinite(args.since)) params.set('since', String(args.since));
-          const qs = params.toString();
-          const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
-          return ok(withActiveEcho(await getJson(url), active, resolved));
-        }
-        case 'get_file': {
-          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-          let path = typeof args.path === 'string' ? args.path : '';
-          // When both project and path are omitted, fall back to the
-          // active file. The agent saying "read this file" without
-          // specifying anything is the most natural call site.
-          if (!path && active && active.fileName) {
-            path = active.fileName;
-          }
-          requireString(path, 'path');
-          const offset = Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
-          const limit = Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
-          return await getFile(baseUrl, id, path, active, resolved, offset, limit);
-        }
-        case 'get_artifact':
-          return await getArtifact(
-            baseUrl,
-            args.project,
-            args.entry,
-            args.include,
-            args.maxBytes,
-          );
-        case 'search_files': {
-          const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
-          requireString(args.query, 'query');
-          const params = new URLSearchParams({ q: String(args.query) });
-          if (args.pattern) params.set('pattern', String(args.pattern));
-          if (args.max) params.set('max', String(args.max));
-          return ok(
-            withActiveEcho(
-              await getJson(
-                `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
-              ),
-              active,
-              resolved,
-            ),
-          );
-        }
-        default:
-          return errorResult(`unknown tool: ${name}`);
-      }
-    } catch (err) {
-      return errorResult(formatError(err, baseUrl));
-    }
+    const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
+    return handleMcpToolCall(baseUrl, name, args);
   });
 
   const transport = new StdioServerTransport();
@@ -431,26 +631,646 @@ export async function runMcpStdio({ daemonUrl }) {
   });
 }
 
-function ok(payload) {
+function ok(payload: unknown) {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   return { content: [{ type: 'text', text }] };
 }
 
-function errorResult(message) {
+function errorResult(message: string) {
   return { isError: true, content: [{ type: 'text', text: message }] };
 }
 
-function requireString(v, name) {
+function requireString(v: unknown, name: string): asserts v is string {
   if (typeof v !== 'string' || v.length === 0) {
     throw new Error(`${name} is required (string).`);
   }
 }
 
+async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
+  try {
+    switch (name) {
+      case 'list_projects':
+        return ok(await getJson<ProjectsPayload>(`${baseUrl}/api/projects`));
+      case 'get_active_context': {
+        const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
+        if (!data || data.active === false) {
+          return ok({
+            active: false,
+            hint: 'Open Design has no active project right now. The active context expires about 5 minutes after the last user interaction with Open Design, so the user may need to click into a project (or switch tabs inside one) to wake it up. Alternatively, pass project="<id-or-name>" to other tools to bypass active context entirely.',
+          });
+        }
+        return ok(data);
+      }
+      case 'get_project': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+        const project = data?.project ?? data;
+        const resolvedDir = typeof data?.resolvedDir === 'string' ? data.resolvedDir : null;
+        const declaredEntry = project?.metadata?.entryFile ?? null;
+        const entryFile = await resolveProjectEntry(baseUrl, id, declaredEntry);
+        const previewUrl = rawPreviewUrl(baseUrl, id, entryFile);
+        // Build the studio deep link too — needs the project's
+        // default conversation, which we look up once. Cheap to skip
+        // when the daemon has no webBaseUrl configured.
+        const webBase = await getWebBaseUrl(baseUrl);
+        const conversationId = webBase ? await getDefaultConversationId(baseUrl, id) : null;
+        const studioUrl = buildStudioUrl(webBase, id, conversationId, entryFile);
+        return ok(
+          withActiveEcho(
+            {
+              ...project,
+              entryFile,
+              kind: project?.metadata?.kind ?? null,
+              resolvedDir,
+              // previewUrl: open in a browser to view the rendered
+              // design directly (HTML entries render; see
+              // rawPreviewUrl). studioUrl: open the OD studio page
+              // that shows the rendered file alongside the chat
+              // history for the project. Both omitted when their
+              // prerequisites aren't met.
+              ...(previewUrl ? { previewUrl } : {}),
+              ...(studioUrl ? { studioUrl } : {}),
+            },
+            active,
+            resolved,
+          ),
+        );
+      }
+      case 'list_files': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        const params = new URLSearchParams();
+        if (typeof args.since === 'number' && Number.isFinite(args.since)) params.set('since', String(args.since));
+        const qs = params.toString();
+        const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files${qs ? `?${qs}` : ''}`;
+        return ok(withActiveEcho(await getJson(url), active, resolved));
+      }
+      case 'get_file': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        let path = typeof args.path === 'string' ? args.path : '';
+        if (!path && active && active.fileName) {
+          path = active.fileName;
+        }
+        requireString(path, 'path');
+        const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(0, Math.floor(args.offset)) : 0;
+        const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.max(1, Math.floor(args.limit)) : 2000;
+        return await getFile(baseUrl, id, path, active, resolved, offset, limit);
+      }
+      case 'get_artifact':
+        return await getArtifact(
+          baseUrl,
+          args.project,
+          args.entry,
+          args.include,
+          args.maxBytes,
+        );
+      case 'search_files': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+        requireString(args.query, 'query');
+        const params = new URLSearchParams({ q: String(args.query) });
+        if (args.pattern) params.set('pattern', String(args.pattern));
+        if (args.max) params.set('max', String(args.max));
+        return ok(
+          withActiveEcho(
+            await getJson(
+              `${baseUrl}/api/projects/${encodeURIComponent(id)}/search?${params.toString()}`,
+            ),
+            active,
+            resolved,
+          ),
+        );
+      }
+      case 'create_artifact':
+        return await createArtifact(baseUrl, args);
+      case 'write_file':
+        return await writeFile(baseUrl, args);
+      case 'delete_file':
+        return await deleteFile(baseUrl, args);
+      case 'delete_project':
+        return await deleteProject(baseUrl, args);
+      case 'create_project':
+        return await createProject(baseUrl, args);
+      case 'list_skills':
+        return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
+      case 'list_plugins':
+        return ok(await listPlugins(baseUrl));
+      case 'list_agents':
+        return ok(await listAgents(baseUrl, args.includeUnavailable === true));
+      case 'start_run':
+        return await startRun(baseUrl, args);
+      case 'get_run':
+        return await getRun(baseUrl, args);
+      case 'cancel_run': {
+        requireString(args.runId, 'runId');
+        return ok(
+          await postJson<JsonObject>(
+            `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}/cancel`,
+            {},
+          ),
+        );
+      }
+      default:
+        return errorResult(`unknown tool: ${name}`);
+    }
+  } catch (err) {
+    return errorResult(formatError(err, baseUrl));
+  }
+}
+
+async function writeFile(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  // The daemon route requires its argv field to be called `name`; the
+  // MCP-facing surface uses `path` to match the rest of the file tools.
+  requireString(args.path, 'path');
+  requireString(args.content, 'content');
+  const encoding = args.encoding === 'base64' ? 'base64' : 'utf8';
+  // No `artifact: true` and no `overwrite: false`: the route then takes
+  // the default writeProjectFile path, which overwrites the target. This
+  // is the exact shape `od files write` uses (see apps/daemon/src/cli.ts).
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: args.path, content: args.content, encoding }),
+  });
+  if (!resp.ok) {
+    return errorResult(await formatDaemonError(resp, url));
+  }
+  const json = (await resp.json()) as JsonObject;
+  return ok(withActiveEcho(json, active, resolved));
+}
+
+async function deleteFile(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  requireString(args.path, 'path');
+  // /api/projects/:id/raw/* accepts nested paths; /api/projects/:id/files/:name
+  // does not. Mirror the create_artifact surface, which already lets agents
+  // address files like "codex-product/index.html".
+  const segments = args.path
+    .split('/')
+    .filter((s) => s.length > 0)
+    .map(encodeURIComponent);
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/raw/${segments.join('/')}`;
+  const resp = await fetch(url, { method: 'DELETE' });
+  if (!resp.ok) {
+    return errorResult(await formatDaemonError(resp, url));
+  }
+  const json = (await resp.json()) as JsonObject;
+  return ok(withActiveEcho(json, active, resolved));
+}
+
+async function deleteProject(baseUrl: string, args: McpArgs) {
+  // Active-context fallback is intentionally disabled: the daemon's
+  // DELETE /api/projects/:id is irreversible (purges the row and the
+  // on-disk project directory), so we never want it to fire against the
+  // wrong project just because the user happened to have one open. The
+  // confirm flag is a second belt for agents that auto-clean.
+  if (typeof args.project !== 'string' || args.project.length === 0) {
+    return errorResult('project is required (no active-context fallback for delete_project).');
+  }
+  if (args.confirm !== true) {
+    return errorResult('confirm:true is required to delete a project (this cannot be undone).');
+  }
+  const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
+  const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
+  const resp = await fetch(url, { method: 'DELETE' });
+  if (!resp.ok) {
+    return errorResult(await formatDaemonError(resp, url));
+  }
+  const json = (await resp.json()) as JsonObject;
+  // The tool accepts a name substring (see resolveProjectId), so the
+  // caller needs the resolvedProject echo to confirm which project was
+  // actually destroyed — same contract write_file/delete_file follow
+  // via withActiveEcho. active is always null here because the
+  // active-context fallback is intentionally disabled above.
+  return ok(withActiveEcho(json, null, resolved));
+}
+
+async function formatDaemonError(resp: Response, url: string): Promise<string> {
+  const body = await safeText(resp);
+  let detail = body || resp.statusText;
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; code?: string } };
+    if (parsed?.error?.message) {
+      detail = `${parsed.error.code ?? 'error'}: ${parsed.error.message}`;
+    }
+  } catch {
+    // body wasn't JSON; fall through with the raw text.
+  }
+  return `daemon ${resp.status} on ${url}: ${detail}`;
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!resp.ok) {
+    throw new Error(await formatDaemonError(resp, url));
+  }
+  return (await resp.json()) as T;
+}
+
+// Create an empty project to generate into. start_run needs an existing
+// project; without this an external agent could only work on projects
+// the user had already created in Open Design.
+//
+// skipDiscoveryBrief defaults to true: the outer agent (Codex, Cursor,
+// …) IS the user-facing surface, so OD's own interactive discovery
+// stage would create a confusing nested-clarification loop where OD's
+// <question-form> output ends up dropped from the MCP response because
+// no project file is produced. Better to let the outer agent gather
+// requirements directly and pass a precise prompt to start_run.
+async function createProject(baseUrl: string, args: McpArgs) {
+  requireString(args.name, 'name');
+  const id =
+    typeof args.id === 'string' && args.id.length > 0
+      ? args.id
+      : slugifyProjectId(args.name);
+  const body: JsonObject = { id, name: args.name, skipDiscoveryBrief: true };
+  if (typeof args.designSystem === 'string' && args.designSystem.length > 0) {
+    body.designSystemId = args.designSystem;
+  }
+  if (typeof args.skill === 'string' && args.skill.length > 0) {
+    body.skillId = args.skill;
+  }
+  return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body));
+}
+
+// Flatten daemon's plugin record into the few fields an external agent
+// needs to pick a plugin: id, title, description, kind, tags. The raw
+// record carries 16+ fields (fsPath, sourceMarketplaceId, installedAt,
+// resolvedSource, …) that an agent never reasons about, and the
+// human-readable description / kind live one level deeper in
+// `manifest.description` / `manifest.od.kind`.
+async function listPlugins(baseUrl: string): Promise<JsonObject> {
+  const raw = await getJson<{ plugins?: JsonObject[] }>(`${baseUrl}/api/plugins`);
+  const plugins = (raw?.plugins ?? []).map((p) => {
+    const manifest = (p?.manifest as JsonObject | undefined) ?? {};
+    const od = (manifest.od as JsonObject | undefined) ?? {};
+    const result: JsonObject = {
+      id: p?.id,
+      title: manifest.title ?? p?.title ?? p?.id,
+    };
+    if (typeof manifest.description === 'string') result.description = manifest.description;
+    const kind = od.taskKind ?? od.kind;
+    if (typeof kind === 'string') result.kind = kind;
+    if (Array.isArray(manifest.tags)) result.tags = manifest.tags;
+    return result;
+  });
+  return { plugins };
+}
+
+// Flatten daemon's agent definition into the few fields an external
+// agent needs to pick a value for start_run.agent. Default filters to
+// `available: true` (only installed CLIs) so the outer agent doesn't
+// pick an agent it can't actually run — the failure mode that left us
+// with zombie "running" runs whose inner Claude binary never spawned.
+// Models are truncated to 10 with `modelsCount` carrying the full
+// total; that keeps the response token-economical even for agents
+// (e.g. opencode) that expose 100+ models.
+async function listAgents(baseUrl: string, includeUnavailable: boolean): Promise<JsonObject> {
+  const raw = await getJson<{ agents?: JsonObject[] }>(`${baseUrl}/api/agents`);
+  const all = raw?.agents ?? [];
+  const filtered = includeUnavailable
+    ? all
+    : all.filter((a) => a?.available === true);
+  const MAX_MODELS = 10;
+  const agents = filtered.map((a) => {
+    const models = Array.isArray(a?.models) ? (a.models as unknown[]) : [];
+    const out: JsonObject = {
+      id: a?.id,
+      name: a?.name,
+      models: models.slice(0, MAX_MODELS),
+      modelsCount: models.length,
+    };
+    if (typeof a?.version === 'string' && a.version.length > 0) out.version = a.version;
+    if (includeUnavailable) {
+      out.available = Boolean(a?.available);
+      if (typeof a?.installUrl === 'string') out.installUrl = a.installUrl;
+    }
+    return out;
+  });
+  return { agents };
+}
+
+// Derive a valid project id ([A-Za-z0-9._-], <=128) from a display name,
+// with a short random suffix so repeated creates with the same name
+// don't collide on the daemon's primary key.
+function slugifyProjectId(name: string): string {
+  const base =
+    name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) ||
+    'project';
+  return `${base}-${randomUUID().replace(/-/g, '').slice(0, 4)}`;
+}
+
+// Commission a generation run. The caller never runs the skill/plugin
+// itself; we POST to /api/runs and the daemon spawns its own agent.
+// Returns the runId immediately so the caller can poll get_run —
+// start+poll because MCP is request/response and generation is
+// minutes-long.
+async function startRun(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  const body: JsonObject = { projectId: id };
+  if (typeof args.prompt === 'string' && args.prompt.length > 0) body.message = args.prompt;
+  if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
+  if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
+  if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
+  if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
+  if (args.inputs !== undefined) {
+    if (args.inputs === null || typeof args.inputs !== 'object' || Array.isArray(args.inputs)) {
+      throw new Error('inputs must be an object');
+    }
+    body.pluginInputs = args.inputs;
+  }
+  const created = await postJson<JsonObject>(`${baseUrl}/api/runs`, body);
+  // Build studioUrl (conversation-level — no entry file yet) so the
+  // outer agent has a URL to give the user right away. The daemon
+  // returns conversationId in the response now that POST /api/runs
+  // falls back to the project's default conversation for MCP callers.
+  const webBase = await getWebBaseUrl(baseUrl);
+  const studioUrl = buildStudioUrl(webBase, id, created?.conversationId, null);
+  return ok(
+    withActiveEcho(
+      {
+        ...created,
+        ...(studioUrl ? { studioUrl } : {}),
+        hint: 'Run started. Open Design generation normally takes 5–30 minutes. Polls showing status:running with no new files / unchanged file mtimes is the inner agent thinking, NOT a hang — DO NOT cancel_run out of impatience and DO NOT substitute write_file to produce the design yourself; OD\'s pipeline is what gives the result its design quality. Poll get_run(runId) every 30–60 seconds; report "still working" to the user between polls and keep waiting. On terminal status the response carries previewUrl + agentMessage which together are the canonical deliverable. When studioUrl is present, ALWAYS show it to the user as a clickable markdown link: `[Open Open Design studio](STUDIO_URL)` — never as inline code or bare text, because Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable.',
+      },
+      active,
+      resolved,
+    ),
+  );
+}
+
+// Poll a run. On terminal status we enrich the daemon's status body
+// with three things the outer agent needs to actually close the loop:
+// (1) previewUrl when there's an entry file — open this in a browser,
+// (2) agentMessage = the inner agent's textual output reassembled from
+//     the SSE event stream, so when the inner agent asked a discovery
+//     question back instead of producing files, the outer agent can
+//     relay it to the user (without this, the run looks like a
+//     "succeeded with empty output" mystery), and
+// (3) a hint that tells the outer agent how to surface both.
+async function getRun(baseUrl: string, args: McpArgs) {
+  requireString(args.runId, 'runId');
+  const status = await getJson<JsonObject>(
+    `${baseUrl}/api/runs/${encodeURIComponent(args.runId)}`,
+  );
+  if (status.status !== 'succeeded' || typeof status.projectId !== 'string' || !status.projectId) {
+    // Non-terminal (or terminal-but-failed) status. Surface
+    // eventsLogPath with a tail hint so the outer agent can watch live
+    // progress in its own shell instead of cancelling because polling
+    // shows nothing changing.
+    const webBase = await getWebBaseUrl(baseUrl);
+    const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, null);
+    const enriched: JsonObject = { ...status };
+    if (studioUrl) enriched.studioUrl = studioUrl;
+    if (typeof status.eventsLogPath === 'string' && status.eventsLogPath.length > 0) {
+      enriched.hint = 'Run still in flight. Tail eventsLogPath in your own shell (e.g. `tail -n 50 -f "' + status.eventsLogPath + '"`) to see live text_delta / tool_use events from the inner agent — that is your in-flight progress signal. Keep polling get_run every 30–60s; do not cancel because file mtimes look static, that is the agent thinking between writes.';
+      if (studioUrl) {
+        enriched.hint += ` Once you have something to show the user, give them a clickable markdown link to studioUrl — render it as \`[Watch progress in Open Design studio](${studioUrl})\`, NEVER as inline code or bare text, so clients like Codex / Cursor / Zed make it navigable in their built-in browser pane.`;
+      }
+    }
+    return ok(enriched);
+  }
+  const [previewUrl, agentMessage, webBase] = await Promise.all([
+    buildRunPreviewUrl(baseUrl, status.projectId),
+    fetchRunAgentMessage(baseUrl, String(status.id ?? args.runId)),
+    getWebBaseUrl(baseUrl),
+  ]);
+  // Reverse-derive entryFile from previewUrl when present so we can
+  // build a fully-specified studio link (project + conversation +
+  // file) rather than just the conversation-level URL.
+  const entryFile = previewUrl
+    ? decodeURIComponent(previewUrl.split('/raw/')[1] ?? '')
+    : null;
+  const studioUrl = buildStudioUrl(webBase, status.projectId, status.conversationId, entryFile);
+  const enriched: JsonObject = { ...status };
+  if (previewUrl) enriched.previewUrl = previewUrl;
+  if (agentMessage) enriched.agentMessage = agentMessage;
+  if (studioUrl) enriched.studioUrl = studioUrl;
+  enriched.hint = previewUrl
+    ? `Run finished. studioUrl (when present) is the BEST link to hand the user — it opens the OD studio page that shows the rendered design AND the chat history (your prompts and the inner agent's replies) side by side. ALWAYS render studioUrl as a clickable markdown link: \`[Open Open Design studio](STUDIO_URL)\` — never as inline code or bare text, because clients like Codex / Cursor / Zed render markdown links as navigable in their built-in browser pane and inline code blocks are not clickable. previewUrl is the raw file URL if the user only wants the rendered output. agentMessage carries the inner agent's explanation; show it alongside the link. Call get_artifact({ project: "${status.projectId}" }) when you need the source files — always pass project explicitly; omitting it falls back to the active project, which may differ. eventsLogPath, when present, holds the full inner-agent event log for forensics.`
+    : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open Open Design studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
+  return ok(enriched);
+}
+
+// Reassemble the inner agent's textual output from the SSE event log.
+// We pull the events one-shot (the endpoint returns the full history
+// for terminal runs and closes), parse out text_delta deltas, and
+// concatenate. Best-effort: any HTTP / parse error returns null so the
+// caller just omits the field.
+async function fetchRunAgentMessage(baseUrl: string, runId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+    if (!resp.ok) return null;
+    const body = await resp.text();
+    const parts: string[] = [];
+    for (const block of body.split(/\n\n/)) {
+      if (!block.trim()) continue;
+      let eventName = '';
+      let dataLine = '';
+      for (const rawLine of block.split('\n')) {
+        if (rawLine.startsWith('event:')) eventName = rawLine.slice(6).trim();
+        else if (rawLine.startsWith('data:')) dataLine = rawLine.slice(5).trim();
+      }
+      if (eventName !== 'agent' || !dataLine) continue;
+      try {
+        const data = JSON.parse(dataLine) as { type?: string; delta?: unknown };
+        if (data?.type === 'text_delta' && typeof data.delta === 'string') {
+          parts.push(data.delta);
+        }
+      } catch {
+        // Non-JSON data lines (rare) are skipped silently.
+      }
+    }
+    const message = parts.join('');
+    return message.length > 0 ? message : null;
+  } catch {
+    return null;
+  }
+}
+
+// Studio deep links (browser-facing OD page that shows the file
+// preview alongside the conversation history for a run). Built from
+// the daemon's advertised webBaseUrl + project + conversation + entry
+// file. The webBaseUrl is exposed by /api/mcp/install-info; we cache
+// it briefly because each get_run/get_project poll otherwise pays for
+// an extra fetch. Returns null when any required piece is missing —
+// callers omit the field rather than emit a half-built URL.
+
+interface WebBaseUrlCache {
+  t: number;
+  url: string | null;
+}
+const WEB_BASE_URL_TTL_MS = 5_000;
+let webBaseUrlCache: WebBaseUrlCache | null = null;
+
+// Internal — for tests only. Module-scoped caches persist across `it`
+// blocks inside the same vitest module load, so an earlier test that
+// returns `null` would otherwise poison subsequent tests for 5s. Test
+// files call this in afterEach to start each case with a clean cache.
+export function _resetWebBaseUrlCache(): void {
+  webBaseUrlCache = null;
+}
+
+async function getWebBaseUrl(daemonBaseUrl: string): Promise<string | null> {
+  const now = Date.now();
+  if (webBaseUrlCache && now - webBaseUrlCache.t < WEB_BASE_URL_TTL_MS) {
+    return webBaseUrlCache.url;
+  }
+  try {
+    const data = await getJson<{ webBaseUrl?: string | null }>(
+      `${daemonBaseUrl}/api/mcp/install-info`,
+    );
+    const url =
+      typeof data?.webBaseUrl === 'string' && data.webBaseUrl.length > 0
+        ? data.webBaseUrl
+        : null;
+    webBaseUrlCache = { t: now, url };
+    return url;
+  } catch {
+    webBaseUrlCache = { t: now, url: null };
+    return null;
+  }
+}
+
+function buildStudioUrl(
+  webBaseUrl: string | null,
+  projectId: unknown,
+  conversationId: unknown,
+  entryFile: unknown,
+): string | null {
+  if (!webBaseUrl) return null;
+  if (typeof projectId !== 'string' || !projectId) return null;
+  if (typeof conversationId !== 'string' || !conversationId) return null;
+  const base = `${webBaseUrl}/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`;
+  if (typeof entryFile === 'string' && entryFile.length > 0) {
+    const segments = entryFile
+      .split('/')
+      .filter((s) => s.length > 0)
+      .map(encodeURIComponent)
+      .join('/');
+    return `${base}/files/${segments}`;
+  }
+  return base;
+}
+
+// For get_project / start_run: pick the project's first / default
+// conversation so the studio link lands the user on a coherent page.
+// create_project seeds a default conversation per project; this just
+// reads the same one back. Returns null on any lookup failure — caller
+// omits studioUrl.
+async function getDefaultConversationId(baseUrl: string, projectId: string): Promise<string | null> {
+  try {
+    const data = await getJson<{ conversations?: Array<{ id?: string }> }>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/conversations`,
+    );
+    const first = Array.isArray(data?.conversations) ? data.conversations[0] : null;
+    return typeof first?.id === 'string' && first.id.length > 0 ? first.id : null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a project's entry file, preferring metadata.entryFile when
+// set and falling back to scanning the file list. This matters because
+// real-world writes (write_file, half-finished inner-agent runs)
+// leave metadata.entryFile null even when a perfectly viewable
+// index.html exists at the project root — without the fallback,
+// get_project/get_run would silently omit previewUrl and force the
+// outer agent to guess a file:// path.
+async function resolveProjectEntry(baseUrl: string, projectId: string, declared: unknown): Promise<string | null> {
+  if (typeof declared === 'string' && declared.length > 0) return declared;
+  try {
+    const data = await getJson<{ files?: Array<{ path?: string; name?: string; kind?: string }> }>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files`,
+    );
+    const files = data?.files ?? [];
+    // index.html wins at any level — the conventional entry signal.
+    const indexHtml = files.find((f) => f?.path === 'index.html' || f?.name === 'index.html');
+    if (indexHtml?.path) return indexHtml.path;
+    // Otherwise: if exactly one .html sits at the project root, that
+    // is unambiguous enough to pick. Don't guess past one match.
+    const htmlAtRoot = files.filter(
+      (f) => typeof f?.path === 'string' && !f.path.includes('/') && f.path.toLowerCase().endsWith('.html'),
+    );
+    if (htmlAtRoot.length === 1 && htmlAtRoot[0]?.path) return htmlAtRoot[0].path;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Build the raw URL that renders a project's entry file. The raw route
+// serves it with the right Content-Type and resolves sibling
+// CSS/JS/img relative to the same dir, so this URL opens directly in a
+// browser (HTML entries render; bare JSX entries that rely on
+// host-injected React/Babel do not — those still need the Open Design
+// UI). Returns null when there's no entry file. Pure: no I/O, so
+// get_project can call it from project data it already has.
+function rawPreviewUrl(baseUrl: string, projectId: string, entry: unknown): string | null {
+  if (typeof entry !== 'string' || entry.length === 0) return null;
+  const segments = entry.split('/').filter((s) => s.length > 0).map(encodeURIComponent).join('/');
+  return `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
+}
+
+// Best-effort variant for get_run, which only has a projectId: fetch the
+// project, then build the URL. Returns null on any lookup failure — the
+// run result is still reachable via get_artifact, so this is a
+// convenience only.
+async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<string | null> {
+  try {
+    const data = await getJson<ProjectPayload>(
+      `${baseUrl}/api/projects/${encodeURIComponent(projectId)}`,
+    );
+    const project = data?.project ?? data;
+    const declared = (project as { metadata?: JsonObject } | undefined)?.metadata?.entryFile;
+    const entry = await resolveProjectEntry(baseUrl, projectId, declared);
+    return rawPreviewUrl(baseUrl, projectId, entry);
+  } catch {
+    return null;
+  }
+}
+
+async function createArtifact(baseUrl: string, args: McpArgs) {
+  const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
+  requireString(args.name, 'name');
+  requireString(args.content, 'content');
+  if (
+    args.artifactManifest !== undefined &&
+    (args.artifactManifest === null ||
+      typeof args.artifactManifest !== 'object' ||
+      Array.isArray(args.artifactManifest))
+  ) {
+    throw new Error('artifactManifest must be an object');
+  }
+  const artifactManifest =
+    args.artifactManifest
+      ? args.artifactManifest
+      : undefined;
+  const payload = await postCreateArtifactRequest({
+    baseUrl,
+    projectId: id,
+    input: {
+      name: args.name,
+      content: args.content,
+      encoding: args.encoding === 'base64' ? 'base64' : 'utf8',
+      ...(artifactManifest === undefined ? {} : { artifactManifest }),
+    },
+  });
+  const result = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? (payload as JsonObject)
+    : { result: payload };
+  return ok(withActiveEcho(result, active, resolved));
+}
+
 // Resource description renderers in some MCP UIs collapse whitespace
 // poorly; keep our descriptions on a single line so they don't break
 // the catalog list layout.
-function oneLine(s) {
+function oneLine(s: unknown): string | undefined {
   if (typeof s !== 'string') return undefined;
   return s.replace(/\s+/g, ' ').trim().slice(0, 200) || undefined;
 }
@@ -462,9 +1282,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // each one re-fetches /api/projects. The TTL is short so a project
 // renamed in the Open Design UI shows up within a few seconds.
 const PROJECT_LIST_TTL_MS = 5000;
-let projectListCache = null;
+let projectListCache: ProjectListCache | null = null;
 
-async function fetchProjectList(baseUrl) {
+async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
   const now = Date.now();
   if (
     projectListCache &&
@@ -473,7 +1293,7 @@ async function fetchProjectList(baseUrl) {
   ) {
     return projectListCache.list;
   }
-  const data = await getJson(`${baseUrl}/api/projects`);
+  const data = await getJson<ProjectsPayload>(`${baseUrl}/api/projects`);
   const list = Array.isArray(data?.projects) ? data.projects : [];
   projectListCache = { baseUrl, t: now, list };
   return list;
@@ -484,17 +1304,17 @@ async function fetchProjectList(baseUrl) {
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
-async function resolveProjectArg(baseUrl, arg) {
+async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
   if (typeof arg === 'string' && arg.length > 0) {
     const resolved = await resolveProjectId(baseUrl, arg);
     return { id: resolved.id, resolved, active: null };
   }
-  let active;
+  let active: ActiveContext;
   try {
-    active = await getJson(`${baseUrl}/api/active`);
+    active = await getJson<ActiveContext>(`${baseUrl}/api/active`);
   } catch (err) {
     throw new Error(
-      `project arg omitted and active context lookup failed: ${err && err.message ? err.message : err}. Pass project="<id-or-name>".`,
+      `project arg omitted and active context lookup failed: ${errorMessage(err)}. Pass project="<id-or-name>".`,
     );
   }
   if (!active || active.active === false || !active.projectId) {
@@ -505,7 +1325,7 @@ async function resolveProjectArg(baseUrl, arg) {
   return { id: active.projectId, resolved: null, active };
 }
 
-async function resolveProjectId(baseUrl, arg) {
+async function resolveProjectId(baseUrl: string, arg: unknown): Promise<ResolvedProject> {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
   }
@@ -517,23 +1337,26 @@ async function resolveProjectId(baseUrl, arg) {
   }
 
   const lower = arg.toLowerCase();
-  const norm = (s) =>
+  const norm = (s: unknown): string =>
     String(s || '')
       .toLowerCase()
       .replace(/\s*\(\d+\)\s*$/, '')
       .replace(/[\s_-]+/g, '-');
   const target = norm(arg);
 
+  const idMatch = list.find((p) => p.id === arg);
+  if (idMatch) return { id: idMatch.id, name: idMatch.name, source: 'id' as const };
+
   const exact = list.filter((p) => String(p.name || '').toLowerCase() === lower);
-  if (exact.length === 1) return { id: exact[0].id, name: exact[0].name, source: 'exact' as const };
+  if (exact.length === 1) { const p = exact[0]!; return { id: p.id, name: p.name, source: 'exact' as const }; }
 
   const slugged = list.filter((p) => norm(p.name) === target);
-  if (slugged.length === 1) return { id: slugged[0].id, name: slugged[0].name, source: 'slug' as const };
+  if (slugged.length === 1) { const p = slugged[0]!; return { id: p.id, name: p.name, source: 'slug' as const }; }
 
   const subs = list.filter((p) =>
     String(p.name || '').toLowerCase().includes(lower),
   );
-  if (subs.length === 1) return { id: subs[0].id, name: subs[0].name, source: 'substring' as const };
+  if (subs.length === 1) { const p = subs[0]!; return { id: p.id, name: p.name, source: 'substring' as const }; }
   if (subs.length > 1) {
     const opts = subs.map((p) => `${p.name} (${p.id})`).join(', ');
     throw new Error(
@@ -543,16 +1366,16 @@ async function resolveProjectId(baseUrl, arg) {
   throw new Error(`no project matches "${arg}"`);
 }
 
-async function getJson(url) {
+async function getJson<T>(url: string): Promise<T> {
   const resp = await fetch(url);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
   }
-  return await resp.json();
+  return (await resp.json()) as T;
 }
 
-async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0, limit = 2000) {
+async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000) {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -565,9 +1388,7 @@ async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0,
       `daemon ${resp.status} on ${url}: ${body || resp.statusText}`,
     );
   }
-  const mime = (resp.headers.get('content-type') || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const mime = ((resp.headers.get('content-type') || 'application/octet-stream').split(';')[0] ?? 'application/octet-stream').trim();
   if (!isTextualMime(mime)) {
     return errorResult(
       `file at "${relPath}" has mime "${mime}"; binary content is not yet supported by od mcp. Use list_files to inspect its metadata.`,
@@ -605,7 +1426,7 @@ async function getFile(baseUrl, project, relPath, active, resolved?, offset = 0,
 // project came from /api/active. Plain pass-through when the caller
 // supplied project explicitly - keeps token overhead at zero for the
 // explicit path.
-function withActiveEcho(payload, active, resolved?) {
+function withActiveEcho<T extends JsonObject>(payload: T, active: ActiveContext | null, resolved?: ResolvedProject | null): T & JsonObject {
   const result = active ? { ...payload, usedActiveContext: activeEchoPayload(active) } : payload;
   if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
     return { ...result, resolvedProject: { id: resolved.id, name: resolved.name } };
@@ -613,7 +1434,7 @@ function withActiveEcho(payload, active, resolved?) {
   return result;
 }
 
-function activeEchoPayload(active) {
+function activeEchoPayload(active: ActiveContext) {
   return {
     projectId: active.projectId,
     projectName: active.projectName ?? null,
@@ -622,7 +1443,7 @@ function activeEchoPayload(active) {
   };
 }
 
-function formatActiveEchoLine(active, resolvedPath) {
+function formatActiveEchoLine(active: ActiveContext, resolvedPath: string): string {
   const proj = active.projectName || active.projectId;
   const note = `[od:active-context project="${proj}" file="${resolvedPath}"]`;
   return active.fileName === resolvedPath
@@ -637,7 +1458,7 @@ const MAX_FILES = 200;
 // Tracks total textual content bytes accumulated; binary stubs don't
 // count (their content is null). Once we cross the cap the caller
 // stops fetching and stamps `truncated: true` on the bundle.
-function totalTextBytes(files) {
+function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   let n = 0;
   for (const f of files) {
     if (!f.binary && typeof f.content === 'string') n += f.content.length;
@@ -645,27 +1466,28 @@ function totalTextBytes(files) {
   return n;
 }
 
-async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesArg) {
+async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
-  if (!VALID_INCLUDE_MODES.has(include)) {
+  if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
     return errorResult(
       `invalid include "${includeMode}"; expected one of: auto, all, shallow`,
     );
   }
   const maxBytes =
-    Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? Number(maxBytesArg) : DEFAULT_MAX_BYTES;
+    typeof maxBytesArg === 'number' && Number.isFinite(maxBytesArg) && maxBytesArg > 0 ? maxBytesArg : DEFAULT_MAX_BYTES;
 
   const { id, active, resolved } = await resolveProjectArg(baseUrl, projectArg);
-  const data = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
-  const project = data?.project ?? data;
+  const data = await getJson<ProjectPayload>(`${baseUrl}/api/projects/${encodeURIComponent(id)}`);
+  const project = (data.project ?? data) as ProjectSummary;
   // Active-file beats project default entry when project also came
   // from active context - if the user is on landing.html and asks
   // "bundle this", they mean landing.html, not whatever
   // metadata.entryFile happens to be.
   const explicitEntry = typeof entryArg === 'string' && entryArg.length > 0;
-  const entry = explicitEntry
-    ? entryArg
-    : (active && active.fileName) || project?.metadata?.entryFile;
+  const metadataEntry = typeof project.metadata?.entryFile === 'string' ? project.metadata.entryFile : undefined;
+  const entry: string | undefined = explicitEntry
+    ? String(entryArg)
+    : (active && active.fileName) || metadataEntry;
   if (!entry) {
     return errorResult(
       `no entry file: pass entry="..." or set the project's metadata.entryFile`,
@@ -677,15 +1499,15 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
     try {
       file = await fetchProjectFile(baseUrl, id, entry);
     } catch (err) {
-      return errorResult(err && err.message ? err.message : String(err));
+      return errorResult(errorMessage(err));
     }
     return okBundle({ project, entry, files: [file], truncated: false, active, resolved });
   }
 
   if (include === 'all') {
-    const meta = await getJson(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
+    const meta = await getJson<{ files?: Array<{ name: string }> }>(`${baseUrl}/api/projects/${encodeURIComponent(id)}/files`);
     const allFiles = Array.isArray(meta?.files) ? meta.files : [];
-    const fetched = [];
+    const fetched: ProjectFileBundleEntry[] = [];
     let truncated = false;
     for (const f of allFiles) {
       if (fetched.length >= MAX_FILES || totalTextBytes(fetched) >= maxBytes) {
@@ -710,20 +1532,20 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
   try {
     entryFile = await fetchProjectFile(baseUrl, id, entry);
   } catch (err) {
-    return errorResult(err && err.message ? err.message : String(err));
+    return errorResult(errorMessage(err));
   }
   const MAX_DEPTH = 3;
   const visited = new Set([entry]);
   const fetched = [entryFile];
   let truncated = false;
-  let frontier = [];
+  let frontier: string[] = [];
   if (isTextualMime(entryFile.mime)) {
     frontier = extractRelativeRefs(entryFile.content || '', entry, entryFile.mime).filter(
       (r) => !visited.has(r),
     );
   }
   outer: for (let depth = 1; depth < MAX_DEPTH && frontier.length > 0; depth++) {
-    const next = [];
+    const next: string[] = [];
     for (const refPath of frontier) {
       if (visited.has(refPath)) continue;
       visited.add(refPath);
@@ -757,7 +1579,7 @@ async function getArtifact(baseUrl, projectArg, entryArg, includeMode, maxBytesA
 // failure of the whole bundle.
 class BudgetExceededError extends Error {}
 
-async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = Infinity) {
+async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes = Infinity): Promise<ProjectFileBundleEntry> {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -768,9 +1590,7 @@ async function fetchProjectFile(baseUrl, projectId, relPath, remainingBytes = In
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
   }
-  const mime = (resp.headers.get('content-type') || 'application/octet-stream')
-    .split(';')[0]
-    .trim();
+  const mime = ((resp.headers.get('content-type') || 'application/octet-stream').split(';')[0] ?? 'application/octet-stream').trim();
   const headerSize = Number(resp.headers.get('content-length'));
   const size = Number.isFinite(headerSize) && headerSize >= 0 ? headerSize : null;
   if (!isTextualMime(mime)) {
@@ -813,25 +1633,25 @@ const JS_REF_PATTERNS = [
 // `srcset` can list multiple comma-separated candidates.
 const SRCSET_PATTERN = /\bsrcset=["']([^"']+)["']/gi;
 
-function isJsLike(mime, fromPath) {
+function isJsLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /javascript|typescript/i.test(mime)) return true;
   return /\.(?:m?jsx?|tsx?|cjs)$/i.test(fromPath);
 }
 
-function isCssLike(mime, fromPath) {
+function isCssLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /^text\/css\b/i.test(mime)) return true;
   return /\.css$/i.test(fromPath);
 }
 
-function isHtmlLike(mime, fromPath) {
+function isHtmlLike(mime: string | undefined, fromPath: string): boolean {
   if (mime && /^text\/html\b/i.test(mime)) return true;
   return /\.html?$/i.test(fromPath);
 }
 
-function extractRelativeRefs(text, fromPath, fromMime) {
+function extractRelativeRefs(text: string, fromPath: string, fromMime: string): string[] {
   if (!text) return [];
-  const refs = new Set();
-  const runPatterns = [];
+  const refs = new Set<string>();
+  const runPatterns: RegExp[] = [];
   if (isHtmlLike(fromMime, fromPath)) {
     runPatterns.push(...HTML_REF_PATTERNS, ...CSS_REF_PATTERNS);
   }
@@ -847,7 +1667,7 @@ function extractRelativeRefs(text, fromPath, fromMime) {
     runPatterns.push(...CSS_REF_PATTERNS);
   }
 
-  const candidates = [];
+  const candidates: string[] = [];
   for (const re of runPatterns) {
     for (const m of text.matchAll(re)) {
       const ref = (m[1] || '').trim();
@@ -890,7 +1710,7 @@ function extractRelativeRefs(text, fromPath, fromMime) {
   return [...refs];
 }
 
-function okBundle(bundle) {
+function okBundle(bundle: BundleInput) {
   const payload = {
     entryFile: bundle.entry,
     projectId: bundle.project?.id,
@@ -908,12 +1728,12 @@ function okBundle(bundle) {
   return ok(withActiveEcho(payload, bundle.active, bundle.resolved));
 }
 
-function isTextualMime(mime) {
+function isTextualMime(mime: string | undefined): boolean {
   if (!mime) return false;
   return TEXTUAL_MIME_PATTERNS.some((re) => re.test(mime));
 }
 
-async function safeText(resp) {
+async function safeText(resp: Response): Promise<string> {
   try {
     return await resp.text();
   } catch {
@@ -921,14 +1741,19 @@ async function safeText(resp) {
   }
 }
 
-function formatError(err, daemonUrl) {
-  const code = err && (err.cause?.code || err.code);
-  const msg = err && err.message ? err.message : String(err);
+function formatError(err: unknown, daemonUrl: string): string {
+  const e = err as ErrorWithCode | null | undefined;
+  const code = e && (e.cause?.code || e.code);
+  const msg = errorMessage(err);
   if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
     return `cannot reach the Open Design daemon at ${daemonUrl}. Is it running? Start it with \`pnpm tools-dev\`.`;
   }
   return msg;
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // Exported for unit tests only.
-export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile };
+export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };

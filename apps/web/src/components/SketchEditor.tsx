@@ -1,55 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Input } from '@open-design/components';
 import { useT } from '../i18n';
+import { Icon } from './Icon';
+import { readDefaultSketchToolColor } from './sketch-colors';
+import type { SketchItem } from './sketch-model';
+
+const SAVED_VISIBLE_MS = 2000;
 
 export type Tool = 'select' | 'pen' | 'text' | 'rect' | 'arrow' | 'eraser';
-
-interface Stroke {
-  kind: 'pen';
-  points: Array<{ x: number; y: number }>;
-  color: string;
-  size: number;
-}
-interface RectShape {
-  kind: 'rect';
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  color: string;
-  size: number;
-}
-interface ArrowShape {
-  kind: 'arrow';
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  color: string;
-  size: number;
-}
-interface TextItem {
-  kind: 'text';
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  size: number;
-}
-
-export type SketchItem = Stroke | RectShape | ArrowShape | TextItem;
-
-export interface SketchDocument {
-  version: 1;
-  items: SketchItem[];
-}
 
 interface Props {
   // Controlled items — the parent owns the strokes so switching to a different
   // tab and back doesn't lose the in-progress sketch. The editor only reports
   // changes via onItemsChange.
   items: SketchItem[];
+  hasPreservedRawItems?: boolean;
   onItemsChange: (items: SketchItem[]) => void;
-  onSave: () => Promise<void> | void;
+  onClear?: () => void;
+  onSave: () => Promise<boolean | void> | boolean | void;
   onCancel?: () => void;
   saving?: boolean;
   dirty?: boolean;
@@ -58,7 +26,9 @@ interface Props {
 
 export function SketchEditor({
   items,
+  hasPreservedRawItems = false,
   onItemsChange,
+  onClear,
   onSave,
   onCancel,
   saving = false,
@@ -69,10 +39,31 @@ export function SketchEditor({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState('#1c1b1a');
+  const [color, setColor] = useState(() => readDefaultSketchToolColor());
   const [size, setSize] = useState(2);
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => clearTimeout(savedTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (dirty) {
+      clearTimeout(savedTimerRef.current);
+      setShowSaved(false);
+    }
+  }, [dirty]);
+
+  // Text-tool modal. Replaces window.prompt() because Electron 28+
+  // disables that API by default and silently returns null, making
+  // the text tool a no-op in the desktop app. Same root cause as
+  // issue #723 (FileViewer's Save-as-template flow).
+  const [textModalOpen, setTextModalOpen] = useState(false);
+  const [textModalValue, setTextModalValue] = useState('');
+  const textAnchorRef = useRef<{ x: number; y: number } | null>(null);
 
   // Resize canvas to its container while keeping a high DPR for crisp lines.
   useEffect(() => {
@@ -126,13 +117,11 @@ export function SketchEditor({
     const pos = pointerPos(e);
 
     if (tool === 'text') {
-      const text = window.prompt(t('sketch.textPrompt'));
-      if (text) {
-        onItemsChange([
-          ...items,
-          { kind: 'text', x: pos.x, y: pos.y, text, color, size: 16 + size * 4 },
-        ]);
-      }
+      // Stash the click position and open the modal. The actual TextItem is
+      // appended in submitTextModal, once the user confirms.
+      textAnchorRef.current = pos;
+      setTextModalValue('');
+      setTextModalOpen(true);
       return;
     }
 
@@ -186,8 +175,49 @@ export function SketchEditor({
     onItemsChange(items.slice(0, -1));
   }
   function handleClear() {
+    if (onClear) {
+      onClear();
+      return;
+    }
     onItemsChange([]);
   }
+
+  const canClear = items.length > 0 || hasPreservedRawItems;
+  const canSave = dirty || items.length > 0 || hasPreservedRawItems;
+
+  function submitTextModal() {
+    const text = textModalValue.trim();
+    const anchor = textAnchorRef.current;
+    if (!text || !anchor) {
+      cancelTextModal();
+      return;
+    }
+    onItemsChange([
+      ...items,
+      { kind: 'text', x: anchor.x, y: anchor.y, text, color, size: 16 + size * 4 },
+    ]);
+    setTextModalOpen(false);
+    setTextModalValue('');
+    textAnchorRef.current = null;
+  }
+
+  function cancelTextModal() {
+    setTextModalOpen(false);
+    setTextModalValue('');
+    textAnchorRef.current = null;
+  }
+
+  const handleSave = useCallback(async () => {
+    const ok = await onSave();
+    if (ok === false) {
+      clearTimeout(savedTimerRef.current);
+      setShowSaved(false);
+      return;
+    }
+    setShowSaved(true);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);
+  }, [onSave]);
 
   return (
     <div className="sketch-editor">
@@ -216,29 +246,30 @@ export function SketchEditor({
           className="sketch-size"
         />
         <span className="sketch-divider" />
-        <button className="ghost" onClick={handleUndo} disabled={items.length === 0}>
+        <Button variant="ghost" onClick={handleUndo} disabled={items.length === 0}>
           {t('sketch.undo')}
-        </button>
-        <button className="ghost" onClick={handleClear} disabled={items.length === 0}>
+        </Button>
+        <Button variant="ghost" onClick={handleClear} disabled={!canClear}>
           {t('sketch.clear')}
-        </button>
+        </Button>
         <span className="sketch-spacer" />
         <span className="sketch-name" title={fileName}>
           {fileName}
           {dirty ? ' •' : ''}
         </span>
         {onCancel ? (
-          <button className="ghost" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel}>
             {t('sketch.close')}
-          </button>
+          </Button>
         ) : null}
-        <button
-          className="primary"
-          onClick={() => void onSave()}
-          disabled={saving || items.length === 0}
+        <Button
+          variant="primary"
+          onClick={handleSave}
+          disabled={saving || !canSave}
+          aria-label={saving ? t('sketch.saving') : showSaved ? t('sketch.saved') : t('common.save')}
         >
-          {saving ? t('sketch.saving') : t('common.save')}
-        </button>
+          {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
+        </Button>
       </div>
       <div className="sketch-canvas-wrap" ref={wrapRef}>
         <canvas
@@ -250,6 +281,45 @@ export function SketchEditor({
           style={{ touchAction: 'none' }}
         />
       </div>
+      {textModalOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true">
+            <div className="modal-head">
+              <h2>{t('sketch.textModalTitle')}</h2>
+            </div>
+            <label>
+              <span>{t('sketch.textPrompt')}</span>
+              <Input
+                type="text"
+                value={textModalValue}
+                autoFocus
+                onChange={(e) => setTextModalValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && textModalValue.trim()) {
+                    e.preventDefault();
+                    submitTextModal();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelTextModal();
+                  }
+                }}
+              />
+            </label>
+            <div className="modal-foot">
+              <Button variant="ghost" onClick={cancelTextModal}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!textModalValue.trim()}
+                onClick={submitTextModal}
+              >
+                {t('common.save')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

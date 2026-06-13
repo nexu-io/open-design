@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-dashboard",
+  "title": "Dashboard",
+  "title_i18n": {
+    "zh-CN": "仪表盘",
+    "zh-TW": "儀表板",
+    "ja": "ダッシュボード",
+    "ko": "대시보드",
+    "de": "Dashboard",
+    "fr": "Tableau de bord",
+    "ru": "Панель управления",
+    "es": "Panel de control",
+    "pt-BR": "Painel de controle",
+    "it": "Dashboard",
+    "vi": "Bảng điều khiển",
+    "pl": "Panel kontrolny",
+    "id": "Dasbor",
+    "nl": "Dashboard",
+    "ar": "لوحة التحكم",
+    "tr": "Gösterge Paneli",
+    "uk": "Панель керування",
+    "en": "Dashboard"
+  },
+  "version": "0.1.0",
+  "description": "Dark-themed cloud-platform aesthetic with modular grids, glass-like panels, and strong data hierarchy for productivity dashboards.",
+  "description_i18n": {
+    "zh-CN": "深色云平台美学风格，配备模块化网格、玻璃质感面板和强数据层级，适用于生产力仪表盘。",
+    "zh-TW": "深色雲端平台美學風格，配備模組化網格、玻璃質感面板和強數據層級，適用於生產力儀表板。",
+    "ja": "モジュラーグリッド、ガラスのようなパネル、明確なデータ階層を備えたダークテーマのクラウドプラットフォーム美学。生産性ダッシュボード向け。",
+    "ko": "모듈식 그리드, 유리 같은 패널, 강력한 데이터 계층 구조를 갖춘 다크 테마 클라우드 플랫폼 미학. 생산성 대시보드용.",
+    "de": "Dunkle Cloud-Plattform-Ästhetik mit modularen Rastern, glasartigen Panels und starker Datenhierarchie für Produktivitäts-Dashboards.",
+    "fr": "Esthétique de plateforme cloud à thème sombre avec grilles modulaires, panneaux vitreux et hiérarchie des données forte pour tableaux de bord de productivité.",
+    "ru": "Темная эстетика облачной платформы с модульными сетками, стеклянными панелями и четкой иерархией данных для дашбордов продуктивности.",
+    "es": "Estética de plataforma en la nube con tema oscuro, cuadrículas modulares, paneles tipo vidrio y jerarquía de datos sólida para dashboards de productividad.",
+    "pt-BR": "Estética de plataforma em nuvem com tema escuro, grades modulares, painéis com efeito de vidro e hierarquia de dados robusta para dashboards de produtividade.",
+    "it": "Estetica cloud-platform a tema scuro con griglie modulari, pannelli effetto vetro e forte gerarchia dei dati per dashboard di produttività.",
+    "vi": "Phong cách nền tảng đám mây tối với lưới modular, bảng hiệu ứng kính và phân cấp dữ liệu mạnh mẽ cho dashboard năng suất.",
+    "pl": "Ciemna estetyka platformy chmurowej z modułowymi siatkami, szklanymi panelami i silną hierarchią danych dla dashboardów produktywności.",
+    "id": "Estetika platform cloud bertema gelap dengan grid modular, panel seperti kaca, dan hierarki data yang kuat untuk dashboard produktivitas.",
+    "nl": "Donker cloudplatform-esthetiek met modulaire rasters, glasachtige panelen en sterke datahiërarchie voor productiviteitsdashboards.",
+    "ar": "جمالية منصة سحابية داكنة مع شبكات معيارية ولوحات زجاجية وتسلسل هرمي قوي للبيانات للوحات معلومات الإنتاجية.",
+    "tr": "Modüler ızgaralar, cam benzeri paneller ve güçlü veri hiyerarşisi ile koyu temalı bulut platformu estetiği. Üretkenlik dashboard'ları için.",
+    "uk": "Темна естетика хмарної платформи з модульними сітками, скляними панелями та чіткою ієрархією даних для дашбордів продуктивності.",
+    "en": "Dark-themed cloud-platform aesthetic with modular grids, glass-like panels, and strong data hierarchy for productivity dashboards."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "professional-corporate"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Dashboard design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Dashboard design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "dashboard",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

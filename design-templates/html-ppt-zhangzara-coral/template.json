@@ -1,0 +1,45 @@
+{
+  "slug": "zhangzara-coral",
+  "name": "Coral",
+  "tagline": "Cream and coral on near-black, set in oversized Bebas Neue.",
+  "mood": [
+    "bold",
+    "warm",
+    "modern",
+    "confident"
+  ],
+  "occasion": [
+    "fashion / beauty pitch",
+    "fitness brand",
+    "F&B brand deck",
+    "lifestyle launch",
+    "creative agency"
+  ],
+  "tone": [
+    "graphic",
+    "punchy",
+    "magazine"
+  ],
+  "formality": "medium",
+  "density": "medium",
+  "palette": {
+    "coral": "#E85D5D",
+    "coral_dark": "#D44A4A",
+    "cream": "#F5F0E8",
+    "cream_dark": "#E8E0D4",
+    "ink": "#1A1A1A",
+    "gray": "#6B6B6B",
+    "description": "near-black canvas, warm cream paper for content, and a saturated coral accent that carries the entire personality"
+  },
+  "typography": {
+    "display": "Bebas Neue",
+    "body": "Inter",
+    "style": "tall condensed display sans for shouty headlines + neutral body for everything else"
+  },
+  "scheme": "mixed",
+  "best_for": "Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials. Just as strong for a creator portfolio, a manifesto, or a tech / research deck that wants warmth and a single bold accent instead of corporate cool.",
+  "avoid_for": "Contexts that should feel quiet or institutional — the coral accent and oversized Bebas Neue commit hard to a confident magazine voice.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page nav dots and slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/coral"
+}

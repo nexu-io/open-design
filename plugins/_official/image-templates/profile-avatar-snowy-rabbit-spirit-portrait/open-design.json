@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-snowy-rabbit-spirit-portrait",
+  "title": "Profile / Avatar - Snowy Rabbit Spirit Portrait",
+  "title_i18n": {
+    "zh-CN": "头像 / 雪兔精灵肖像",
+    "zh-TW": "頭像 / 雪兔精靈肖像",
+    "ja": "プロフィール / アバター - スノーラビット スピリット ポートレート",
+    "ko": "프로필 / 아바타 - 설토끼 정령 초상화",
+    "de": "Profil / Avatar - Schneehasen-Geist-Porträt",
+    "fr": "Profil / Avatar - Portrait d'Esprit Lapin des Neiges",
+    "ru": "Профиль / Аватар - Портрет Духа Снежного Кролика",
+    "es": "Perfil / Avatar - Retrato de Espíritu de Conejo Nevado",
+    "pt-BR": "Perfil / Avatar - Retrato de Espírito Coelho da Neve",
+    "it": "Profilo / Avatar - Ritratto Spirito Coniglio della Neve",
+    "vi": "Hồ Sơ / Avatar - Chân Dung Linh Thỏ Tuyết",
+    "pl": "Profil / Awatar - Portret Ducha Śnieżnego Królika",
+    "id": "Profil / Avatar - Potret Roh Kelinci Salju",
+    "nl": "Profiel / Avatar - Sneeuwkonijn Geest Portret",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة روح الأرنب الثلجي",
+    "tr": "Profil / Avatar - Karlı Tavşan Ruhu Portresi",
+    "uk": "Профіль / Аватар - Портрет Духу Снігового Кролика",
+    "en": "Profile / Avatar - Snowy Rabbit Spirit Portrait"
+  },
+  "version": "0.1.0",
+  "description": "This prompt generates a serene fantasy portrait of an anonymous rabbit-eared woman in winter, ideal for atmospheric character art and stylized profile illustrations.",
+  "description_i18n": {
+    "zh-CN": "生成宁静奇幻风格的兔耳少女冬季肖像，适合氛围感角色艺术和风格化头像插画。",
+    "zh-TW": "生成寧靜奇幻風格的兔耳少女冬季肖像，適合氛圍感角色藝術和風格化頭像插畫。",
+    "ja": "冬の雰囲気の中、うさぎ耳の女性キャラクターの幻想的なポートレートを生成。雰囲気のあるキャラクターアートやスタイライズされたプロフィールイラストに最適です。",
+    "ko": "겨울 배경의 토끼 귀 여성 캐릭터를 그린 고요한 판타지 초상화를 생성합니다. 분위기 있는 캐릭터 아트와 양식화된 프로필 일러스트에 이상적입니다.",
+    "de": "Erzeugt ein ruhiges Fantasy-Porträt einer Frau mit Hasenohren im Winter, ideal für atmosphärische Charakterkunst und stilisierte Profilillustrationen.",
+    "fr": "Génère un portrait fantastique serein d'une femme aux oreilles de lapin en hiver, idéal pour l'art de personnage atmosphérique et les illustrations de profil stylisées.",
+    "ru": "Генерирует умиротворённый фэнтезийный портрет девушки с кроличьими ушами зимой, идеален для атмосферного арта персонажей и стилизованных иллюстраций профиля.",
+    "es": "Genera un retrato de fantasía sereno de una mujer con orejas de conejo en invierno, ideal para arte de personajes atmosférico e ilustraciones de perfil estilizadas.",
+    "pt-BR": "Gera um retrato de fantasia sereno de uma mulher com orelhas de coelho no inverno, ideal para arte de personagem atmosférica e ilustrações de perfil estilizadas.",
+    "it": "Genera un ritratto fantasy sereno di una donna con orecchie da coniglio in inverno, ideale per character art atmosferica e illustrazioni di profilo stilizzate.",
+    "vi": "Tạo chân dung giả tưởng thanh bình của nhân vật nữ tai thỏ trong mùa đông, lý tưởng cho nghệ thuật nhân vật đầy không khí và tranh minh họa hồ sơ phong cách hóa.",
+    "pl": "Generuje spokojny fantasy portret kobiety z królichymi uszami w zimowej scenerii, idealny do atmosferycznej sztuki postaci i stylizowanych ilustracji profilowych.",
+    "id": "Menghasilkan potret fantasi yang tenang dari wanita bertelinga kelinci di musim dingin, ideal untuk seni karakter atmosferik dan ilustrasi profil bergaya.",
+    "nl": "Genereert een sereen fantasy portret van een vrouw met konijnenoren in de winter, ideaal voor sfeervolle karakterkunst en gestileerde profielillustraties.",
+    "ar": "ينشئ صورة شخصية خيالية هادئة لامرأة بأذني أرنب في الشتاء، مثالية لفن الشخصيات الجوي والرسوم التوضيحية المنمقة للملف الشخصي.",
+    "tr": "Kışta tavşan kulaklı bir kadının huzurlu fantezi portresini oluşturur, atmosferik karakter sanatı ve stilize profil illüstrasyonları için idealdir.",
+    "uk": "Генерує спокійний фентезійний портрет жінки з кролячими вухами взимку, ідеальний для атмосферного арту персонажів та стилізованих ілюстрацій профілю.",
+    "en": "This prompt generates a serene fantasy portrait of an anonymous rabbit-eared woman in winter, ideal for atmospheric character art and stylized profile illustrations."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy",
+    "nature"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453209807_szh7zz_HG_c_-ca4AAz43H.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A soft, painterly portrait of a mysterious young woman with {argument name=\"hair color\" default=\"long white hair\"} and 2 tall rabbit ears rising above her head, centered in a vertical composition from chest up. Her face is completely obscured by a flat rectangular censor block in muted beige, creating an anonymous surreal effect. She wears a traditional kimono-inspired robe in warm ivory with bold black trim: 3 visible black sections total, including the wide crossover collar, 2 black sleeve bands, and a black waist sash tied in front. On the left chest is 1 embroidered white rabbit patch outlined in brown. On the right side of her hair hangs 1 red braided cord ornament tied into a bow, decorated with 2 tassels and 1 small rabbit-shaped charm. The hair is long, flowing, slightly windswept, and silky, framing the shoulders. Set her in a quiet snowy landscape with falling snow, pale gray winter atmosphere, bare trees, and a softly blurred traditional pagoda silhouette in the distance on the right. Use a delicate East Asian fantasy aesthetic, muted colors, gentle lighting, subtle texture like watercolor or gouache on paper, highly refined costume details, calm mood, and a centered symmetrical composition.",
+        "zh-CN": "使用这个插件完成以下任务：A soft, painterly portrait of a mysterious young woman with {argument name=\"hair color\" default=\"long white hair\"} and 2 tall rabbit ears rising above her head, centered in a vertical composition from chest up. Her face is completely obscured by a flat rectangular censor block in muted beige, creating an anonymous surreal effect. She wears a traditional kimono-inspired robe in warm ivory with bold black trim: 3 visible black sections total, including the wide crossover collar, 2 black sleeve bands, and a black waist sash tied in front. On the left chest is 1 embroidered white rabbit patch outlined in brown. On the right side of her hair hangs 1 red braided cord ornament tied into a bow, decorated with 2 tassels and 1 small rabbit-shaped charm. The hair is long, flowing, slightly windswept, and silky, framing the shoulders. Set her in a quiet snowy landscape with falling snow, pale gray winter atmosphere, bare trees, and a softly blurred traditional pagoda silhouette in the distance on the right. Use a delicate East Asian fantasy aesthetic, muted colors, gentle lighting, subtle texture like watercolor or gouache on paper, highly refined costume details, calm mood, and a centered symmetrical composition."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

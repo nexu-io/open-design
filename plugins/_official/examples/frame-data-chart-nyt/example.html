@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>NYT Chart · AI Agent MAU 2018–2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  body { font-family:'IBM Plex Sans','Noto Sans SC',system-ui,sans-serif; background:#f7f5ee; color:#1a1a1a; margin:0; }
+  .serif { font-family:'Source Serif Pro',Georgia,serif; }
+  .mono { font-family:'IBM Plex Mono',ui-monospace,monospace; }
+  .nyt-red { color:#a91d1d; }
+  .nyt-red-fill { fill:#a91d1d; }
+  .kicker { font-size:11px; letter-spacing:0.14em; text-transform:uppercase; }
+  @keyframes draw { from { stroke-dashoffset: 1000 } to { stroke-dashoffset: 0 } }
+  .line { stroke-dasharray:1000; animation: draw 1.4s ease-out forwards; animation-delay: .4s; opacity:0; animation-fill-mode: forwards; }
+  .line { animation: draw 1.4s ease-out .4s forwards, fadeIn .1s linear .4s forwards; }
+  @keyframes fadeIn { to { opacity:1 } }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-12">
+  <article class="w-[1280px] max-w-full">
+    <header class="flex items-baseline justify-between">
+      <div class="kicker nyt-red font-semibold">GLOBAL · MONTHLY ACTIVE USERS · 2018–2026</div>
+      <div class="kicker opacity-60 mono">FRAME 04 · CHART</div>
+    </header>
+
+    <h1 class="serif mt-3 leading-[1.05] font-medium" style="font-size:clamp(36px,4.4vw,68px)">
+      AI agent 月活在 <span class="nyt-red italic">2024 之后</span> 进入两段抛物线 ——<br/>
+      第一段由云端 Claude / GPT 推动, 第二段由本地 CLI agent 普及。
+    </h1>
+
+    <!-- chart -->
+    <svg viewBox="0 0 1100 460" class="mt-8 w-full">
+      <!-- y axis hairlines -->
+      <g stroke="#1a1a1a" stroke-width="0.5" opacity="0.25">
+        <line x1="60" y1="60" x2="1040" y2="60"/>
+        <line x1="60" y1="180" x2="1040" y2="180"/>
+        <line x1="60" y1="300" x2="1040" y2="300"/>
+        <line x1="60" y1="420" x2="1040" y2="420"/>
+      </g>
+      <!-- y labels -->
+      <g class="mono" font-size="11" fill="#1a1a1a" opacity="0.6">
+        <text x="20" y="64">640M</text>
+        <text x="20" y="184">420M</text>
+        <text x="20" y="304">210M</text>
+        <text x="20" y="424">0</text>
+      </g>
+      <!-- area band -->
+      <path d="M 60 410 L 180 405 L 300 395 L 420 380 L 540 355 L 660 320 L 780 270 L 900 195 L 1020 90 L 1020 420 L 60 420 Z" fill="#a91d1d" opacity="0.06"/>
+      <!-- main line -->
+      <polyline class="line" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"
+        points="60,410 180,405 300,395 420,380 540,355 660,320 780,270 900,195 1020,90" />
+      <!-- accent inflection -->
+      <polyline fill="none" stroke="#a91d1d" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="6 5"
+        points="780,270 900,195 1020,90" />
+      <!-- data points -->
+      <g>
+        <circle cx="60" cy="410" r="4" fill="#1a1a1a"/>
+        <circle cx="180" cy="405" r="4" fill="#1a1a1a"/>
+        <circle cx="300" cy="395" r="4" fill="#1a1a1a"/>
+        <circle cx="420" cy="380" r="4" fill="#1a1a1a"/>
+        <circle cx="540" cy="355" r="4" fill="#1a1a1a"/>
+        <circle cx="660" cy="320" r="4" fill="#1a1a1a"/>
+        <circle cx="780" cy="270" r="6" class="nyt-red-fill"/>
+        <circle cx="900" cy="195" r="6" class="nyt-red-fill"/>
+        <circle cx="1020" cy="90" r="6" class="nyt-red-fill"/>
+      </g>
+      <!-- annotations -->
+      <g class="mono" font-size="11" fill="#1a1a1a">
+        <text x="784" y="250">2024 · 310M</text>
+        <text x="894" y="175" class="nyt-red-fill">2025 · 468M</text>
+        <text x="1010" y="70" class="nyt-red-fill" text-anchor="end">2026 · 640M</text>
+      </g>
+      <!-- inflection callout -->
+      <g class="serif" font-style="italic" fill="#a91d1d">
+        <text x="800" y="380" font-size="14">⤴ Inflection point</text>
+        <text x="800" y="398" font-size="14">local CLI agents普及</text>
+      </g>
+      <!-- x labels -->
+      <g class="mono" font-size="11" fill="#1a1a1a" opacity="0.6">
+        <text x="60" y="445" text-anchor="middle">'18</text>
+        <text x="180" y="445" text-anchor="middle">'19</text>
+        <text x="300" y="445" text-anchor="middle">'20</text>
+        <text x="420" y="445" text-anchor="middle">'21</text>
+        <text x="540" y="445" text-anchor="middle">'22</text>
+        <text x="660" y="445" text-anchor="middle">'23</text>
+        <text x="780" y="445" text-anchor="middle">'24</text>
+        <text x="900" y="445" text-anchor="middle">'25</text>
+        <text x="1020" y="445" text-anchor="middle">'26</text>
+      </g>
+    </svg>
+
+    <footer class="mt-3 flex items-baseline justify-between mono text-[10.5px] opacity-60">
+      <span>Source · Synthesized industry estimates, 2026-05</span>
+      <span>Chart by HTML-Anything</span>
+      <span>NYT-STYLE · FRAME-DATA-CHART-NYT</span>
+    </footer>
+  </article>
+</body>
+</html>

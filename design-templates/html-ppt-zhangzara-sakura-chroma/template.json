@@ -1,0 +1,54 @@
+{
+  "slug": "zhangzara-sakura-chroma",
+  "name": "Sakura Chroma",
+  "tagline": "Vintage Japanese cassette-package aesthetic: cream paper, diagonal rainbow ribbons, condensed bold type, JIS-style spec checkboxes.",
+  "mood": [
+    "retro",
+    "playful",
+    "kawaii-tech",
+    "warm",
+    "tactile",
+    "product-catalogue"
+  ],
+  "occasion": [
+    "product launch or catalogue",
+    "indie hardware or analog studio brand",
+    "music label or release schedule",
+    "creative studio annual report",
+    "magazine or zine pitch",
+    "vintage-flavored brand campaign"
+  ],
+  "tone": [
+    "playful",
+    "confident",
+    "warm",
+    "tactile",
+    "80s-Japanese-tech"
+  ],
+  "formality": "low",
+  "density": "medium",
+  "palette": {
+    "paper": "#F1E6CB",
+    "ink": "#3A2516",
+    "red": "#E5392A",
+    "pink": "#E54489",
+    "orange": "#F09131",
+    "yellow": "#F0BC2A",
+    "green": "#3D9F47",
+    "blue": "#3F8BC4",
+    "description": "warm cream paper canvas with dark warm-brown ink and a six-colour primary palette (red, pink, orange, yellow, green, blue) used as bold flat blocks, ribbons, and product-strip accents"
+  },
+  "typography": {
+    "display": "Big Shoulders Display",
+    "body": "Albert Sans",
+    "mono": "JetBrains Mono",
+    "jp": "Noto Sans JP",
+    "style": "condensed black grotesk display in red and brown for hero type, paired with a clean modern sans for body and a mono for spec-sheet listings; Japanese kanji used as decorative micro-type"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like a vintage Japanese cassette package or a TDK / Sony / Sakura Color product catalogue: indie hardware brand decks, music-label release schedules, analog studio retrospectives, zine and magazine pitches, kawaii-tech product launches, creative-studio annual reports. Equally good for any deck wanting bold colour, condensed display type, and a tactile printed-product personality.",
+  "avoid_for": "Decks that need restrained, corporate, or quiet typography — the bold condensed lockups, ribbon stripes, and primary-colour palette are intentionally loud and product-page-y.",
+  "slide_count": 8,
+  "navigation": "vanilla JS (arrow keys, space, Home/End, touch swipe)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/sakura-chroma"
+}

@@ -18,6 +18,14 @@ export type PackagedDesktopRootIdentity = {
   version: 1;
 };
 
+export type PackagedWebRootIdentity = {
+  namespace: string;
+  pid: number;
+  url: string;
+  startedAt: string;
+  version: 1;
+};
+
 export type PackagedDesktopIdentityHandle = {
   close(): Promise<void>;
   identity: PackagedDesktopRootIdentity;
@@ -49,14 +57,16 @@ function createPackagedDesktopRootIdentity(options: {
 }
 
 export async function writePackagedDesktopIdentity(options: {
+  identityPath?: string;
   paths: PackagedNamespacePaths;
   stamp: SidecarStamp;
 }): Promise<PackagedDesktopIdentityHandle> {
   const identity = createPackagedDesktopRootIdentity(options);
+  const identityPath = options.identityPath ?? options.paths.desktopIdentityPath;
 
   const writeIdentity = async () => {
     identity.updatedAt = new Date().toISOString();
-    await writeJsonFile(options.paths.desktopIdentityPath, identity);
+    await writeJsonFile(identityPath, identity);
   };
 
   await writeIdentity();
@@ -68,8 +78,23 @@ export async function writePackagedDesktopIdentity(options: {
   return {
     async close() {
       clearInterval(heartbeat);
-      await removeFile(options.paths.desktopIdentityPath).catch(() => undefined);
+      await removeFile(identityPath).catch(() => undefined);
     },
     identity,
   };
+}
+
+export async function writePackagedWebIdentity(options: {
+  paths: PackagedNamespacePaths;
+  pid: number;
+  url: string;
+}): Promise<void> {
+  const identity: PackagedWebRootIdentity = {
+    namespace: options.paths.namespaceRoot.split("/").pop() ?? "default",
+    pid: options.pid,
+    url: options.url,
+    startedAt: new Date().toISOString(),
+    version: 1,
+  };
+  await writeJsonFile(options.paths.webIdentityPath, identity);
 }

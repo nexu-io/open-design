@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-mono",
+  "title": "Mono",
+  "title_i18n": {
+    "zh-CN": "Mono",
+    "zh-TW": "Mono",
+    "ja": "Mono",
+    "ko": "Mono",
+    "de": "Mono",
+    "fr": "Mono",
+    "ru": "Mono",
+    "es": "Mono",
+    "pt-BR": "Mono",
+    "it": "Mono",
+    "vi": "Mono",
+    "pl": "Mono",
+    "id": "Mono",
+    "nl": "Mono",
+    "ar": "Mono",
+    "tr": "Mono",
+    "uk": "Mono",
+    "en": "Mono"
+  },
+  "version": "0.1.0",
+  "description": "Monospace-driven, matrix-inspired design with high-contrast elements, compact density, and a hacker-chic aesthetic.",
+  "description_i18n": {
+    "zh-CN": "黑客风格的等宽字体驱动设计，采用矩阵风格的高对比度元素和紧凑布局。",
+    "zh-TW": "駭客風格的等寬字型驅動設計，採用矩陣風格的高對比度元素和緊湊佈局。",
+    "ja": "ハッカー美学を纏った等幅フォント駆動のデザイン。マトリックス風の高コントラスト要素とコンパクトな密度が特徴。",
+    "ko": "해커 감성의 고정폭 글꼴 기반 디자인. 매트릭스 스타일의 고대비 요소와 컴팩트한 밀도가 특징입니다.",
+    "de": "Monospace-basiertes Design mit Matrix-Ästhetik, kontrastreichen Elementen, kompakter Dichte und Hacker-Chic.",
+    "fr": "Design à police monospace inspiré de Matrix avec des éléments à fort contraste, densité compacte et esthétique hacker.",
+    "ru": "Дизайн на основе моноширинного шрифта в стиле Матрицы с высококонтрастными элементами, компактной плотностью и хакерской эстетикой.",
+    "es": "Diseño basado en tipografía monoespaciada con inspiración Matrix, elementos de alto contraste, densidad compacta y estética hacker.",
+    "pt-BR": "Design baseado em fonte monoespaçada com inspiração Matrix, elementos de alto contraste, densidade compacta e estética hacker.",
+    "it": "Design basato su font monospace ispirato a Matrix con elementi ad alto contrasto, densità compatta ed estetica hacker.",
+    "vi": "Thiết kế dựa trên phông chữ đơn cách, lấy cảm hứng từ Matrix với các yếu tố tương phản cao, mật độ gọn nhẹ và thẩm mỹ hacker.",
+    "pl": "Projekt oparty na czcionce monospace inspirowany Matrixem z wysokim kontrastem, zwartą gęstością i hackerską estetyką.",
+    "id": "Desain berbasis font monospace dengan inspirasi Matrix, elemen kontras tinggi, kepadatan kompak, dan estetika hacker.",
+    "nl": "Monospace-gedreven ontwerp geïnspireerd door Matrix met hoog contrast elementen, compacte dichtheid en hacker-esthetiek.",
+    "ar": "تصميم مستوحى من Matrix يعتمد على خط أحادي المسافة مع عناصر عالية التباين، كثافة مدمجة، وجمالية القراصنة.",
+    "tr": "Matrix'ten ilham alan monospace yazı tipi tabanlı tasarım. Yüksek kontrast öğeler, kompakt yoğunluk ve hacker estetiğiyle.",
+    "uk": "Дизайн на основі моноширинного шрифту в стилі Матриці з висококонтрастними елементами, компактною щільністю та хакерською естетикою.",
+    "en": "Monospace-driven, matrix-inspired design with high-contrast elements, compact density, and a hacker-chic aesthetic."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "modern-minimal"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Mono design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Mono design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "mono",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,291 @@
+<script is:inline>
+  (() => {
+    const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+
+    const formatStars = (count) => {
+      if (!Number.isFinite(count) || count <= 0) return null;
+      if (count < 1000) return String(count);
+      return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    };
+
+    const formatVersion = (release) => {
+      const fromTag = (tag) => {
+        if (typeof tag !== 'string') return null;
+        const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+        return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+      };
+      const fromName = (name) => {
+        if (typeof name !== 'string') return null;
+        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+    };
+
+    const chrome = document.querySelector('[data-chrome-headroom]');
+    if (chrome) {
+      const navBar = chrome.querySelector('.nav');
+      const glassMap = chrome.querySelector('[data-nav-glass-map]');
+
+      // Liquid Glass displacement map — ported 1:1 from Inspira UI's
+      // LiquidGlass.vue `displacementImage` computed (radius 16, border 0.07,
+      // lightness 50, alpha 0.93, blur 11, blend "difference"). Built at the
+      // live bar's pixel size so the edge refraction tracks the bar as it
+      // condenses; mirrors the component's ResizeObserver-driven data URI.
+      const buildGlassMap = (w, h) => {
+        // Pill radius — half the bar height — so the refraction follows the
+        // condensed capsule's fully rounded ends.
+        const radius = Math.round(Math.min(w, h) / 2);
+        const borderRatio = 0.07;
+        const lightness = 50;
+        const alpha = 0.93;
+        const blur = 11;
+        const blend = 'difference';
+        const inset = Math.min(w, h) * (borderRatio * 0.5);
+        const svg =
+          '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
+            '<defs>' +
+              '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+              '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+            '</defs>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
+            '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#blue)" style="mix-blend-mode:' + blend + '"/>' +
+            '<rect x="' + inset + '" y="' + inset + '" width="' + (w - inset * 2) + '" height="' + (h - inset * 2) + '" rx="' + radius + '" fill="hsl(0 0% ' + lightness + '% / ' + alpha + ')" style="filter:blur(' + blur + 'px)"/>' +
+          '</svg>';
+        return 'data:image/svg+xml,' + encodeURIComponent(svg);
+      };
+
+      const syncGlassMap = () => {
+        if (!navBar || !glassMap) return;
+        const rect = navBar.getBoundingClientRect();
+        const w = Math.max(1, Math.round(rect.width));
+        const h = Math.max(1, Math.round(rect.height));
+        const uri = buildGlassMap(w, h);
+        glassMap.setAttribute('href', uri);
+        glassMap.setAttributeNS('http://www.w3.org/1999/xlink', 'href', uri);
+      };
+
+      // Debounced map rebuild — the capsule's width/height animate on
+      // condense, so rebuilding the displacement SVG every frame would
+      // re-rasterize the filter each frame and stutter. Rebuild once the size
+      // settles; the prior map covers the brief morph.
+      let mapTimer = 0;
+      const scheduleGlassMap = () => {
+        clearTimeout(mapTimer);
+        mapTimer = setTimeout(syncGlassMap, 140);
+      };
+
+      // Condense-on-scroll with hysteresis: condense past 64px, release below
+      // 24px. The dead-band stops a scroll that lingers near a single
+      // threshold from flipping the state — and the bar's geometry — back and
+      // forth (the "jitter"). rAF collapses each scroll burst to one read +
+      // at most one class change per frame.
+      const condenseOn = 64;
+      const condenseOff = 24;
+      let condensed = false;
+      let ticking = false;
+      const onScroll = () => {
+        ticking = false;
+        const y = window.scrollY;
+        if (!condensed && y > condenseOn) {
+          condensed = true;
+          chrome.classList.add('is-condensed');
+        } else if (condensed && y < condenseOff) {
+          condensed = false;
+          chrome.classList.remove('is-condensed');
+        }
+      };
+      window.addEventListener(
+        'scroll',
+        () => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(onScroll);
+        },
+        { passive: true },
+      );
+      condensed = window.scrollY > condenseOn;
+      chrome.classList.toggle('is-condensed', condensed);
+
+      syncGlassMap();
+      if (navBar) {
+        if (window.ResizeObserver) {
+          new ResizeObserver(scheduleGlassMap).observe(navBar);
+        }
+        window.addEventListener('resize', scheduleGlassMap, { passive: true });
+      }
+    }
+
+    // Hamburger menu toggle. Active only at narrow viewports (CSS hides
+    // the toggle button at ≥1100px). Click toggles `.is-open` on the
+    // header; outside-click, Escape, and clicking any link inside the
+    // menu close it again. Keeps `aria-expanded` in sync.
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const primaryNav = document.querySelector('[data-nav-primary]');
+    const navEl = toggle ? toggle.closest('header.nav') : null;
+    if (toggle && primaryNav && navEl) {
+      const setOpen = (open) => {
+        navEl.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOpen(!navEl.classList.contains('is-open'));
+      });
+      // Close when clicking any actual nav link (but not the Product
+      // parent trigger — its href='/' is a real page link, so we let it
+      // navigate which closes the menu naturally).
+      primaryNav.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('click', (ev) => {
+        if (!navEl.contains(ev.target)) setOpen(false);
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') setOpen(false);
+      });
+    }
+
+    const starSlots = document.querySelectorAll('[data-github-stars]');
+    if (starSlots.length > 0) {
+      fetch(REPO_API, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatStars(data?.stargazers_count);
+          if (!label) return;
+          for (const slot of starSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    }
+
+    const versionSlots = document.querySelectorAll('[data-github-version]');
+    if (versionSlots.length > 0) {
+      fetch(`${REPO_API}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatVersion(data);
+          if (!label) return;
+          for (const slot of versionSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    }
+
+    // Helper used by every clipboard-write button (link copy, share
+    // text copy). Tries the Clipboard API; falls back to a `prompt()`
+    // window the user can manually copy from on browsers that block
+    // clipboard writes (older Safari, embedded webviews).
+    const writeClipboard = async (text, btn) => {
+      const flash = () => {
+        if (!btn) return;
+        btn.setAttribute('data-copied', 'true');
+        setTimeout(() => btn.removeAttribute('data-copied'), 1400);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          flash();
+          return;
+        }
+      } catch {
+        // fall through
+      }
+      window.prompt('Copy', text);
+    };
+
+    // Copy-link buttons on detail pages and inside the share dialog.
+    document.querySelectorAll('[data-copy-link]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        writeClipboard(btn.getAttribute('data-copy-link') || '', btn);
+      });
+    });
+
+    // Share dialog: trigger button opens the matching `<dialog
+    // data-share-dialog="...">` and the `Copy text` button inside
+    // copies the textarea contents. Modal closes via the form's
+    // method="dialog" submit (the × button) or Escape key.
+    // Build real platform share-intent URLs from the dialog's message + link so
+    // the social buttons pre-fill the post instead of opening an empty composer.
+    // Recomputes on EVERY call (no one-time guard): grid pages such as
+    // plugins/templates reuse a single dialog across cards, overwriting the
+    // textarea + copy-link per click, so the intents must be rebuilt from the
+    // dialog's current payload each time it reopens. Exposed on `window` so
+    // those per-card handlers can re-wire after they swap the payload.
+    // Share text + links are baked at build time against the canonical
+    // production host (Astro.site). Rewrite that origin to wherever the page is
+    // actually served so a share from staging/preview carries the matching host
+    // (e.g. staging.open-design.ai) instead of always pointing at production.
+    // On production this is a no-op (the origins match).
+    const SHARE_PROD_ORIGIN = 'https://open-design.ai';
+    const rewriteShareOrigin = (dialog) => {
+      const here = window.location.origin;
+      if (!here || here === SHARE_PROD_ORIGIN || !/^https?:/.test(here)) return;
+      const swap = (value) => (value ? value.split(SHARE_PROD_ORIGIN).join(here) : value);
+      const ta = dialog.querySelector('[data-share-text]');
+      if (ta && ta.value) ta.value = swap(ta.value);
+      const linkBtn = dialog.querySelector('[data-copy-link]');
+      if (linkBtn) {
+        const cur = linkBtn.getAttribute('data-copy-link');
+        if (cur) linkBtn.setAttribute('data-copy-link', swap(cur));
+      }
+    };
+
+    const wireSharePlatforms = (dialog) => {
+      if (!dialog) return;
+      rewriteShareOrigin(dialog);
+      const ta = dialog.querySelector('[data-share-text]');
+      const linkBtn = dialog.querySelector('[data-copy-link]');
+      const message = ta ? (ta.value || ta.textContent || '').trim() : '';
+      const url = linkBtn ? (linkBtn.getAttribute('data-copy-link') || '') : '';
+      if (!message && !url) return;
+      const title = (message.split('\n')[0] || '').trim();
+      const m = encodeURIComponent(message);
+      const u = encodeURIComponent(url);
+      const intents = {
+        X: `https://twitter.com/intent/tweet?text=${m}`,
+        LinkedIn: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+        Reddit: `https://www.reddit.com/submit?url=${u}&title=${encodeURIComponent(title)}`,
+        Facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+      };
+      dialog.querySelectorAll('.detail-share-platform-btn').forEach((btn) => {
+        const label = btn.getAttribute('aria-label');
+        if (label && intents[label]) btn.setAttribute('href', intents[label]);
+      });
+    };
+    window.__odWireShareIntents = wireSharePlatforms;
+
+    document.querySelectorAll('[data-share-open]').forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        const key = trigger.getAttribute('data-share-open');
+        const dialog = document.querySelector(`[data-share-dialog="${key}"]`);
+        wireSharePlatforms(dialog);
+        if (dialog && typeof dialog.showModal === 'function') {
+          dialog.showModal();
+        } else if (dialog) {
+          // Older browsers without <dialog> support — just toggle
+          // a class. CSS already shows `.detail-share-dialog` open
+          // by default; we set `open` attr to mimic.
+          dialog.setAttribute('open', '');
+        }
+      });
+    });
+    document.querySelectorAll('[data-share-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const dialog = btn.closest('dialog, [data-share-dialog]');
+        const ta = dialog ? dialog.querySelector('[data-share-text]') : null;
+        if (!ta) return;
+        const text = ta.value || ta.textContent || '';
+        writeClipboard(text, btn);
+        // Auto-select the textarea contents so the user can manually
+        // copy too if they prefer that affordance.
+        if (ta.select) {
+          try { ta.select(); } catch {}
+        }
+      });
+    });
+  })();
+</script>

@@ -1,0 +1,51 @@
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import type { ToolPackCache } from "../cache.js";
+import type { ToolPackConfig } from "../config.js";
+import { processWebSourcemaps } from "../web-sourcemaps.js";
+import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
+import { runPnpm } from "./commands.js";
+
+async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
+  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
+  const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
+
+  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/download", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/components", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  try {
+    await runPnpm(config, ["--filter", "@open-design/web", "build"], {
+      OD_WEB_OUTPUT_MODE: config.webOutputMode,
+    });
+    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
+    // .map files. Runs before any packaging step copies the web output into
+    // the Electron resources so .map never ends up inside the .app bundle.
+    await processWebSourcemaps(config);
+  } finally {
+    if (previousWebNextEnv == null) {
+      await rm(webNextEnvPath, { force: true });
+    } else {
+      await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
+    }
+  }
+  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
+}
+
+export async function ensureMacWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<void> {
+  await ensureWorkspaceBuildArtifacts(config, cache, async () => {
+    await buildWorkspaceArtifacts(config);
+  });
+}

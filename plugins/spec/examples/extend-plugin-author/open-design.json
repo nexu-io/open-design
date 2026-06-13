@@ -1,0 +1,46 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "extend-plugin-author",
+  "title": "Plugin Author",
+  "version": "0.1.0",
+  "description": "Guide an agent through creating, validating, and preparing an Open Design plugin contribution.",
+  "license": "MIT",
+  "tags": ["extend", "plugin-authoring", "create-plugin", "spec-plugin", "marketplace"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "utility",
+    "scenario": "plugin-authoring",
+    "useCase": {
+      "query": "Create an Open Design plugin for {{lane}} that helps users {{goal}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "assets": ["../../SPEC.md", "../../AGENT-DEVELOPMENT.md"],
+      "atoms": ["discovery-question-form", "todo-write", "file-read", "file-write", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write", "file-read"] },
+        { "id": "write", "atoms": ["file-write"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "lane", "type": "select", "required": true, "label": "Lane", "options": ["import", "create", "export", "share", "deploy", "refine", "extend"] },
+      { "name": "goal", "type": "text", "required": true, "label": "Goal" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "fs:write"]
+  }
+}
+

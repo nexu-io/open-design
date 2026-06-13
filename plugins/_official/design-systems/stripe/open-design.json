@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-stripe",
+  "title": "Stripe",
+  "title_i18n": {
+    "zh-CN": "Stripe",
+    "zh-TW": "Stripe",
+    "ja": "Stripe",
+    "ko": "Stripe",
+    "de": "Stripe",
+    "fr": "Stripe",
+    "ru": "Stripe",
+    "es": "Stripe",
+    "pt-BR": "Stripe",
+    "it": "Stripe",
+    "vi": "Stripe",
+    "pl": "Stripe",
+    "id": "Stripe",
+    "nl": "Stripe",
+    "ar": "Stripe",
+    "tr": "Stripe",
+    "uk": "Stripe",
+    "en": "Stripe"
+  },
+  "version": "0.1.0",
+  "description": "Payment infrastructure. Signature purple gradients, weight-300 elegance.",
+  "description_i18n": {
+    "zh-CN": "支付基础设施。标志性紫色渐变，300字重优雅设计。",
+    "zh-TW": "支付基礎設施。標誌性紫色漸層，300字重優雅設計。",
+    "ja": "決済インフラ。シグネチャーパープルグラデーション、ウェイト300のエレガンス。",
+    "ko": "결제 인프라. 시그니처 퍼플 그라데이션, 웨이트-300 우아함.",
+    "de": "Zahlungsinfrastruktur. Charakteristische lila Verläufe, elegantes Weight-300.",
+    "fr": "Infrastructure de paiement. Dégradés violets emblématiques, élégance weight-300.",
+    "ru": "Платёжная инфраструктура. Фирменные фиолетовые градиенты, изящность weight-300.",
+    "es": "Infraestructura de pagos. Degradados morados característicos, elegancia weight-300.",
+    "pt-BR": "Infraestrutura de pagamentos. Gradientes roxos exclusivos, elegância weight-300.",
+    "it": "Infrastruttura di pagamento. Gradienti viola distintivi, eleganza weight-300.",
+    "vi": "Hạ tầng thanh toán. Gradient tím đặc trưng, sự thanh lịch weight-300.",
+    "pl": "Infrastruktura płatności. Charakterystyczne fioletowe gradienty, elegancja weight-300.",
+    "id": "Infrastruktur pembayaran. Gradien ungu khas, elegansi weight-300.",
+    "nl": "Betalingsinfrastructuur. Kenmerkende paarse verloopkleuren, weight-300 elegantie.",
+    "ar": "بنية تحتية للدفع. تدرجات بنفسجية مميزة، أناقة weight-300.",
+    "tr": "Ödeme altyapısı. İmza niteliğinde mor degradeler, weight-300 zarafeti.",
+    "uk": "Платіжна інфраструктура. Фірмові фіолетові градієнти, елегантність weight-300.",
+    "en": "Payment infrastructure. Signature purple gradients, weight-300 elegance."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "fintech-crypto"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Stripe design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Stripe design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "stripe",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

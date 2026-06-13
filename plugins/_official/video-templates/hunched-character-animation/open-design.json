@@ -1,0 +1,120 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-hunched-character-animation",
+  "title": "Hunched Character Animation",
+  "title_i18n": {
+    "zh-CN": "驼背角色动画",
+    "zh-TW": "駝背角色動畫",
+    "ja": "猫背キャラクターアニメーション",
+    "ko": "구부정한 캐릭터 애니메이션",
+    "de": "Gebeugte Charakter-Animation",
+    "fr": "Animation de personnage voûté",
+    "ru": "Анимация сутулого персонажа",
+    "es": "Animación de personaje encorvado",
+    "pt-BR": "Animação de personagem curvado",
+    "it": "Animazione personaggio curvo",
+    "vi": "Hoạt ảnh nhân vật gù lưng",
+    "pl": "Animacja zgarbionej postaci",
+    "id": "Animasi karakter bungkuk",
+    "nl": "Gebogen karakter animatie",
+    "ar": "رسوم متحركة لشخصية محدبة",
+    "tr": "Kambur karakter animasyonu",
+    "uk": "Анімація сутулого персонажа",
+    "en": "Hunched Character Animation"
+  },
+  "version": "0.1.0",
+  "description": "Instruction for Seedance 2 to create an in-place walking animation for a specific character reference.",
+  "description_i18n": {
+    "zh-CN": "指导 Seedance 2 创建特定角色参考的原地行走动画。",
+    "zh-TW": "指導 Seedance 2 創建特定角色參考的原地行走動畫。",
+    "ja": "Seedance 2で特定のキャラクターリファレンスに基づいたその場歩行アニメーションを作成するための手順。",
+    "ko": "Seedance 2에서 특정 캐릭터 레퍼런스에 대한 제자리 걷기 애니메이션을 만들기 위한 지침입니다.",
+    "de": "Anleitung für Seedance 2 zur Erstellung einer Walking-Animation an Ort und Stelle für eine bestimmte Charakterreferenz.",
+    "fr": "Instructions pour Seedance 2 afin de créer une animation de marche sur place pour une référence de personnage spécifique.",
+    "ru": "Инструкция для Seedance 2 по созданию анимации ходьбы на месте для конкретного референса персонажа.",
+    "es": "Instrucciones para Seedance 2 para crear una animación de caminata en el lugar para una referencia de personaje específica.",
+    "pt-BR": "Instruções para o Seedance 2 criar uma animação de caminhada no lugar para uma referência de personagem específica.",
+    "it": "Istruzioni per Seedance 2 per creare un'animazione di camminata sul posto per un riferimento di personaggio specifico.",
+    "vi": "Hướng dẫn cho Seedance 2 tạo hoạt ảnh đi bộ tại chỗ cho tham chiếu nhân vật cụ thể.",
+    "pl": "Instrukcje dla Seedance 2 do tworzenia animacji chodzenia w miejscu dla określonego wzorca postaci.",
+    "id": "Instruksi untuk Seedance 2 membuat animasi berjalan di tempat untuk referensi karakter tertentu.",
+    "nl": "Instructies voor Seedance 2 om een ter plaatse loopanimatie te maken voor een specifieke karakterreferentie.",
+    "ar": "تعليمات لـ Seedance 2 لإنشاء رسوم متحركة للمشي في المكان لمرجع شخصية محدد.",
+    "tr": "Seedance 2'nin belirli bir karakter referansı için yerinde yürüme animasyonu oluşturması için talimatlar.",
+    "uk": "Інструкція для Seedance 2 щодо створення анімації ходьби на місці для конкретного референсу персонажа.",
+    "en": "Instruction for Seedance 2 to create an in-place walking animation for a specific character reference."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Olivio Sarikas",
+    "url": "https://x.com/OlivioSarikas/status/2049093747011670042"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d3d5dcaf102414a8cceca23d60b5c0d0/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d3d5dcaf102414a8cceca23d60b5c0d0/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "create a walking animation for this hunched over character. the character stays in place",
+        "zh-CN": "使用这个插件完成以下任务：create a walking animation for this hunched over character. the character stays in place"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

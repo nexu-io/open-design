@@ -1,0 +1,375 @@
+---
+/*
+ * /plugins/templates/<kind>/ — focused grid for one artifact category.
+ *
+ * Reads from `plugins/_official/` (bundled-plugin registry). Same
+ * filter the parent flat index applies, narrowed to one of the seven
+ * artifact kinds. Subcategory chips are anchored on the page so a
+ * single tap inside Prototype / Slides / Image / Video jumps to a
+ * scene cluster without leaving the page.
+ *
+ * Layout matches the parent `/plugins/templates/` page (YouMind-style
+ * card grid + Open-Source-Claude-Design hero + counter chip + FAQ on
+ * the parent only). The shared `.tpl-grid` class drops every card
+ * into a 3-column responsive grid; the existing client-side scene
+ * filter script keeps working because every card carries the same
+ * `data-scene` attribute the legacy `<PluginRow>` row exposed.
+ */
+import Layout from '../../../../_components/sub-page-layout.astro';
+import TemplateCard from '../../../../_components/template-card.astro';
+import {
+  getBundledPlugins,
+  type BundledPluginRecord,
+} from '../../../../_lib/bundled-plugins';
+import {
+  PLUGIN_CATEGORIES,
+  bundledRecordOf,
+  categorizePlugin,
+  categorizeSubcategory,
+  getSubcategoriesFor,
+  type PluginCategorySlug,
+} from '../../../../_lib/plugin-facets';
+import { getPluginsCopy } from '../../../../_lib/plugins-i18n';
+import { localeFromPath, localizedHref } from '../../../../i18n';
+
+export async function getStaticPaths() {
+  return PLUGIN_CATEGORIES.map((cat) => ({
+    params: { kind: cat.slug },
+    props: { categorySlug: cat.slug },
+  }));
+}
+
+interface Props {
+  categorySlug: PluginCategorySlug;
+}
+
+const { categorySlug } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const pcopy = getPluginsCopy(locale);
+const categoryCopy = pcopy.category[categorySlug];
+
+const all = getBundledPlugins().filter((p) => p.bucket !== 'design-systems');
+
+interface Item {
+  record: BundledPluginRecord;
+  subcategory: string | null;
+}
+
+const items: Item[] = [];
+for (const record of all) {
+  const matchable = bundledRecordOf(record);
+  if (categorizePlugin(matchable) !== categorySlug) continue;
+  items.push({
+    record,
+    subcategory: categorizeSubcategory(matchable, categorySlug),
+  });
+}
+
+const subcategories = getSubcategoriesFor(categorySlug);
+const subCounts = new Map<string, number>();
+for (const i of items) {
+  if (i.subcategory) subCounts.set(i.subcategory, (subCounts.get(i.subcategory) ?? 0) + 1);
+}
+
+const featuredSet = new Set(
+  items
+    .filter((i) => i.record.tags?.includes('featured'))
+    .map((i) => i.record.manifestId),
+);
+
+const totalCount = items.length;
+const title = `${categoryCopy.label} templates · Open Source Claude Design alternative`;
+const description = categoryCopy.description;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL(`/plugins/templates/${categorySlug}/`, Astro.site).toString(),
+  numberOfItems: totalCount,
+};
+---
+
+<Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
+  <header class="catalog-head tpl-hero">
+    <div class="tpl-hero-text">
+      <h1 class="display">{categoryCopy.label}<span class="dot">.</span></h1>
+      <p class="lead">{categoryCopy.description}</p>
+    </div>
+  </header>
+
+  <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
+    <div class="filter-group">
+      <span class="filter-label">{pcopy.artifactKindLabel}</span>
+      <ul>
+        <li>
+          <a class="chip chip-link" href={href('/plugins/templates/#filter-strip')}>{pcopy.allChip}</a>
+        </li>
+        {PLUGIN_CATEGORIES.map((cat) => (
+          <li>
+            <a
+              class={cat.slug === categorySlug ? 'chip chip-link is-active' : 'chip chip-link'}
+              href={href(`/plugins/templates/${cat.slug}/#filter-strip`)}
+              aria-current={cat.slug === categorySlug ? 'page' : undefined}
+            >
+              {pcopy.category[cat.slug].label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  {subcategories.length > 0 && (
+    <section class="filter-strip" aria-label={pcopy.sceneLabel} data-scene-strip>
+      <div class="filter-group">
+        <span class="filter-label">{pcopy.sceneLabel}</span>
+        <ul>
+          <li>
+            <button type="button" class="chip chip-link is-active" data-scene-pick="all">
+              {pcopy.allChip}<span class="chip-num">{totalCount}</span>
+            </button>
+          </li>
+          {subcategories.map((sub) => {
+            const count = subCounts.get(sub.slug) ?? 0;
+            if (count === 0) return null;
+            return (
+              <li>
+                <button
+                  type="button"
+                  class="chip chip-link"
+                  data-scene-pick={sub.slug}
+                  title={sub.description}
+                >
+                  {pcopy.subcategory[sub.slug] ?? sub.label}<span class="chip-num">{count}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
+  )}
+
+  <section
+    class="tpl-grid"
+    aria-label={`${categoryCopy.label} ${pcopy.tileTemplates}`}
+    data-scene-list
+  >
+    {items.map((item, idx) => (
+      <TemplateCard
+        record={item.record}
+        index={idx}
+        featured={featuredSet.has(item.record.manifestId)}
+        dataScene={item.subcategory ?? 'none'}
+      />
+    ))}
+  </section>
+
+  {/*
+   * Client-side scene filter for /plugins/templates/<kind>/. Toggles
+   * card visibility via inline `display` so the existing scene chips
+   * stay routing-free (no per-scene URL × 18 locales × 7 kinds = 126
+   * static pages just to swap a filter). The chips are rendered as
+   * <button> for the same reason — no anchor href to chase when JS
+   * no-ops.
+   */}
+  <script>
+    (() => {
+      const strip = document.querySelector('[data-scene-strip]');
+      const list = document.querySelector('[data-scene-list]');
+      if (!strip || !list) return;
+      const buttons = strip.querySelectorAll('[data-scene-pick]');
+      const items = list.querySelectorAll('[data-scene]');
+      strip.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const pick = target.closest('[data-scene-pick]');
+        if (!(pick instanceof HTMLElement)) return;
+        const want = pick.getAttribute('data-scene-pick');
+        buttons.forEach((b) => b.classList.toggle('is-active', b === pick));
+        items.forEach((card) => {
+          const has = card.getAttribute('data-scene');
+          const hide = want !== 'all' && has !== want;
+          (card as HTMLElement).style.display = hide ? 'none' : '';
+        });
+      });
+    })();
+  </script>
+
+  {/*
+    Page-level share dialog — single instance, same DOM shape as the
+    detail-page dialog. See parent `/plugins/templates/index.astro` for
+    the rationale; this file duplicates the markup + boot script so
+    each route is self-contained for static export.
+  */}
+  <dialog class="detail-share-dialog tpl-share-popover" data-tpl-share-dialog>
+    <form method="dialog" class="detail-share-dialog-form">
+      <header class="detail-share-dialog-head">
+        <h2>{pcopy.shareTitle}</h2>
+        <button
+          type="submit"
+          class="detail-share-dialog-close"
+          aria-label={pcopy.shareDialogClose}
+          value="cancel"
+        >×</button>
+      </header>
+      <p class="detail-share-dialog-lead">{pcopy.shareLead}</p>
+      <textarea
+        class="detail-share-dialog-text"
+        readonly
+        rows="6"
+        data-share-text
+      ></textarea>
+      <div class="detail-share-dialog-actions">
+        <button
+          type="button"
+          class="btn btn-primary detail-share-dialog-copy"
+          data-share-copy
+        >
+          {pcopy.shareCopyText}
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost detail-share-dialog-copy-link"
+          data-copy-link
+        >
+          {pcopy.shareCopyLink}
+        </button>
+      </div>
+      <div class="detail-share-dialog-platforms">
+        <span class="detail-share-dialog-platforms-label">{pcopy.shareJumpTo}</span>
+        <a class="detail-share-platform-btn" href="https://x.com/compose/post" target="_blank" rel="noopener" aria-label="X">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+          <span class="sr-only">X</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.linkedin.com/feed/?shareActive=true" target="_blank" rel="noopener" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          <span class="sr-only">LinkedIn</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.reddit.com/submit" target="_blank" rel="noopener" aria-label="Reddit">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12.3c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 00.029-.463.33.33 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/></svg>
+          <span class="sr-only">Reddit</span>
+        </a>
+        <a class="detail-share-platform-btn" href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          <span class="sr-only">Facebook</span>
+        </a>
+      </div>
+    </form>
+  </dialog>
+
+  {/*
+   * Hover-autoplay observer + card-level share button (page-level
+   * dialog populate + showModal). Bundled into one <script> so they
+   * share the same boot lifecycle; idempotent re-binds via
+   * `data-tpl-init` / `data-tpl-share-bound` markers when
+   * `astro:page-load` fires more than once.
+   */}
+  <script>
+    const initTemplatesKindPage = () => {
+      // Card preview hover-autoplay + idle hold/pan loop lives in the shared
+      // <TemplateCardAutoplay /> component (same contract as the parent
+      // `/plugins/templates/` page), so the behaviour stays identical here.
+
+      const dialog = document.querySelector<HTMLDialogElement>('[data-tpl-share-dialog]');
+      const positionPopover = (trigger: HTMLElement) => {
+        if (!dialog) return;
+        dialog.style.top = '-9999px';
+        dialog.style.left = '-9999px';
+        if (typeof dialog.show === 'function') {
+          dialog.show();
+        } else {
+          dialog.setAttribute('open', '');
+        }
+        const tr = trigger.getBoundingClientRect();
+        const dr = dialog.getBoundingClientRect();
+        const margin = 12;
+        const gap = 8;
+        let left = tr.right - dr.width;
+        left = Math.max(margin, Math.min(left, window.innerWidth - dr.width - margin));
+        let top = tr.top - dr.height - gap;
+        if (top < margin) top = tr.bottom + gap;
+        top = Math.max(margin, Math.min(top, window.innerHeight - dr.height - margin));
+        dialog.style.left = `${left}px`;
+        dialog.style.top = `${top}px`;
+      };
+
+      if (dialog && !dialog.hasAttribute('data-tpl-popover-bound')) {
+        dialog.setAttribute('data-tpl-popover-bound', '1');
+        document.addEventListener('click', (event) => {
+          if (!dialog.open) return;
+          const target = event.target;
+          if (!(target instanceof Node)) return;
+          if (dialog.contains(target)) return;
+          if ((target as Element).closest?.('[data-tpl-card-share]')) return;
+          dialog.close();
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && dialog.open) dialog.close();
+        });
+      }
+
+      document
+        .querySelectorAll<HTMLButtonElement>('[data-tpl-card-share]:not([data-tpl-share-bound])')
+        .forEach((btn) => {
+          btn.setAttribute('data-tpl-share-bound', '1');
+          btn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!dialog) return;
+            const text = btn.getAttribute('data-share-text') ?? '';
+            const url = btn.getAttribute('data-share-url') ?? '';
+            const ta = dialog.querySelector<HTMLTextAreaElement>('[data-share-text]');
+            const copyLinkBtn = dialog.querySelector<HTMLButtonElement>('[data-copy-link]');
+            if (ta) ta.value = text;
+            if (copyLinkBtn) copyLinkBtn.setAttribute('data-copy-link', url);
+            // Rebuild the social share-intent hrefs from this card's payload;
+            // the dialog is reused across cards, so the intents must be
+            // recomputed on each open rather than wired once.
+            (window as unknown as { __odWireShareIntents?: (d: Element) => void }).__odWireShareIntents?.(dialog);
+            if (dialog.open) dialog.close();
+            positionPopover(btn);
+          });
+        });
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initTemplatesKindPage);
+    } else {
+      initTemplatesKindPage();
+    }
+    document.addEventListener('astro:page-load', initTemplatesKindPage);
+  </script>
+</Layout>
+
+<style>
+  /*
+   * Scene-pick chips are rendered as <button> so we can attach a
+   * single delegated click handler without worrying about anchor
+   * default-href behaviour (which would otherwise try to scroll to
+   * a non-existent #anchor when the JS no-ops).
+   *
+   * Resetting only the user-agent decorations (appearance, the bold
+   * font shorthand defaults that override .chip's mono/11px, the
+   * narrow button padding) so the chip reads identical to the anchor
+   * chips on the same rail. No `color` here: this scoped rule out-ranks
+   * the plain-class chip rules in sub-pages.css, so declaring one would
+   * pin the label to ink even on `.is-active` (dark fill + dark label).
+   * `.chip` / `.chip:hover` / `.chip-link.is-active` already cover every
+   * state, and author rules beat the UA button color regardless of
+   * specificity.
+   */
+  [data-scene-strip] .chip-link[data-scene-pick] {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    text-transform: none;
+  }
+</style>

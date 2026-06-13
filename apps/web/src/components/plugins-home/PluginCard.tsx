@@ -1,0 +1,369 @@
+// Single plugin card rendered inside the plugins-home grid.
+//
+// Each card is a hero preview tile + a small metadata footer. The
+// hero region adapts to the plugin type (image / video poster,
+// sandboxed HTML iframe, design-system patch, plain text) — the
+// classifier in `./preview.ts` picks the right surface and the
+// shared `PreviewSurface` switchboard mounts it lazily so a
+// 350-tile grid stays cheap.
+//
+// Hover reveals an overlay with the plugin description, tag chips,
+// and primary actions (Use / Details), so the resting state stays
+// gallery-clean while the active state surfaces everything the user
+// needs to commit.
+
+import { useMemo, useState } from 'react';
+import { VisuallyHidden } from '@open-design/components';
+import type { InstalledPluginRecord } from '@open-design/contracts';
+import { useI18n } from '../../i18n';
+import type { PluginShareAction } from '../../state/projects';
+import { Icon } from '../Icon';
+import { TrustBadge } from '../TrustBadge';
+import { PreviewSurface } from './cards/PreviewSurface';
+import { localizePluginDescription, localizePluginTitle } from './localization';
+import { inferPluginPreview } from './preview';
+import type { PluginUseAction } from './useActions';
+
+interface Props {
+  record: InstalledPluginRecord;
+  isActive: boolean;
+  isPending: boolean;
+  pendingAny: boolean;
+  pendingShareAction?: { pluginId: string; action: PluginShareAction } | null;
+  isFeatured: boolean;
+  // Saved collection (rich layout only — the gallery tile has no save UI).
+  isSaved: boolean;
+  onSave: (record: InstalledPluginRecord) => void;
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onOpenDetails: (record: InstalledPluginRecord) => void;
+  onShareAction?: (
+    record: InstalledPluginRecord,
+    action: PluginShareAction,
+  ) => void;
+  // 'rich' (default) keeps the hover-overlay metadata card. 'gallery'
+  // is the minimal live-preview tile: a top bar (dot + name + open
+  // fullscreen) over an eagerly-rendered example.html iframe.
+  layout?: 'rich' | 'gallery';
+  // Gallery only: the ↗ that opens the real example page in a new tab.
+  // Fired alongside the default anchor navigation so analytics can tell
+  // "opened the finished page" apart from "opened the detail modal".
+  onOpenExternal?: (record: InstalledPluginRecord) => void;
+}
+
+const MAX_VISIBLE_TAGS = 3;
+
+export function PluginCard({
+  record,
+  isActive,
+  isPending,
+  pendingAny,
+  pendingShareAction = null,
+  isFeatured,
+  isSaved,
+  onSave,
+  onUse,
+  onOpenDetails,
+  onShareAction,
+  layout = 'rich',
+  onOpenExternal,
+}: Props) {
+  const { locale } = useI18n();
+  const [useMenuOpen, setUseMenuOpen] = useState(false);
+  // Tiles prefer the cheap pre-baked hover-pan clip; the detail modal still
+  // opens the live interactive page (it calls inferPluginPreview without this).
+  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
+  const title = localizePluginTitle(locale, record);
+  const description = localizePluginDescription(locale, record);
+  const tags = useMemo(
+    () =>
+      (record.manifest?.tags ?? [])
+        .filter((t) => !NOISE_TAGS.has(t.toLowerCase()))
+        .slice(0, MAX_VISIBLE_TAGS),
+    [record.manifest?.tags],
+  );
+  const hasQuery = Boolean(record.manifest?.od?.useCase?.query);
+  const sharePendingAction =
+    pendingShareAction?.pluginId === record.id ? pendingShareAction.action : null;
+  const shareBusy = sharePendingAction !== null;
+  const useDisabled = isPending || pendingAny || shareBusy;
+
+  function pickUseAction(action: PluginUseAction) {
+    setUseMenuOpen(false);
+    onUse(record, action);
+  }
+
+  if (layout === 'gallery') {
+    // Live-preview tile: a macOS-window-style bar (status dot + plugin
+    // name + open-fullscreen) over an eagerly-rendered example.html
+    // iframe. The whole tile opens the detail surface; the ↗ link opens
+    // the real page in a new tab.
+    const previewSrc = preview.kind === 'html' ? preview.src : null;
+    return (
+      <article
+        role="listitem"
+        className={[
+          'plugins-home__card',
+          'plugins-home__card--gallery',
+          `plugins-home__card--${preview.kind}`,
+          isActive ? 'is-active' : '',
+          isFeatured ? 'is-featured' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-plugin-id={record.id}
+        data-preview-kind={preview.kind}
+        {...(isFeatured ? { 'data-featured': 'true' } : {})}
+        // Mouse convenience: clicking anywhere on the tile opens details.
+        // Keyboard/AT users get a real, announced control via the title
+        // button below — the tile itself stays a non-interactive listitem
+        // so screen readers don't announce a bare "listitem" as actionable.
+        onClick={() => onOpenDetails(record)}
+      >
+        <div className="plugins-home__gallery-bar">
+          <span className="plugins-home__gallery-dot" aria-hidden />
+          <button
+            type="button"
+            className="plugins-home__gallery-name"
+            title={title}
+            aria-label={`Open ${title} details`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDetails(record);
+            }}
+            // The accessible, focusable control that opens the detail modal;
+            // also the e2e/visual hook equivalent to the rich card's Details.
+            data-testid={`plugins-home-details-${record.id}`}
+          >
+            {title}
+          </button>
+          {previewSrc ? (
+            <a
+              className="plugins-home__gallery-open"
+              href={previewSrc}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenExternal?.(record);
+              }}
+              aria-label={`Open ${title} in a new tab`}
+              data-testid={`plugins-home-open-${record.id}`}
+            >
+              <Icon name="external-link" size={12} />
+            </a>
+          ) : null}
+        </div>
+        <div className="plugins-home__gallery-frame">
+          <PreviewSurface
+            pluginId={record.id}
+            pluginTitle={title}
+            preview={preview}
+            eager
+          />
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article
+      role="listitem"
+      className={[
+        'plugins-home__card',
+        `plugins-home__card--${preview.kind}`,
+        onShareAction ? 'plugins-home__card--shareable' : '',
+        isActive ? 'is-active' : '',
+        isFeatured ? 'is-featured' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-plugin-id={record.id}
+      data-preview-kind={preview.kind}
+      {...(isFeatured ? { 'data-featured': 'true' } : {})}
+    >
+      <PreviewSurface
+        pluginId={record.id}
+        pluginTitle={title}
+        preview={preview}
+      />
+
+      <div className="plugins-home__card-overlay">
+        <div className="plugins-home__card-overlay-top">
+          <TrustBadge trust={record.trust} variant="overlay" />
+          {isFeatured ? (
+            <span className="plugins-home__overlay-featured" aria-hidden>
+              <Icon name="star" size={11} />
+            </span>
+          ) : null}
+        </div>
+        <div className="plugins-home__card-overlay-body">
+          <span className="plugins-home__overlay-title" title={title}>
+            {title}
+          </span>
+          {description ? (
+            <p className="plugins-home__overlay-desc">{description}</p>
+          ) : null}
+          {tags.length > 0 ? (
+            <div className="plugins-home__overlay-tags">
+              {tags.map((t) => (
+                <span key={t} className="plugins-home__overlay-tag">
+                  {t}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="plugins-home__overlay-actions">
+          <div className="plugins-home__overlay-actions-main">
+            <button
+              type="button"
+              className="plugins-home__action plugins-home__action--secondary"
+              onClick={() => onOpenDetails(record)}
+              aria-label={`View details for ${title}`}
+              data-testid={`plugins-home-details-${record.id}`}
+            >
+              <Icon name="eye" size={12} />
+              <span>Details</span>
+            </button>
+            <div
+              className={`plugins-home__use-menu${hasQuery ? ' has-options' : ''}`}
+              onBlur={(event) => {
+                const nextTarget = event.relatedTarget;
+                if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
+                  setUseMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="plugins-home__action plugins-home__action--primary plugins-home__use-main"
+                onClick={() => pickUseAction('use')}
+                disabled={useDisabled}
+                aria-busy={isPending ? 'true' : undefined}
+                data-testid={`plugins-home-use-${record.id}`}
+              >
+                {isPending ? 'Applying…' : 'Use'}
+              </button>
+              {hasQuery ? (
+                <>
+                  <button
+                    type="button"
+                    className="plugins-home__action plugins-home__action--primary plugins-home__use-toggle"
+                    onClick={() => setUseMenuOpen((open) => !open)}
+                    disabled={useDisabled}
+                    aria-haspopup="menu"
+                    aria-expanded={useMenuOpen}
+                    aria-label={`Choose how to use ${title}`}
+                    data-testid={`plugins-home-use-menu-${record.id}`}
+                  >
+                    <Icon name="chevron-down" size={13} />
+                  </button>
+                  {useMenuOpen ? (
+                    <div
+                      className="plugins-home__use-menu-list"
+                      role="menu"
+                      aria-label={`Use options for ${title}`}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="plugins-home__use-menu-item"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => pickUseAction('use')}
+                        data-testid={`plugins-home-use-context-${record.id}`}
+                      >
+                        Use
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="plugins-home__use-menu-item"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => pickUseAction('use-with-query')}
+                        data-testid={`plugins-home-use-with-query-${record.id}`}
+                      >
+                        Use with query
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+          {onShareAction ? (
+            <div
+              className="plugins-home__share-actions"
+              aria-label={`Share ${title}`}
+            >
+              <button
+                type="button"
+                className="plugins-home__action plugins-home__action--secondary plugins-home__action--compact"
+                onClick={() => onShareAction(record, 'publish-github')}
+                disabled={pendingAny || shareBusy}
+                aria-busy={sharePendingAction === 'publish-github' ? 'true' : undefined}
+                aria-label={`Publish ${title} as a GitHub repository`}
+                title="Publish plugin as a GitHub repository"
+                data-testid={`plugins-home-publish-github-${record.id}`}
+              >
+                <Icon
+                  name={sharePendingAction === 'publish-github' ? 'spinner' : 'github'}
+                  size={12}
+                />
+                <span>{sharePendingAction === 'publish-github' ? 'Starting…' : 'Publish'}</span>
+              </button>
+              <button
+                type="button"
+                className="plugins-home__action plugins-home__action--secondary plugins-home__action--compact"
+                onClick={() => onShareAction(record, 'contribute-open-design')}
+                disabled={pendingAny || shareBusy}
+                aria-busy={sharePendingAction === 'contribute-open-design' ? 'true' : undefined}
+                aria-label={`Contribute ${title} to Open Design`}
+                title="Contribute plugin to Open Design with a pull request"
+                data-testid={`plugins-home-contribute-open-design-${record.id}`}
+              >
+                <Icon
+                  name={sharePendingAction === 'contribute-open-design' ? 'spinner' : 'share'}
+                  size={12}
+                />
+                <span>{sharePendingAction === 'contribute-open-design' ? 'Starting…' : 'Contribute'}</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="plugins-home__card-foot">
+        <button
+          type="button"
+          className={[
+            'plugins-home__card-save',
+            isSaved ? 'is-saved' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={() => onSave(record)}
+          aria-pressed={isSaved}
+          aria-label={`${isSaved ? 'Saved' : 'Save'} ${title}`}
+          title={isSaved ? 'Saved' : 'Save'}
+          data-testid={`plugins-home-save-${record.id}`}
+        >
+          <Icon name={isSaved ? 'check' : 'star'} size={12} />
+          <VisuallyHidden>{isSaved ? 'Saved' : 'Save'}</VisuallyHidden>
+        </button>
+        <span className="plugins-home__card-title" title={title}>
+          <span className="plugins-home__card-title-text">{title}</span>
+        </span>
+        <TrustBadge trust={record.trust} />
+      </div>
+    </article>
+  );
+}
+
+const NOISE_TAGS = new Set<string>([
+  'first-party',
+  'third-party',
+  'phase-1',
+  'phase-7',
+  'untitled',
+  'plugin',
+]);

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-sanity",
+  "title": "Sanity",
+  "title_i18n": {
+    "zh-CN": "Sanity",
+    "zh-TW": "Sanity",
+    "ja": "Sanity",
+    "ko": "Sanity",
+    "de": "Sanity",
+    "fr": "Sanity",
+    "ru": "Sanity",
+    "es": "Sanity",
+    "pt-BR": "Sanity",
+    "it": "Sanity",
+    "vi": "Sanity",
+    "pl": "Sanity",
+    "id": "Sanity",
+    "nl": "Sanity",
+    "ar": "Sanity",
+    "tr": "Sanity",
+    "uk": "Sanity",
+    "en": "Sanity"
+  },
+  "version": "0.1.0",
+  "description": "Headless CMS. Red accent, content-first editorial layout.",
+  "description_i18n": {
+    "zh-CN": "无头 CMS。红色强调色，内容优先的编辑布局。",
+    "zh-TW": "無頭式 CMS。紅色強調色，內容優先的編輯版面。",
+    "ja": "ヘッドレスCMS。赤のアクセントカラー、コンテンツファーストの編集レイアウト。",
+    "ko": "헤드리스 CMS. 빨간색 강조, 콘텐츠 우선 편집 레이아웃.",
+    "de": "Headless CMS. Rote Akzentfarbe, inhaltsorientiertes redaktionelles Layout.",
+    "fr": "CMS headless. Accent rouge, mise en page éditoriale axée sur le contenu.",
+    "ru": "Headless CMS. Красный акцент, редакторский макет с упором на контент.",
+    "es": "CMS headless. Acento rojo, diseño editorial centrado en el contenido.",
+    "pt-BR": "CMS headless. Destaque vermelho, layout editorial focado em conteúdo.",
+    "it": "CMS headless. Accento rosso, layout editoriale incentrato sui contenuti.",
+    "vi": "CMS headless. Màu nhấn đỏ, bố cục biên tập ưu tiên nội dung.",
+    "pl": "Headless CMS. Czerwony akcent, układ redakcyjny skupiony na treści.",
+    "id": "CMS headless. Aksen merah, tata letak editorial yang mengutamakan konten.",
+    "nl": "Headless CMS. Rode accent, content-first redactionele layout.",
+    "ar": "نظام إدارة محتوى بدون واجهة أمامية. لون تمييز أحمر، تخطيط تحريري يركز على المحتوى.",
+    "tr": "Headless CMS. Kırmızı vurgu, içerik odaklı editöryal düzen.",
+    "uk": "Headless CMS. Червоний акцент, редакційний макет із фокусом на контент.",
+    "en": "Headless CMS. Red accent, content-first editorial layout."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "backend-data"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Sanity design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Sanity design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "sanity",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-kami",
+  "title": "kami (紙 / 纸)",
+  "title_i18n": {
+    "zh-CN": "kami (紙 / 纸)",
+    "zh-TW": "kami (紙 / 纸)",
+    "ja": "kami (紙 / 纸)",
+    "ko": "kami (紙 / 纸)",
+    "de": "kami (紙 / 纸)",
+    "fr": "kami (紙 / 纸)",
+    "ru": "kami (紙 / 纸)",
+    "es": "kami (紙 / 纸)",
+    "pt-BR": "kami (紙 / 纸)",
+    "it": "kami (紙 / 纸)",
+    "vi": "kami (紙 / 纸)",
+    "pl": "kami (紙 / 纸)",
+    "id": "kami (紙 / 纸)",
+    "nl": "kami (紙 / 纸)",
+    "ar": "kami (紙 / 纸)",
+    "tr": "kami (紙 / 纸)",
+    "uk": "kami (紙 / 纸)",
+    "en": "kami (紙 / 纸)"
+  },
+  "version": "0.1.0",
+  "description": "Editorial paper system: warm parchment canvas, ink-blue accent, serif-led hierarchy. Built for resumes, one-pagers, white papers, portfolios, slide decks — anything that should feel like high-quality print rather than UI. Multilingual by de",
+  "description_i18n": {
+    "zh-CN": "编辑纸张系统：温暖羊皮纸画布、墨蓝色强调、衬线主导层次。适用于简历、单页文档、白皮书、作品集、幻灯片等需要高品质印刷质感的内容。支持多语言。",
+    "zh-TW": "編輯紙張系統：溫暖羊皮紙畫布、墨藍色強調、襯線主導層次。適用於履歷、單頁文件、白皮書、作品集、簡報等需要高品質印刷質感的內容。支援多語言。",
+    "ja": "エディトリアルペーパーシステム：温かみのある羊皮紙キャンバス、インクブルーのアクセント、セリフ主体の階層構造。履歴書、1ページ資料、ホワイトペーパー、ポートフォリオ、スライド資料など、UIではなく高品質な印刷物の質感を求めるコンテンツに最適。多言語対応。",
+    "ko": "에디토리얼 페이퍼 시스템: 따뜻한 양피지 캔버스, 잉크 블루 강조, 세리프 중심 계층 구조. 이력서, 한 페이지 문서, 백서, 포트폴리오, 프레젠테이션 등 UI가 아닌 고품질 인쇄물 느낌이 필요한 콘텐츠에 적합. 다국어 지원.",
+    "de": "Redaktionelles Papiersystem: warme Pergament-Leinwand, tintenblauer Akzent, Serifen-geführte Hierarchie. Für Lebensläufe, Einseiter, Whitepapers, Portfolios, Präsentationen – alles, was hochwertige Druckqualität statt UI vermitteln soll. Mehrsprachig.",
+    "fr": "Système de papier éditorial : toile parchemin chaleureuse, accent bleu encre, hiérarchie à empattements. Conçu pour CV, documents d'une page, livres blancs, portfolios, présentations — tout ce qui doit évoquer l'impression de qualité plutôt que l'UI. Multilingue.",
+    "ru": "Редакторская бумажная система: тёплый пергаментный холст, чернильно-синий акцент, иерархия с засечками. Для резюме, однастраничников, официальных документов, портфолио, презентаций — всего, что должно выглядеть как качественная печать, а не UI. Многоязычная.",
+    "es": "Sistema de papel editorial: lienzo de pergamino cálido, acento azul tinta, jerarquía con serifas. Para currículums, documentos de una página, libros blancos, portafolios, presentaciones: todo lo que debe sentirse como impresión de alta calidad en lugar de UI. Multilingüe.",
+    "pt-BR": "Sistema de papel editorial: tela de pergaminho quente, destaque azul-tinta, hierarquia com serifas. Para currículos, documentos de uma página, white papers, portfólios, apresentações — tudo que deve parecer impressão de alta qualidade em vez de UI. Multilíngue.",
+    "it": "Sistema editoriale cartaceo: tela pergamena calda, accento blu inchiostro, gerarchia con grazie. Per curriculum, documenti singoli, white paper, portfolio, presentazioni: tutto ciò che deve sembrare stampa di qualità anziché UI. Multilingue.",
+    "vi": "Hệ thống giấy biên tập: canvas giấy da ấm áp, điểm nhấn xanh mực, phân cấp kiểu chữ serif. Dành cho CV, tài liệu một trang, white paper, portfolio, slide thuyết trình — mọi thứ cần cảm giác in ấn chất lượng cao thay vì UI. Đa ngôn ngữ.",
+    "pl": "Redakcyjny system papieru: ciepłe płótno pergaminowe, akcent atramentowej błękiti, hierarchia z szeryfami. Do CV, jednostronicowych dokumentów, white papers, portfolio, prezentacji — wszystkiego, co powinno wyglądać jak wysokiej jakości druk zamiast UI. Wielojęzyczny.",
+    "id": "Sistem kertas editorial: kanvas perkamen hangat, aksen biru tinta, hierarki serif. Untuk resume, dokumen satu halaman, white paper, portofolio, slide presentasi — apa pun yang harus terasa seperti cetakan berkualitas tinggi daripada UI. Multibahasa.",
+    "nl": "Redactioneel papiersysteem: warm perkamentcanvas, inktblauw accent, schreef-gedreven hiërarchie. Voor cv's, eenpagers, whitepapers, portfolio's, presentaties — alles dat moet aanvoelen als hoogwaardige print in plaats van UI. Meertalig.",
+    "ar": "نظام ورق تحريري: لوحة رق دافئة، لهجة زرقاء حبرية، تسلسل هرمي بخطوط serif. مصمم للسير الذاتية، المستندات أحادية الصفحة، الأوراق البيضاء، الحقائب، العروض التقديمية — كل ما يجب أن يبدو كطباعة عالية الجودة بدلاً من UI. متعدد اللغات.",
+    "tr": "Editoryal kağıt sistemi: sıcak parşömen kanvas, mürekkep mavisi vurgu, serif tabanlı hiyerarşi. Özgeçmişler, tek sayfalık belgeler, teknik raporlar, portföyler, sunumlar için — UI yerine yüksek kaliteli baskı hissi vermesi gereken her şey. Çok dilli.",
+    "uk": "Редакційна паперова система: теплий пергаментний холст, чорнильно-синій акцент, ієрархія з засічками. Для резюме, односторінкових документів, білих паперів, портфоліо, презентацій — всього, що має виглядати як якісний друк, а не UI. Багатомовна.",
+    "en": "Editorial paper system: warm parchment canvas, ink-blue accent, serif-led hierarchy. Built for resumes, one-pagers, white papers, portfolios, slide decks — anything that should feel like high-quality print rather than UI. Multilingual by de"
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "editorial-print"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the kami (紙 / 纸) design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "Generate a {{artifactKind}} using the kami (紙 / 纸) design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "kami",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

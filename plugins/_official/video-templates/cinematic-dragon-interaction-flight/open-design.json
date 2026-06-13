@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-dragon-interaction-flight",
+  "title": "Cinematic Dragon Interaction & Flight",
+  "title_i18n": {
+    "zh-CN": "电影级龙与人互动与飞行",
+    "zh-TW": "電影級龍與人互動與飛行",
+    "ja": "映画的なドラゴンとの交流と飛行",
+    "ko": "영화 같은 드래곤 교감 및 비행",
+    "de": "Filmische Drachen-Interaktion & Flug",
+    "fr": "Interaction cinématique avec un dragon et vol",
+    "ru": "Кинематографичное взаимодействие с драконом и полёт",
+    "es": "Interacción cinematográfica con dragón y vuelo",
+    "pt-BR": "Interação cinemática com dragão e voo",
+    "it": "Interazione cinematica con drago e volo",
+    "vi": "Tương tác và bay cùng rồng điện ảnh",
+    "pl": "Filmowa interakcja ze smokiem i lot",
+    "id": "Interaksi dan penerbangan naga sinematik",
+    "nl": "Filmische draak-interactie en vlucht",
+    "ar": "تفاعل سينمائي مع تنين وطيران",
+    "tr": "Sinematik ejderha etkileşimi ve uçuş",
+    "uk": "Кінематографічна взаємодія з драконом і політ",
+    "en": "Cinematic Dragon Interaction & Flight"
+  },
+  "version": "0.1.0",
+  "description": "A detailed storyboard-style prompt for a video featuring a woman's emotional interaction with a dragon followed by a cinematic flight sequence.",
+  "description_i18n": {
+    "zh-CN": "分镜脚本风格的视频提示词，展现女性与龙的情感互动及电影级飞行场景。",
+    "zh-TW": "分鏡腳本風格的影片提示詞，展現女性與龍的情感互動及電影級飛行場景。",
+    "ja": "女性とドラゴンの感情的な交流と映画的な飛行シーンを描く、絵コンテスタイルの動画プロンプト。",
+    "ko": "여성과 드래곤의 감정적 교감과 영화 같은 비행 장면을 담은 스토리보드 스타일의 동영상 프롬프트입니다.",
+    "de": "Ein Storyboard-Prompt für ein Video mit emotionaler Interaktion zwischen Frau und Drache sowie kinematischer Flugsequenz.",
+    "fr": "Un prompt de style storyboard pour une vidéo montrant l'interaction émotionnelle entre une femme et un dragon, suivie d'une séquence de vol cinématographique.",
+    "ru": "Промпт в стиле раскадровки для видео с эмоциональным взаимодействием женщины с драконом и кинематографической сценой полёта.",
+    "es": "Prompt estilo storyboard para un video con interacción emocional entre una mujer y un dragón, seguido de una secuencia de vuelo cinematográfica.",
+    "pt-BR": "Prompt estilo storyboard para um vídeo apresentando interação emocional entre uma mulher e um dragão, seguida de uma sequência de voo cinematográfica.",
+    "it": "Prompt in stile storyboard per un video con interazione emotiva tra una donna e un drago, seguito da una sequenza di volo cinematografica.",
+    "vi": "Prompt phong cách storyboard cho video thể hiện sự tương tác đầy cảm xúc giữa người phụ nữ và rồng, kèm cảnh bay điện ảnh.",
+    "pl": "Prompt w stylu storyboardu do wideo z emocjonalną interakcją między kobietą a smokiem oraz kinową sekwencją lotu.",
+    "id": "Prompt gaya storyboard untuk video yang menampilkan interaksi emosional wanita dengan naga diikuti sekuens penerbangan sinematik.",
+    "nl": "Een storyboard-achtige prompt voor een video met emotionele interactie tussen een vrouw en een draak, gevolgd door een filmische vluchtscène.",
+    "ar": "مطالبة بأسلوب القصة المصورة لفيديو يعرض تفاعلاً عاطفياً بين امرأة وتنين يتبعه مشهد طيران سينمائي.",
+    "tr": "Bir kadın ile ejderha arasındaki duygusal etkileşim ve ardından sinematik uçuş sekansını içeren storyboard tarzı video prompt'u.",
+    "uk": "Промпт у стилі розкадровки для відео з емоційною взаємодією жінки з драконом та кінематографічною сценою польоту.",
+    "en": "A detailed storyboard-style prompt for a video featuring a woman's emotional interaction with a dragon followed by a cinematic flight sequence."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "simply",
+    "url": "https://x.com/kingofdairyque/status/2049052738924023976"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "fantasy",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/f72b7a26635bdf580a2899bf2682f7f6/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/f72b7a26635bdf580a2899bf2682f7f6/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "STYLE Handheld + aerial camera blend Soft motion blur (only during fast transitions) Teal–orange cinematic grade Cool tones during dragon moments, warm tones at emotional peak ⏱ TIMELINE (15s) 0–2s (HOOK) Close-up on woman standing at a cliff Wind moving through hair A giant shadow passes over her → she slowly turns Low rumble builds tension 2–5s (CONNECTION) Dragon lands behind her with heavy presence It lowers its head slowly She hesitates, then touches its face Wind + dust particles react subtly Quiet emotional moment (no aggression) 5–8s (TAKEOFF) She climbs onto its back Dragon launches powerfully into the sky Camera follows upward, slight rotation Clouds rush past, strong sense of speed 8–12s (FLIGHT SEQUENCE) Fast but controlled cuts: Flying through clouds Passing mountain peaks Close-up of wings moving Her expression shifting to awe Wide aerial shot showing scale 12–15s (FINAL MOMENT) Above the clouds in golden light Dragon slows and stabilizes She stands confidently on its back Wide cinematic shot → calm, powerful ending",
+        "zh-CN": "使用这个插件完成以下任务：STYLE Handheld + aerial camera blend Soft motion blur (only during fast transitions) Teal–orange cinematic grade Cool tones during dragon moments, warm tones at emotional peak ⏱ TIMELINE (15s) 0–2s (HOOK) Close-up on woman standing at a cliff Wind moving through hair A giant shadow passes over her → she slowly turns Low rumble builds tension 2–5s (CONNECTION) Dragon lands behind her with heavy presence It lowers its head slowly She hesitates, then touches its face Wind + dust particles react subtly Quiet emotional moment (no aggression) 5–8s (TAKEOFF) She climbs onto its back Dragon launches powerfully into the sky Camera follows upward, slight rotation Clouds rush past, strong sense of speed 8–12s (FLIGHT SEQUENCE) Fast but controlled cuts: Flying through clouds Passing mountain peaks Close-up of wings moving Her expression shifting to awe Wide aerial shot showing scale 12–15s (FINAL MOMENT) Above the clouds in golden light Dragon slows and stabilizes She stands confidently on its back Wide cinematic shot → calm, powerful ending"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

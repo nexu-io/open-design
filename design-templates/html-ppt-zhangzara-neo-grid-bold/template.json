@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-neo-grid-bold",
+  "name": "Neo-Grid Bold",
+  "tagline": "Editorial neo-brutalism with a single neon yellow accent on off-white paper.",
+  "mood": [
+    "confident",
+    "punchy",
+    "editorial",
+    "modern"
+  ],
+  "occasion": [
+    "product launch",
+    "design review",
+    "founder pitch",
+    "brand deck",
+    "consulting findings",
+    "conference talk"
+  ],
+  "tone": [
+    "bold",
+    "minimal",
+    "design-led",
+    "graphic"
+  ],
+  "formality": "medium",
+  "density": "high",
+  "palette": {
+    "bg": "#ECECE8",
+    "ink": "#0A0A0A",
+    "paper": "#F5F4EF",
+    "accent": "#E6FF3D",
+    "muted": "#8A8A85",
+    "description": "off-white paper background, ink black, signature neon yellow accent used sparingly"
+  },
+  "typography": {
+    "display": "Space Grotesk",
+    "body": "Space Grotesk",
+    "mono": "JetBrains Mono",
+    "style": "geometric sans paired with technical mono captions; uppercase display weight"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel confident and editorial-graphic: design-led pitches, brand work, founder talks, conference keynotes. Excellent for stat-heavy slides, comparisons, and process flows. Just as strong for tech, research, or finance when the speaker wants to read as design-led rather than corporate.",
+  "avoid_for": "Contexts that need to feel quiet, traditional, or warm — the neon-yellow accent and uppercase display commit to a confident editorial voice.",
+  "slide_count": 12,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/neo-grid-bold"
+}

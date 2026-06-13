@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-character-intro-motion-graphics-sequence",
+  "title": "Character Intro Motion Graphics Sequence",
+  "title_i18n": {
+    "zh-CN": "角色介绍动态图形序列",
+    "zh-TW": "角色介紹動態圖形序列",
+    "ja": "キャラクター紹介モーショングラフィックスシーケンス",
+    "ko": "캐릭터 소개 모션 그래픽 시퀀스",
+    "de": "Charakter-Intro-Motion-Graphics-Sequenz",
+    "fr": "Séquence d'animation d'introduction de personnages",
+    "ru": "Анимационная последовательность представления персонажей",
+    "es": "Secuencia de gráficos animados de introducción de personajes",
+    "pt-BR": "Sequência de motion graphics de introdução de personagens",
+    "it": "Sequenza di motion graphics per introduzione personaggi",
+    "vi": "Chuỗi đồ họa chuyển động giới thiệu nhân vật",
+    "pl": "Sekwencja grafiki ruchomej wprowadzającej postacie",
+    "id": "Urutan grafis gerak pengenalan karakter",
+    "nl": "Karakter intro motion graphics-sequentie",
+    "ar": "تسلسل رسومات متحركة لتقديم الشخصيات",
+    "tr": "Karakter tanıtım hareketli grafik dizisi",
+    "uk": "Послідовність моушн-графіки представлення персонажів",
+    "en": "Character Intro Motion Graphics Sequence"
+  },
+  "version": "0.1.0",
+  "description": "A complex, multi-stage motion graphics prompt for introducing a team of characters with specific UI overlays and transitions, designed for the Seedance 2.0 model.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 模型设计的复杂多阶段动态图形提示词，用于介绍团队角色并添加特定 UI 叠加层和转场效果。",
+    "zh-TW": "為 Seedance 2.0 模型設計的複雜多階段動態圖形提示詞，用於介紹團隊角色並添加特定 UI 疊加層和轉場效果。",
+    "ja": "Seedance 2.0モデル用に設計された、特定のUIオーバーレイとトランジションを含むチームキャラクター紹介用の複雑なマルチステージモーショングラフィックスプロンプト。",
+    "ko": "Seedance 2.0 모델을 위해 설계된, 특정 UI 오버레이와 전환 효과가 포함된 팀 캐릭터 소개용 복합 다단계 모션 그래픽 프롬프트.",
+    "de": "Ein komplexer, mehrstufiger Motion-Graphics-Prompt für die Vorstellung eines Charakterteams mit spezifischen UI-Overlays und Übergängen, entwickelt für das Seedance 2.0-Modell.",
+    "fr": "Un prompt d'animation complexe et multi-étapes pour présenter une équipe de personnages avec des superpositions UI et des transitions spécifiques, conçu pour le modèle Seedance 2.0.",
+    "ru": "Сложный многоэтапный промпт для моушн-графики, предназначенный для представления команды персонажей с конкретными UI-наложениями и переходами для модели Seedance 2.0.",
+    "es": "Un prompt complejo y de múltiples etapas para gráficos animados que introduce un equipo de personajes con superposiciones UI y transiciones específicas, diseñado para el modelo Seedance 2.0.",
+    "pt-BR": "Um prompt complexo de múltiplos estágios para motion graphics que apresenta uma equipe de personagens com sobreposições UI e transições específicas, projetado para o modelo Seedance 2.0.",
+    "it": "Un prompt complesso e multi-fase per motion graphics che introduce un team di personaggi con overlay UI e transizioni specifiche, progettato per il modello Seedance 2.0.",
+    "vi": "Prompt đồ họa chuyển động phức tạp đa giai đoạn để giới thiệu nhóm nhân vật với lớp phủ UI và hiệu ứng chuyển cảnh cụ thể, được thiết kế cho mô hình Seedance 2.0.",
+    "pl": "Złożony, wieloetapowy prompt grafiki ruchomej do przedstawienia zespołu postaci z konkretnymi nakładkami UI i przejściami, zaprojektowany dla modelu Seedance 2.0.",
+    "id": "Prompt grafis gerak multi-tahap yang kompleks untuk memperkenalkan tim karakter dengan overlay UI dan transisi spesifik, dirancang untuk model Seedance 2.0.",
+    "nl": "Een complexe, meerfasige motion graphics-prompt voor het introduceren van een team personages met specifieke UI-overlays en overgangen, ontworpen voor het Seedance 2.0-model.",
+    "ar": "موجه رسومات متحركة معقد متعدد المراحل لتقديم فريق من الشخصيات مع طبقات UI وانتقالات محددة، مصمم لنموذج Seedance 2.0.",
+    "tr": "Seedance 2.0 modeli için tasarlanmış, belirli UI katmanları ve geçişleri içeren karakter ekibi tanıtımı için karmaşık, çok aşamalı hareketli grafik prompt'u.",
+    "uk": "Складний багатоетапний промпт для моушн-графіки, призначений для представлення команди персонажів із конкретними UI-накладеннями та переходами для моделі Seedance 2.0.",
+    "en": "A complex, multi-stage motion graphics prompt for introducing a team of characters with specific UI overlays and transitions, designed for the Seedance 2.0 model."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "KANA",
+    "url": "https://x.com/KanaWorks_AI/status/2049281443956974029"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "motion-graphics",
+    "cinematic",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d7697b00e2a3cb0ecb91273a772eda39/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d7697b00e2a3cb0ecb91273a772eda39/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Based on the three characters in the reference images. High definition, Unreal Engine rendering, cinematic quality, candy-colored palette, Japanese-style aesthetics, artistic, with strong sense of rhythm.\n\n0–2s: Empty scene, a small dot at the center, thin-line UI frame, subtle particles. Text: “STATUS: STANDBY” “SYSTEM: INIT”.\n\n2–4s: The fox on the left from image2 appears, riding a hovering skateboard, waves toward the camera. Curved motion trails behind. Text: “ID: 01” “CODENAME: RED” “ROLE: TACTICIAN”.\n\n4–6s: The rabbit on the right from image1 appears, swings a carrot weapon and takes a combat stance. Circular motion trails. Text: “ID: 02” “CODENAME: KANA” “ROLE: EXECUTIONER” “WEAPON: CARROT”.\n\n6–8s: The corgi from image3 appears, looks left and right, showing a simple, friendly smile. Concentric circle UI under its feet. Text: “ID: 03” “CODENAME: Arthur” “ROLE: COMMANDER”.\n\n8–15s: The three characters align horizontally, from left to right: FIREBIRD, SAGE, MAD RABBIT. Snap alignment, unified circular platform beneath. Text: “SYSTEM SYNC COMPLETE” “UNIT READY”. Add UI overlay to each character: tracking frames, data bars, simplified charts. Text: “TRACKING” “ANALYSIS” “LOCKED”.\n\nLarge title “CHAOS UNIT” appears, breaking into geometric fragments that expand outward. Text: “SYSTEM ERROR” “DATA BREAK”. The fragments then reassemble into “CHAOS UNIT”, centered layout with subtle circular guide lines. Text: “REBUILD COMPLETE” “SYSTEM ONLINE” “KANAWORKS_AI”.\n\nFinal frame: “CHAOS UNIT” at the top, the three characters standing side by side below, with a clean circular platform at the bottom. Text: “STATUS: LOCKED” “UNIT: ACTIVE”.",
+        "zh-CN": "使用这个插件完成以下任务：Based on the three characters in the reference images. High definition, Unreal Engine rendering, cinematic quality, candy-colored palette, Japanese-style aesthetics, artistic, with strong sense of rhythm.\n\n0–2s: Empty scene, a small dot at the center, thin-line UI frame, subtle particles. Text: “STATUS: STANDBY” “SYSTEM: INIT”.\n\n2–4s: The fox on the left from image2 appears, riding a hovering skateboard, waves toward the camera. Curved motion trails behind. Text: “ID: 01” “CODENAME: RED” “ROLE: TACTICIAN”.\n\n4–6s: The rabbit on the right from image1 appears, swings a carrot weapon and takes a combat stance. Circular motion trails. Text: “ID: 02” “CODENAME: KANA” “ROLE: EXECUTIONER” “WEAPON: CARROT”.\n\n6–8s: The corgi from image3 appears, looks left and right, showing a simple, friendly smile. Concentric circle UI under its feet. Text: “ID: 03” “CODENAME: Arthur” “ROLE: COMMANDER”.\n\n8–15s: The three characters align horizontally, from left to right: FIREBIRD, SAGE, MAD RABBIT. Snap alignment, unified circular platform beneath. Text: “SYSTEM SYNC COMPLETE” “UNIT READY”. Add UI overlay to each character: tracking frames, data bars, simplified charts. Text: “TRACKING” “ANALYSIS” “LOCKED”.\n\nLarge title “CHAOS UNIT” appears, breaking into geometric fragments that expand outward. Text: “SYSTEM ERROR” “DATA BREAK”. The fragments then reassemble into “CHAOS UNIT”, centered layout with subtle circular guide lines. Text: “REBUILD COMPLETE” “SYSTEM ONLINE” “KANAWORKS_AI”.\n\nFinal frame: “CHAOS UNIT” at the top, the three characters standing side by side below, with a clean circular platform at the bottom. Text: “STATUS: LOCKED” “UNIT: ACTIVE”."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

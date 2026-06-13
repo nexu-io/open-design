@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Figma — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/figma. Every visible
+        value comes from tokens.css. Figma's signature moves: strictly
+        black-and-white interface, figmaSans variable weights (320–700),
+        pill (50px) and circular (50%) geometry, dashed focus outlines,
+        figmaMono uppercase labels with positive letter-spacing."
+    />
+
+    <style>
+      :root {
+        --bg:           #ffffff;
+        --surface:      #ffffff;
+        --surface-warm: var(--surface);
+
+        --fg:   #000000;
+        --fg-2: #000000;
+        --muted: rgba(0, 0, 0, 0.55);
+        --meta:  rgba(0, 0, 0, 0.40);
+
+        --border:      rgba(0, 0, 0, 0.12);
+        --border-soft: rgba(0, 0, 0, 0.06);
+
+        --accent:        #000000;
+        --accent-on:     #ffffff;
+        --accent-hover:  rgba(0, 0, 0, 0.85);
+        --accent-active: rgba(0, 0, 0, 0.08);
+
+        --success: #16a34a;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+
+        --font-display: "figmaSans", "figmaSans Fallback", "SF Pro Display", system-ui, Helvetica, sans-serif;
+        --font-body:    "figmaSans", "figmaSans Fallback", "SF Pro Display", system-ui, Helvetica, sans-serif;
+        --font-mono:    "figmaMono", "figmaMono Fallback", "SF Mono", Menlo, ui-monospace, monospace;
+
+        --text-xs:   12px;
+        --text-sm:   16px;
+        --text-base: 16px;
+        --text-lg:   20px;
+        --text-xl:   26px;
+        --text-2xl:  26px;
+        --text-3xl:  64px;
+        --text-4xl:  86px;
+
+        --leading-body:     1.40;
+        --leading-tight:    1.00;
+        --tracking-display: -0.02em;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet:  64px;
+        --section-y-phone:   40px;
+
+        --radius-sm:   50px;
+        --radius-md:   8px;
+        --radius-lg:   8px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+        --focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.8);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1920px;
+        --container-gutter-desktop: 40px;
+        --container-gutter-tablet:  24px;
+        --container-gutter-phone:   16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        /* OpenType kern on all text — structural, not decorative. */
+        font-feature-settings: "kern";
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ─────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 400;              /* figmaSans light — base display weight */
+        margin: 0;
+        line-height: var(--leading-tight);
+        font-feature-settings: "kern";
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        /* 64px section: line-height 1.10, tracking -0.96px (-0.015em). */
+        line-height: 1.10;
+        letter-spacing: -0.015em;
+      }
+      h3 {
+        font-size: var(--text-xl);
+        /* 26px sub-heading: line-height 1.35, tracking -0.26px (-0.01em).
+           Overrides the shared 1.00 set above. */
+        line-height: 1.35;
+        letter-spacing: -0.01em;
+        font-weight: 540;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        line-height: 1.40;
+        color: var(--muted);
+        font-weight: 330;
+        letter-spacing: -0.007em;
+      }
+      /* figmaMono uppercase label — section signpost. */
+      .mono-label {
+        font-family: var(--font-mono);
+        font-size: 18px;
+        font-weight: 400;
+        text-transform: uppercase;
+        letter-spacing: 0.54px;
+        color: var(--fg);
+        line-height: 1.30;
+      }
+      .body-muted { color: var(--muted); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ─────────────────────────────── */
+      /* All buttons use pill (50px) or circle (50%) — non-negotiable. */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 20px;
+        border-radius: var(--radius-sm);   /* 50px pill */
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 400;
+        font-feature-settings: "kern";
+        line-height: 1;
+        cursor: pointer;
+        border: none;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      /* Figma focus: dashed 2px outline — the editor selection handle echo. */
+      .btn:focus-visible { outline: 2px dashed var(--fg); outline-offset: 2px; }
+      .btn-black {
+        background: var(--fg);
+        color: var(--accent-on);
+      }
+      .btn-black:hover { background: rgba(0, 0, 0, 0.85); }
+      .btn-white {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid rgba(0, 0, 0, 0.15);
+      }
+      .btn-white:hover { background: rgba(0, 0, 0, 0.04); }
+
+      /* ─── Product tab bar ─────────────────────── */
+      .tab-bar {
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .tab {
+        padding: 8px 18px;
+        border-radius: var(--radius-sm);  /* 50px pill */
+        font-size: var(--text-base);
+        font-weight: 480;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: var(--fg);
+        font-feature-settings: "kern";
+        transition: background-color var(--motion-fast) var(--ease-standard);
+      }
+      .tab:hover { background: rgba(0, 0, 0, 0.06); }
+      .tab.active { background: var(--fg); color: var(--accent-on); }
+      .tab:focus-visible { outline: 2px dashed var(--fg); outline-offset: 2px; }
+
+      /* ─── Cards ──────────────────────────────── */
+      .card {
+        background: var(--bg);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        box-shadow: var(--elev-raised);
+      }
+
+      /* ─── Layout ─────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="mono-label">Reference fixture · figma</p>
+            <h1>Nothing great is made alone.</h1>
+            <p class="lead" style="max-width:48ch">
+              Figma brings teams together to design, prototype, and build.
+              A strictly black-and-white interface where product content is the
+              hero. Every value below from tokens.css.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-black">
+                Get started for free
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-white">Read the spec</a>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card">
+              <p class="mono-label" style="margin-bottom:var(--space-4)">Product areas</p>
+              <div class="tab-bar">
+                <button class="tab active">Design</button>
+                <button class="tab">Dev Mode</button>
+                <button class="tab">Prototype</button>
+                <button class="tab">Slides</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section data-od-id="features">
+        <p class="mono-label" style="margin-bottom:var(--space-6)">What this fixture exercises</p>
+
+        <div class="features-grid">
+          <article class="card stack-3">
+            <h3>Variable precision</h3>
+            <p class="body-muted" style="font-size:var(--text-base);font-weight:330;letter-spacing:-0.007em">
+              Weight stops 320, 330, 340, 450, 480, 540, 700 — the granular
+              control IS the design. Hierarchy through micro-differences.
+            </p>
+          </article>
+          <article class="card stack-3">
+            <h3 style="font-weight:340">Monochrome chrome</h3>
+            <p class="body-muted" style="font-size:var(--text-base);font-weight:330;letter-spacing:-0.007em">
+              #000000 and #ffffff only. Color lives in product content —
+              gradients, screenshots, and embedded designs — never the shell.
+            </p>
+          </article>
+          <article class="card stack-3">
+            <h3>Dashed focus</h3>
+            <p class="body-muted" style="font-size:var(--text-base);font-weight:330;letter-spacing:-0.007em">
+              2px dashed outline on all interactive elements — echoes selection
+              handles in the Figma editor. The website speaks the product's UI.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- FORM / ACTIONS -->
+      <section data-od-id="actions">
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--space-12);align-items:start">
+          <div class="stack-4">
+            <p class="mono-label">Actions</p>
+            <h2 style="font-size:var(--text-xl);line-height:1.35;letter-spacing:-0.01em;font-weight:540">All buttons use pill (50px) radius.</h2>
+            <p class="lead" style="max-width:44ch">
+              No sharp corners on interactive elements. Black solid for primary;
+              bordered white for secondary. Focus is dashed, never solid.
+            </p>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+              <button class="btn btn-black">Primary action</button>
+              <button class="btn btn-white">Secondary</button>
+            </div>
+            <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+              <button class="tab active">Active tab</button>
+              <button class="tab">Inactive tab</button>
+              <button class="tab">Another</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

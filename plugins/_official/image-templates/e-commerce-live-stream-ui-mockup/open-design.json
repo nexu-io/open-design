@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-e-commerce-live-stream-ui-mockup",
+  "title": "E-commerce Live Stream UI Mockup",
+  "title_i18n": {
+    "zh-CN": "电商直播界面模型",
+    "zh-TW": "電商直播介面模型",
+    "ja": "Eコマースライブ配信UIモックアップ",
+    "ko": "전자상거래 라이브 스트림 UI 목업",
+    "de": "E-Commerce-Livestream-UI-Mockup",
+    "fr": "Maquette UI de Diffusion en Direct E-commerce",
+    "ru": "Макет UI прямого эфира для электронной коммерции",
+    "es": "Mockup de UI de Transmisión en Vivo para E-commerce",
+    "pt-BR": "Mockup de UI de Live Stream de E-commerce",
+    "it": "Mockup UI Live Stream E-commerce",
+    "vi": "Mockup UI Phát Trực Tiếp Thương Mại Điện Tử",
+    "pl": "Mockup UI Transmisji Na Żywo E-commerce",
+    "id": "Mockup UI Live Stream E-commerce",
+    "nl": "E-commerce Livestream UI-mockup",
+    "ar": "نموذج واجهة البث المباشر للتجارة الإلكترونية",
+    "tr": "E-ticaret Canlı Yayın UI Mockup",
+    "uk": "Макет UI прямої трансляції для електронної комерції",
+    "en": "E-commerce Live Stream UI Mockup"
+  },
+  "version": "0.1.0",
+  "description": "Generates a realistic social media live stream interface overlaying a portrait, featuring customizable chat messages, gift popups, and a product purchase card.",
+  "description_i18n": {
+    "zh-CN": "生成逼真的社交媒体直播界面，叠加在人像上，支持自定义聊天消息、礼物弹窗和商品购买卡片。",
+    "zh-TW": "生成逼真的社群媒體直播介面，疊加在人像上，支援自訂聊天訊息、禮物彈窗和商品購買卡片。",
+    "ja": "ポートレートに重ねて表示するリアルなSNSライブ配信インターフェースを生成。カスタマイズ可能なチャットメッセージ、ギフトポップアップ、商品購入カードを備えています。",
+    "ko": "인물 사진 위에 오버레이되는 사실적인 소셜 미디어 라이브 스트림 인터페이스를 생성하며, 커스터마이징 가능한 채팅 메시지, 선물 팝업, 상품 구매 카드를 제공합니다.",
+    "de": "Erzeugt eine realistische Social-Media-Livestream-Oberfläche über einem Porträt mit anpassbaren Chat-Nachrichten, Geschenk-Popups und Produktkaufkarte.",
+    "fr": "Génère une interface de diffusion en direct réaliste sur les réseaux sociaux superposée à un portrait, avec messages de chat personnalisables, popups de cadeaux et carte d'achat de produit.",
+    "ru": "Создает реалистичный интерфейс прямой трансляции в социальных сетях поверх портрета с настраиваемыми сообщениями чата, всплывающими окнами подарков и карточкой покупки товара.",
+    "es": "Genera una interfaz realista de transmisión en vivo en redes sociales sobre un retrato, con mensajes de chat personalizables, ventanas emergentes de regalos y tarjeta de compra de productos.",
+    "pt-BR": "Gera uma interface realista de transmissão ao vivo de mídia social sobreposta a um retrato, com mensagens de chat personalizáveis, popups de presentes e cartão de compra de produto.",
+    "it": "Genera un'interfaccia realistica di live streaming per social media sovrapposta a un ritratto, con messaggi chat personalizzabili, popup di regali e scheda di acquisto prodotto.",
+    "vi": "Tạo giao diện phát trực tiếp mạng xã hội chân thực chồng lên chân dung, với tin nhắn chat tùy chỉnh, popup quà tặng và thẻ mua sản phẩm.",
+    "pl": "Generuje realistyczny interfejs transmisji na żywo w mediach społecznościowych nakładany na portret, z konfigurowalnymi wiadomościami czatu, wyskakującymi okienkami prezentów i kartą zakupu produktu.",
+    "id": "Menghasilkan antarmuka live stream media sosial yang realistis di atas potret, dengan pesan chat yang dapat disesuaikan, popup hadiah, dan kartu pembelian produk.",
+    "nl": "Genereert een realistische sociale media livestream-interface over een portret, met aanpasbare chatberichten, cadeaupopups en een productaankoopkaart.",
+    "ar": "ينشئ واجهة بث مباشر واقعية لوسائل التواصل الاجتماعي فوق صورة شخصية، مع رسائل دردشة قابلة للتخصيص ونوافذ منبثقة للهدايا وبطاقة شراء المنتج.",
+    "tr": "Bir portrenin üzerine yerleştirilmiş, özelleştirilebilir sohbet mesajları, hediye popup'ları ve ürün satın alma kartı içeren gerçekçi bir sosyal medya canlı yayın arayüzü oluşturur.",
+    "uk": "Генерує реалістичний інтерфейс прямої трансляції в соціальних мережах поверх портрета з налаштовуваними повідомленнями чату, спливаючими вікнами подарунків та карткою покупки товару.",
+    "en": "Generates a realistic social media live stream interface overlaying a portrait, featuring customizable chat messages, gift popups, and a product purchase card."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "神经病不想好转",
+    "url": "https://x.com/sjbbxhz/status/2045684734714380687#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "app-web-design",
+    "portrait",
+    "fantasy",
+    "product"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1776699445498_ga2ry5_HGO7H0DWkAApdKK.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "{\n  \"type\": \"live stream UI mockup\",\n  \"subject\": {\n    \"description\": \"portrait of {argument name=\\\"host name\\\" default=\\\"Elon Musk\\\"}, smiling, wearing a black t-shirt with a white technical schematic graphic\",\n    \"background\": \"left side shows a screen with '{argument name=\\\"left background logo\\\" default=\\\"SPACEX\\\"}' text, right side shows a red '{argument name=\\\"right background logo\\\" default=\\\"Tesla T logo\\\"}' and a dark car\"\n  },\n  \"ui_overlay\": {\n    \"top_header\": {\n      \"host_info\": \"avatar, name '{argument name=\\\"host name\\\" default=\\\"Elon Musk\\\"}', subtext '55.6万本场点赞', red '关注' button\",\n      \"rank_badge\": \"gold coin icon with '全站第1名'\",\n      \"viewer_stats\": \"3 top viewer avatars with '12.3w', '8.6w', '5.7w', total '68.7万', 'X' close button\",\n      \"right_links\": \"'更多直播 >', '礼物展馆 0/24' with blue '经典' tag\"\n    },\n    \"mid_left_gifts\": {\n      \"count\": 2,\n      \"items\": [\n        \"avatar '科技爱好者', '送小心心', heart icon x 1314\",\n        \"avatar '星辰大海', '送火箭', rocket icon x 666\"\n      ]\n    },\n    \"bottom_left_chat\": {\n      \"system_message\": \"level 37 badge '宇宙漫游者 加入了直播间'\",\n      \"message_count\": 7,\n      \"messages\": [\n        \"小火箭: 马斯克！未来可期！🚀\",\n        \"future: 特斯拉Model 2什么时候出？\",\n        \"星空梦想家: SpaceX今年能上火星吗？\",\n        \"AI探索者: Neuralink进展如何？\",\n        \"帅气的网友: 马总好！\",\n        \"Mars: 第一次来你的直播，超激动！\",\n        \"用户123: 讲讲AI吧，会取代人类吗？\"\n      ]\n    },\n    \"bottom_right_product_card\": {\n      \"hot_tag\": \"orange '热卖 x 1888'\",\n      \"image\": \"Tesla Cybertruck\",\n      \"title\": \"{argument name=\\\"product name\\\" default=\\\"特斯拉Cybertruck 电动皮卡\\\"}\",\n      \"price\": \"{argument name=\\\"product price\\\" default=\\\"¥ 1,618,000\\\"}\",\n      \"button\": \"red '抢' button\",\n      \"floating_animation\": \"translucent hearts floating up the right edge\"\n    },\n    \"bottom_bar\": {\n      \"input_field\": \"'说点什么...'\",\n      \"icons\": [\"smiley face\", \"three dots\", \"shopping cart\", \"gift box\", \"share\"]\n    }\n  }\n}",
+        "zh-CN": "{\n  \"type\": \"live stream UI mockup\",\n  \"subject\": {\n    \"description\": \"portrait of {argument name=\\\"host name\\\" default=\\\"Elon Musk\\\"}, smiling, wearing a black t-shirt with a white technical schematic graphic\",\n    \"background\": \"left side shows a screen with '{argument name=\\\"left background logo\\\" default=\\\"SPACEX\\\"}' text, right side shows a red '{argument name=\\\"right background logo\\\" default=\\\"Tesla T logo\\\"}' and a dark car\"\n  },\n  \"ui_overlay\": {\n    \"top_header\": {\n      \"host_info\": \"avatar, name '{argument name=\\\"host name\\\" default=\\\"Elon Musk\\\"}', subtext '55.6万本场点赞', red '关注' button\",\n      \"rank_badge\": \"gold coin icon with '全站第1名'\",\n      \"viewer_stats\": \"3 top viewer avatars with '12.3w', '8.6w', '5.7w', total '68.7万', 'X' close button\",\n      \"right_links\": \"'更多直播 >', '礼物展馆 0/24' with blue '经典' tag\"\n    },\n    \"mid_left_gifts\": {\n      \"count\": 2,\n      \"items\": [\n        \"avatar '科技爱好者', '送小心心', heart icon x 1314\",\n        \"avatar '星辰大海', '送火箭', rocket icon x 666\"\n      ]\n    },\n    \"bottom_left_chat\": {\n      \"system_message\": \"level 37 badge '宇宙漫游者 加入了直播间'\",\n      \"message_count\": 7,\n      \"messages\": [\n        \"小火箭: 马斯克！未来可期！🚀\",\n        \"future: 特斯拉Model 2什么时候出？\",\n        \"星空梦想家: SpaceX今年能上火星吗？\",\n        \"AI探索者: Neuralink进展如何？\",\n        \"帅气的网友: 马总好！\",\n        \"Mars: 第一次来你的直播，超激动！\",\n        \"用户123: 讲讲AI吧，会取代人类吗？\"\n      ]\n    },\n    \"bottom_right_product_card\": {\n      \"hot_tag\": \"orange '热卖 x 1888'\",\n      \"image\": \"Tesla Cybertruck\",\n      \"title\": \"{argument name=\\\"product name\\\" default=\\\"特斯拉Cybertruck 电动皮卡\\\"}\",\n      \"price\": \"{argument name=\\\"product price\\\" default=\\\"¥ 1,618,000\\\"}\",\n      \"button\": \"red '抢' button\",\n      \"floating_animation\": \"translucent hearts floating up the right edge\"\n    },\n    \"bottom_bar\": {\n      \"input_field\": \"'说点什么...'\",\n      \"icons\": [\"smiley face\", \"three dots\", \"shopping cart\", \"gift box\", \"share\"]\n    }\n  }\n}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

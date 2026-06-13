@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-fantasy",
+  "title": "Fantasy",
+  "title_i18n": {
+    "zh-CN": "奇幻",
+    "zh-TW": "奇幻",
+    "ja": "ファンタジー",
+    "ko": "판타지",
+    "de": "Fantasy",
+    "fr": "Fantasy",
+    "ru": "Фэнтези",
+    "es": "Fantasía",
+    "pt-BR": "Fantasia",
+    "it": "Fantasy",
+    "vi": "Kỳ Ảo",
+    "pl": "Fantasy",
+    "id": "Fantasi",
+    "nl": "Fantasy",
+    "ar": "فانتازيا",
+    "tr": "Fantastik",
+    "uk": "Фентезі",
+    "en": "Fantasy"
+  },
+  "version": "0.1.0",
+  "description": "Game-inspired fantasy aesthetic with bold, premium visuals, rich color palettes, and immersive thematic elements.",
+  "description_i18n": {
+    "zh-CN": "游戏风格的奇幻美学，采用大胆的高级视觉效果、丰富的色彩搭配和沉浸式主题元素。",
+    "zh-TW": "遊戲風格的奇幻美學，採用大膽的高級視覺效果、豐富的色彩搭配和沉浸式主題元素。",
+    "ja": "ゲームにインスパイアされたファンタジー美学。大胆でプレミアムなビジュアル、豊かなカラーパレット、没入感のあるテーマ要素を備えています。",
+    "ko": "게임에서 영감을 받은 판타지 미학으로, 대담하고 프리미엄한 비주얼, 풍부한 색상 팔레트, 몰입감 있는 테마 요소를 제공합니다.",
+    "de": "Von Spielen inspirierte Fantasy-Ästhetik mit kraftvollen, hochwertigen Visuals, satten Farbpaletten und immersiven thematischen Elementen.",
+    "fr": "Esthétique fantasy inspirée des jeux vidéo avec des visuels audacieux et premium, des palettes de couleurs riches et des éléments thématiques immersifs.",
+    "ru": "Игровая фэнтезийная эстетика с яркими премиальными визуалами, насыщенными цветовыми палитрами и погружающими тематическими элементами.",
+    "es": "Estética de fantasía inspirada en videojuegos con visuales atrevidos y premium, paletas de colores ricas y elementos temáticos inmersivos.",
+    "pt-BR": "Estética de fantasia inspirada em jogos com visuais ousados e premium, paletas de cores ricas e elementos temáticos imersivos.",
+    "it": "Estetica fantasy ispirata ai giochi con visual audaci e premium, ricche palette di colori ed elementi tematici immersivi.",
+    "vi": "Phong cách thẩm mỹ kỳ ảo lấy cảm hứng từ game với hình ảnh đậm chất cao cấp, bảng màu phong phú và các yếu tố chủ đề đắm chìm.",
+    "pl": "Estetyka fantasy inspirowana grami z odważnymi, premium wizualizacjami, bogatymi paletami kolorów i wciągającymi elementami tematycznymi.",
+    "id": "Estetika fantasi terinspirasi game dengan visual premium yang berani, palet warna kaya, dan elemen tematik yang imersif.",
+    "nl": "Game-geïnspireerde fantasy-esthetiek met gedurfde, premium visuals, rijke kleurenpaletten en meeslepende thematische elementen.",
+    "ar": "جمالية خيالية مستوحاة من الألعاب مع مرئيات جريئة وفاخرة، ولوحات ألوان غنية، وعناصر موضوعية غامرة.",
+    "tr": "Oyunlardan ilham alan fantastik estetik; cesur ve premium görseller, zengin renk paletleri ve sürükleyici tematik unsurlarla.",
+    "uk": "Ігрова фентезійна естетика зі сміливими преміальними візуальними елементами, насиченими колірними палітрами та занурюючими тематичними елементами.",
+    "en": "Game-inspired fantasy aesthetic with bold, premium visuals, rich color palettes, and immersive thematic elements."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "creative-artistic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Fantasy design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Fantasy design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "fantasy",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

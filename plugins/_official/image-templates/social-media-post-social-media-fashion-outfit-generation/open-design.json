@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-social-media-fashion-outfit-generation",
+  "title": "Social Media Post - Social Media Fashion Outfit Generation",
+  "title_i18n": {
+    "zh-CN": "社交媒体帖子 - 社交媒体时尚穿搭生成",
+    "zh-TW": "社群媒體貼文 - 社群媒體時尚穿搭生成",
+    "ja": "ソーシャルメディア投稿 - ソーシャルメディアファッションコーディネート生成",
+    "ko": "소셜 미디어 게시물 - 소셜 미디어 패션 아웃핏 생성",
+    "de": "Social Media Post - Social Media Fashion Outfit Generierung",
+    "fr": "Publication sur les réseaux sociaux - Génération de tenues mode",
+    "ru": "Пост в соцсетях - Генерация модных образов",
+    "es": "Publicación en redes sociales - Generación de outfits de moda",
+    "pt-BR": "Publicação em redes sociais - Geração de looks de moda",
+    "it": "Post sui social media - Generazione outfit moda",
+    "vi": "Bài đăng mạng xã hội - Tạo trang phục thời trang",
+    "pl": "Post w mediach społecznościowych - Generowanie stylizacji modowych",
+    "id": "Postingan Media Sosial - Pembuatan Outfit Fashion",
+    "nl": "Social Media Post - Social Media Fashion Outfit Generatie",
+    "ar": "منشور على وسائل التواصل الاجتماعي - توليد إطلالات الموضة",
+    "tr": "Sosyal Medya Gönderisi - Sosyal Medya Moda Kombini Oluşturma",
+    "uk": "Допис у соцмережах - Генерація модних образів",
+    "en": "Social Media Post - Social Media Fashion Outfit Generation"
+  },
+  "version": "0.1.0",
+  "description": "A prompt to generate a week's worth of fashion blogger-style outfit recommendations based on a character profile, complete with item labels and prices.",
+  "description_i18n": {
+    "zh-CN": "根据角色档案生成一周时尚博主风格的穿搭推荐，包含单品标签和价格信息。",
+    "zh-TW": "根據角色檔案生成一週時尚部落客風格的穿搭推薦，包含單品標籤和價格資訊。",
+    "ja": "キャラクタープロフィールに基づいて、アイテムラベルと価格を含む1週間分のファッションブロガースタイルのコーディネート提案を生成します。",
+    "ko": "캐릭터 프로필을 기반으로 아이템 라벨과 가격이 포함된 일주일치 패션 블로거 스타일 아웃핏 추천을 생성합니다.",
+    "de": "Erstellt basierend auf einem Charakterprofil eine Woche voller Modeempfehlungen im Blogger-Stil mit Artikelbezeichnungen und Preisen.",
+    "fr": "Génère une semaine de recommandations de tenues style blogueur mode basées sur un profil de personnage, avec étiquettes d'articles et prix.",
+    "ru": "Создает недельную подборку модных образов в стиле fashion-блогера на основе профиля персонажа с названиями вещей и ценами.",
+    "es": "Genera recomendaciones de outfits estilo blogger de moda para una semana basadas en un perfil de personaje, con etiquetas de artículos y precios.",
+    "pt-BR": "Gera recomendações de looks estilo blogger de moda para uma semana com base em um perfil de personagem, incluindo etiquetas de itens e preços.",
+    "it": "Genera una settimana di outfit in stile fashion blogger basati su un profilo personaggio, completi di etichette articoli e prezzi.",
+    "vi": "Tạo gợi ý trang phục theo phong cách blogger thời trang cho cả tuần dựa trên hồ sơ nhân vật, kèm nhãn sản phẩm và giá cả.",
+    "pl": "Generuje tygodniowe rekomendacje stylizacji w stylu blogera modowego na podstawie profilu postaci, z etykietami produktów i cenami.",
+    "id": "Menghasilkan rekomendasi outfit bergaya fashion blogger untuk seminggu berdasarkan profil karakter, lengkap dengan label item dan harga.",
+    "nl": "Genereert een week aan outfit-aanbevelingen in fashion blogger-stijl op basis van een karakterprofiel, compleet met artikellabels en prijzen.",
+    "ar": "ينشئ توصيات إطلالات أسبوعية بأسلوب مدونة الموضة بناءً على ملف شخصية، مع تسميات المنتجات والأسعار.",
+    "tr": "Karakter profiline göre ürün etiketleri ve fiyatlarıyla birlikte bir haftalık moda blogcusu tarzında kombin önerileri oluşturur.",
+    "uk": "Створює тижневу добірку модних образів у стилі fashion-блогера на основі профілю персонажа з назвами речей та цінами.",
+    "en": "A prompt to generate a week's worth of fashion blogger-style outfit recommendations based on a character profile, complete with item labels and prices."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Rion Wu",
+    "url": "https://x.com/rionaifantasy/status/2049122261249204626"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453151822_tkaefc_HG_wnqGbAAAq416.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Based on this character info card for a {argument name=\"subject\" default=\"girl\"}, generate a 7-day outfit recommendation guide suitable for her appearance, height, and weight. Use a {argument name=\"platform style\" default=\"Xiaohongshu\"} fashion blogger presentation style. Generate 7 images at once (one for each day), specifically labeling the styles and prices of accessories, shoes, hats, pendants, tops, pants, socks, and other items for easy reference.",
+        "zh-CN": "使用这个插件完成以下任务：Based on this character info card for a {argument name=\"subject\" default=\"girl\"}, generate a 7-day outfit recommendation guide suitable for her appearance, height, and weight. Use a {argument name=\"platform style\" default=\"Xiaohongshu\"} fashion blogger presentation style. Generate 7 images at once (one for each day), specifically labeling the styles and prices of accessories, shoes, hats, pendants, tops, pants, socks, and other items for easy reference."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

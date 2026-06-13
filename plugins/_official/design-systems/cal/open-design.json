@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-cal",
+  "title": "Cal.com",
+  "title_i18n": {
+    "zh-CN": "Cal.com",
+    "zh-TW": "Cal.com",
+    "ja": "Cal.com",
+    "ko": "Cal.com",
+    "de": "Cal.com",
+    "fr": "Cal.com",
+    "ru": "Cal.com",
+    "es": "Cal.com",
+    "pt-BR": "Cal.com",
+    "it": "Cal.com",
+    "vi": "Cal.com",
+    "pl": "Cal.com",
+    "id": "Cal.com",
+    "nl": "Cal.com",
+    "ar": "Cal.com",
+    "tr": "Cal.com",
+    "uk": "Cal.com",
+    "en": "Cal.com"
+  },
+  "version": "0.1.0",
+  "description": "Open-source scheduling. Clean neutral UI, developer-oriented simplicity.",
+  "description_i18n": {
+    "zh-CN": "开源日程安排工具。简洁中性的 UI，面向开发者的简约设计。",
+    "zh-TW": "開源行程安排工具。簡潔中性的 UI，面向開發者的簡約設計。",
+    "ja": "オープンソースのスケジュール管理ツール。クリーンでニュートラルなUI、開発者向けのシンプルさ。",
+    "ko": "오픈소스 일정 관리 도구. 깔끔하고 중립적인 UI, 개발자 지향적 단순함.",
+    "de": "Open-Source-Terminplanung. Klares, neutrales UI, entwicklerorientierte Einfachheit.",
+    "fr": "Planification open-source. Interface épurée et neutre, simplicité orientée développeur.",
+    "ru": "Планировщик с открытым исходным кодом. Чистый нейтральный UI, простота для разработчиков.",
+    "es": "Programación de citas de código abierto. UI limpia y neutral, simplicidad orientada al desarrollador.",
+    "pt-BR": "Agendamento de código aberto. UI limpa e neutra, simplicidade voltada para desenvolvedores.",
+    "it": "Pianificazione open-source. UI pulita e neutra, semplicità orientata agli sviluppatori.",
+    "vi": "Công cụ lên lịch mã nguồn mở. UI sạch sẽ trung tính, thiết kế đơn giản hướng đến nhà phát triển.",
+    "pl": "Harmonogramowanie open-source. Czysty, neutralny UI, prostota zorientowana na deweloperów.",
+    "id": "Penjadwalan open-source. UI bersih dan netral, kesederhanaan berorientasi pengembang.",
+    "nl": "Open-source planning. Schone neutrale UI, ontwikkelaargerichte eenvoud.",
+    "ar": "جدولة مفتوحة المصدر. واجهة مستخدم نظيفة ومحايدة، بساطة موجهة للمطورين.",
+    "tr": "Açık kaynaklı zamanlama. Temiz nötr UI, geliştirici odaklı sadelik.",
+    "uk": "Планувальник з відкритим кодом. Чистий нейтральний UI, простота для розробників.",
+    "en": "Open-source scheduling. Clean neutral UI, developer-oriented simplicity."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "productivity-saas"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Cal.com design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Cal.com design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "cal",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

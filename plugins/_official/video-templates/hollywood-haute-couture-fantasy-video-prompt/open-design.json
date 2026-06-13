@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-hollywood-haute-couture-fantasy-video-prompt",
+  "title": "Hollywood Haute Couture Fantasy Video Prompt",
+  "title_i18n": {
+    "zh-CN": "好莱坞高级定制时尚视频提示词",
+    "zh-TW": "好萊塢高級訂製時尚影片提示詞",
+    "ja": "ハリウッドオートクチュールファンタジー動画プロンプト",
+    "ko": "할리우드 오트 쿠튀르 판타지 영상 프롬프트",
+    "de": "Hollywood Haute Couture Fantasy Video-Prompt",
+    "fr": "Prompt Vidéo Fantaisie Haute Couture Hollywood",
+    "ru": "Промпт для видео в стиле голливудской высокой моды",
+    "es": "Prompt de Video de Alta Costura Fantástica de Hollywood",
+    "pt-BR": "Prompt de Vídeo de Alta Costura Fantástica de Hollywood",
+    "it": "Prompt Video Fantasy Haute Couture Hollywood",
+    "vi": "Prompt Video Thời Trang Cao Cấp Hollywood Ảo Ảnh",
+    "pl": "Prompt Wideo Hollywood Haute Couture Fantasy",
+    "id": "Prompt Video Fantasi Haute Couture Hollywood",
+    "nl": "Hollywood Haute Couture Fantasy Videoprompt",
+    "ar": "موجه فيديو خيالي للأزياء الراقية في هوليوود",
+    "tr": "Hollywood Haute Couture Fantezi Video İstemi",
+    "uk": "Промпт для відео голлівудської високої моди фентезі",
+    "en": "Hollywood Haute Couture Fantasy Video Prompt"
+  },
+  "version": "0.1.0",
+  "description": "A detailed, multi-scene video generation prompt for Seedance 2.0, designed to create a Hollywood Haute Couture Fantasy film. The prompt specifies style, resolution (8K), rendering engine (Unreal Engin",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 设计的多场景视频生成提示词，用于创建好莱坞高级定制时尚风格影片，支持 8K 分辨率和 Unreal Engine 渲染。",
+    "zh-TW": "為 Seedance 2.0 設計的多場景影片生成提示詞，用於創建好萊塢高級訂製時尚風格影片，支援 8K 解析度和 Unreal Engine 渲染。",
+    "ja": "Seedance 2.0用の詳細なマルチシーン動画生成プロンプト。ハリウッドオートクチュールファンタジー映画を8K解像度とUnreal Engineレンダリングで作成します。",
+    "ko": "Seedance 2.0용 멀티 씬 영상 생성 프롬프트로, 8K 해상도와 Unreal Engine 렌더링으로 할리우드 오트 쿠튀르 판타지 영화를 제작합니다.",
+    "de": "Ein detaillierter Multi-Szenen-Video-Prompt für Seedance 2.0 zum Erstellen von Hollywood Haute Couture Fantasy-Filmen in 8K-Auflösung mit Unreal Engine-Rendering.",
+    "fr": "Prompt de génération vidéo multi-scènes détaillé pour Seedance 2.0, conçu pour créer des films fantasy haute couture hollywoodiens en 8K avec rendu Unreal Engine.",
+    "ru": "Детальный многосценовый промпт для Seedance 2.0, создающий фэнтезийные фильмы в стиле голливудской haute couture с разрешением 8K и рендерингом в Unreal Engine.",
+    "es": "Prompt detallado de generación de video multi-escena para Seedance 2.0, diseñado para crear películas de fantasía de alta costura de Hollywood en 8K con renderizado en Unreal Engine.",
+    "pt-BR": "Prompt detalhado de geração de vídeo multi-cena para Seedance 2.0, projetado para criar filmes de fantasia de alta costura de Hollywood em 8K com renderização Unreal Engine.",
+    "it": "Prompt dettagliato multi-scena per Seedance 2.0, progettato per creare film fantasy di haute couture hollywoodiana in risoluzione 8K con rendering Unreal Engine.",
+    "vi": "Prompt tạo video đa cảnh chi tiết cho Seedance 2.0, được thiết kế để tạo phim giả tưởng thời trang cao cấp Hollywood với độ phân giải 8K và kết xuất Unreal Engine.",
+    "pl": "Szczegółowy wieloscenowy prompt generowania wideo dla Seedance 2.0, zaprojektowany do tworzenia hollywodzkich filmów fantasy haute couture w rozdzielczości 8K z renderowaniem w Unreal Engine.",
+    "id": "Prompt generasi video multi-adegan terperinci untuk Seedance 2.0, dirancang untuk membuat film fantasi haute couture Hollywood dengan resolusi 8K dan rendering Unreal Engine.",
+    "nl": "Gedetailleerde multi-scene video generatie prompt voor Seedance 2.0, ontworpen om Hollywood haute couture fantasy films te maken in 8K resolutie met Unreal Engine rendering.",
+    "ar": "موجه مفصل متعدد المشاهد لإنشاء الفيديو في Seedance 2.0، مصمم لإنتاج أفلام خيالية للأزياء الراقية بأسلوب هوليوود بدقة 8K ومعالجة Unreal Engine.",
+    "tr": "Seedance 2.0 için detaylı çok sahneli video oluşturma istemi, 8K çözünürlük ve Unreal Engine render ile Hollywood haute couture fantezi filmleri oluşturmak için tasarlanmıştır.",
+    "uk": "Детальний багатосценовий промпт для Seedance 2.0, призначений для створення фентезійних фільмів у стилі голлівудської haute couture з роздільною здатністю 8K та рендерингом в Unreal Engine.",
+    "en": "A detailed, multi-scene video generation prompt for Seedance 2.0, designed to create a Hollywood Haute Couture Fantasy film. The prompt specifies style, resolution (8K), rendering engine (Unreal Engin"
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "John",
+    "url": "https://x.com/johnAGI168/status/2025849650654122348"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "vfx-fantasy",
+    "cinematic",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e066fab457509bc6809ea212ae5d6a51/thumbnails/thumbnail.jpg",
+      "video": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/594.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "[Style] Hollywood Haute Couture Fantasy blockbuster, 8K ultra-clear, Photorealistic, High-fashion Editorial Style, Unreal Engine 5 fluid rendering, visual illusion. [Duration] 15 seconds. [Scene] An endless, real-life Salar de Uyuni (Sky Mirror) salt flat. The sky is filled with oppressive dark clouds, and the ground perfectly reflects everything like a mirror, with the overall picture presenting a minimalist, cool tone. [00:00-00:05] Shot 1: Haute Couture Entrance and Porcelain Skin. Camera position: Extremely low-angle upward shot, ultra-telephoto lens zoom-in. Action: An Asian female model with a highly recognizable, high-fashion face walks coolly on the water surface. Effect: She is wearing not fabric, but a long dress made of flowing, real Liquid Blue-and-White Porcelain. As she walks, the skirt makes a crisp collision sound like real ceramic, with a flowing luster on the surface. The traditional blue-and-white patterns move across the white porcelain-textured skirt as if alive. [00:05-00:10] Shot 2: Physical Shattering and Ink-wash Descent. Camera position: Extreme close-up of the face, focus rapidly pulls back. Action: The model suddenly stops, stares coldly at the camera, and snaps her fingers crisply. Effect: The moment the fingers snap, her blue-and-white porcelain dress does not fall, but instantly explodes into thousands of extremely photorealistic Ink-wash Swallows. These swallows carry real water droplets and ink marks, dragging black fluid afterimages in the air, spinning frantically around her. [00:10-00:15] Shot 3: Dimensional Dissolution and Abyss Reflection. Camera position: High-altitude overhead shot, camera rapidly rotates and descends. Action: The swarm of ink-wash swallows plunges into the mirrored lake water beneath the model's feet. Effect: The surface tension of the originally solid salt lake instantly disappears. The entire extremely realistic world begins to violently bleed and dissolve like concentrated ink dropped into clear water. The real dark clouds and the model's figure transform entirely into an extremely grand 3D Fluid Ink Vortex, completely swallowing the camera into a black and white interwoven abyss.",
+        "zh-CN": "使用这个插件完成以下任务：[Style] Hollywood Haute Couture Fantasy blockbuster, 8K ultra-clear, Photorealistic, High-fashion Editorial Style, Unreal Engine 5 fluid rendering, visual illusion. [Duration] 15 seconds. [Scene] An endless, real-life Salar de Uyuni (Sky Mirror) salt flat. The sky is filled with oppressive dark clouds, and the ground perfectly reflects everything like a mirror, with the overall picture presenting a minimalist, cool tone. [00:00-00:05] Shot 1: Haute Couture Entrance and Porcelain Skin. Camera position: Extremely low-angle upward shot, ultra-telephoto lens zoom-in. Action: An Asian female model with a highly recognizable, high-fashion face walks coolly on the water surface. Effect: She is wearing not fabric, but a long dress made of flowing, real Liquid Blue-and-White Porcelain. As she walks, the skirt makes a crisp collision sound like real ceramic, with a flowing luster on the surface. The traditional blue-and-white patterns move across the white porcelain-textured skirt as if alive. [00:05-00:10] Shot 2: Physical Shattering and Ink-wash Descent. Camera position: Extreme close-up of the face, focus rapidly pulls back. Action: The model suddenly stops, stares coldly at the camera, and snaps her fingers crisply. Effect: The moment the fingers snap, her blue-and-white porcelain dress does not fall, but instantly explodes into thousands of extremely photorealistic Ink-wash Swallows. These swallows carry real water droplets and ink marks, dragging black fluid afterimages in the air, spinning frantically around her. [00:10-00:15] Shot 3: Dimensional Dissolution and Abyss Reflection. Camera position: High-altitude overhead shot, camera rapidly rotates and descends. Action: The swarm of ink-wash swallows plunges into the mirrored lake water beneath the model's feet. Effect: The surface tension of the originally solid salt lake instantly disappears. The entire extremely realistic world begins to violently bleed and dissolve like concentrated ink dropped into clear water. The real dark clouds and the model's figure transform entirely into an extremely grand 3D Fluid Ink Vortex, completely swallowing the camera into a black and white interwoven abyss."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

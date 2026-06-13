@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-pinterest",
+  "title": "Pinterest",
+  "title_i18n": {
+    "zh-CN": "Pinterest",
+    "zh-TW": "Pinterest",
+    "ja": "Pinterest",
+    "ko": "Pinterest",
+    "de": "Pinterest",
+    "fr": "Pinterest",
+    "ru": "Pinterest",
+    "es": "Pinterest",
+    "pt-BR": "Pinterest",
+    "it": "Pinterest",
+    "vi": "Pinterest",
+    "pl": "Pinterest",
+    "id": "Pinterest",
+    "nl": "Pinterest",
+    "ar": "Pinterest",
+    "tr": "Pinterest",
+    "uk": "Pinterest",
+    "en": "Pinterest"
+  },
+  "version": "0.1.0",
+  "description": "Visual discovery. Red accent, masonry grid, image-first.",
+  "description_i18n": {
+    "zh-CN": "视觉发现。红色主色调，瀑布流网格，图片优先。",
+    "zh-TW": "視覺探索。紅色主色調，瀑布流網格，圖片優先。",
+    "ja": "ビジュアルディスカバリー。赤いアクセント、メイソンリーグリッド、画像優先。",
+    "ko": "비주얼 디스커버리. 레드 강조, 메이슨리 그리드, 이미지 우선.",
+    "de": "Visuelle Entdeckung. Roter Akzent, Masonry-Grid, Bild zuerst.",
+    "fr": "Découverte visuelle. Accent rouge, grille maçonnerie, image en premier.",
+    "ru": "Визуальное открытие. Красный акцент, каменная сетка, изображения в приоритете.",
+    "es": "Descubrimiento visual. Acento rojo, cuadrícula de mampostería, imagen primero.",
+    "pt-BR": "Descoberta visual. Destaque vermelho, grade masonry, imagem em primeiro lugar.",
+    "it": "Scoperta visiva. Accento rosso, griglia masonry, immagine prima.",
+    "vi": "Khám phá trực quan. Điểm nhấn đỏ, lưới masonry, hình ảnh ưu tiên.",
+    "pl": "Wizualne odkrywanie. Czerwony akcent, siatka masonry, obraz na pierwszym planie.",
+    "id": "Penemuan visual. Aksen merah, grid masonry, gambar utama.",
+    "nl": "Visuele ontdekking. Rood accent, masonry-raster, beeld eerst.",
+    "ar": "اكتشاف بصري. لون أحمر مميز، شبكة بناء حجري، الصورة أولاً.",
+    "tr": "Görsel keşif. Kırmızı vurgu, duvar örgüsü ızgara, görsel öncelikli.",
+    "uk": "Візуальне відкриття. Червоний акцент, кладкова сітка, зображення на першому місці.",
+    "en": "Visual discovery. Red accent, masonry grid, image-first."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Pinterest design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Pinterest design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "pinterest",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

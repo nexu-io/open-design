@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-agentic",
+  "title": "Agentic",
+  "title_i18n": {
+    "zh-CN": "Agentic",
+    "zh-TW": "Agentic",
+    "ja": "Agentic",
+    "ko": "Agentic",
+    "de": "Agentic",
+    "fr": "Agentic",
+    "ru": "Agentic",
+    "es": "Agentic",
+    "pt-BR": "Agentic",
+    "it": "Agentic",
+    "vi": "Agentic",
+    "pl": "Agentic",
+    "id": "Agentic",
+    "nl": "Agentic",
+    "ar": "Agentic",
+    "tr": "Agentic",
+    "uk": "Agentic",
+    "en": "Agentic"
+  },
+  "version": "0.1.0",
+  "description": "Conversational AI-first interface with minimal controls, clear outcomes, and delegated task flows for agentic workflows.",
+  "description_i18n": {
+    "zh-CN": "对话式 AI 优先界面，控件简洁、结果清晰，支持代理工作流的委派任务流程。",
+    "zh-TW": "對話式 AI 優先介面，控制項簡潔、結果清晰，支援代理工作流程的委派任務流程。",
+    "ja": "会話型AI優先のインターフェース。最小限のコントロール、明確な結果、エージェントワークフロー向けの委任タスクフローを提供します。",
+    "ko": "최소한의 컨트롤과 명확한 결과, 에이전트 워크플로를 위한 위임된 작업 흐름을 갖춘 대화형 AI 우선 인터페이스입니다.",
+    "de": "Konversations-AI-first-Interface mit minimalen Steuerelementen, klaren Ergebnissen und delegierten Task-Flows für agentische Workflows.",
+    "fr": "Interface conversationnelle axée sur l'IA avec des contrôles minimaux, des résultats clairs et des flux de tâches délégués pour les workflows agentiques.",
+    "ru": "Разговорный интерфейс на основе ИИ с минимальным количеством элементов управления, четкими результатами и делегированными потоками задач для агентных рабочих процессов.",
+    "es": "Interfaz conversacional con IA como prioridad, controles mínimos, resultados claros y flujos de tareas delegados para flujos de trabajo agénticos.",
+    "pt-BR": "Interface conversacional com IA em primeiro lugar, controles mínimos, resultados claros e fluxos de tarefas delegados para workflows agênticos.",
+    "it": "Interfaccia conversazionale AI-first con controlli minimali, risultati chiari e flussi di attività delegati per workflow agentici.",
+    "vi": "Giao diện AI hội thoại ưu tiên với các điều khiển tối thiểu, kết quả rõ ràng và luồng tác vụ ủy quyền cho quy trình làm việc tác nhân.",
+    "pl": "Konwersacyjny interfejs AI z minimalnymi kontrolkami, jesnymi wynikami i delegowanymi przepływami zadań dla agentowych workflow.",
+    "id": "Antarmuka AI percakapan dengan kontrol minimal, hasil yang jelas, dan alur tugas yang didelegasikan untuk alur kerja agentik.",
+    "nl": "Conversationele AI-first interface met minimale bedieningselementen, duidelijke resultaten en gedelegeerde taakstromen voor agentische workflows.",
+    "ar": "واجهة محادثة تعتمد على الذكاء الاصطناعي أولاً مع عناصر تحكم بسيطة ونتائج واضحة وتدفقات مهام مفوضة لسير العمل الوكيل.",
+    "tr": "Minimal kontroller, net sonuçlar ve aracı iş akışları için devredilmiş görev akışlarına sahip konuşma tabanlı yapay zeka öncelikli arayüz.",
+    "uk": "Розмовний інтерфейс на основі ШІ з мінімальними елементами керування, чіткими результатами та делегованими потоками завдань для агентних робочих процесів.",
+    "en": "Conversational AI-first interface with minimal controls, clear outcomes, and delegated task flows for agentic workflows."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "themed-unique"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Agentic design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Agentic design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "agentic",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

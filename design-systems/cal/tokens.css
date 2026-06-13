@@ -1,0 +1,265 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/cal/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Cal.com" —
+ * open-source scheduling infrastructure rendered as a grayscale photograph.
+ * Pure-white canvas, near-black charcoal text, one reserved link-blue, and
+ * a multi-layer shadow stack that replaces CSS borders with ring-shadows.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating an artifact for cal should paste the
+ * `:root` block verbatim into the first `<style>` of the artifact, then
+ * reference everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each bends a schema convention to
+ * match Cal.com's voice rather than the cross-brand default):
+ *
+ *   1. `--fg` is `#242424` (Charcoal), NOT `#000000`. DESIGN.md §2 names
+ *      it the "signature near-black, warmer than pure black" — the
+ *      micro-warmth is what keeps the canvas from feeling harsh, the
+ *      same role `#171717` plays for Vercel. `--fg-2` independently
+ *      binds to `#111111` (Midnight) because Cal uses it for highest-
+ *      contrast nav links and deep emphasis; `--muted` lands on
+ *      `#898989` (Mid Gray) for descriptions, the third documented
+ *      tier in the grayscale palette.
+ *
+ *   2. `--accent` is `#0099ff` (Link Blue), the ONLY non-grayscale
+ *      value in the brand. DESIGN.md §2 calls it "the only blue in
+ *      the system, reserved strictly for hyperlinks" — color is a
+ *      "foreign substance" deliberately quarantined to text links and
+ *      focus rings. Primary CTAs use `--fg` (Charcoal) as the button
+ *      background, mirroring Cal.com's signature dark-on-white button.
+ *      Keeping the link-blue in `--accent` (not promoting Charcoal to
+ *      double-duty) preserves the lint's "≤2 accent uses per screen"
+ *      semantic and matches where blue actually appears in product.
+ *
+ *   3. `--border` is `rgba(34, 42, 53, 0.08)` — the literal Cal.com
+ *      ring-shadow alpha, NOT a solid hex. DESIGN.md §1 + §6 calls
+ *      out the shadow-as-border technique: surfaces use `0 0 0 1px`
+ *      ring shadows instead of CSS borders, "avoiding CSS border
+ *      entirely". Binding `--border` to the same alpha lets
+ *      `--elev-ring` reproduce the Cal hairline by default, and lets
+ *      `border: 1px solid var(--border)` match exactly when a true
+ *      border is structurally needed. `--border-soft` drops to 0.05
+ *      alpha (the same value used in the diffused-shadow layer of
+ *      the card stack) for inner separators that shouldn't compete.
+ *
+ *   4. `--surface-warm` aliases to `--surface` and `--meta` aliases to
+ *      `--muted`. Cal.com is intentionally monochrome — there is no
+ *      warm surface tier and no fourth gray below `--muted`. Following
+ *      the schema, an unused tier collapses via `var()` instead of
+ *      introducing a fabricated value.
+ *
+ *   5. `--elev-raised` is the full multi-layer Cal card stack
+ *      (`0 1px 5px -4px rgba(19,19,22,0.7), 0 0 0 1px rgba(34,42,53,0.08),
+ *      0 4px 8px rgba(34,42,53,0.05)`), reproduced VERBATIM from
+ *      DESIGN.md §6 Level 2. The composition is the workhorse: a sharp
+ *      contact shadow at the bottom edge (the `-4px` spread lifts the
+ *      blur off the top), a ring-shadow that paints the hairline edge,
+ *      and a soft diffused ambient at 5% alpha. Drop any layer and
+ *      the card stops looking "built" — it floats.
+ *
+ *   6. The type scale tops out at 64px (`--text-4xl`) per DESIGN.md §3
+ *      "Display Hero: Cal Sans 64px / 600 / 1.10". `--leading-tight`
+ *      is 1.1 to match. `--tracking-display` is `0` (not negative)
+ *      because Cal Sans was DESIGNED with extremely tight default
+ *      letter-spacing at large sizes — DESIGN.md §3 lists letter-
+ *      spacing 0px at 64/48/24 and warns that adding negative tracking
+ *      at small sizes cramps the font. Positive tracking compensation
+ *      for sub-24px Cal Sans usage stays a component-local concern.
+ *
+ *   7. `--font-display` leads with `Cal Sans` (the custom geometric
+ *      display face by Mark Davis, open-source via Google Fonts),
+ *      falling back to Inter so artifacts render legibly when Cal
+ *      Sans is not loaded. `--font-body` is Inter ("rock-solid"
+ *      body face per DESIGN.md §3). `--font-mono` leads with
+ *      Roboto Mono per the documented code-block font.
+ *
+ *   8. Section rhythm is generous: `96px` desktop, `64px` tablet,
+ *      `48px` phone (`--section-y-*`). DESIGN.md §5 demands "80px–96px
+ *      vertical between major sections (generous)" and DESIGN.md §7
+ *      forbids dropping below 48px on any breakpoint — "the generous
+ *      whitespace is core to the premium monochrome aesthetic".
+ *      Container caps at `1200px` (the documented max content width).
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Cal.com's canvas is achromatic and uniform — pure white page, pure
+   * white cards, no warm tier anywhere. `--surface-warm` aliases to
+   * `--surface` because the brand explicitly forbids background tinting
+   * (DESIGN.md §2: "boldness through monochrome"); depth comes from the
+   * multi-layer shadow stack, not from surface-color variation. */
+  --bg: #ffffff;                  /* Pure White — the dominant canvas */
+  --surface: #ffffff;              /* White card surface — depth via shadow, not color */
+  --surface-warm: var(--surface);  /* alias — Cal.com has no warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Three grayscale tiers from DESIGN.md §2 palette: Charcoal (#242424,
+   * the warmer-than-black signature), Midnight (#111111, deepest text
+   * for nav and high-contrast emphasis), and Mid Gray (#898989, the
+   * documented secondary / muted tier). `--meta` collapses to `--muted`
+   * because Cal has no fourth tier — there is no tertiary gray below
+   * Mid Gray in the brand spec. */
+  --fg: #242424;                   /* Charcoal — primary text, button bg, signature near-black */
+  --fg-2: #111111;                 /* Midnight — deepest text, nav, high-contrast emphasis */
+  --muted: #898989;                /* Mid Gray — descriptions, secondary labels, muted content */
+  --meta: var(--muted);            /* alias — Cal has only three grayscale tiers */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Shadow-as-border is THE signature: `rgba(34, 42, 53, 0.08)` at 1px
+   * spread replaces CSS borders throughout (DESIGN.md §1 + §6). Binding
+   * `--border` to the alpha (not a solid hex) lets `--elev-ring`
+   * reproduce the Cal hairline by default, and lets `border: 1px solid
+   * var(--border)` paint the same value when a real border is
+   * structurally required. `--border-soft` drops to 0.05 (the diffused-
+   * shadow layer alpha) for inner row separators that must not compete
+   * with the card edge. */
+  --border: rgba(34, 42, 53, 0.08);       /* signature ring-shadow alpha — used as border */
+  --border-soft: rgba(34, 42, 53, 0.05);  /* inner separator — quieter than the card edge */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Link Blue (#0099ff) — the ONLY chromatic color in the entire
+   * system. DESIGN.md §2: "reserved strictly for hyperlinks". Cal's
+   * marketing site treats color as "a foreign substance"; primary CTAs
+   * use `--fg` (Charcoal) as the button background, not `--accent`,
+   * which keeps the blue exclusively where it appears in product:
+   * inline text links and the focus-ring tint. */
+  --accent: #0099ff;               /* Link Blue — only non-grayscale color, link-only */
+  --accent-on: #ffffff;            /* white label on the rare blue surface */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Cal.com's marketing surface rarely renders state. We inherit the
+   * schema defaults (no grayscale-shift) — the product UI does show
+   * greens and blues in scheduling screenshots, but per DESIGN.md §2
+   * those colors belong to the product image, not the marketing frame. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Cal Sans + Inter — the documented two-face pairing (DESIGN.md §3).
+   * Cal Sans is exclusively for headings (24px+) with extremely tight
+   * default letter-spacing; Inter is "rock-solid" body. The font stacks
+   * fall through to system-installed faces so artifacts render legibly
+   * even when Cal Sans / Inter are not loaded. */
+  --font-display: "Cal Sans", "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-body: "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table. The
+   * scale tops out at 64px (display hero, Cal Sans 600 / 1.10) and
+   * keeps the documented 48 / 24 / 20 / 16 / 14 / 12 anchors. The
+   * `--text-2xl` step at 32px bridges the 24→48 gap so cross-brand
+   * components reading `--text-2xl` get a sensible section-title size
+   * even though DESIGN.md does not list 32px explicitly. */
+  --text-xs: 12px;                 /* caption / micro / Cal Sans label */
+  --text-sm: 14px;                 /* caption / nav micro / Roboto Mono code */
+  --text-base: 16px;               /* body / UI label / card title */
+  --text-lg: 20px;                 /* sub-heading (Cal Sans 600 / 1.20 / +0.2px) */
+  --text-xl: 24px;                 /* feature heading (Cal Sans 600 / 1.30) */
+  --text-2xl: 32px;                /* bridge tier (24→48) for cross-brand consumers */
+  --text-3xl: 48px;                /* section heading (Cal Sans 600 / 1.10) */
+  --text-4xl: 64px;                /* display hero (Cal Sans 600 / 1.10) */
+
+  /* `--leading-tight` is 1.1 to match DESIGN.md's "Cal Sans display
+   * 1.10" and "Section Heading 1.10" rows. `--leading-body` is 1.5,
+   * the documented Inter body-text leading. `--tracking-display` is
+   * `0` — Cal Sans is DESIGNED with extremely tight default letter-
+   * spacing at large sizes, and DESIGN.md §3 lists tracking 0px at
+   * 64 / 48 / 24px. Negative tracking at display would over-cramp it. */
+  --leading-body: 1.5;
+  --leading-tight: 1.1;
+  --tracking-display: 0;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px-grid base scale matching the schema defaults. Cal.com's DESIGN
+   * §5 spacing scale (1/2/3/4/6/8/12/16/20/24/28 sub-tiers) covers many
+   * micro-padding values that are too fine for the shared schema; those
+   * stay component-local. The 4/8/12/16/20/24/32/48 tier here covers
+   * the structural rhythm — the deliberate jump from 28px to 80px in
+   * DESIGN.md is preserved by the `--section-y-*` tier below. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "80px–96px vertical between major
+   * sections (generous)" + §7 forbids dropping below 48px on mobile.
+   * We anchor at the upper end (96px desktop), step down to 64px on
+   * tablet, and bottom out at the 48px mobile floor. The whitespace
+   * is the design — DESIGN.md §5 calls it "lavish section spacing". */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 documents an unusually wide radius scale (2/4/6/8/12/
+   * 16/29/100/1000/9999). We bind the four schema tiers to: 8 (the
+   * "standard interactive element" radius for buttons / inputs /
+   * images), 12 (medium containers), 16 (large section containers),
+   * 9999 (pill for badges and rounded actions). The intermediate
+   * 29px / 100px tiers are component-specific and stay inline. */
+  --radius-sm: 8px;                /* buttons, inputs, standard interactive */
+  --radius-md: 12px;               /* cards, medium containers */
+  --radius-lg: 16px;               /* large section containers */
+  --radius-pill: 9999px;           /* pill badges, fully rounded actions */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Cal.com's depth system is shadow-LED via multi-layer compositing
+   * (DESIGN.md §6: "11 shadow definitions"). Three sanctioned levels:
+   *
+   *   --elev-flat    no shadow (page canvas, basic text containers)
+   *   --elev-ring    the signature 1px ring-as-border (most surfaces)
+   *   --elev-raised  the workhorse card stack (Level 2 in DESIGN.md §6)
+   *
+   * `--elev-raised` is reproduced VERBATIM from DESIGN.md §6 Level 2:
+   *   contact: 0 1px 5px -4px rgba(19,19,22,0.7)   — sharp bottom edge
+   *   ring:    0 0 0 1px rgba(34,42,53,0.08)        — hairline border
+   *   ambient: 0 4px 8px rgba(34,42,53,0.05)        — soft diffused depth
+   * Drop any layer and the card loses the "physical card on a table"
+   * quality that DESIGN.md §6 calls out as the system's signature. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 1px 5px -4px rgba(19, 19, 22, 0.7),
+    0 0 0 1px rgba(34, 42, 53, 0.08),
+    0 4px 8px rgba(34, 42, 53, 0.05);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * The schema default (a soft alpha glow at `--accent`) reproduces
+   * Cal.com's focus aesthetic well — DESIGN.md §2 names the focus
+   * indicator as "Focus Ring: #3b82f6 at 50% opacity", and our Link
+   * Blue accent tinted to ~30% alpha sits in the same family without
+   * introducing a brand-foreign hue. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Two durations + one easing curve. Cal.com's transitions are quick
+   * and unobtrusive — DESIGN.md §4 describes hover as a simple opacity
+   * reduction, never a long-form choreographed entrance. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px max content width per DESIGN.md §5: "~1200px content
+   * container, centered". Gutters narrow on mobile so body copy stays
+   * comfortable on small screens — Cal.com does not edge-bleed text
+   * at any breakpoint. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

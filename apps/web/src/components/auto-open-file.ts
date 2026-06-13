@@ -19,7 +19,20 @@
 interface CandidateFile {
   readonly name: string;
   readonly path?: string;
+  readonly kind?: string;
+  readonly mtime?: number;
 }
+
+interface AutoOpenOptions {
+  // Names of files that are React modules loaded by a sibling HTML entry (via
+  // `<script type="text/babel" src>`). These have no standalone preview, so
+  // auto-opening one strands the user on a dead-end tab. When a resolved
+  // candidate is in this set we decline to open it. See
+  // `apps/web/src/runtime/jsx-module-refs.ts` for how the set is derived.
+  readonly moduleFileNames?: ReadonlySet<string>;
+}
+
+const NO_MODULES: ReadonlySet<string> = new Set();
 
 function basenameOf(p: string): string {
   return p.split('/').pop() ?? p;
@@ -28,7 +41,16 @@ function basenameOf(p: string): string {
 export function decideAutoOpenAfterWrite(
   filePath: string,
   nextFiles: ReadonlyArray<CandidateFile>,
+  options: AutoOpenOptions = {},
 ): { shouldOpen: boolean; fileName: string | null } {
+  const moduleFileNames = options.moduleFileNames ?? NO_MODULES;
+  // Resolve a positive identification into an open decision, declining files
+  // that are modules of a multi-file HTML entry rather than standalone pages.
+  const resolve = (fileName: string): { shouldOpen: boolean; fileName: string | null } =>
+    moduleFileNames.has(fileName)
+      ? { shouldOpen: false, fileName: null }
+      : { shouldOpen: true, fileName };
+
   if (!filePath) return { shouldOpen: false, fileName: null };
 
   // 1) Path-suffix match against full project-relative paths.
@@ -48,7 +70,7 @@ export function decideAutoOpenAfterWrite(
     }
   }
   if (suffixMatches.length === 1) {
-    return { shouldOpen: true, fileName: suffixMatches[0]!.name };
+    return resolve(suffixMatches[0]!.name);
   }
   if (suffixMatches.length > 1) {
     // Multiple project files plausibly correspond to this path — refuse
@@ -69,7 +91,30 @@ export function decideAutoOpenAfterWrite(
     return rel ? basenameOf(rel) === filePath : false;
   });
   if (basenameMatches.length === 1) {
-    return { shouldOpen: true, fileName: basenameMatches[0]!.name };
+    return resolve(basenameMatches[0]!.name);
   }
   return { shouldOpen: false, fileName: null };
+}
+
+function isHtmlPreviewFile(file: CandidateFile): boolean {
+  const path = file.path ?? file.name;
+  return file.kind === 'html' || /\.html?$/i.test(path);
+}
+
+export function selectAutoOpenProducedHtml(
+  producedFiles: ReadonlyArray<CandidateFile>,
+): string | null {
+  let selected: CandidateFile | null = null;
+  for (const file of producedFiles) {
+    if (!isHtmlPreviewFile(file)) continue;
+    if (!selected) {
+      selected = file;
+      continue;
+    }
+    const nextMtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
+    const selectedMtime =
+      typeof selected.mtime === 'number' && Number.isFinite(selected.mtime) ? selected.mtime : 0;
+    if (nextMtime >= selectedMtime) selected = file;
+  }
+  return selected?.name ?? null;
 }

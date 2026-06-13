@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-pptx-html-fidelity-audit",
+  "title": "Pptx Html Fidelity Audit",
+  "title_i18n": {
+    "zh-CN": "Pptx Html 保真度审计",
+    "zh-TW": "Pptx Html 保真度稽核",
+    "ja": "Pptx Html 忠実度監査",
+    "ko": "Pptx Html 충실도 감사",
+    "de": "Pptx Html Genauigkeitsprüfung",
+    "fr": "Audit de fidélité Pptx Html",
+    "ru": "Аудит точности Pptx Html",
+    "es": "Auditoría de fidelidad Pptx Html",
+    "pt-BR": "Auditoria de fidelidade Pptx Html",
+    "it": "Controllo fedeltà Pptx Html",
+    "vi": "Kiểm tra độ trung thực Pptx Html",
+    "pl": "Audyt wierności Pptx Html",
+    "id": "Audit keakuratan Pptx Html",
+    "nl": "Pptx Html nauwkeurigheidsaudit",
+    "ar": "تدقيق دقة Pptx Html",
+    "tr": "Pptx Html doğruluk denetimi",
+    "uk": "Аудит точності Pptx Html",
+    "en": "Pptx Html Fidelity Audit"
+  },
+  "version": "0.1.0",
+  "description": "Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an HTML slide deck and asks to compare/audit/verify/fix the export — including phrases like \"compare ppt with html\", \"fidelity audit\", \"fix the pptx\", \"ppt is cut off\", \"footer overlap\", \"italic missing in pptx\", \"re-export the deck\", \"pptx-html-fidelity-audit\", or any case where a python-pptx → HTML round-trip needs verification or repair. Also trigger when the user shows you a deck.html and a deck.pptx side by side and is debugging visual differences.",
+  "description_i18n": {
+    "zh-CN": "审计 python-pptx 导出与源 HTML 幻灯片的一致性，识别布局和内容偏差（页脚溢出、内容裁剪、斜体丢失、样式丢失、间距错误），并以严格的页脚和光标流布局规范重新导出。",
+    "zh-TW": "稽核 python-pptx 匯出與來源 HTML 簡報的一致性，識別版面與內容偏移（頁尾溢位、內容裁切、斜體遺失、樣式遺失、間距錯誤），並以嚴格的頁尾與游標流版面規範重新匯出。",
+    "ja": "python-pptx エクスポートとソース HTML デッキの忠実度を監査し、レイアウトとコンテンツのずれ（フッター溢れ、コンテンツ切り取り、イタリック欠落、スタイル損失、間隔ずれ）を特定し、厳密なフッターとカーソルフローレイアウト規律で再エクスポートします。",
+    "ko": "python-pptx 내보내기와 원본 HTML 덱의 충실도를 감사하고 레이아웃 및 콘텐츠 편차(바닥글 오버플로, 잘린 콘텐츠, 이탤릭체 누락, 스타일 손실, 간격 오류)를 식별하여 엄격한 바닥글 및 커서 흐름 레이아웃 규칙으로 재내보내기합니다.",
+    "de": "Prüft python-pptx-Exporte gegen das HTML-Quell-Deck, identifiziert Layout- und Inhaltsabweichungen (Fußzeilen-Überlauf, abgeschnittene Inhalte, fehlende Kursivschrift, verlorene Stile, falsche Abstände) und exportiert mit strenger Fußzeilen- und Cursor-Flow-Layout-Disziplin neu.",
+    "fr": "Audite un export python-pptx par rapport à son deck HTML source, identifie les écarts de mise en page et de contenu (débordement de pied de page, contenu rogné, italique manquant, styles perdus, espacement incorrect) et réexporte avec une discipline stricte de mise en page pied de page et flux de curseur.",
+    "ru": "Проверяет экспорт python-pptx на соответствие исходному HTML-деку, выявляет расхождения в макете и содержимом (переполнение нижнего колонтитула, обрезанный контент, потерянный курсив, утраченные стили, неправильные отступы) и переэкспортирует с соблюдением строгой дисциплины макета нижнего колонтитула и потока курсора.",
+    "es": "Audita una exportación de python-pptx contra su deck HTML fuente, identifica desviaciones de diseño y contenido (desbordamiento de pie de página, contenido recortado, cursiva faltante, estilos perdidos, espaciado incorrecto) y reexporta con disciplina estricta de diseño de pie de página y flujo de cursor.",
+    "pt-BR": "Audita uma exportação python-pptx em relação ao deck HTML de origem, identifica desvios de layout e conteúdo (estouro de rodapé, conteúdo cortado, itálico ausente, estilos perdidos, espaçamento incorreto) e reexporta com disciplina rigorosa de layout de rodapé e fluxo de cursor.",
+    "it": "Controlla un'esportazione python-pptx rispetto al deck HTML di origine, identifica deviazioni di layout e contenuto (overflow piè di pagina, contenuto ritagliato, corsivo mancante, stili persi, spaziatura errata) e riesporta con disciplina rigorosa di layout piè di pagina e flusso cursore.",
+    "vi": "Kiểm tra xuất python-pptx so với bộ HTML nguồn, xác định sự lệch lạc bố cục và nội dung (tràn chân trang, nội dung bị cắt, thiếu in nghiêng, mất kiểu, khoảng cách sai) và xuất lại với kỷ luật bố cục chân trang và luồng con trỏ nghiêm ngặt.",
+    "pl": "Audytuje eksport python-pptx w porównaniu ze źródłowym zestawem HTML, identyfikuje odchylenia układu i treści (przepełnienie stopki, przycięta zawartość, brakująca kursywa, utracone style, nieprawidłowe odstępy) i ponownie eksportuje z rygorystyczną dyscypliną układu stopki i przepływu kursora.",
+    "id": "Mengaudit ekspor python-pptx terhadap deck HTML sumbernya, mengidentifikasi penyimpangan tata letak dan konten (footer meluap, konten terpotong, miring hilang, gaya hilang, spasi salah) dan mengekspor ulang dengan disiplin tata letak footer dan aliran kursor yang ketat.",
+    "nl": "Controleert een python-pptx-export tegen het HTML-brondeck, identificeert lay-out- en inhoudsafwijkingen (voettekst-overflow, afgesneden inhoud, ontbrekende cursief, verloren opmaak, onjuiste spatiëring) en exporteert opnieuw met strikte voettekst- en cursorflow-lay-outdiscipline.",
+    "ar": "يدقق تصدير python-pptx مقابل مجموعة HTML المصدر، ويحدد انحرافات التخطيط والمحتوى (فيض التذييل، محتوى مقصوص، مائل مفقود، أنماط مفقودة، مسافات خاطئة) ويعيد التصدير بانضباط صارم لتخطيط التذييل وتدفق المؤشر.",
+    "tr": "Bir python-pptx dışa aktarımını kaynak HTML destesine karşı denetler, düzen ve içerik sapmalarını (altbilgi taşması, kırpılmış içerik, eksik italik, kayıp stil, yanlış aralık) tanımlar ve katı altbilgi ve imleç akışı düzen disipliniyle yeniden dışa aktarır.",
+    "uk": "Перевіряє експорт python-pptx на відповідність вихідному HTML-деку, виявляє розбіжності в макеті та вмісті (переповнення нижнього колонтитула, обрізаний вміст, втрачений курсив, втрачені стилі, неправильні відступи) та переекспортує з дотриманням суворої дисципліни макета нижнього колонтитула та потоку курсора.",
+    "en": "Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an HTML slide deck and asks to compare/audit/verify/fix the export — including phrases like \"compare ppt with html\", \"fidelity audit\", \"fix the pptx\", \"ppt is cut off\", \"footer overlap\", \"italic missing in pptx\", \"re-export the deck\", \"pptx-html-fidelity-audit\", or any case where a python-pptx → HTML round-trip needs verification or repair. Also trigger when the user shows you a deck.html and a deck.pptx side by side and is debugging visual differences."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/pptx-html-fidelity-audit",
+  "tags": [
+    "example",
+    "first-party",
+    "utility",
+    "engineering",
+    "web",
+    "pptx-fidelity",
+    "pptx-audit",
+    "ppt",
+    "untitled",
+    "footer-overlap",
+    "verify-pptx",
+    "html-to-pptx"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "utility",
+    "scenario": "engineering",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an H",
+        "zh-CN": "使用这个插件完成以下任务：Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an H"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./references/audit-table-template.md",
+        "./references/font-discipline.md",
+        "./references/layout-discipline.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

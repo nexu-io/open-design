@@ -1,0 +1,203 @@
+/* ============================================================
+   Open Design — neutral product workspace
+   ============================================================ */
+:root {
+  /* Surface palette — neutral app chrome that does not bias generated artifacts.
+     Keep warm/brand colors out of preview backgrounds; generated product UI
+     must choose its own palette through the active skill/design brief. */
+  --bg: #faf9f7;
+  --bg-app: #faf9f7;
+  --bg-panel: #fdfcfa;
+  --bg-subtle: #f4f5f7;
+  --bg-muted: #eef1f5;
+  --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
+  --bg-fill-secondary: rgba(0, 0, 0, 0.06);
+  --bg-fill: rgba(0, 0, 0, 0.12);
+  --bg-elevated: #fffefc;
+  --border: #e1e5eb;
+  --border-strong: #c9d0da;
+  --border-soft: #edf0f4;
+
+  --text: #1a1916;
+  --text-strong: #0d0c0a;
+  --text-muted: #74716b;
+  --text-soft: #989590;
+  --text-faint: #b3b0a8;
+
+  /* Accent — Open Design action color for app chrome only. */
+  --accent: #c96442;
+  --accent-strong: #b45a3b;
+  --accent-soft: #f5d8cb;
+  --accent-tint: #fbeee5;
+  --accent-hover: #b45a3b;
+
+  /* Semantic accent tints used by tool / status pills. */
+  --green: #1f7a3a;
+  --green-bg: #e8f7ee;
+  --green-border: #c6ead2;
+  --blue: #2348b8;
+  --blue-bg: #e8efff;
+  --blue-border: #c8d6ff;
+  --purple: #6c3aa6;
+  --purple-bg: #f3ecf9;
+  --purple-border: #e4d4f1;
+  --red: #9c2a25;
+  --red-bg: #fdecea;
+  --red-border: #f5c6c2;
+  --amber: #b26200;
+  --amber-bg: #fff3e0;
+
+  --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
+  --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
+  --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
+
+  /* Corner-radius scale — the only radii UI should reach for (Shape
+     Consistency Lock). xs for inline code / micro-chips, sm for controls,
+     base for cards/menus, md for medium containers, lg for large surfaces,
+     pill for fully-rounded interactive. Off-scale values (7px, 9px, 10px
+     literals) are drift; collapse them to the nearest token. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Motion — codifies the UI animation philosophy (see AGENTS.md). The
+     built-in `ease` curve is too weak and `ease-in` is banned for UI;
+     --ease-out is the single canonical curve for product transitions.
+     Enter reads gentle, exit reads decisive (asymmetric durations);
+     --dur-quick is for hover / focus micro-feedback. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-quick: 120ms;
+  --dur-enter: 200ms;
+  --dur-exit: 140ms;
+
+  /* "Active option" indicator color, intentionally separate from --accent
+     (brand orange used by primary CTAs like Create / Save). Use --selected
+     for "this option is the one currently picked" affordances — selected
+     fidelity card, focused input ring, active filter pill — so a primary
+     CTA and a selected state can coexist on the same screen without
+     competing. --selected-soft is the 16% tint for outer rings / fills. */
+  --selected: #2563eb;
+  --selected-soft: rgba(37, 99, 235, 0.16);
+
+  --serif: 'Source Serif Pro', 'Source Serif 4', 'Iowan Old Style', 'Apple Garamond', Georgia, 'Times New Roman', serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --prose-font-size: 15px;
+  --prose-line-height: 1.75;
+  --code-header-bg: #f4f5f7;
+  --code-body-bg: #f9fafb;
+  --code-font-size: 13px;
+  --code-line-height: 1.65;
+}
+
+/* Dark theme variables — shared between explicit [data-theme="dark"] and the
+   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1917;
+  --bg-app: #1a1917;
+  --bg-panel: #222120;
+  --bg-subtle: #252321;
+  --bg-muted: #2e2c29;
+  --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+  --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+  --bg-fill: rgba(255, 255, 255, 0.16);
+  --bg-elevated: #2a2825;
+  --border: #333128;
+  --border-strong: #46433c;
+  --border-soft: #2a2825;
+
+  --text: #e8e4dc;
+  --text-strong: #f2ede4;
+  --text-muted: #9a9690;
+  --text-soft: #6e6b65;
+  --text-faint: #4e4b46;
+
+  --accent: #d97a56;
+  --accent-strong: #e8896a;
+  --accent-soft: #3d2318;
+  --accent-tint: #2e1a12;
+  --accent-hover: #e8896a;
+
+  --green: #4caf72;
+  --green-bg: #0f2a18;
+  --green-border: #1a4028;
+  --blue: #6b8fe8;
+  --blue-bg: #0f1a38;
+  --blue-border: #1a2c58;
+  --purple: #a87dd4;
+  --purple-bg: #1e1030;
+  --purple-border: #321a50;
+  --red: #e06b65;
+  --red-bg: #2a0e0c;
+  --red-border: #451714;
+  --amber: #e09a40;
+  --amber-bg: #2a1a04;
+
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+  --code-header-bg: #1e1e20;
+  --code-body-bg: #18181b;
+}
+
+/* System mode: follow OS preference when no explicit data-theme is set. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #1a1917;
+    --bg-app: #1a1917;
+    --bg-panel: #222120;
+    --bg-subtle: #252321;
+    --bg-muted: #2e2c29;
+    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+    --bg-fill: rgba(255, 255, 255, 0.16);
+    --bg-elevated: #2a2825;
+    --border: #333128;
+    --border-strong: #46433c;
+    --border-soft: #2a2825;
+
+    --text: #e8e4dc;
+    --text-strong: #f2ede4;
+    --text-muted: #9a9690;
+    --text-soft: #6e6b65;
+    --text-faint: #4e4b46;
+
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+    --accent-soft: #3d2318;
+    --accent-tint: #2e1a12;
+    --accent-hover: #e8896a;
+
+    --green: #4caf72;
+    --green-bg: #0f2a18;
+    --green-border: #1a4028;
+    --blue: #6b8fe8;
+    --blue-bg: #0f1a38;
+    --blue-border: #1a2c58;
+    --purple: #a87dd4;
+    --purple-bg: #1e1030;
+    --purple-border: #321a50;
+    --red: #e06b65;
+    --red-bg: #2a0e0c;
+    --red-border: #451714;
+    --amber: #e09a40;
+    --amber-bg: #2a1a04;
+
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+    --code-header-bg: #1e1e20;
+    --code-body-bg: #18181b;
+  }
+}

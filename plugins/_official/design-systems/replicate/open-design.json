@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-replicate",
+  "title": "Replicate",
+  "title_i18n": {
+    "zh-CN": "Replicate",
+    "zh-TW": "Replicate",
+    "ja": "Replicate",
+    "ko": "Replicate",
+    "de": "Replicate",
+    "fr": "Replicate",
+    "ru": "Replicate",
+    "es": "Replicate",
+    "pt-BR": "Replicate",
+    "it": "Replicate",
+    "vi": "Replicate",
+    "pl": "Replicate",
+    "id": "Replicate",
+    "nl": "Replicate",
+    "ar": "Replicate",
+    "tr": "Replicate",
+    "uk": "Replicate",
+    "en": "Replicate"
+  },
+  "version": "0.1.0",
+  "description": "Run ML models via API. Clean white canvas, code-forward.",
+  "description_i18n": {
+    "zh-CN": "通过 API 运行机器学习模型。简洁白色画布，代码优先。",
+    "zh-TW": "透過 API 執行機器學習模型。簡潔白色畫布，程式碼優先。",
+    "ja": "APIで機械学習モデルを実行。シンプルな白いキャンバス、コード中心。",
+    "ko": "API를 통해 머신러닝 모델을 실행합니다. 깔끔한 흰색 캔버스, 코드 중심.",
+    "de": "ML-Modelle per API ausführen. Saubere weiße Leinwand, Code-fokussiert.",
+    "fr": "Exécutez des modèles ML via API. Canevas blanc épuré, axé sur le code.",
+    "ru": "Запуск ML-моделей через API. Чистый белый холст, ориентация на код.",
+    "es": "Ejecuta modelos de ML mediante API. Lienzo blanco limpio, enfocado en código.",
+    "pt-BR": "Execute modelos de ML via API. Tela branca limpa, focado em código.",
+    "it": "Esegui modelli ML tramite API. Canvas bianco pulito, orientato al codice.",
+    "vi": "Chạy các mô hình ML qua API. Giao diện trắng sạch sẽ, tập trung vào code.",
+    "pl": "Uruchamiaj modele ML przez API. Czyste białe płótno, skoncentrowane na kodzie.",
+    "id": "Jalankan model ML lewat API. Kanvas putih bersih, fokus pada kode.",
+    "nl": "Voer ML-modellen uit via API. Schoon wit canvas, code-gericht.",
+    "ar": "تشغيل نماذج ML عبر API. لوحة بيضاء نظيفة، تركز على الكود.",
+    "tr": "API ile ML modellerini çalıştırın. Temiz beyaz tuval, kod odaklı.",
+    "uk": "Запуск ML-моделей через API. Чисте біле полотно, орієнтація на код.",
+    "en": "Run ML models via API. Clean white canvas, code-forward."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Replicate design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Replicate design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "replicate",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

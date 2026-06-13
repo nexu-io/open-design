@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlowAI Team Dashboard Template</title>
+  <style>
+    :root {
+      --bg: #d9d9de;
+      --app: #f8f8fa;
+      --panel: #fff;
+      --line: #e9e9ed;
+      --text: #1f2128;
+      --muted: #8b8f9a;
+      --hover: #f3f4f7;
+      --accent: #1f2937;
+      --chart-stroke: #1f2937;
+      --chart-fill: rgba(31, 41, 55, 0.16);
+      --chart-axis: #6b7280;
+      --chart-bar-label: #677084;
+      --chart-bar-value: #1f2937;
+    }
+    body.dark {
+      --bg: #0f1218;
+      --app: #171b23;
+      --panel: #1d2430;
+      --line: #2c3442;
+      --text: #ecf0f7;
+      --muted: #9aa3b6;
+      --hover: #242c3a;
+      --accent: #ecf0f7;
+      --chart-stroke: #ecf0f7;
+      --chart-fill: rgba(236, 240, 247, 0.18);
+      --chart-axis: #9aa3b6;
+      --chart-bar-label: #9aa3b6;
+      --chart-bar-value: #ecf0f7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: linear-gradient(180deg, var(--bg), var(--bg));
+      color: var(--text);
+      padding: 22px;
+    }
+    .shell { max-width: 1320px; margin: 0 auto; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+    .top { height: 48px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; padding: 0 12px; background: var(--app); }
+    .top button, .chip { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; height: 30px; padding: 0 10px; cursor: pointer; }
+    .top .actions { display: flex; gap: 6px; }
+    .wrap { padding: 12px; display: grid; gap: 10px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--panel); color: var(--muted); }
+    .tab.active { color: var(--text); background: var(--hover); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .card, .panel { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    .card { padding: 10px; cursor: zoom-in; }
+    .card .k { color: var(--muted); font-size: 11px; }
+    .card .v { font-size: 28px; font-weight: 650; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    .panel { padding: 10px; cursor: zoom-in; }
+    .panel-title { margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 480px; }
+    .table th, .table td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; }
+    .badge { border: 1px solid var(--line); border-radius: 99px; padding: 2px 8px; font-size: 11px; }
+    .canvas { width: 100%; height: 180px; border: 1px solid var(--line); border-radius: 8px; background: var(--app); display: block; }
+    .avatars { display: grid; gap: 7px; }
+    .who { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+    .name { display: flex; align-items: center; gap: 8px; }
+    .av { width: 22px; height: 22px; border-radius: 50%; background: #ced4e6; color: #202431; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+    .view { display: none; }
+    .view.active { display: block; }
+    .zoomed { position: fixed !important; inset: 8vh 8vw !important; z-index: 99; overflow: auto; cursor: zoom-out; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25); }
+    .backdrop { position: fixed; inset: 0; background: rgba(10, 12, 18, 0.55); z-index: 98; }
+    .tooltip { position: fixed; z-index: 120; pointer-events: none; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 8px; font-size: 11px; padding: 6px 8px; opacity: 0; transition: opacity 0.12s ease; }
+    .tooltip.show { opacity: 1; }
+
+    @media (max-width: 1300px) {
+      .grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+      .stats { grid-template-columns: 1fr; }
+      .tabs { gap: 4px; }
+      .tab { flex: 1 1 auto; text-align: center; }
+      .table { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <b>FlowAI · Team Dashboard</b>
+      <div class="actions">
+        <button id="themeBtn" type="button" aria-label="Toggle theme">Theme</button>
+        <button id="exportBtn" type="button">Export CSV</button>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-view="members" role="tab" aria-selected="true">Team Members</button>
+        <button class="tab" data-view="details" role="tab" aria-selected="false">Team Details</button>
+        <button class="tab" data-view="activity" role="tab" aria-selected="false">Activity Log</button>
+      </div>
+
+      <div class="stats">
+        <div class="card zoomable"><div class="k">Total Members</div><div class="v">35</div></div>
+        <div class="card zoomable"><div class="k">Active Now</div><div class="v">15</div></div>
+        <div class="card zoomable"><div class="k">Runs Today</div><div class="v">4,210</div></div>
+        <div class="card zoomable"><div class="k">Success Rate</div><div class="v">98.6%</div></div>
+      </div>
+
+      <section id="members" class="view active">
+        <div class="grid">
+          <div class="panel zoomable">
+            <div class="table-wrap">
+              <table class="table" id="teamTable">
+                <thead>
+                  <tr><th>Name</th><th>Role</th><th>Status</th><th>Workflow</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Alexander Montgomery</td><td>Editor</td><td><span class="badge">Active</span></td><td>33%</td></tr>
+                  <tr><td>Nathaniel Richardson</td><td>Owner</td><td><span class="badge">Active</span></td><td>24%</td></tr>
+                  <tr><td>Theodore Whitmore</td><td>Editor</td><td><span class="badge">Pending</span></td><td>--</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel zoomable">
+            <div class="panel-title">Online Presence</div>
+            <canvas id="presenceChart" class="canvas" width="360" height="180"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section id="details" class="view">
+        <div class="grid">
+          <div class="panel zoomable">
+            <div class="panel-title">Role Distribution</div>
+            <canvas id="roleChart" class="canvas" width="680" height="180"></canvas>
+          </div>
+          <div class="panel zoomable">
+            <div class="panel-title">Top Contributors</div>
+            <div class="avatars">
+              <div class="who"><div class="name"><span class="av">WP</span>William Prescott</div><b>28</b></div>
+              <div class="who"><div class="name"><span class="av">EK</span>Edward Kensington</div><b>24</b></div>
+              <div class="who"><div class="name"><span class="av">OR</span>Oliver Remington</div><b>19</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="activity" class="view">
+        <div class="grid">
+          <div class="panel zoomable">
+            <div class="panel-title">Activity Trend</div>
+            <canvas id="riskChart" class="canvas" width="680" height="180"></canvas>
+          </div>
+          <div class="panel zoomable">
+            <div class="panel-title">Risk Radar</div>
+            <div class="avatars">
+              <div class="who">5 Failed Logins</div>
+              <div class="who">API key Age Exceeded Policy</div>
+              <div class="who">SSO Scope Changed</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div id="tt" class="tooltip" role="status" aria-live="polite"></div>
+  <script>
+    const charts = {
+      presence: { id: "presenceChart", labels: ["04-25","04-26","04-27","04-28","04-29","04-30","05-01","05-02"], values: [8,11,9,12,14,13,15,12] },
+      risk:     { id: "riskChart",     labels: ["04-26","04-27","04-28","04-29","04-30","05-01","05-02"],         values: [7,10,6,8,11,9,5] },
+      role:     { id: "roleChart",     labels: ["Owner","Admin","Editor","Viewer","Devops"],                       values: [3,14,37,34,6], colors: ["#fac6cd","#d7e5ff","#89b5ff","#c8ccff","#f0dbff"] }
+    };
+    const pts = {};
+    const tt = document.getElementById("tt");
+    let detailsAnimated = false;
+
+    function chartColors() {
+      const cs = getComputedStyle(document.body);
+      return {
+        stroke: cs.getPropertyValue("--chart-stroke").trim() || "#1f2937",
+        fill:   cs.getPropertyValue("--chart-fill").trim()   || "rgba(31,41,55,.16)",
+        axis:   cs.getPropertyValue("--chart-axis").trim()   || "#6b7280",
+        barLabel: cs.getPropertyValue("--chart-bar-label").trim() || "#677084",
+        barValue: cs.getPropertyValue("--chart-bar-value").trim() || "#1f2937"
+      };
+    }
+
+    function spark(cfg) {
+      const c = document.getElementById(cfg.id);
+      if (!c) return;
+      const ctx = c.getContext("2d"), w = c.width, h = c.height;
+      const cc = chartColors();
+      const min = Math.min(...cfg.values), max = Math.max(...cfg.values), pad = 18;
+      ctx.clearRect(0, 0, w, h);
+      ctx.beginPath();
+      pts[cfg.id] = [];
+      cfg.values.forEach((v, i) => {
+        const x = pad + (i / (cfg.values.length - 1)) * (w - pad * 2);
+        const y = h - pad - ((v - min) / Math.max(max - min, 1)) * (h - pad * 2);
+        pts[cfg.id].push({ x, y, label: cfg.labels[i], value: v });
+        if (!i) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = cc.stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineTo(w - pad, h - pad);
+      ctx.lineTo(pad, h - pad);
+      ctx.closePath();
+      ctx.fillStyle = cc.fill;
+      ctx.fill();
+      pts[cfg.id].forEach((p) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = cc.stroke;
+        ctx.fill();
+        ctx.fillStyle = cc.axis;
+        ctx.font = "10px Inter";
+        ctx.fillText(String(p.value), p.x - 8, p.y - 8);
+      });
+    }
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+    function drawBars(progress) {
+      const c = document.getElementById(charts.role.id);
+      if (!c) return;
+      const ctx = c.getContext("2d"), w = c.width, h = c.height;
+      const cc = chartColors();
+      const vals = charts.role.values, labels = charts.role.labels, colors = charts.role.colors, max = Math.max(...vals);
+      const x0 = 28, y0 = 142, bw = 88, gap = 20;
+      ctx.clearRect(0, 0, w, h);
+      pts[c.id] = [];
+      vals.forEach((v, i) => {
+        const hh = (v / max) * 100 * progress;
+        const x = x0 + i * (bw + gap);
+        const cv = Math.round(v * progress);
+        ctx.fillStyle = colors[i];
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(x, y0 - hh, bw, hh, 8);
+        else ctx.rect(x, y0 - hh, bw, hh);
+        ctx.fill();
+        ctx.fillStyle = cc.barLabel;
+        ctx.font = "11px Inter";
+        ctx.fillText(labels[i], x + 8, 165);
+        ctx.fillStyle = cc.barValue;
+        ctx.fillText(cv + "%", x + 27, y0 - hh - 8);
+        pts[c.id].push({ x: x + bw / 2, y: y0 - hh, label: labels[i], value: v + "%" });
+      });
+    }
+
+    function animateBars() {
+      const dur = 800, start = performance.now();
+      function frame(ts) {
+        const p = easeOutCubic(Math.min((ts - start) / dur, 1));
+        drawBars(p);
+        if (p < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function redrawAll() {
+      spark(charts.presence);
+      spark(charts.risk);
+      if (detailsAnimated) drawBars(1);
+    }
+
+    function showTip(txt, x, y) {
+      tt.textContent = txt;
+      const pad = 12;
+      const tw = tt.offsetWidth || 120, th = tt.offsetHeight || 24;
+      let left = x + 10, top = y + 10;
+      if (left + tw + pad > window.innerWidth)  left = x - tw - 10;
+      if (top  + th + pad > window.innerHeight) top  = y - th - 10;
+      tt.style.left = left + "px";
+      tt.style.top  = top  + "px";
+      tt.classList.add("show");
+    }
+    function hideTip() { tt.classList.remove("show"); }
+
+    function bindTooltip(id) {
+      const c = document.getElementById(id);
+      if (!c) return;
+      c.addEventListener("mousemove", (e) => {
+        const p = pts[id] || [];
+        if (!p.length) return;
+        const r = c.getBoundingClientRect();
+        const x = (e.clientX - r.left) * (c.width / r.width);
+        const y = (e.clientY - r.top)  * (c.height / r.height);
+        let hit = null, d = 999;
+        p.forEach((pt) => {
+          const dd = Math.hypot(pt.x - x, pt.y - y);
+          if (dd < d) { d = dd; hit = pt; }
+        });
+        if (hit && d < 20) showTip(`${hit.label} · ${hit.value}`, e.clientX, e.clientY);
+        else hideTip();
+      });
+      c.addEventListener("mouseleave", hideTip);
+    }
+
+    function setView(v) {
+      document.querySelectorAll(".view").forEach((el) => el.classList.remove("active"));
+      const target = document.getElementById(v);
+      if (target) target.classList.add("active");
+      document.querySelectorAll(".tab").forEach((t) => {
+        const on = t.dataset.view === v;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      if (window.location.hash !== "#" + v) {
+        history.replaceState(null, "", "#" + v);
+      }
+      if (v === "details") {
+        if (!detailsAnimated) { animateBars(); detailsAnimated = true; }
+        else drawBars(1);
+      }
+    }
+
+    function bindZoom() {
+      let zoomed = null;
+      function unzoom() {
+        if (zoomed) zoomed.classList.remove("zoomed");
+        document.querySelector(".backdrop")?.remove();
+        zoomed = null;
+      }
+      document.querySelectorAll(".zoomable").forEach((el) => {
+        el.addEventListener("click", (e) => {
+          if (e.target.closest("button, input, select, a")) return;
+          if (zoomed === el) { unzoom(); return; }
+          unzoom();
+          const b = document.createElement("div");
+          b.className = "backdrop";
+          b.onclick = unzoom;
+          document.body.appendChild(b);
+          el.classList.add("zoomed");
+          zoomed = el;
+        });
+      });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") unzoom(); });
+    }
+
+    function exportCsv() {
+      const table = document.getElementById("teamTable");
+      if (!table) return;
+      const rows = [];
+      const headerCells = table.querySelectorAll("thead th");
+      rows.push([...headerCells].map((th) => th.textContent.trim()));
+      table.querySelectorAll("tbody tr").forEach((tr) => {
+        rows.push([...tr.querySelectorAll("td")].map((td) => td.innerText.trim().replace(/\s+/g, " ")));
+      });
+      const csv = rows
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "flowai-team.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    }
+
+    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
+    document.getElementById("themeBtn").onclick = () => {
+      document.body.classList.toggle("dark");
+      redrawAll();
+    };
+    document.getElementById("exportBtn").onclick = exportCsv;
+
+    spark(charts.presence);
+    spark(charts.risk);
+    bindTooltip("presenceChart");
+    bindTooltip("riskChart");
+    bindTooltip("roleChart");
+    bindZoom();
+
+    const initial = (window.location.hash || "#members").slice(1);
+    setView(["members", "details", "activity"].includes(initial) ? initial : "members");
+  </script>
+</body>
+</html>

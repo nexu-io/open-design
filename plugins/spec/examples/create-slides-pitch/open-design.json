@@ -1,0 +1,60 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-slides-pitch",
+  "title": "Example Pitch Slides",
+  "version": "0.1.0",
+  "description": "Spec example plugin for producing an investor-ready HTML pitch deck artifact.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design Spec Examples",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/spec/examples/create-slides-pitch",
+  "tags": ["create", "deck", "slides", "pitch"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "finance",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create an 8-slide seed pitch deck for a product called Atlas Desk with traction, market, business model, and ask.",
+        "zh-CN": "使用插件为 Atlas Desk 创建 8 页种子轮融资演示文稿，包含增长、市场、商业模式和融资诉求。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Example Pitch Slides"
+        }
+      ]
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "craft": ["typography", "color", "anti-ai-slop"],
+      "assets": ["./example.html"],
+      "atoms": ["todo-write", "critique-theater", "handoff"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write", "live-artifact"] },
+        { "id": "critique", "atoms": ["critique-theater"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "inputs": [
+      { "name": "company", "type": "string", "required": true, "label": "Company" },
+      { "name": "ask", "type": "string", "default": "$2.5M seed", "label": "Ask" }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

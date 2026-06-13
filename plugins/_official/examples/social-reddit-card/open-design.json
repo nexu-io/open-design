@@ -1,0 +1,127 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-social-reddit-card",
+  "title": "Reddit Post Card",
+  "title_i18n": {
+    "en": "Reddit Post Card",
+    "zh-CN": "Reddit 帖子卡",
+    "zh-TW": "Reddit 貼文卡片",
+    "ja": "Reddit投稿カード",
+    "ko": "Reddit 게시물 카드",
+    "de": "Reddit-Post-Karte",
+    "fr": "Carte de publication Reddit",
+    "ru": "Карточка поста Reddit",
+    "es": "Tarjeta de publicación de Reddit",
+    "pt-BR": "Card de Post do Reddit",
+    "it": "Card post Reddit",
+    "vi": "Thẻ bài đăng Reddit",
+    "pl": "Karta posta Reddit",
+    "id": "Kartu Postingan Reddit",
+    "nl": "Reddit-postkaart",
+    "ar": "بطاقة منشور Reddit",
+    "tr": "Reddit Gönderi Kartı",
+    "uk": "Картка публікації Reddit"
+  },
+  "version": "0.1.0",
+  "description": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
+  "description_i18n": {
+    "en": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
+    "zh-CN": "拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享",
+    "zh-TW": "逼真的 Reddit 貼文卡片，帶有投票欄和留言數，適用於影片疊加層或故事分享。",
+    "ja": "投票レールとコメント数を備えたリアルなReddit投稿カード。動画オーバーレイやストーリー共有に最適です。",
+    "ko": "투표 레일과 댓글 수가 포함된 실감나는 Reddit 게시물 카드입니다. 비디오 오버레이나 스토리 공유에 적합합니다.",
+    "de": "Realistische Reddit-Post-Karte mit Vote-Leiste und Kommentaranzahl, geeignet für Video-Overlays oder Story-Sharing.",
+    "fr": "Carte de publication Reddit réaliste avec barre de vote et nombre de commentaires, adaptée aux overlays vidéo ou au partage de stories.",
+    "ru": "Реалистичная карточка поста Reddit с панелью голосования и счётчиком комментариев для видеооверлеев или публикаций в сторис.",
+    "es": "Tarjeta de publicación de Reddit realista con barra de votos y contador de comentarios, ideal para superposiciones de video o compartir historias.",
+    "pt-BR": "Card de post do Reddit realista com barra de votos e contagem de comentários, ideal para sobreposições de vídeo ou compartilhamento de stories.",
+    "it": "Card post Reddit realistico con barra voti e conteggio commenti, adatto per overlay video o condivisione di storie.",
+    "vi": "Thẻ bài đăng Reddit chân thực với thanh bình chọn và số lượt bình luận, phù hợp cho lớp phủ video hoặc chia sẻ câu chuyện.",
+    "pl": "Realistyczna karta posta Reddit z panelem głosowania i licznikiem komentarzy, idealna do nakładek wideo lub udostępniania w Stories.",
+    "id": "Kartu postingan Reddit realistis dengan panel voting dan jumlah komentar, cocok untuk overlay video atau berbagi story.",
+    "nl": "Realistische Reddit-postkaart met stembalk en aantal reacties, geschikt voor video-overlays of het delen van stories.",
+    "ar": "بطاقة منشور Reddit واقعية مع شريط التصويت وعدد التعليقات، مناسبة لتراكبات الفيديو أو مشاركة القصص.",
+    "tr": "Oy çubuğu ve yorum sayısı içeren gerçekçi Reddit gönderi kartı, video kaplamaları veya hikaye paylaşımı için uygundur.",
+    "uk": "Реалістична картка публікації Reddit з панеллю голосування та лічильником коментарів для відеооверлеїв або публікацій у сторіс."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-reddit-card",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "reddit",
+    "social",
+    "card",
+    "overlay",
+    "story"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Reddit Post Card template to turn my content into a realistic Reddit post card with vote rail and comment count for a video overlay or story share. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Reddit 帖子卡」模板把我的内容做成一份「拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Reddit Post Card",
+          "title_i18n": {
+            "en": "Reddit Post Card",
+            "zh-CN": "Reddit 帖子卡"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

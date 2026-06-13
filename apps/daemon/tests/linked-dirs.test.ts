@@ -10,6 +10,10 @@ function real(p: string): string {
   try { return realpathSync(p); } catch { return p; }
 }
 
+function blockedSystemDir(): string {
+  return real(process.platform === 'win32' ? (process.env.SystemRoot ?? 'C:\\Windows') : '/etc');
+}
+
 test('rejects non-array input', () => {
   assert.equal(validateLinkedDirs('not-array').error, 'linkedDirs must be an array');
   assert.equal(validateLinkedDirs(null).error, 'linkedDirs must be an array');
@@ -52,7 +56,7 @@ test('rejects filesystem root', () => {
 });
 
 test('rejects blocked system directories', () => {
-  const result = validateLinkedDirs([real('/etc')]);
+  const result = validateLinkedDirs([blockedSystemDir()]);
   assert.ok(result.error);
   assert.ok(result.error.includes('system directory'));
 });
@@ -61,7 +65,7 @@ test('rejects symlink pointing to blocked directory', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'od-linked-'));
   const link = join(tmp, 'etc-link');
   try {
-    symlinkSync('/etc', link);
+    symlinkSync(blockedSystemDir(), link, process.platform === 'win32' ? 'junction' : 'dir');
     const result = validateLinkedDirs([link]);
     assert.ok(result.error);
     assert.ok(result.error.includes('system directory'));

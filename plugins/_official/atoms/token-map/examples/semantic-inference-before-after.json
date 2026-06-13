@@ -1,0 +1,164 @@
+{
+  "simulationKind": "deterministic-fixture",
+  "notes": [
+    "This is not a measured production benchmark.",
+    "It simulates the same anonymous Figma token batch under the old value-level prompt and the semantic inference prompt.",
+    "The after run keeps the existing executable token-map disk contract: bucket matches plus unmatched.json/meta.json, with no inferred.json or new unmatched reason."
+  ],
+  "sourceTokens": [
+    {
+      "source": "color-1",
+      "value": "#FFFFFF",
+      "usage": ["App Shell/Canvas fill", "Card/Default fill", "Modal/Surface fill"]
+    },
+    {
+      "source": "color-2",
+      "value": "#111827",
+      "usage": ["Body text", "Icon/Default foreground", "Table cell text"]
+    },
+    {
+      "source": "color-3",
+      "value": "#5B8DEF",
+      "usage": ["Button/Primary fill", "Selected tab indicator", "Active nav item"]
+    },
+    {
+      "source": "color-4",
+      "value": "#5B8DEF",
+      "usage": ["Link text in Settings frame", "Inline help link", "Docs link"]
+    },
+    {
+      "source": "color-5",
+      "value": "#D0D5DD",
+      "usage": ["Input/Default border", "Divider line", "Table row separator"]
+    },
+    {
+      "source": "paint-17",
+      "value": "#84CAFF",
+      "usage": ["Button/Focus outline", "Input/Focus ring", "Menu item focus halo"]
+    },
+    {
+      "source": "color-6",
+      "value": "#E5484D",
+      "usage": ["Error message text", "Destructive button fill", "Alert/Error icon"]
+    },
+    {
+      "source": "color-7",
+      "value": "#F59E0B",
+      "usage": ["Chart series 2", "Illustration accent", "One-off metric badge"]
+    }
+  ],
+  "targetDesignSystemTokens": [
+    "--ds-color-surface",
+    "--ds-color-fg",
+    "--ds-color-primary",
+    "--ds-color-link",
+    "--ds-color-border",
+    "--ds-color-focus-ring",
+    "--ds-color-danger"
+  ],
+  "beforeRun": {
+    "promptMode": "value-level-token-map",
+    "mapped": [],
+    "unmatched": [
+      { "source": "color-1", "reason": "no-target-equivalent" },
+      { "source": "color-2", "reason": "no-target-equivalent" },
+      { "source": "color-3", "reason": "no-target-equivalent" },
+      { "source": "color-4", "reason": "no-target-equivalent" },
+      { "source": "color-5", "reason": "no-target-equivalent" },
+      { "source": "paint-17", "reason": "no-target-equivalent" },
+      { "source": "color-6", "reason": "no-target-equivalent" },
+      { "source": "color-7", "reason": "no-target-equivalent" }
+    ],
+    "coverage": {
+      "mapped": 0,
+      "total": 8,
+      "ratio": 0
+    }
+  },
+  "afterRun": {
+    "promptMode": "semantic-token-inference",
+    "mapped": [
+      {
+        "source": "color-1",
+        "target": "--ds-color-surface",
+        "via": "name"
+      },
+      {
+        "source": "color-2",
+        "target": "--ds-color-fg",
+        "via": "name"
+      },
+      {
+        "source": "color-3",
+        "target": "--ds-color-primary",
+        "via": "name"
+      },
+      {
+        "source": "color-4",
+        "target": "--ds-color-link",
+        "via": "name"
+      },
+      {
+        "source": "color-5",
+        "target": "--ds-color-border",
+        "via": "name"
+      },
+      {
+        "source": "paint-17",
+        "target": "--ds-color-focus-ring",
+        "via": "name"
+      },
+      {
+        "source": "color-6",
+        "target": "--ds-color-danger",
+        "via": "name"
+      }
+    ],
+    "unmatched": [
+      {
+        "source": "color-7",
+        "reason": "no-target-equivalent",
+        "hint": "ambiguous semantic role; candidates: chart-series, illustration-accent, warning"
+      }
+    ],
+    "coverage": {
+      "mapped": 7,
+      "total": 8,
+      "ratio": 0.875
+    },
+    "reasoningTrace": [
+      {
+        "source": "color-1",
+        "semanticEvidence": ["App Shell/Canvas fill", "Card/Default fill", "Modal/Surface fill"]
+      },
+      {
+        "source": "color-2",
+        "semanticEvidence": ["Body text", "Icon/Default foreground", "Table cell text"]
+      },
+      {
+        "source": "color-3",
+        "semanticEvidence": ["Button/Primary fill", "Selected tab indicator", "Active nav item"]
+      },
+      {
+        "source": "color-4",
+        "semanticEvidence": ["Link text in Settings frame", "Inline help link", "Docs link"]
+      },
+      {
+        "source": "color-5",
+        "semanticEvidence": ["Input/Default border", "Divider line", "Table row separator"]
+      },
+      {
+        "source": "paint-17",
+        "semanticEvidence": ["Button/Focus outline", "Input/Focus ring", "Menu item focus halo"]
+      },
+      {
+        "source": "color-6",
+        "semanticEvidence": ["Error message text", "Destructive button fill", "Alert/Error icon"]
+      },
+      {
+        "source": "color-7",
+        "semanticEvidence": ["Chart series 2", "Illustration accent", "One-off metric badge"]
+      }
+    ]
+  }
+}

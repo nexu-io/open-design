@@ -1,4 +1,3 @@
-// @ts-nocheck
 import path from 'node:path';
 
 const MANIFEST_VERSION = 1;
@@ -10,7 +9,17 @@ const MAX_SUPPORTING_FILE_LENGTH = 260;
 const MAX_SUPPORTING_FILES = 128;
 const MAX_METADATA_BYTES = 16 * 1024;
 
-const ALLOWED_KINDS = new Set([
+type JsonRecord = Record<string, unknown>;
+
+type ValidationResult =
+  | { ok: true; value: JsonRecord | null }
+  | { ok: false; error: string };
+
+type ValidationOptions = {
+  preserveUpdatedAt?: boolean;
+};
+
+const ALLOWED_KINDS = new Set<string>([
   'html',
   'deck',
   'react-component',
@@ -23,7 +32,7 @@ const ALLOWED_KINDS = new Set([
   'google-slides-deck',
 ]);
 
-const ALLOWED_RENDERERS = new Set([
+const ALLOWED_RENDERERS = new Set<string>([
   'html',
   'deck-html',
   'react-component',
@@ -36,23 +45,28 @@ const ALLOWED_RENDERERS = new Set([
   'google-slides',
 ]);
 
-const ALLOWED_EXPORTS = new Set(['html', 'pdf', 'zip', 'pptx', 'jsx', 'md', 'svg', 'txt']);
-const ALLOWED_STATUS = new Set(['streaming', 'complete', 'error']);
+const ALLOWED_EXPORTS = new Set<string>(['html', 'pdf', 'zip', 'pptx', 'jsx', 'md', 'svg', 'txt']);
+const ALLOWED_STATUS = new Set<string>(['streaming', 'complete', 'error']);
 
-function isPlainObject(value) {
+function isPlainObject(value: unknown): value is JsonRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
 
-function validateBoundedString(value, field, maxLen, { allowEmpty = false } = {}) {
+function validateBoundedString(
+  value: unknown,
+  field: string,
+  maxLen: number,
+  { allowEmpty = false }: { allowEmpty?: boolean } = {},
+): string | null {
   if (typeof value !== 'string') return `${field} must be a string`;
   if (!allowEmpty && value.length === 0) return `${field} is required`;
   if (value.length > maxLen) return `${field} exceeds max length (${maxLen})`;
   return null;
 }
 
-function validateSupportingPath(value) {
+function validateSupportingPath(value: unknown): string | null {
   if (typeof value !== 'string') return 'supportingFiles entries must be strings';
   if (value.length === 0) return 'supportingFiles entries cannot be empty';
   if (value.length > MAX_SUPPORTING_FILE_LENGTH) {
@@ -71,7 +85,11 @@ function validateSupportingPath(value) {
   return null;
 }
 
-export function validateArtifactManifestInput(manifest, entry) {
+export function validateArtifactManifestInput(
+  manifest: unknown,
+  entry: unknown,
+  options: ValidationOptions = {},
+): ValidationResult {
   if (manifest == null) return { ok: true, value: null };
   if (!isPlainObject(manifest)) {
     return { ok: false, error: 'artifactManifest must be an object' };
@@ -79,12 +97,18 @@ export function validateArtifactManifestInput(manifest, entry) {
 
   const kindErr = validateBoundedString(manifest.kind, 'artifactManifest.kind', 64);
   if (kindErr) return { ok: false, error: kindErr };
+  if (typeof manifest.kind !== 'string') {
+    return { ok: false, error: 'artifactManifest.kind must be a string' };
+  }
   if (!ALLOWED_KINDS.has(manifest.kind)) {
     return { ok: false, error: 'artifactManifest.kind is not allowed' };
   }
 
   const rendererErr = validateBoundedString(manifest.renderer, 'artifactManifest.renderer', 64);
   if (rendererErr) return { ok: false, error: rendererErr };
+  if (typeof manifest.renderer !== 'string') {
+    return { ok: false, error: 'artifactManifest.renderer must be a string' };
+  }
   if (!ALLOWED_RENDERERS.has(manifest.renderer)) {
     return { ok: false, error: 'artifactManifest.renderer is not allowed' };
   }
@@ -107,6 +131,13 @@ export function validateArtifactManifestInput(manifest, entry) {
     }
     if (!ALLOWED_STATUS.has(manifest.status)) {
       return { ok: false, error: 'artifactManifest.status is not allowed' };
+    }
+  }
+
+  if (manifest.primary !== undefined) {
+    if (manifest.primary !== true) {
+      const primaryErr = validateSupportingPath(manifest.primary);
+      if (primaryErr) return { ok: false, error: `artifactManifest.primary ${primaryErr}` };
     }
   }
 
@@ -172,15 +203,24 @@ export function validateArtifactManifestInput(manifest, entry) {
     }
   }
 
-  const safeEntry = typeof entry === 'string' ? entry : '';
-  if (!safeEntry || safeEntry.length > MAX_ENTRY_LENGTH) {
-    return { ok: false, error: `artifact entry exceeds max length (${MAX_ENTRY_LENGTH})` };
+  const manifestEntry =
+    typeof manifest.entry === 'string' && manifest.entry.trim()
+      ? manifest.entry.trim()
+      : entry;
+  const entryErr = validateSupportingPath(manifestEntry);
+  if (entryErr) {
+    return { ok: false, error: `artifactManifest.entry ${entryErr}` };
   }
+  const safeEntry = (manifestEntry as string).replace(/\\/g, '/');
 
-  return { ok: true, value: sanitizeManifest(manifest, safeEntry) };
+  return { ok: true, value: sanitizeManifest(manifest, safeEntry, options) };
 }
 
-export function sanitizeManifest(manifest, entry) {
+export function sanitizeManifest(
+  manifest: JsonRecord,
+  entry: string,
+  options: ValidationOptions = {},
+): JsonRecord {
   const now = new Date().toISOString();
   return {
     version: MANIFEST_VERSION,
@@ -188,32 +228,41 @@ export function sanitizeManifest(manifest, entry) {
     title: manifest.title || entry,
     entry,
     renderer: manifest.renderer,
-    status: ALLOWED_STATUS.has(manifest.status) ? manifest.status : 'complete',
+    status: typeof manifest.status === 'string' && ALLOWED_STATUS.has(manifest.status) ? manifest.status : 'complete',
     exports: manifest.exports,
+    primary:
+      manifest.primary === true
+        ? true
+        : typeof manifest.primary === 'string'
+          ? manifest.primary.replace(/\\/g, '/')
+          : undefined,
     supportingFiles: Array.isArray(manifest.supportingFiles)
-      ? manifest.supportingFiles.map((x) => x.replace(/\\/g, '/'))
+      ? manifest.supportingFiles.map((x) => String(x).replace(/\\/g, '/'))
       : undefined,
     createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : now,
-    updatedAt: now,
+    updatedAt:
+      options.preserveUpdatedAt && typeof manifest.updatedAt === 'string'
+        ? manifest.updatedAt
+        : now,
     sourceSkillId: manifest.sourceSkillId,
     designSystemId: manifest.designSystemId ?? undefined,
     metadata: manifest.metadata,
   };
 }
 
-export function parsePersistedManifest(raw, fallbackEntry) {
+export function parsePersistedManifest(raw: string, fallbackEntry: string): JsonRecord | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.version !== MANIFEST_VERSION) return null;
     const entry = typeof parsed.entry === 'string' && parsed.entry ? parsed.entry : fallbackEntry;
-    const result = validateArtifactManifestInput(parsed, entry);
+    const result = validateArtifactManifestInput(parsed, entry, { preserveUpdatedAt: true });
     return result.ok ? result.value : null;
   } catch {
     return null;
   }
 }
 
-export function inferLegacyManifest(entry) {
+export function inferLegacyManifest(entry: string): JsonRecord | null {
   const lower = entry.toLowerCase();
   const ext = path.extname(lower);
   // NOTE: This duplicate heuristic must stay in sync with

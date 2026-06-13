@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-sequence-and-movement-instruction-for-martial-arts-video",
+  "title": "Sequence and Movement Instruction for Martial Arts Video",
+  "title_i18n": {
+    "zh-CN": "武术视频的动作序列指令",
+    "zh-TW": "武術影片的動作序列指令",
+    "ja": "武道動画の動作シーケンス指示",
+    "ko": "무술 동영상을 위한 동작 시퀀스 지침",
+    "de": "Sequenz- und Bewegungsanweisung für Kampfkunst-Videos",
+    "fr": "Instructions de séquence et de mouvement pour vidéo d'arts martiaux",
+    "ru": "Инструкция по последовательности и движениям для видео боевых искусств",
+    "es": "Instrucciones de secuencia y movimiento para video de artes marciales",
+    "pt-BR": "Instruções de sequência e movimento para vídeo de artes marciais",
+    "it": "Istruzioni di sequenza e movimento per video di arti marziali",
+    "vi": "Hướng dẫn trình tự và chuyển động cho video võ thuật",
+    "pl": "Instrukcje sekwencji i ruchu dla wideo sztuk walki",
+    "id": "Instruksi urutan dan gerakan untuk video seni bela diri",
+    "nl": "Sequentie- en bewegingsinstructie voor vechtsportvideo",
+    "ar": "تعليمات التسلسل والحركة لفيديو الفنون القتالية",
+    "tr": "Dövüş sanatları videosu için dizi ve hareket talimatı",
+    "uk": "Інструкція послідовності та руху для відео бойових мистецтв",
+    "en": "Sequence and Movement Instruction for Martial Arts Video"
+  },
+  "version": "0.1.0",
+  "description": "A video prompt for Seedance 2.0 that instructs the model to animate a sequence based on a character sheet, focusing on specific movements and steps.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 提供的视频提示词，根据角色表指导模型生成特定动作和步骤的动画序列。",
+    "zh-TW": "為 Seedance 2.0 提供的影片提示詞，根據角色表指導模型生成特定動作和步驟的動畫序列。",
+    "ja": "Seedance 2.0 向けの動画プロンプトで、キャラクターシートに基づいて特定の動作とステップのアニメーションシーケンスを生成します。",
+    "ko": "캐릭터 시트를 기반으로 특정 동작과 단계의 애니메이션 시퀀스를 생성하도록 모델에 지시하는 Seedance 2.0용 비디오 프롬프트입니다.",
+    "de": "Ein Video-Prompt für Seedance 2.0, der das Modell anweist, eine Sequenz basierend auf einem Character Sheet zu animieren und sich auf bestimmte Bewegungen und Schritte zu konzentrieren.",
+    "fr": "Un prompt vidéo pour Seedance 2.0 qui instruit le modèle à animer une séquence basée sur une feuille de personnage, en se concentrant sur des mouvements et étapes spécifiques.",
+    "ru": "Видео-промпт для Seedance 2.0, который инструктирует модель анимировать последовательность на основе листа персонажа с фокусом на конкретные движения и шаги.",
+    "es": "Un prompt de video para Seedance 2.0 que instruye al modelo a animar una secuencia basada en una hoja de personaje, enfocándose en movimientos y pasos específicos.",
+    "pt-BR": "Um prompt de vídeo para Seedance 2.0 que instrui o modelo a animar uma sequência baseada em uma ficha de personagem, focando em movimentos e passos específicos.",
+    "it": "Un prompt video per Seedance 2.0 che istruisce il modello ad animare una sequenza basata su una scheda personaggio, concentrandosi su movimenti e passaggi specifici.",
+    "vi": "Prompt video cho Seedance 2.0 hướng dẫn mô hình tạo chuỗi hoạt ảnh dựa trên bảng nhân vật, tập trung vào các chuyển động và bước cụ thể.",
+    "pl": "Prompt wideo dla Seedance 2.0, który instruuje model do animacji sekwencji opartej na arkuszu postaci, koncentrując się na konkretnych ruchach i krokach.",
+    "id": "Prompt video untuk Seedance 2.0 yang menginstruksikan model untuk menganimasikan urutan berdasarkan lembar karakter, fokus pada gerakan dan langkah tertentu.",
+    "nl": "Een videoprompt voor Seedance 2.0 die het model instrueert om een sequentie te animeren op basis van een karakterblad, gericht op specifieke bewegingen en stappen.",
+    "ar": "موجه فيديو لـ Seedance 2.0 يوجه النموذج لإنشاء رسوم متحركة لتسلسل بناءً على ورقة الشخصية، مع التركيز على حركات وخطوات محددة.",
+    "tr": "Seedance 2.0 için, modele karakter sayfasına dayalı bir diziyi canlandırması talimatı veren ve belirli hareketler ve adımlara odaklanan bir video istemi.",
+    "uk": "Відео-промпт для Seedance 2.0, який інструктує модель анімувати послідовність на основі аркуша персонажа, зосереджуючись на конкретних рухах і кроках.",
+    "en": "A video prompt for Seedance 2.0 that instructs the model to animate a sequence based on a character sheet, focusing on specific movements and steps."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Aijaz",
+    "url": "https://x.com/iamsofiaijaz/status/2049045776001564680"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "fantasy",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://pbs.twimg.com/media/HG-sP7Lb0AEmlWA.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "[STYLE] Monochrome grayscale illustration, 3D-rendered character, clean instructional reference sheet, white background, comic-style cell grid layout, technical diagram aesthetic. [LAYOUT] 4×4 grid layout with a total of 16 panels. Each panel is separated by thin black border lines. Cells are numbered from 1 to 16, with consistent panel sizes. [CHARACTER] image1 (the same character appears consistently in all panels) [PANEL STRUCTURE – per cell] Top-left: bold number badge + English title text Center: full-body character pose illustration Bottom-left: English description text (3–4 lines) Overlay: directional arrows indicating movement [ARROWS / MOTION INDICATORS] Curved arrows, straight arrows, and circular rotation indicators placed around the character to show motion flow and direction. [RENDERING STYLE] Highly detailed 3D sculpted style, soft studio lighting, subtle shadows, no color, grayscale shading, clean linework, game concept art quality. [NEGATIVE] No background scenery, no color tones, no additional characters, no complex background. Create img2 that follows the exact sequence and movements from steps 1–16 shown in img1. The music should be aud1. There should be no dialogue, text, or narration.",
+        "zh-CN": "使用这个插件完成以下任务：[STYLE] Monochrome grayscale illustration, 3D-rendered character, clean instructional reference sheet, white background, comic-style cell grid layout, technical diagram aesthetic. [LAYOUT] 4×4 grid layout with a total of 16 panels. Each panel is separated by thin black border lines. Cells are numbered from 1 to 16, with consistent panel sizes. [CHARACTER] image1 (the same character appears consistently in all panels) [PANEL STRUCTURE – per cell] Top-left: bold number badge + English title text Center: full-body character pose illustration Bottom-left: English description text (3–4 lines) Overlay: directional arrows indicating movement [ARROWS / MOTION INDICATORS] Curved arrows, straight arrows, and circular rotation indicators placed around the character to show motion flow and direction. [RENDERING STYLE] Highly detailed 3D sculpted style, soft studio lighting, subtle shadows, no color, grayscale shading, clean linework, game concept art quality. [NEGATIVE] No background scenery, no color tones, no additional characters, no complex background. Create img2 that follows the exact sequence and movements from steps 1–16 shown in img1. The music should be aud1. There should be no dialogue, text, or narration."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

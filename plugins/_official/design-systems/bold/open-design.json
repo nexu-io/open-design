@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-bold",
+  "title": "Bold",
+  "title_i18n": {
+    "zh-CN": "粗体",
+    "zh-TW": "粗體",
+    "ja": "ボールド",
+    "ko": "볼드",
+    "de": "Fett",
+    "fr": "Gras",
+    "ru": "Жирный",
+    "es": "Negrita",
+    "pt-BR": "Negrito",
+    "it": "Grassetto",
+    "vi": "Đậm",
+    "pl": "Pogrubienie",
+    "id": "Tebal",
+    "nl": "Vet",
+    "ar": "عريض",
+    "tr": "Kalın",
+    "uk": "Жирний",
+    "en": "Bold"
+  },
+  "version": "0.1.0",
+  "description": "Strong visual presence with heavyweight typography, high-contrast colors, and commanding layouts.",
+  "description_i18n": {
+    "zh-CN": "采用粗体字重、高对比度配色和强势布局，呈现强烈的视觉冲击力。",
+    "zh-TW": "採用粗體字重、高對比度配色和強勢版面，呈現強烈的視覺衝擊力。",
+    "ja": "太字のタイポグラフィ、高コントラストの配色、力強いレイアウトで強い視覚的存在感を演出します。",
+    "ko": "굵은 타이포그래피, 고대비 색상, 강렬한 레이아웃으로 강한 시각적 존재감을 제공합니다.",
+    "de": "Starke visuelle Präsenz durch fette Typografie, kontrastreiche Farben und dominante Layouts.",
+    "fr": "Présence visuelle forte avec une typographie épaisse, des couleurs à fort contraste et des mises en page imposantes.",
+    "ru": "Яркое визуальное присутствие с жирной типографикой, высококонтрастными цветами и выразительными макетами.",
+    "es": "Presencia visual fuerte con tipografía de peso pesado, colores de alto contraste y diseños imponentes.",
+    "pt-BR": "Presença visual forte com tipografia pesada, cores de alto contraste e layouts imponentes.",
+    "it": "Presenza visiva forte con tipografia pesante, colori ad alto contrasto e layout imponenti.",
+    "vi": "Sự hiện diện trực quan mạnh mẽ với kiểu chữ đậm, màu sắc tương phản cao và bố cục nổi bật.",
+    "pl": "Silna obecność wizualna dzięki pogrubionej typografii, kontrastowym kolorom i wyrazistym układom.",
+    "id": "Kehadiran visual yang kuat dengan tipografi tebal, warna kontras tinggi, dan tata letak yang mencolok.",
+    "nl": "Sterke visuele aanwezigheid met vette typografie, hoog contrasterende kleuren en krachtige layouts.",
+    "ar": "حضور بصري قوي مع طباعة سميكة وألوان عالية التباين وتخطيطات مهيبة.",
+    "tr": "Kalın tipografi, yüksek kontrastlı renkler ve güçlü düzenlerle güçlü görsel varlık.",
+    "uk": "Потужна візуальна присутність із жирною типографікою, висококонтрастними кольорами та виразними макетами.",
+    "en": "Strong visual presence with heavyweight typography, high-contrast colors, and commanding layouts."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "bold-expressive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Bold design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Bold design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "bold",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

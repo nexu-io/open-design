@@ -1,0 +1,51 @@
+---
+import Layout from '../../_components/sub-page-layout.astro';
+import { getCraftRecords } from '../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const craft = await getCraftRecords(locale);
+
+const title = ui.catalog.craft.title(craft.length);
+const description = ui.catalog.craft.description;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL('/craft/', Astro.site).toString(),
+  numberOfItems: craft.length,
+};
+---
+
+<Layout title={title} description={description} active="craft" jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">{ui.catalog.craft.label}</span>
+    <h1 class="display">
+      {ui.catalog.craft.heading(craft.length)}
+    </h1>
+    <p class="lead">
+      {ui.catalog.craft.lead}
+    </p>
+  </header>
+
+  <section class="catalog-grid" aria-label={ui.catalog.craft.allAria}>
+    <ol>
+      {craft.map((c, idx) => (
+        <li class="catalog-row">
+          <a href={href(`/craft/${c.slug}/`)}>
+            <span class="row-index">{String(idx + 1).padStart(2, '0')}</span>
+            <span class="row-body">
+              <span class="row-name">{c.name}</span>
+              <span class="row-desc">{c.summary}</span>
+            </span>
+            <span class="row-arrow" aria-hidden="true">→</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </section>
+</Layout>

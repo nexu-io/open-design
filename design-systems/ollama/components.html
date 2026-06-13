@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ollama — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/ollama. Every visible
+        value comes from tokens.css; if the agent paste-replaces the
+        :root block and reuses the component selectors below verbatim,
+        the artifact passes lint without further audit."
+    />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #fafafa;
+        --surface-warm: var(--surface);
+
+        --fg: #000000;
+        --fg-2: #262626;
+        --muted: #737373;
+        --meta: #a3a3a3;
+
+        --border: #e5e5e5;
+        --border-soft: var(--border);
+
+        --accent: #000000;
+        --accent-on: #ffffff;
+        --accent-hover: #262626;
+        --accent-active: #404040;
+
+        --success: #16a34a;
+        --warn: #eab308;
+        --danger: #dc2626;
+
+        --font-display: "SF Pro Rounded", system-ui, -apple-system, system-ui;
+        --font-body: ui-sans-serif, system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 18px;
+        --text-xl: 24px;
+        --text-2xl: 30px;
+        --text-3xl: 36px;
+        --text-4xl: 48px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1;
+        --tracking-display: 0;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 112px;
+        --section-y-tablet: 88px;
+        --section-y-phone: 48px;
+
+        --radius-sm: 9999px;
+        --radius-md: 12px;
+        --radius-lg: 9999px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 0 0 1px var(--border);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, #3b82f6, transparent 50%);
+
+        --motion-fast: 100ms;
+        --motion-base: 140ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section {
+        padding-block: var(--section-y-desktop);
+      }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Navigation ────────────────────────────────────────── */
+      /* Transparent on white per DESIGN.md §4 — no background,
+         no border, just the wordmark, three text links, and a
+         black pill CTA. */
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: var(--space-6);
+        padding-block: var(--space-5);
+      }
+      .nav-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: 500;
+        color: var(--fg);
+        text-decoration: none;
+        letter-spacing: var(--tracking-display);
+      }
+      .nav-brand svg { display: block; }
+      .nav-links {
+        display: flex;
+        gap: var(--space-5);
+        margin-inline-start: var(--space-4);
+      }
+      .nav-links a {
+        color: var(--fg);
+        font-size: var(--text-base);
+        font-weight: 400;
+        text-decoration: none;
+      }
+      .nav-spacer { flex: 1; }
+      .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+      }
+      .nav-signin {
+        color: var(--fg);
+        font-size: var(--text-base);
+        text-decoration: none;
+      }
+      @media (max-width: 639px) {
+        .nav-links, .nav-signin { display: none; }
+      }
+
+      /* ─── Typography ────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+        margin: 0;
+        font-weight: 500;
+      }
+      h1 { font-size: var(--text-4xl); color: var(--fg); }
+      h2 { font-size: var(--text-3xl); color: var(--fg); }
+      h3 {
+        font-size: var(--text-xl);
+        font-weight: 400;
+        line-height: 1.33;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--muted);
+        line-height: 1.56;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        font-weight: 400;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-5 > * + * { margin-block-start: var(--space-5); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons (every interactive radius is pill) ─────────── */
+      /* DESIGN.md §4 — three pill variants, all 10px 24px padding,
+         all 9999px radius. The accent role is fulfilled by the
+         black pill; the gray pill is the calmer affirmative; the
+         outlined pill is the secondary action on white. */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px var(--space-6);
+        border-radius: var(--radius-pill);
+        font-family: inherit;
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+        text-decoration: none;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+        border-color: var(--accent);
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      .btn-primary:active {
+        background: var(--accent-active);
+        border-color: var(--accent-active);
+      }
+      .btn-gray {
+        background: var(--border);
+        color: var(--fg-2);
+        border-color: var(--border);
+      }
+      .btn-gray:hover {
+        background: color-mix(in oklab, var(--border), var(--fg) 6%);
+        border-color: color-mix(in oklab, var(--border), var(--fg) 6%);
+      }
+      .btn-outline {
+        background: var(--bg);
+        color: var(--fg-2);
+        border-color: var(--border);
+      }
+      .btn-outline:hover {
+        background: var(--surface);
+      }
+
+      /* ─── Pill tabs ─────────────────────────────────────────── */
+      .tabs {
+        display: inline-flex;
+        gap: var(--space-1);
+        padding: var(--space-1);
+        background: var(--surface);
+        border-radius: var(--radius-pill);
+      }
+      .tab {
+        padding: 6px var(--space-4);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-sm);
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .tab[aria-selected="true"] {
+        background: var(--border);
+        color: var(--fg-2);
+      }
+      .tab:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Inputs (pill search / form fields) ────────────────── */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg-2);
+      }
+      .field input {
+        padding: 10px var(--space-5);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--fg);
+        font-family: inherit;
+        font-size: var(--text-base);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .field-help {
+        font-size: var(--text-xs);
+        color: var(--muted);
+        padding-inline-start: var(--space-5);
+      }
+
+      /* ─── Cards (the only non-pill radius) ──────────────────── */
+      .card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .card h3 { color: var(--fg); }
+
+      /* ─── Terminal block ────────────────────────────────────── */
+      /* 12px-radius bordered container per DESIGN.md §4, no shadow.
+         Mono inside, with a pill copy button on the right. */
+      .terminal {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-4) var(--space-5);
+        font-family: var(--font-mono);
+        font-size: var(--text-base);
+        color: var(--fg);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+      }
+      .terminal-prompt { color: var(--meta); user-select: none; }
+      .terminal-cmd { color: var(--fg-2); flex: 1; }
+      .terminal-copy {
+        padding: 4px var(--space-3);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        cursor: pointer;
+      }
+      .terminal-copy:hover { background: var(--surface); }
+      .terminal-copy:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Tag pills ─────────────────────────────────────────── */
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px var(--space-3);
+        border-radius: var(--radius-pill);
+        background: var(--border);
+        color: var(--fg-2);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        line-height: 1.6;
+      }
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a.text-link {
+        color: var(--fg);
+        text-decoration: none;
+        border-bottom: 1px solid var(--border);
+      }
+      a.text-link:hover { border-bottom-color: var(--fg); }
+
+      /* ─── Section-specific layout ───────────────────────────── */
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: var(--space-6);
+      }
+      .hero h1 { max-width: 18ch; }
+      .hero .lead { max-width: 56ch; }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .hero-terminal {
+        margin-block-start: var(--space-6);
+        width: min(640px, 100%);
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+      .feature-icon {
+        width: 28px;
+        height: 28px;
+        color: var(--fg);
+      }
+
+      .signup {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-12) var(--space-8);
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) {
+        .signup {
+          grid-template-columns: 1fr;
+          padding: var(--space-8);
+          gap: var(--space-6);
+        }
+      }
+      .signup-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .signup-row {
+        display: flex;
+        gap: var(--space-2);
+      }
+      .signup-row .field { flex: 1; }
+      @media (max-width: 639px) {
+        .signup-row { flex-direction: column; }
+      }
+
+      .footnote {
+        margin-block-start: var(--space-12);
+        padding-block-start: var(--space-6);
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+        color: var(--meta);
+        font-size: var(--text-sm);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════════
+           NAV — transparent on white, three text links, pill CTA.
+           Exercises: .nav, .nav-brand, .nav-links, .btn-primary.
+      ═══════════════════════════════════════════════════════════════ -->
+      <header class="nav" aria-label="Primary">
+        <a href="#" class="nav-brand">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M7 14c0-3 1.5-5 5-5s5 2 5 5v5H7v-5z" />
+            <path d="M9 9V6a3 3 0 0 1 6 0v3" />
+            <circle cx="10" cy="13" r="0.6" fill="currentColor" stroke="none" />
+            <circle cx="14" cy="13" r="0.6" fill="currentColor" stroke="none" />
+            <path d="M11 16h2" />
+          </svg>
+          Ollama
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#models">Models</a>
+          <a href="#docs">Docs</a>
+          <a href="#blog">Blog</a>
+        </nav>
+        <span class="nav-spacer"></span>
+        <div class="nav-actions">
+          <a href="#signin" class="nav-signin">Sign in</a>
+          <a href="#download" class="btn btn-primary">
+            Download
+          </a>
+        </div>
+      </header>
+
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — centered single column. Exercises h1, .lead,
+           .btn-primary, .btn-gray, .terminal, --section-y-* rhythm.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="hero" aria-labelledby="hero-heading">
+        <div class="hero">
+          <p class="eyebrow">ollama · run open models locally</p>
+          <h1 id="hero-heading">
+            Run large language models on your own machine.
+          </h1>
+          <p class="lead">
+            Pull an open model, run it offline, and chat with it from
+            your terminal or your app. No accounts, no API keys, no
+            tokens billed by the thousand — your machine is the server.
+          </p>
+          <div class="hero-actions">
+            <a href="#download" class="btn btn-primary">
+              Download for macOS
+            </a>
+            <a href="#docs" class="btn btn-gray">
+              Read the docs
+            </a>
+          </div>
+          <div class="hero-terminal">
+            <div class="terminal" role="figure" aria-label="Example command">
+              <span class="terminal-prompt">$</span>
+              <span class="terminal-cmd">ollama run llama3.2</span>
+              <button type="button" class="terminal-copy" aria-label="Copy command">
+                Copy
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURES — three cards, plain border, 12px radius.
+           Exercises h2, .card, .tag, .features-grid, mono accents.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="features" aria-labelledby="features-heading">
+        <div class="stack-4" style="text-align: center; margin-block-end: var(--space-12);">
+          <p class="eyebrow">what ollama does</p>
+          <h2 id="features-heading" style="margin-inline: auto; max-width: 22ch;">
+            One command. Any model. On your hardware.
+          </h2>
+        </div>
+
+        <div class="features-grid">
+          <article class="card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v12" />
+              <path d="M6 9l6 6 6-6" />
+              <path d="M4 21h16" />
+            </svg>
+            <h3>Pull a model</h3>
+            <p class="body-muted body-sm">
+              Browse a catalog of open models — Llama, Mistral, Gemma,
+              Qwen, DeepSeek — and download with a single command. Models
+              live on your disk, not on someone else's server.
+            </p>
+            <div class="tag-row">
+              <span class="tag">llama3.2</span>
+              <span class="tag">mistral</span>
+              <span class="tag">gemma3</span>
+            </div>
+          </article>
+
+          <article class="card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 9h18" />
+              <path d="M8 14h4" />
+            </svg>
+            <h3>Talk to it</h3>
+            <p class="body-muted body-sm">
+              Chat from the terminal, or call the OpenAI-compatible
+              local API from any language. Streaming, tool calls, and
+              structured output work the same as the hosted runtimes
+              your app already targets.
+            </p>
+            <div class="tag-row">
+              <span class="tag">http://localhost:11434</span>
+            </div>
+          </article>
+
+          <article class="card">
+            <svg
+              class="feature-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="6" cy="6" r="2" />
+              <circle cx="18" cy="6" r="2" />
+              <circle cx="6" cy="18" r="2" />
+              <circle cx="18" cy="18" r="2" />
+              <path d="M8 6h8M8 18h8M6 8v8M18 8v8" />
+            </svg>
+            <h3>Plug it in</h3>
+            <p class="body-muted body-sm">
+              Drop Ollama behind the agent framework, IDE plugin, or
+              chat client you already use — LangChain, OpenWebUI,
+              Continue, your homegrown CLI. The runtime stays out of
+              the way.
+            </p>
+            <div class="tag-row">
+              <span class="tag">langchain</span>
+              <span class="tag">opencode</span>
+              <span class="tag">continue</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM — pill input + black pill submit. Exercises .field,
+           input :focus-visible, .btn-primary (reused), .field-help.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section data-od-id="signup" aria-labelledby="signup-heading">
+        <div class="signup">
+          <div class="stack-4">
+            <p class="eyebrow">stay close to the work</p>
+            <h2 id="signup-heading" style="max-width: 16ch;">
+              Get a note when a new model lands.
+            </h2>
+            <p class="body-muted">
+              Roughly one email a month — release notes for new models,
+              changelog highlights, and the occasional benchmark. No
+              marketing, no upsells, unsubscribe in one click.
+            </p>
+          </div>
+
+          <form class="signup-form" onsubmit="event.preventDefault();">
+            <div class="signup-row">
+              <div class="field">
+                <label for="signup-email" class="body-sm">Email</label>
+                <input
+                  id="signup-email"
+                  type="email"
+                  placeholder="you@your-machine.local"
+                  autocomplete="email"
+                  required
+                />
+              </div>
+              <button type="submit" class="btn btn-primary" style="align-self: end;">
+                Subscribe
+              </button>
+            </div>
+            <p class="field-help">
+              We use the address only to send release notes. See the
+              <a href="#privacy" class="text-link">privacy note</a>.
+            </p>
+          </form>
+        </div>
+
+        <div class="footnote">
+          <span>© Ollama · run open models locally</span>
+          <span>v0.5.0 · <a href="#changelog" class="text-link" style="color: inherit;">changelog</a></span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

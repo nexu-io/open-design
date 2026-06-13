@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Reddit Post · r/programming</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  body { font-family: 'IBM Plex Sans','Noto Sans SC',system-ui,sans-serif; background: radial-gradient(circle at 30% 20%, #1a2026 0%, #050507 80%); }
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-12">
+  <article class="w-[720px] rounded-2xl flex" style="background:#1a1a1b;border:1px solid #343536;box-shadow:0 30px 60px -20px rgba(0,0,0,0.6)">
+    <!-- vote rail -->
+    <aside class="w-12 py-4 flex flex-col items-center gap-1.5 shrink-0" style="background:#161617;border-right:1px solid #343536;border-top-left-radius:1rem;border-bottom-left-radius:1rem">
+      <button class="text-[#878a8c] hover:text-[#ff4500]"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor"><path d="M12 4l8 10h-5v6h-6v-6H4z"/></svg></button>
+      <span class="font-bold text-[15px]" style="color:#ff4500">12.3k</span>
+      <button class="text-[#878a8c] hover:text-[#7193ff]"><svg viewBox="0 0 24 24" class="w-5 h-5" fill="currentColor"><path d="M12 20l-8-10h5V4h6v6h5z"/></svg></button>
+    </aside>
+    <!-- body -->
+    <div class="flex-1 p-5 min-w-0" style="color:#d7dadc">
+      <!-- meta -->
+      <div class="flex items-center gap-2 text-[12px]" style="color:#818384">
+        <div class="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style="background:#ff4500">r/</div>
+        <span class="font-bold" style="color:#d7dadc">r/programming</span>
+        <span>·</span>
+        <span>Posted by u/code_quality_guy · 4h ago</span>
+        <span class="ml-auto text-[10px] uppercase tracking-wider px-2 py-0.5 rounded" style="background:#272729;color:#d7dadc">TIL</span>
+      </div>
+      <!-- title -->
+      <h1 class="mt-3 text-[22px] font-medium leading-snug" style="color:#d7dadc">TIL my code reviewer asks LLMs to roast my PRs before approving</h1>
+      <!-- body -->
+      <p class="mt-3 text-[15px] leading-relaxed" style="color:#d7dadc">
+        So I started doing this thing where I run my diff through Claude with the prompt "be brutally honest, find anything that would embarrass me at code review". The team lead picked up on the patterns and now does it as a first-pass before he even reads the PR.
+      </p>
+      <p class="mt-3 text-[15px] leading-relaxed" style="color:#d7dadc">Productivity up, ego down. 10/10 would recommend.</p>
+      <!-- actions -->
+      <div class="mt-4 flex items-center gap-3 text-[12.5px] font-semibold" style="color:#818384">
+        <button class="flex items-center gap-1.5 hover:text-[#d7dadc] px-2 py-1 rounded hover:bg-[#272729]">
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor"><path d="M20 2H4a2 2 0 00-2 2v12a2 2 0 002 2h4l4 4 4-4h4a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg>
+          <span>1.2k Comments</span>
+        </button>
+        <button class="flex items-center gap-1.5 hover:text-[#d7dadc] px-2 py-1 rounded hover:bg-[#272729]">
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
+          <span>7 Awards</span>
+        </button>
+        <button class="flex items-center gap-1.5 hover:text-[#d7dadc] px-2 py-1 rounded hover:bg-[#272729]">
+          <svg viewBox="0 0 24 24" class="w-4 h-4" fill="currentColor"><path d="M18 8a3 3 0 11-2.83-3H15l-7 4-1.17-1A3 3 0 113 11l5-3-4-3a3 3 0 11.83-1.83L9 6l7-4z"/></svg>
+          <span>Share</span>
+        </button>
+        <button class="ml-auto px-2 py-1 rounded hover:bg-[#272729]">⋯</button>
+      </div>
+    </div>
+  </article>
+</body>
+</html>

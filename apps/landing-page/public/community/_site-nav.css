@@ -1,0 +1,979 @@
+/*
+ * Site header styles for the static community sub-pages
+ * (/community/contributors/, /community/ambassadors/, /community/moderators/).
+ *
+ * Extracted from `app/globals.css` (the `.site-chrome` / locale switcher /
+ * `.nav` chrome section plus its responsive rules) so these verbatim-served
+ * static pages can carry the same navbar as the homepage. When the nav
+ * section of `app/globals.css` changes, mirror the diff here.
+ *
+ * Loaded AFTER `/community/_styles.css`, so same-specificity declarations
+ * here win over the old community mini-nav rules that share class names
+ * (.nav / .nav-inner / .nav-links / .brand).
+ */
+
+/* ---- neutralize community mini-nav declarations that the homepage nav
+   does not re-declare (everything else is overridden by the rules below) */
+.nav {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.nav-inner { height: auto; }
+.nav-links a.is-active::after { content: none; }
+
+/* ---- homepage design tokens, scoped to the embedded chrome so they cannot
+   override the community pages' own :root variables (both define --spacing-*) */
+.site-chrome {
+  --paper: #fafafa;
+  --paper-warm: #f5f5f5;
+  --paper-dark: #f0f0f0;
+  --ink: #262626;
+  --ink-soft: #434343;
+  --ink-mute: #595959;
+  --ink-faint: #8c8c8c;
+  --coral: #63fe13;
+  --coral-tint: color-mix(in oklab, var(--bone), var(--coral) 8%);
+  --coral-soft: #83ff3b;
+  --mustard: #63fe13;
+  --olive: #218c00;
+  --bone: #ffffff;
+  --line: #d9d9d9;
+  --line-hover: #bfbfbf;
+  --line-soft: #f0f0f0;
+  --line-faint: #f5f5f5;
+  --shadow: 0 30px 60px -30px rgba(38, 38, 38, 0.16);
+  --serif: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --sans: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --body: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --spacing-2: 2px;
+  --spacing-4: 4px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-18: 18px;
+  --spacing-20: 20px;
+  --spacing-22: 22px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-38: 38px;
+  --spacing-42: 42px;
+  --spacing-48: 48px;
+  --spacing-52: 52px;
+  --spacing-58: 58px;
+  --spacing-62: 62px;
+  --spacing-68: 68px;
+}
+
+/* ---- the nav markup uses the homepage `.container`, which the community
+   stylesheet does not define */
+.container {
+  max-width: 1360px;
+  padding: 0 64px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ---- verbatim copy of the app/globals.css chrome section (site-chrome,
+   topbar/locale switcher, nav, brand, dropdowns, toggle, CTAs) ---- */
+.site-chrome {
+  /* Fixed so the bar stays pinned to the top and condenses on scroll
+     (was `absolute`, which let it scroll away). At the very top it is a
+     transparent overlay on the hero; past the scroll threshold the inline
+     script adds `.is-condensed`, which shrinks the bar and turns on the
+     Liquid Glass material below. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: transparent;
+  transform: translateY(0);
+  transition: transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+  will-change: transform;
+}
+.site-chrome.is-hidden {
+  transform: translateY(-100%);
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* top metadata strip */
+.topbar {
+  border-bottom: 1px solid transparent;
+  padding: 10px 0;
+  background: transparent;
+  /*
+   * Stays a positioned context so the locale menu has an absolute
+   * anchor. The z-index is small but non-zero so the topbar — and the
+   * menu that drops out of it — paint above the sibling nav inside
+   * `.site-chrome`. Without this the menu would be obscured by the
+   * nav's download/star buttons.
+   */
+  position: relative;
+  z-index: 2;
+}
+.topbar-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.topbar-inner b { color: var(--ink); font-weight: 600; }
+.topbar-inner .coral { color: var(--coral); }
+.topbar-inner > span { white-space: nowrap; }
+.topbar-inner .mid { display: inline-flex; gap: 26px; }
+.topbar-inner .mid > span { white-space: nowrap; }
+.topbar-inner .right { display: inline-flex; gap: 18px; align-items: center; }
+.topbar-inner .right > span,
+.topbar-inner .right > a { white-space: nowrap; }
+.topbar-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.topbar-link:hover { color: var(--coral); border-bottom-color: var(--coral); }
+/*
+ * Editorial language switcher. The trigger reads as part of the
+ * masthead line ("● LIVE · V0.7.0 / LANG · ZH-TW") — uppercase
+ * tracked text, no pill, no border. The dropdown is a small
+ * floating panel that mirrors the topbar's paper/ink palette but
+ * drops the tracking so native scripts (中文 / 한국어 / العربية)
+ * read at their intended rhythm.
+ */
+.locale-switch {
+  display: inline-block;
+  position: relative;
+}
+.locale-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: inherit;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+  user-select: none;
+  outline: none;
+  padding: 0;
+}
+.locale-trigger::-webkit-details-marker { display: none; }
+.locale-trigger:hover,
+.locale-switch[open] > .locale-trigger,
+.locale-trigger:focus-visible {
+  color: var(--coral);
+  border-bottom-color: var(--coral);
+}
+.locale-trigger-prefix {
+  color: var(--ink-faint);
+}
+.locale-trigger:hover .locale-trigger-prefix,
+.locale-switch[open] > .locale-trigger .locale-trigger-prefix,
+.locale-trigger:focus-visible .locale-trigger-prefix {
+  color: var(--coral);
+}
+.locale-trigger-sep {
+  opacity: 0.55;
+}
+.locale-trigger-code {
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--ink);
+  font-weight: 600;
+}
+.locale-trigger:hover .locale-trigger-code,
+.locale-switch[open] > .locale-trigger .locale-trigger-code,
+.locale-trigger:focus-visible .locale-trigger-code {
+  color: var(--coral);
+}
+/* Skill Remix Icon glyph primitive — mirrors `.ri-glyph` in the landing
+   page's globals.css so PUA glyph chars (e.g. the locale caret \ea4e)
+   render from the 'Remix Icon' font instead of falling back to tofu. */
+.ri-glyph {
+  font-family: 'Remix Icon';
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+/* Iconic language switcher — Remix Icon "translate-2" glyph from the
+   skill font (see @font-face 'Remix Icon'). Replaces the 语言 · 简中 text. */
+.locale-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  transition: color 160ms ease;
+}
+.locale-trigger-icon::before {
+  font-family: 'Remix Icon';
+  content: '\f226';
+  font-style: normal;
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+}
+.locale-trigger-iconic { border-bottom: 0; }
+.locale-trigger-iconic:hover .locale-trigger-icon,
+.locale-switch[open] > .locale-trigger-iconic .locale-trigger-icon,
+.locale-trigger-iconic:focus-visible .locale-trigger-icon {
+  color: var(--coral);
+}
+.locale-trigger-caret {
+  font-size: 12px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.locale-switch[open] > .locale-trigger .locale-trigger-caret {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+/*
+ * Two-column editorial catalogue. 17 locales × single-column would either
+ * scroll (ugly) or run most of the hero's height (worse). A 2-col grid
+ * keeps the panel under 9 rows so every language is visible at once and
+ * reads like a small index of nameplates rather than a dropdown.
+ *
+ * The shared top offset gives clear breathing room from the topbar baseline
+ * — without it the active row (which mirrors the trigger label) feels
+ * fused to the chrome above it.
+ */
+.locale-menu {
+  position: absolute;
+  top: calc(100% + var(--nav-flyout-gap, 12px));
+  right: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(168px, 1fr));
+  gap: 2px 4px;
+  padding: 10px;
+  background: var(--paper);
+  /* Match the sibling product `.nav-dropdown`: same border, radius, and shadow
+     so both header menus read as one panel style. */
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(26, 26, 26, 0.08);
+  font-family: var(--sans);
+  letter-spacing: normal;
+  text-transform: none;
+  /* Subtle entrance — matches the rest of the site's 200ms ease-out */
+  animation: locale-menu-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes locale-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* Invisible hover bridge across the gap between the trigger and the panel,
+   so moving the cursor down to the menu doesn't drop the hover and close it
+   (mirrors the sibling `.nav-dropdown::before`). */
+.locale-menu::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--nav-flyout-gap, 12px));
+  left: 0;
+  right: 0;
+  height: var(--nav-flyout-gap, 12px);
+}
+.locale-menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 12px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 12.5px;
+  line-height: 1.2;
+  /* Rounded so the hover/active fill reads as a pill-ish row inside the
+     8px panel rather than a hard-edged rectangle. */
+  border-radius: 6px;
+  transition: background 140ms ease, color 140ms ease;
+}
+/* Hover / active match the product `.nav-dropdown a`: coral-tint fill on hover,
+   a faint grey fill for the current locale — both keep ink text. */
+.locale-menu-item:hover {
+  background: var(--coral-tint);
+  color: var(--ink);
+}
+.locale-menu-item:hover .locale-menu-code { color: var(--ink-faint); }
+.locale-menu-item.is-active {
+  background: rgba(26, 26, 26, 0.04);
+  color: var(--ink);
+}
+.locale-menu-item.is-active .locale-menu-code {
+  color: var(--ink-faint);
+}
+.locale-menu-code {
+  flex-shrink: 0;
+  min-width: 46px;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: color 140ms ease;
+}
+.locale-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .locale-menu {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: min(260px, calc(100vw - 32px));
+  }
+  .locale-menu-item { padding: 9px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .locale-menu { animation: none; }
+  .locale-trigger-caret { transition: none; }
+}
+.topbar .pulse {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--coral);
+  display: inline-block;
+  margin-right: 6px;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* nav */
+/*
+ * The sticky + headroom behavior lives on the outer `.site-chrome`
+ * wrapper now (so the topbar + nav slide as one unit). This rule keeps
+ * only the spacing and surface treatment.
+ */
+.nav {
+  /* Explicit 100% (not auto) so the width can animate to the condensed
+     capsule instead of snapping — `auto` widths don't transition. */
+  width: 100%;
+  /* Inline margins are `auto` in BOTH states so the width shrink stays
+     centered every frame (shrinks toward the middle). If the base were
+     `margin: 0`, the 0 → auto transition isn't interpolable and the left
+     edge stays pinned while the right pulls in — reads as a left-to-right
+     collapse. */
+  margin-inline: auto;
+  padding: 22px 0;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition:
+    width 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    margin 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease;
+}
+/* Off-screen host for the Liquid Glass `<filter>` defs (referenced by id
+   from the nav's backdrop-filter). Kept in flow with zero size rather than
+   display:none, since some engines drop filter references on hidden subtrees. */
+.nav-glass-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/*
+ * Condensed bar — the Liquid Glass material. Two `backdrop-filter`
+ * declarations: the plain blur is the Safari/Firefox fallback (the
+ * component's SVG displacement filter is unsupported there); the
+ * `url(#nav-liquid-glass)` line is the Chromium chromatic-refraction
+ * material and overrides it where supported. The bar also shrinks its
+ * vertical padding for the condensed feel.
+ */
+.site-chrome.is-condensed .nav {
+  /* Detaches from the edges into a centered floating capsule: a gap from
+     the top, side margins, and fully rounded ends. 1280px (not 1080px) so
+     the longest translated nav rows (ja/ru/uk) still hold a single line —
+     the row must never wrap into a second line over the hero. */
+  margin: 14px auto 0;
+  width: min(1280px, calc(100% - 32px));
+  padding: 9px 0;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 20, 15, 0.08);
+  background: hsl(0 0% 100% / 0.42);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: url(#nav-liquid-glass) blur(7px) saturate(1.4);
+  box-shadow:
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.55),
+    inset 0 0 10px 4px rgba(255, 255, 255, 0.22),
+    0 6px 24px rgba(17, 17, 26, 0.06),
+    0 12px 40px rgba(17, 17, 26, 0.05);
+}
+/* The inner gutter eases in lockstep with the capsule width. */
+.nav > .container {
+  transition: padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Tighten the inner container padding inside the capsule (the full 64px
+   container gutter would over-inset the brand / links / actions). */
+.site-chrome.is-condensed .nav > .container {
+  max-width: none;
+  padding: 0 28px;
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+/*
+ * Desktop bar layout (≥1081px, above the hamburger breakpoint): three
+ * equal-flanked columns — brand logo pinned flush-left, the nav links
+ * centred, and the action cluster (download / star / locale) flush-right.
+ * The two 1fr side tracks are symmetric, which keeps the centre column
+ * optically centred regardless of how wide either side gets. Mobile keeps
+ * the base flex layout untouched.
+ */
+@media (min-width: 1081px) {
+  .nav-inner {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .nav-inner > .brand {
+    order: 1;
+    justify-self: start;
+  }
+  .nav-inner > nav[data-nav-primary] {
+    order: 2;
+    justify-self: center;
+  }
+  .nav-inner > .nav-side {
+    order: 3;
+    justify-self: end;
+  }
+  /* Translated labels (ja ソリューション, ru Сообщество, …) run longer than
+     the English originals. A trigger must never break between its label and
+     the ▾ caret — wrapping stacks the bar into two lines that overlap the
+     hero. The bar widens / tightens instead (capsule cap + the band below). */
+  .nav-links a {
+    white-space: nowrap;
+  }
+}
+/* Mid-band desktop (hamburger ends at 1081px): the longest locales need
+ * tighter link spacing to hold a single row. The hover bridge width must
+ * track the gap so sweeping between triggers keeps a dropdown open. */
+@media (min-width: 1081px) and (max-width: 1366px) {
+  .nav-links { gap: 22px; }
+  .nav-links li.has-dropdown:not(:last-child)::after { width: 22px; }
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 18px;
+}
+/*
+ * Combined brand lockup — the glyph + "Open Design" wordmark as a single
+ * SVG (`/logo-lockup.svg`, viewBox 225×83). Sized by height so the glyph
+ * keeps roughly its previous 44px optical weight while the wordmark sets
+ * its own width. Replaces the old `.brand-mark` glyph + `.brand-name`
+ * text pair in the header and both footers.
+ */
+.brand-logo {
+  height: 40px;
+  width: auto;
+  display: block;
+  flex: 0 0 auto;
+  transition: height 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Shrinks alongside the condensed bar (eased in lockstep with the
+   capsule's width/padding so nothing jumps ahead). */
+.site-chrome.is-condensed .brand-logo {
+  height: 33px;
+}
+.brand-mark {
+  /*
+   * Bumped from 36px → 44px (≈22% larger). The new black brand mark
+   * needs the extra optical weight against the wordmark, especially
+   * given the speech-bubble negative space visually shrinks the glyph.
+   * (PR #2588's brand polish, restored on top of #2469.)
+   */
+  width: 44px; height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.brand-name {
+  white-space: nowrap;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Round the corners of the brand glyph (~22% of side, app-icon
+   * silhouette convention) so the solid-fill square reads as a
+   * brand mark next to the wordmark rather than a screenshot. */
+  border-radius: 10px;
+}
+.brand-meta {
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  line-height: 1.3;
+  margin-left: 4px;
+  border-left: 1px solid var(--line);
+  padding-left: 14px;
+}
+.brand-meta b { display: block; color: var(--ink); font-weight: 600; }
+
+.nav-links {
+  display: flex;
+  gap: 38px;
+  list-style: none;
+}
+.nav-links a {
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.18s ease;
+  position: relative;
+}
+.nav-links a:hover { color: var(--coral); }
+.nav-links a .num {
+  font-size: 9px;
+  color: var(--ink-faint);
+  position: absolute;
+  top: -7px;
+  right: -16px;
+  letter-spacing: 0.04em;
+}
+
+/* AMR partner logo at the tail of the nav links (700×272 lockup scaled to
+   the bar). */
+.nav-links .nav-amr {
+  display: flex;
+  align-items: center;
+}
+.nav-amr-logo {
+  display: block;
+  height: 22px;
+  width: auto;
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+.nav-amr a:hover .nav-amr-logo { opacity: 1; }
+
+/*
+ * Product dropdown — CSS-only, no JS. The submenu is hidden by default and
+ * revealed on `:hover` of the parent `li.has-dropdown`, or on `:focus-within`
+ * for keyboard navigation. This keeps the static export self-contained.
+ */
+.nav-links li.has-dropdown {
+  position: relative;
+  --nav-flyout-gap: 12px;
+}
+/*
+ * Invisible hover bridge across the 38px flex gap between nav triggers so
+ * sweeping between items keeps something hovered — otherwise the dropdown and
+ * the :has() page blur flick off/on in the dead gap. Last item excluded.
+ */
+.nav-links li.has-dropdown:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 38px;
+}
+.nav-links .dropdown-caret {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  font-size: 11px;
+  line-height: 1;
+  /* nudge up a hair: the triangle glyph's ink sits low in its em box */
+  transform: translateY(-1px);
+  color: var(--ink-faint);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+.nav-links li.has-dropdown:hover .dropdown-caret,
+.nav-links li.has-dropdown:focus-within .dropdown-caret {
+  /* keep the -1px optical baseline; nudge down 1px more as the open affordance */
+  transform: translateY(0);
+  color: var(--coral);
+}
+.nav-dropdown {
+  position: absolute;
+  top: calc(100% + var(--nav-flyout-gap, 12px));
+  left: -16px;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  min-width: 320px;
+  background: var(--paper);
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(26, 26, 26, 0.08);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  z-index: 50;
+}
+.nav-links li.has-dropdown:hover .nav-dropdown,
+.nav-links li.has-dropdown:focus-within .nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+/*
+ * Frosted backdrop behind an open header menu. Opening a nav dropdown — or the
+ * language switcher — frosts the page (blueprint / glass look) while the nav
+ * bar and its menu stay sharp on top. Pure CSS via :has().
+ *
+ * Anchored to the viewport top (`top: 0`, full-viewport height) so it covers
+ * the WHOLE screen behind the chrome — including the transparent topbar strip
+ * above the nav pill, where page content used to bleed through while a menu was
+ * open. It lives in the chrome's stacking context (z-index 50 in .shell) at the
+ * back (z-index -1), so it covers page content while the topbar, nav links,
+ * dropdown, and locale menu all paint above it; the opaque condensed nav pill
+ * hides the frost behind itself, so the bar still reads as a clean bar.
+ * Desktop only: the mobile nav is a vertical drawer, not a hover panel.
+ */
+@media (min-width: 1081px) {
+  .site-chrome::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100vh;
+    z-index: -1;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(26px) saturate(108%);
+    -webkit-backdrop-filter: blur(26px) saturate(108%);
+    opacity: 0;
+    pointer-events: none;
+    /* Delay the fade-OUT so a brief hover loss (crossing a gap) doesn't flash
+       the blur; opening stays instant via the override below. */
+    transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1) 120ms;
+  }
+  .site-chrome:has(.nav-links li.has-dropdown:hover)::after,
+  .site-chrome:has(.nav-links li.has-dropdown:focus-within)::after,
+  .site-chrome:has(.locale-switch[open])::after {
+    opacity: 1;
+    transition-delay: 0ms;
+  }
+}
+/* invisible bridge so cursor can travel from trigger to menu without
+ * crossing a gap that closes the menu mid-traverse */
+.nav-dropdown::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--nav-flyout-gap, 12px));
+  left: 0;
+  right: 0;
+  height: var(--nav-flyout-gap, 12px);
+}
+.nav-dropdown a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.nav-dropdown a:hover {
+  background: var(--coral-tint);
+  color: var(--ink);
+}
+.nav-dropdown a.is-active {
+  background: rgba(26, 26, 26, 0.04);
+}
+.nav-dropdown .dropdown-name {
+  display: block;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.nav-dropdown .dropdown-blurb {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.4;
+}
+
+/* Grouped dropdown (Solution): small-caps group labels between the rows.
+   Rules mirror upstream main's header CSS 1:1. */
+.nav-dropdown .nav-dropdown-group {
+  padding: 8px 12px 2px;
+}
+.nav-dropdown .nav-dropdown-group:first-child {
+  padding-top: 4px;
+}
+.nav-dropdown .nav-dropdown-group-label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Solution panel lists 11 rows + 2 group labels; cap the height so it never
+   grows past the viewport, scrolling inside instead. */
+.nav-dropdown-solution {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+/*
+ * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
+ * viewports it replaces the inline nav-links and toggles a panel
+ * underneath the header bar via a small handler in `header-enhancer`.
+ */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.nav-toggle:hover {
+  background: rgba(26, 26, 26, 0.04);
+  border-color: rgba(26, 26, 26, 0.32);
+}
+.nav-toggle-icon,
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.nav-toggle-icon {
+  position: relative;
+}
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+.nav-toggle-icon::before { top: -6px; }
+.nav-toggle-icon::after  { top:  6px; }
+/* When open, morph into an "X" */
+.nav.is-open .nav-toggle-icon { background: transparent; }
+.nav.is-open .nav-toggle-icon::before { top: 0; transform: rotate(45deg); }
+.nav.is-open .nav-toggle-icon::after  { top: 0; transform: rotate(-45deg); }
+
+.nav-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+}
+.nav-side .locale-switch {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.nav-side .locale-menu {
+  top: calc(100% + var(--nav-flyout-gap, 12px));
+  right: 0;
+}
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.nav-cta [data-github-stars],
+.nav-cta [data-github-version] {
+  font-variant-numeric: tabular-nums;
+}
+.nav-cta::after {
+  content: none;
+}
+/* Download: a compact filled pill. Same ink background as the primary button
+   (.btn-primary), but tighter padding than .btn's 14px 22px so it reads at
+   nav scale. */
+.nav-cta.ghost {
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  transition: background 160ms ease, transform 160ms ease;
+}
+.nav-cta:not(.ghost):hover {
+  color: var(--coral);
+}
+.nav-cta.ghost:hover {
+  background: #434343;
+}
+
+/* ---- responsive nav rules, cherry-picked from the globals.css
+   "responsive" section ---- */
+@media (max-width: 1280px) {
+  .container { padding: 0 44px; }
+}
+@media (max-width: 1180px) {
+  .nav-inner { gap: 18px; }
+  .brand-meta { display: none; }
+}
+@media (max-width: 1080px) {
+  .nav-toggle { display: inline-flex; }
+  .brand { white-space: nowrap; }
+  /* Hide Download from the bar (Star stays). */
+  .nav-side .nav-cta.ghost { display: none; }
+  /* Collapse the nav <ul> into a panel that drops below the header bar.
+   * The header is `position: sticky`, so absolute-positioning the panel
+   * relative to the header element keeps it pinned correctly. */
+  .nav { position: sticky; }
+  .nav > .nav-inner > nav[data-nav-primary] {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    background: var(--paper);
+    border-top: 1px solid rgba(26, 26, 26, 0.08);
+    box-shadow: 0 12px 32px rgba(26, 26, 26, 0.06);
+  }
+  .nav.is-open > .nav-inner > nav[data-nav-primary] {
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 12px 24px 20px 24px;
+  }
+  .nav-links li {
+    border-bottom: 1px solid rgba(26, 26, 26, 0.06);
+  }
+  .nav-links li:last-child { border-bottom: none; }
+  .nav-links a {
+    display: block;
+    padding: 14px 0;
+    font-size: 16px;
+  }
+  .nav-links a .num {
+    position: static;
+    margin-left: 6px;
+    font-size: 11px;
+  }
+  /* Product dropdown flattens — always show OD + HA as nested static items. */
+  .nav-links li.has-dropdown { position: static; }
+  .nav-links .dropdown-caret { display: none; }
+  .nav-dropdown {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    margin: 0 0 4px 0;
+    padding: 0 0 4px 16px;
+    border: none;
+    border-left: 2px solid rgba(26, 26, 26, 0.08);
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    min-width: 0;
+  }
+  .nav-dropdown::before { display: none; }
+  .nav-dropdown a { padding: 8px 8px; border-radius: 4px; }
+  .nav-dropdown .dropdown-blurb { display: none; }
+  /* Let the Solution panel flow naturally inside the flattened nav panel
+     instead of scrolling within a capped box. */
+  .nav-dropdown-solution { max-height: none; overflow: visible; }
+}
+@media (max-width: 1080px) {
+  .container { padding: 0 32px; }
+}
+@media (max-width: 880px) {
+  .container { padding: 0 24px; }
+  .nav { padding: 16px 0; }
+  .brand-meta { display: none; }
+  .nav-side .nav-cta.ghost { display: none; }
+}
+@media (max-width: 560px) {
+  .container { padding: 0 16px; }
+  .locale-trigger { gap: 4px; }
+  .locale-trigger-prefix { display: none; }
+  .locale-trigger-sep { display: none; }
+  .locale-menu { min-width: 208px; }
+  .nav-inner { gap: 12px; }
+  .brand { font-size: 16px; gap: 8px; }
+  .brand-mark { width: 32px; height: 32px; font-size: 16px; }
+  .brand-logo { height: 34px; }
+}
+@media (max-width: 420px) {
+  .container { padding: 0 14px; }
+  .locale-menu { min-width: 192px; }
+}
+
+/* ---- community-page fit: the homepage chrome is a fixed transparent
+   overlay (it expects the hero to start underneath), so push the static
+   page content down by one bar height and keep in-page anchors visible. */
+body { padding-top: 88px; }
+html { scroll-padding-top: 110px; }

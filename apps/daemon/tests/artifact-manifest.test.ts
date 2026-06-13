@@ -57,6 +57,27 @@ describe('validateArtifactManifestInput', () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.value?.status).toBe('streaming');
   });
+
+  it('preserves an existing updatedAt timestamp when requested', () => {
+    const res = validateArtifactManifestInput(
+      { ...validBase(), updatedAt: '2026-05-01T00:00:00.000Z' },
+      'index.html',
+      { preserveUpdatedAt: true },
+    );
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value?.updatedAt).toBe('2026-05-01T00:00:00.000Z');
+  });
+
+  it('stamps updatedAt at validation time by default', () => {
+    const res = validateArtifactManifestInput(
+      { ...validBase(), updatedAt: '2026-05-01T00:00:00.000Z' },
+      'index.html',
+    );
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value?.updatedAt).not.toBe('2026-05-01T00:00:00.000Z');
+  });
 });
 
 describe('inferLegacyManifest', () => {

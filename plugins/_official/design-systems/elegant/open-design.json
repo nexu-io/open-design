@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-elegant",
+  "title": "Elegant",
+  "title_i18n": {
+    "zh-CN": "优雅",
+    "zh-TW": "優雅",
+    "ja": "エレガント",
+    "ko": "엘레강트",
+    "de": "Elegant",
+    "fr": "Élégant",
+    "ru": "Элегантный",
+    "es": "Elegante",
+    "pt-BR": "Elegante",
+    "it": "Elegante",
+    "vi": "Thanh Lịch",
+    "pl": "Elegancki",
+    "id": "Elegan",
+    "nl": "Elegant",
+    "ar": "أنيق",
+    "tr": "Zarif",
+    "uk": "Елегантний",
+    "en": "Elegant"
+  },
+  "version": "0.1.0",
+  "description": "Graceful, refined aesthetic with delicate typography, minimal palettes, and polished layouts that exude sophistication.",
+  "description_i18n": {
+    "zh-CN": "精致优雅的美学风格，配有精美的排版、简约的色彩方案和精良的布局，展现高雅气质。",
+    "zh-TW": "精緻優雅的美學風格，配有精美的排版、簡約的色彩方案和精良的佈局，展現高雅氣質。",
+    "ja": "洗練された美学。繊細なタイポグラフィ、ミニマルなカラーパレット、洗練されたレイアウトで上品さを演出します。",
+    "ko": "섬세한 타이포그래피, 미니멀한 팔레트, 세련된 레이아웃으로 우아함과 고급스러움을 표현하는 디자인입니다.",
+    "de": "Anmutvolle, raffinierte Ästhetik mit feiner Typografie, minimalistischen Farbpaletten und polierten Layouts, die Raffinesse ausstrahlen.",
+    "fr": "Esthétique gracieuse et raffinée avec une typographie délicate, des palettes minimalistes et des mises en page soignées qui dégagent sophistication.",
+    "ru": "Изящная утончённая эстетика с изысканной типографикой, минималистичными палитрами и отточенными макетами, излучающими изысканность.",
+    "es": "Estética refinada y elegante con tipografía delicada, paletas minimalistas y diseños pulidos que transmiten sofisticación.",
+    "pt-BR": "Estética graciosa e refinada com tipografia delicada, paletas minimalistas e layouts sofisticados que exalam sofisticação.",
+    "it": "Estetica raffinata ed elegante con tipografia delicata, palette minimaliste e layout curati che emanano sofisticatezza.",
+    "vi": "Thẩm mỹ tao nhã, tinh tế với kiểu chữ mềm mại, bảng màu tối giản và bố cục chau chuốt thể hiện sự sang trọng.",
+    "pl": "Wdzięczna, wyrafinowana estetyka z delikatną typografią, minimalistycznymi paletami i dopracowanymi układami emanującymi wyrafinowaniem.",
+    "id": "Estetika anggun dan halus dengan tipografi yang lembut, palet minimal, dan tata letak yang dipoles untuk memancarkan kecanggihan.",
+    "nl": "Sierlijke, verfijnde esthetiek met delicate typografie, minimalistische kleurpaletten en gepolijste lay-outs die verfijning uitstralen.",
+    "ar": "جمالية راقية ومصقولة مع طباعة رقيقة ولوحات ألوان بسيطة وتخطيطات متقنة تنضح بالرقي.",
+    "tr": "İnce tipografi, minimal paletler ve cilalı düzenlerle zarafet yayan, zarif ve sofistike bir estetik.",
+    "uk": "Витончена естетика з делікатною типографікою, мінімалістичними палітрами та вишуканими макетами, що випромінюють вишуканість.",
+    "en": "Graceful, refined aesthetic with delicate typography, minimal palettes, and polished layouts that exude sophistication."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "professional-corporate"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Elegant design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Elegant design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "elegant",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

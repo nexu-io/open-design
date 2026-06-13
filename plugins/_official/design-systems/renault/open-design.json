@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-renault",
+  "title": "Renault",
+  "title_i18n": {
+    "zh-CN": "Renault",
+    "zh-TW": "Renault",
+    "ja": "Renault",
+    "ko": "Renault",
+    "de": "Renault",
+    "fr": "Renault",
+    "ru": "Renault",
+    "es": "Renault",
+    "pt-BR": "Renault",
+    "it": "Renault",
+    "vi": "Renault",
+    "pl": "Renault",
+    "id": "Renault",
+    "nl": "Renault",
+    "ar": "Renault",
+    "tr": "Renault",
+    "uk": "Renault",
+    "en": "Renault"
+  },
+  "version": "0.1.0",
+  "description": "French automotive. Vibrant aurora gradients, NouvelR typography, bold energy.",
+  "description_i18n": {
+    "zh-CN": "法国汽车品牌。活力极光渐变、NouvelR 字体、大胆能量。",
+    "zh-TW": "法國汽車品牌。鮮豔極光漸層、NouvelR 字型、大膽能量。",
+    "ja": "フランスの自動車。鮮やかなオーロラグラデーション、NouvelRタイポグラフィ、大胆なエネルギー。",
+    "ko": "프랑스 자동차. 선명한 오로라 그라데이션, NouvelR 타이포그래피, 대담한 에너지.",
+    "de": "Französische Automobilbranche. Lebendige Aurora-Verläufe, NouvelR-Typografie, kraftvolle Energie.",
+    "fr": "Automobile française. Dégradés aurores vibrants, typographie NouvelR, énergie audacieuse.",
+    "ru": "Французский автомобильный бренд. Яркие градиенты северного сияния, типографика NouvelR, смелая энергия.",
+    "es": "Automoción francesa. Gradientes aurora vibrantes, tipografía NouvelR, energía audaz.",
+    "pt-BR": "Automotivo francês. Gradientes aurora vibrantes, tipografia NouvelR, energia ousada.",
+    "it": "Automotive francese. Gradienti aurora vibranti, tipografia NouvelR, energia audace.",
+    "vi": "Ô tô Pháp. Gradient cực quang sống động, kiểu chữ NouvelR, năng lượng táo bạo.",
+    "pl": "Francuska motoryzacja. Żywe gradienty zorzy polarnej, typografia NouvelR, odważna energia.",
+    "id": "Otomotif Prancis. Gradien aurora yang cerah, tipografi NouvelR, energi yang berani.",
+    "nl": "Franse automotive. Levendige aurora-verloop, NouvelR-typografie, gedurfde energie.",
+    "ar": "صناعة سيارات فرنسية. تدرجات شفق قطبي نابضة، خط NouvelR، طاقة جريئة.",
+    "tr": "Fransız otomotiv. Canlı aurora geçişleri, NouvelR tipografisi, cesur enerji.",
+    "uk": "Французський автомобільний бренд. Яскраві градієнти полярного сяйва, типографіка NouvelR, смілива енергія.",
+    "en": "French automotive. Vibrant aurora gradients, NouvelR typography, bold energy."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "automotive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Renault design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Renault design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "renault",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

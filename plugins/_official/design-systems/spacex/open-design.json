@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-spacex",
+  "title": "SpaceX",
+  "title_i18n": {
+    "zh-CN": "SpaceX",
+    "zh-TW": "SpaceX",
+    "ja": "SpaceX",
+    "ko": "SpaceX",
+    "de": "SpaceX",
+    "fr": "SpaceX",
+    "ru": "SpaceX",
+    "es": "SpaceX",
+    "pt-BR": "SpaceX",
+    "it": "SpaceX",
+    "vi": "SpaceX",
+    "pl": "SpaceX",
+    "id": "SpaceX",
+    "nl": "SpaceX",
+    "ar": "SpaceX",
+    "tr": "SpaceX",
+    "uk": "SpaceX",
+    "en": "SpaceX"
+  },
+  "version": "0.1.0",
+  "description": "Space technology. Stark black and white, full-bleed imagery, futuristic.",
+  "description_i18n": {
+    "zh-CN": "太空科技。鲜明的黑白配色，全出血图像，未来主义风格。",
+    "zh-TW": "太空科技。鮮明的黑白配色，全出血圖像，未來主義風格。",
+    "ja": "宇宙技術。鮮明な白黒、全面裁ち落とし画像、未来的。",
+    "ko": "우주 기술. 선명한 흑백, 전면 이미지, 미래지향적.",
+    "de": "Weltraumtechnologie. Starkes Schwarz-Weiß, randabfallende Bilder, futuristisch.",
+    "fr": "Technologie spatiale. Noir et blanc contrasté, images à fond perdu, futuriste.",
+    "ru": "Космические технологии. Контрастная черно-белая гамма, изображения в обрез, футуристика.",
+    "es": "Tecnología espacial. Blanco y negro marcado, imágenes a sangre, futurista.",
+    "pt-BR": "Tecnologia espacial. Preto e branco marcante, imagens sangradas, futurista.",
+    "it": "Tecnologia spaziale. Bianco e nero deciso, immagini al vivo, futuristica.",
+    "vi": "Công nghệ không gian. Đen trắng tương phản, hình ảnh tràn viền, phong cách tương lai.",
+    "pl": "Technologia kosmiczna. Wyrazista czerń i biel, obrazy na spadzie, futurystyczna.",
+    "id": "Teknologi luar angkasa. Hitam putih kontras, gambar full-bleed, futuristik.",
+    "nl": "Ruimtetechnologie. Sterk zwart-wit, aflopende beelden, futuristisch.",
+    "ar": "تكنولوجيا الفضاء. أبيض وأسود واضح، صور ممتدة بالكامل، مستقبلي.",
+    "tr": "Uzay teknolojisi. Keskin siyah beyaz, taşmalı görseller, fütüristik.",
+    "uk": "Космічні технології. Контрастна чорно-біла гама, зображення в обріз, футуристика.",
+    "en": "Space technology. Stark black and white, full-bleed imagery, futuristic."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the SpaceX design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the SpaceX design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "spacex",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

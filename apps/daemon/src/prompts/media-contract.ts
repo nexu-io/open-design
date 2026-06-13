@@ -23,6 +23,7 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media-models.js';
+import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ');
@@ -33,6 +34,67 @@ const VIDEO_IDS = fmtList(VIDEO_MODELS.map((m) => m.id));
 const AUDIO_MUSIC_IDS = fmtList(AUDIO_MODELS_BY_KIND.music.map((m) => m.id));
 const AUDIO_SPEECH_IDS = fmtList(AUDIO_MODELS_BY_KIND.speech.map((m) => m.id));
 const AUDIO_SFX_IDS = fmtList(AUDIO_MODELS_BY_KIND.sfx.map((m) => m.id));
+
+export function renderMediaGenerationContract(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const mode = mediaExecution?.mode ?? 'enabled';
+  if (mode === 'enabled') {
+    return renderEnabledMediaGenerationContract(mediaExecution);
+  }
+  const scope = renderMediaPolicyScope(mediaExecution);
+  if (mode === 'disabled') {
+    return `
+---
+
+## Media generation policy (load-bearing — overrides softer wording above)
+
+Open Design-owned media execution is **disabled for this run**. Do not call
+\`"$OD_NODE_BIN" "$OD_BIN" media generate\`, Codex built-in imagegen, OD media
+provider APIs, local renderers, or ad-hoc scripts that create media bytes on
+OD's behalf.
+
+External MCP media tools, when explicitly configured for this run, are outside
+this OD-owned media policy. If no such external tool is available and the user
+asks for media, describe the intended creative brief, prompt, surface, model
+preference, references, and output filename in chat, then stop. Do not claim a
+file was generated and do not emit an \`<artifact>\` block for media.
+${scope}`;
+  }
+  return renderEnabledMediaGenerationContract(mediaExecution);
+}
+
+function renderEnabledMediaGenerationContract(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const scope = renderMediaPolicyScope(mediaExecution);
+  if (!scope) return MEDIA_GENERATION_CONTRACT;
+  return MEDIA_GENERATION_CONTRACT.replace(
+    '\n### Allowed model IDs (per surface)',
+    `
+### Active media policy scope
+
+The dispatcher will reject surfaces or models outside this run's active
+allowlist. Treat this allowlist as narrower than the full catalogue below;
+select only from it.
+${scope}
+
+### Allowed model IDs (per surface)`,
+  );
+}
+
+function renderMediaPolicyScope(
+  mediaExecution?: MediaExecutionPolicy | undefined,
+): string {
+  const lines: string[] = [];
+  if (Array.isArray(mediaExecution?.allowedSurfaces) && mediaExecution.allowedSurfaces.length > 0) {
+    lines.push(`Allowed surfaces for this run: ${fmtList(mediaExecution.allowedSurfaces as MediaSurface[])}.`);
+  }
+  if (Array.isArray(mediaExecution?.allowedModels) && mediaExecution.allowedModels.length > 0) {
+    lines.push(`Allowed models for this run: ${fmtList(mediaExecution.allowedModels)}.`);
+  }
+  return lines.length > 0 ? `\n\n${lines.join('\n')}` : '';
+}
 
 export const MEDIA_GENERATION_CONTRACT = `
 ---
@@ -85,8 +147,11 @@ Run via your shell tool (Bash on Claude Code, exec on Codex/Gemini, etc.):
   [--aspect 1:1|16:9|9:16|4:3|3:4] \\
   [--length <seconds>]              # video only
   [--duration <seconds>]            # audio only
+  [--prompt-influence <0-1>]        # audio:sfx only; higher follows the prompt more closely
+  [--loop]                          # audio:sfx only; request a seamless loop
   [--audio-kind music|speech|sfx]   # audio only
   [--voice <provider-voice-id>]     # audio:speech only; omit to use provider default
+  [--language <lang>]               # audio:speech only; language boost (e.g. Chinese,Yue for Cantonese)
 \`\`\`
 
 Always quote the prompt value. Use \`--prompt "<full prompt>"\` (or the
@@ -178,14 +243,18 @@ reported that exact condition. One failed dispatcher call is enough to
 report the error; do not fan out into alternate execution paths inside
 the same turn.
 
-### Long-running renders (Volcengine i2v, hyperframes-html): generate → wait loop
+### All slow renders: generate → wait loop
 
-\`media generate\` no longer blocks for the full render. It dispatches
-the task daemon-side and returns within ~1s with a \`{taskId}\`. You then
-drive the render to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\` in
-a loop — each call long-polls the daemon for up to 25s, well below your
-shell tool's default 30s timeout. The wait subcommand exits with a
-distinct code per outcome:
+Any model whose generation takes longer than ~25s — including **fal flux-pro-ultra,
+fal Veo, fal Sora, Volcengine i2v, hyperframes-html, and anything else with a
+multi-minute pipeline** — will not complete within the initial \`media generate\` call.
+
+\`media generate\` dispatches the task daemon-side and polls for up to ~25s. It
+always exits 0 — either with \`{"file":{...}}\` if the render finished within that
+window, or with \`{"taskId":"..."}\` as a handoff signal. You then drive the render
+to completion by calling \`media wait <taskId>\` through \`OD_NODE_BIN\` + \`OD_BIN\`
+in a loop — each call long-polls the daemon for up to 120s. The wait subcommand
+exits with a distinct code per outcome:
 
 - \`exit 0\` — terminal **done**. Final stdout line is \`{"file":{...}}\`.
 - \`exit 5\` — terminal **failed**. Stderr carries the upstream error.
@@ -195,29 +264,43 @@ distinct code per outcome:
   off (\`--since\` skips already-seen progress lines so you don't see the
   same chatter twice).
 
-The pattern in your shell tool:
+The pattern in your shell tool (uses python3 to parse JSON — do NOT use jq, it
+may not be installed):
 
 \`\`\`bash
-out=$("$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model … --image …)
-ec=$?
-if [ "$ec" -ne 0 ] && [ "$ec" -ne 2 ]; then
-  echo "$out" >&2; exit "$ec"
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
+ec=\$?
+if [ "\$ec" -ne 0 ]; then
+  echo "\$out" >&2; exit "\$ec"
 fi
-task_id=$(printf '%s\\n' "$out" | tail -1 | jq -r '.taskId // empty')
-since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // 0')
-while [ "$ec" -eq 2 ] && [ -n "$task_id" ]; do
-  out=$("$OD_NODE_BIN" "$OD_BIN" media wait "$task_id" --since "$since")
-  ec=$?
-  since=$(printf '%s\\n' "$out" | tail -1 | jq -r '.nextSince // '"$since")
+last=\$(printf '%s\\n' "\$out" | tail -1)
+task_id=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('taskId',''))" 2>/dev/null)
+since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',0))" 2>/dev/null)
+since="\${since:-0}"
+while [ -n "\$task_id" ]; do
+  out=\$("$OD_NODE_BIN" "$OD_BIN" media wait "\$task_id" --since "\$since")
+  ec=\$?
+  last=\$(printf '%s\\n' "\$out" | tail -1)
+  since=\$(printf '%s\\n' "\$last" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('nextSince',\$since))" 2>/dev/null)
+  since="\${since:-0}"
+  if [ "\$ec" -eq 0 ]; then
+    task_id=""
+  elif [ "\$ec" -ne 2 ]; then
+    echo "\$out" >&2; exit "\$ec"
+  fi
 done
-# At this point ec is 0 (done) or 5 (failed). Final result on the last
-# stdout line of \`out\`.
+# At this point ec is 0 (done) or 5 (failed). Final result on the last stdout line of \$out.
+printf '%s\\n' "\$last"
 \`\`\`
 
-Each \`generate\` and \`wait\` call lasts at most ~25s, so the agent
-shell tool's default ~30s cap never fires. Progress lines stream to
-stderr as they arrive, so the user sees live status in chat throughout
-the loop instead of waiting silently for a single multi-minute call.
+Each \`generate\` call lasts at most ~25s and each \`wait\` call at most ~120s,
+both well within your shell tool's timeout. Progress lines stream to stderr as
+they arrive, so the user sees live status in chat throughout the loop instead of
+waiting silently for a single multi-minute call.
+
+**Always write your shell invocation as the full generate+wait loop above**, even
+for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
+\`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."
 
 A note on \`fetch failed\` to \`127.0.0.1\`. The OD daemon runs on
 loopback in the same machine that spawned you, so it is essentially
@@ -247,37 +330,84 @@ showed it crashed).
 - **audio · speech**: ${AUDIO_SPEECH_IDS}
 - **audio · sfx**:    ${AUDIO_SFX_IDS}
 
-If the user requests a model that is not in this list, surface a warning
-in your reply and either (a) ask them to pick a registered ID or (b)
-proceed with the project metadata's default model and explain the
-substitution. Do not silently fall back.
+If the user requests a model that is not in this list **and** the ID does
+not start with \`fal-ai/\`, surface a warning in your reply and either
+(a) ask them to pick a registered ID or (b) proceed with the project
+metadata's default model and explain the substitution. Do not silently
+fall back.
+
+Exception — **fal-ai/\* custom paths**: any model ID that begins with
+\`fal-ai/\` (e.g. \`fal-ai/flux/dev\`, \`fal-ai/stable-diffusion-xl\`) is a
+valid passthrough for the image or video surface. Pass it to
+\`"$OD_NODE_BIN" "$OD_BIN" media generate\` as-is via \`--model <id>\`;
+the daemon routes it directly to the fal queue without a catalog entry.
+Do **not** warn the user or substitute the default when a \`fal-ai/\`
+path is given.
 
 ### Workflow rules
 
 1. **Read project metadata first.** The "Project metadata" block above
-   tells you the user's pre-selected model, aspect, length, voice, audio
-   kind, etc. Treat those as authoritative defaults — only override if
-   the user's chat message explicitly contradicts them.
-   For \`minimax-tts\`, \`voice\` must be a valid MiniMax \`voice_id\`
-   (example: \`male-qn-qingse\`). Do not pass natural-language voice
-   descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
-   flag instead unless you have a real id.
-2. **One discovery turn before generating.** Even with metadata defaults
-   present, restate what you're about to make and ask one targeted
-   question if anything is ambiguous (subject, mood, brand, voice). The
-   discovery rules from the philosophy layer still apply — emit a
-   question form on turn 1 unless the user's prompt already pins every
-   variable.
+    tells you the user's pre-selected model, aspect, length, voice, audio
+    kind, etc. Treat those as authoritative defaults — only override if
+    the user's chat message explicitly contradicts them.
+    For \`minimax-tts\`, \`voice\` must be a valid MiniMax \`voice_id\`
+    (example: \`male-qn-qingse\`). Do not pass natural-language voice
+    descriptions like "warm Mandarin narrator" as \`--voice\`; omit the
+    flag instead unless you have a real id.
+    For \`elevenlabs-v3\`, \`--voice\` expects a provider-specific ElevenLabs \`voice_id\`; do not pass a natural-language voice description there.
+    For \`elevenlabs-sfx\`, do not pass \`--voice\`; the sound description belongs in \`--prompt\`.
+    Keep ElevenLabs SFX \`--prompt\` under 450 characters; target 180-320 characters so the dispatcher does not waste a generation attempt on provider validation.
+    Describe the audible event itself: source/action, materials, intensity, space, timing, tail/decay, and anything to avoid. Good SFX prompts are literal sound briefs such as "short glass UI confirmation chime, clean attack, soft shimmer tail, no melody, no voice" or "seamless rainy alley ambience loop, distant traffic, wet pavement drips, no voices".
+    For music-like requests on \`elevenlabs-sfx\`, produce a short sound-effects loop or texture, not a full song arrangement. Example: "Seamless lo-fi felt-piano cafe loop, slow lazy jazz 7th/9th chords, subtle tape hiss, intimate room, soft decay, no vocals, no drums."
+    Avoid vague intent-only prompts such as "a nice transition" or "make this section feel premium" unless you translate them into concrete sound sources.
+    Use \`--prompt-influence 0.7\` for user-specified SFX so ElevenLabs follows the prompt more closely; lower it only when the user explicitly wants exploratory/noisier variation.
+    Add \`--loop\` only when the requested SFX must be seamless ambience / background / game loop audio. Mention loop intent in the prompt as well.
+    SFX duration is capped at 30 seconds by the provider.
+    \`language\` enables pronunciation boost for specific languages
+    (e.g. \`Chinese,Yue\` for Cantonese, \`Chinese\` for Mandarin).
+2. **Dispatch immediately when the brief is complete.** For image and video
+   projects, if the user's prompt specifies the subject, style/mood, and setting,
+   **dispatch without a discovery question turn**. Do not ask about model or aspect
+   ratio when reasonable defaults exist — use them and start generating.
+
+   Default model selection (use these when \`imageModel\`/\`videoModel\` is unknown
+   or the user asks for "best"):
+   - **Image, best quality (user says "best", "highest quality", "most realistic")**:
+     use \`flux-pro-ultra\` — but tell the user it takes 60–180s
+   - **Image, default / no preference stated**: use the project metadata's
+     \`imageModel\` if set; otherwise use \`gpt-image-2\`
+   - **Video, best quality**: use project metadata \`videoModel\` if set; otherwise
+     \`doubao-seedance-2-0-260128\`
+
+   Default aspect ratio (use when \`aspectRatio\` is unknown):
+   - Landscape/outdoor scenes, cinematic, widescreen → \`16:9\`
+   - Portrait, vertical social → \`9:16\`
+   - Product, abstract, square social → \`1:1\`
+   - General default when no cue → \`1:1\`
+
+   **Skip the discovery question when all of these are true:**
+   - The subject is described (what to generate)
+   - The style or mood is implied or stated (realistic, cinematic, illustrated, etc.)
+   - Any model/aspect gaps can be filled with the defaults above
+
+   **Do ask** if the output intent is genuinely ambiguous (e.g. "make something cool"
+   with no subject), or the user explicitly requests a model/voice the project
+   metadata doesn't carry.
+
    For \`hyperframes-html\`, the discovery turn is the last turn before
-   you start authoring. Once the user answers, write the composition
-   files into \`.hyperframes-cache/\` and run \`npx hyperframes render\`
-   immediately — do not add a second "plan" or "environment check"
-   message first, and do not call \`"$OD_NODE_BIN" "$OD_BIN" media generate\` (that path is
-   intentionally rejected for this model).
-3. **Generate by shell, narrate in chat.** When you actually invoke
-   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call. After
-   it returns, write a short reply: what was produced, the filename,
-   and any notes (model substitutions, retries, follow-up suggestions).
+   you start authoring. Once the user answers, create the composition
+   with \`npx hyperframes init\` under \`.hyperframes-cache/\`, edit the
+   generated \`index.html\`, and dispatch through
+   \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>\`.
+   Do not run \`npx hyperframes render\` yourself; Chrome-bound rendering
+   must happen in the daemon process. Do not add a second "plan" or
+   "environment check" message first.
+3. **Generate by shell, reply in one short message.** When you invoke
+   \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, do it inside a clearly-labelled tool call.
+   After the command completes, reply with **one brief message** (2–3 sentences max):
+   the filename, the model used, and a single follow-up offer ("Want a different
+   aspect ratio?" / "Try again with more fog?"). Do not write long descriptions,
+   artistic analyses, or multi-paragraph commentary. Speed matters.
    If it fails, quote the real stderr / exit code and stop there.
    Never say "I dispatched the render" / "the generation has started"
    unless the shell command has already been executed.
@@ -295,10 +425,12 @@ substitution. Do not silently fall back.
 
 ### Detecting and surfacing provider errors
 
-Today the dispatcher ships two real provider integrations: \`openai\`
-(image, with Azure OpenAI auto-detected from the configured base URL)
-and \`volcengine\` (Doubao Seedance video / Seedream image). Other
-providers (suno-v5, kling, fishaudio, …) are still stubs.
+Today the dispatcher ships real provider integrations for OpenAI
+(image and speech, with Azure OpenAI auto-detected from the configured
+base URL), Volcengine (Doubao Seedance video / Seedream image), Grok
+image/video, Nano Banana image, HyperFrames video, and the MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations.
+Models whose provider path has no renderer still return a configured
+stub/error signal as described below.
 
 The dispatcher tags every outcome explicitly. Treat the failure
 signals below as hard errors and surface them verbatim to the user —
@@ -309,13 +441,16 @@ do **not** narrate a stub as if it were the final result.
    models without a real renderer, and the CLI prints the daemon's
    error message. Set \`OD_MEDIA_ALLOW_STUBS=1\` to write a labelled
    placeholder instead.
-2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` and \`"$OD_NODE_BIN" "$OD_BIN" media wait\` exit:
-   \`0\` on real success, \`2\` when the task is **still running** and
-   needs another \`wait\` call (see "Long-running renders" above), \`5\`
-   when the daemon accepted the request but the provider call failed
-   (key missing / 4xx / network blip), and \`1–4\` for client / daemon
-   errors. Always check \`$?\` before describing the output. \`2\` is
-   not a failure — it just means "keep polling".
+2. **Exit code.** \`"$OD_NODE_BIN" "$OD_BIN" media generate\` exits \`0\` for
+   both immediate completion and successful queued/running handoff; inspect
+   the final stdout JSON for either \`file\` or \`taskId\`. \`"$OD_NODE_BIN"
+   "$OD_BIN" media wait\` exits \`0\` on terminal **done**, \`2\` when the
+   task is still **running** and needs another \`wait\` call (see
+   "Long-running renders" above), \`5\` when the daemon accepted the request
+   but the provider call failed (key missing / 4xx / network blip), and
+   \`1–4\` for client / daemon errors. Always check \`$?\` before describing
+   the output. \`2\` from \`media wait\` is not a failure — it just means
+   "keep polling".
 3. **stderr WARN lines.** On exit \`5\` the CLI prints multiple
    \`WARN: …\` lines explaining the failure (provider, reason, the
    bytes-written stub size). Quote the reason in your reply.
@@ -334,8 +469,7 @@ do **not** narrate a stub as if it were the final result.
    provider call failed (\`providerError\` non-null) — surface that
    distinction in your reply.
 
-A few surfaces (audio, some long-tail image/video providers) are still
-intentional stubs. In that case you can narrate the placeholder as
-expected, but still mention to the user that the real provider
-integration hasn't landed.
+Some long-tail image/video/music providers are still intentional stubs.
+In that case you can narrate the placeholder as expected, but still
+mention to the user that the real provider integration hasn't landed.
 `;

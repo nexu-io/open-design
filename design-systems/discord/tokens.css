@@ -1,0 +1,125 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/discord/tokens.css
+ *
+ * Structured token bindings for the "Discord" brand — deep blurple,
+ * dark-first surfaces, voice-and-chat for gaming and community.
+ *
+ * Brand identity in three sentences:
+ *   1. Dark-first: three-step depth ladder (#1e1f22 deepest → #2b2d31
+ *      sidebar → #313338 chat surface), pixel-snapped 1px dividers at
+ *      low alpha, rounded-square server avatars that morph to circles.
+ *   2. gg sans (friendly geometric, Whitney-replacement) for all text at
+ *      400/500/600/700/800 weights; 16px body never shrinks; hierarchy
+ *      comes from weight contrast over color contrast.
+ *   3. Blurple (#5865f2) as the single saturated accent — reserved for
+ *      brand mark, primary CTAs, mentions, and "you" affordances; used
+ *      sparingly so it pops against the muted dark surface.
+ *
+ * Schema decisions:
+ *   - --bg: #313338 (chat surface / primary dark); --surface: #2b2d31.
+ *   - --surface-warm: #191a1e (deepest — server list rail, level below).
+ *   - --fg: #dbdee1 (text-normal — cooler than pure white).
+ *   - --fg-2: #f2f3f5 (header-primary — modal titles, channel headers).
+ *   - --muted: #949ba4 (text-muted — timestamps, metadata).
+ *   - --border: rgba(255,255,255,0.06); --border-soft: same.
+ *   - --accent: #5865f2 (Blurple); --accent-hover: #4752c4.
+ *   - --tracking-display: -0.02em (display 56px hero per DESIGN.md).
+ *   - --radius-sm: 4px (buttons/inputs); --radius-md: 8px (cards).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #313338;              /* chat surface / primary dark */
+  --surface:      #2b2d31;              /* channel sidebar, settings sidebar */
+  --surface-warm: #1e1f22;             /* server list rail — deepest layer */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #dbdee1;                      /* text-normal — slightly cooler than white */
+  --fg-2: #f2f3f5;                      /* header-primary — modal titles */
+  --muted: #949ba4;                     /* text-muted — timestamps, server names */
+  --meta:  #80848e;                     /* channels-default — inactive sidebar names */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.06);  /* standard divider */
+  --border-soft: #3f4147;                    /* solid divider for cards */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #5865f2;            /* Blurple — brand primary CTA */
+  --accent-on:     #ffffff;
+  --accent-hover:  #4752c4;            /* darker hover */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #23a55a;                  /* status-online green */
+  --warn:    #f0b232;                  /* status-idle yellow */
+  --danger:  #f23f43;                  /* status-dnd / destructive red */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "gg sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    "gg sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    "gg mono", Consolas, "Andale Mono", "Courier New", Courier, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Discord: 56px display, 24px page heading, 16px body (never shrinks).
+   * Schema spine: xs=12 (timestamp/caption), base=16, 4xl=56. */
+  --text-xs:   12px;                   /* timestamp / caption / meta */
+  --text-sm:   14px;                   /* compact metadata */
+  --text-base: 16px;                   /* message body — never below 16px */
+  --text-lg:   18px;                   /* feature heading */
+  --text-xl:   20px;                   /* sub-heading */
+  --text-2xl:  24px;                   /* page heading — settings/profile */
+  --text-3xl:  32px;                   /* section heading */
+  --text-4xl:  56px;                   /* display hero — marketing */
+
+  /* Leading + tracking.
+   * --leading-tight=1.10: 56px hero compression.
+   * h2 (32px) → 1.20; h3 (24px) → 1.25 per brand feel.
+   * --tracking-display: -0.02em (display 56px per DESIGN.md). */
+  --leading-body:     1.375;
+  --leading-tight:    1.10;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 4px base grid per DESIGN.md §Spacing & Layout. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 40px;
+
+  /* Section rhythm. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 4px for buttons/inputs; 8px for cards. Rounded but not balloon-soft. */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Dark surfaces: luminance stepping; semi-transparent white borders
+     as depth signal rather than drop shadows. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: rgba(0, 0, 0, 0.4) 0px 2px 4px, 0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px rgba(88, 101, 242, 0.3);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   80ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

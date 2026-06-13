@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-opencode-ai",
+  "title": "OpenCode",
+  "title_i18n": {
+    "zh-CN": "OpenCode",
+    "zh-TW": "OpenCode",
+    "ja": "OpenCode",
+    "ko": "OpenCode",
+    "de": "OpenCode",
+    "fr": "OpenCode",
+    "ru": "OpenCode",
+    "es": "OpenCode",
+    "pt-BR": "OpenCode",
+    "it": "OpenCode",
+    "vi": "OpenCode",
+    "pl": "OpenCode",
+    "id": "OpenCode",
+    "nl": "OpenCode",
+    "ar": "OpenCode",
+    "tr": "OpenCode",
+    "uk": "OpenCode",
+    "en": "OpenCode"
+  },
+  "version": "0.1.0",
+  "description": "AI coding platform. Developer-centric dark theme.",
+  "description_i18n": {
+    "zh-CN": "AI 编程平台。开发者友好的深色主题。",
+    "zh-TW": "AI 編程平台。開發者友好的深色主題。",
+    "ja": "AIコーディングプラットフォーム。開発者向けダークテーマ。",
+    "ko": "AI 코딩 플랫폼. 개발자 중심의 다크 테마.",
+    "de": "KI-Codierungsplattform. Entwicklerzentriertes dunkles Theme.",
+    "fr": "Plateforme de codage IA. Thème sombre orienté développeur.",
+    "ru": "Платформа для программирования с ИИ. Тёмная тема для разработчиков.",
+    "es": "Plataforma de codificación con IA. Tema oscuro centrado en desarrolladores.",
+    "pt-BR": "Plataforma de codificação com IA. Tema escuro focado em desenvolvedores.",
+    "it": "Piattaforma di codifica AI. Tema scuro incentrato sugli sviluppatori.",
+    "vi": "Nền tảng lập trình AI. Giao diện tối dành cho lập trình viên.",
+    "pl": "Platforma kodowania AI. Ciemny motyw skoncentrowany na programistach.",
+    "id": "Platform coding AI. Tema gelap yang berpusat pada pengembang.",
+    "nl": "AI-coderingsplatform. Ontwikkelaarsgericht donker thema.",
+    "ar": "منصة برمجة بالذكاء الاصطناعي. سمة داكنة تركز على المطورين.",
+    "tr": "Yapay zeka kodlama platformu. Geliştirici odaklı koyu tema.",
+    "uk": "Платформа для програмування зі штучним інтелектом. Темна тема для розробників.",
+    "en": "AI coding platform. Developer-centric dark theme."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the OpenCode design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the OpenCode design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "opencode-ai",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

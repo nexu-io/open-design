@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Craft references loader. The active skill declares which sections it
 // needs via `od.craft.requires`; this module reads the matching files
 // from <projectRoot>/craft/<slug>.md and returns a single concatenated
@@ -18,13 +17,13 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
  *   body is the concatenated markdown (each file preceded by a level-3
  *   section header). sections lists which slugs actually resolved.
  */
-export async function loadCraftSections(craftDir, requested) {
+export async function loadCraftSections(craftDir: string, requested: unknown[]) {
   if (!craftDir || !Array.isArray(requested) || requested.length === 0) {
     return { body: "", sections: [] };
   }
-  const seen = new Set();
-  const parts = [];
-  const sections = [];
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  const sections: string[] = [];
   for (const raw of requested) {
     if (typeof raw !== "string") continue;
     const slug = raw.trim().toLowerCase();

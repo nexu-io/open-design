@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-nyt-graph",
+  "title": "NYT Graph",
+  "title_i18n": {
+    "en": "NYT Graph",
+    "zh-CN": "NYT 图表"
+  },
+  "version": "0.1.0",
+  "description": "Animated data chart in print editorial style",
+  "description_i18n": {
+    "en": "Animated data chart in print editorial style",
+    "zh-CN": "《纽约时报》社论风格的数据图表动效，克制的排版与坐标轴逐步浮现，适合数据叙事。"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-nyt-graph",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "data",
+    "chart",
+    "editorial",
+    "nyt",
+    "line-graph",
+    "data-viz"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-nyt-graph/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-nyt-graph/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the NYT Graph HyperFrames template to create a 15s data-viz video. Replace the sample copy with real content, preserve the template's motion signature, and render to MP4.",
+        "zh-CN": "使用「NYT 图表」HyperFrames 模板创建一段约 15 秒的data-viz动效视频。把示例文案替换为真实内容，保留模板的动效签名，并渲染为 MP4。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 15
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "attribution": [
+      {
+        "name": "hyperframes registry/examples/nyt-graph",
+        "license": "Apache-2.0",
+        "author": "heygen-com / Hyperframes",
+        "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/nyt-graph"
+      }
+    ]
+  }
+}

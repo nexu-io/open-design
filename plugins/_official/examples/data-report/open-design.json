@@ -1,0 +1,126 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-data-report",
+  "title": "Data Visualization Report",
+  "title_i18n": {
+    "en": "Data Visualization Report",
+    "zh-CN": "数据可视化报告",
+    "zh-TW": "資料視覺化報告",
+    "ja": "データビジュアライゼーションレポート",
+    "ko": "데이터 시각화 보고서",
+    "de": "Datenvisualisierungsbericht",
+    "fr": "Rapport de Visualisation de Données",
+    "ru": "Отчет визуализации данных",
+    "es": "Informe de Visualización de Datos",
+    "pt-BR": "Relatório de Visualização de Dados",
+    "it": "Report di Visualizzazione Dati",
+    "vi": "Báo Cáo Trực Quan Hóa Dữ Liệu",
+    "pl": "Raport Wizualizacji Danych",
+    "id": "Laporan Visualisasi Data",
+    "nl": "Datavisualisatierapport",
+    "ar": "تقرير تصور البيانات",
+    "tr": "Veri Görselleştirme Raporu",
+    "uk": "Звіт візуалізації даних"
+  },
+  "version": "0.1.0",
+  "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+  "description_i18n": {
+    "en": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+    "zh-CN": "把 CSV/Excel/JSON 数据转成漂亮的可视化报告页",
+    "zh-TW": "將 CSV、Excel 或 JSON 資料轉換為精美的視覺化報告頁面。",
+    "ja": "CSV、Excel、または JSON データを洗練されたビジュアルレポートページに変換します。",
+    "ko": "CSV, Excel 또는 JSON 데이터를 세련된 시각적 보고서 페이지로 변환합니다.",
+    "de": "Verwandelt CSV-, Excel- oder JSON-Daten in eine ansprechende visuelle Berichtsseite.",
+    "fr": "Transforme les données CSV, Excel ou JSON en une page de rapport visuel soigné.",
+    "ru": "Преобразует данные CSV, Excel или JSON в наглядную страницу отчета.",
+    "es": "Convierte datos CSV, Excel o JSON en una página de informe visual refinada.",
+    "pt-BR": "Transforma dados CSV, Excel ou JSON em uma página de relatório visual refinada.",
+    "it": "Trasforma dati CSV, Excel o JSON in una pagina di report visivo raffinato.",
+    "vi": "Chuyển đổi dữ liệu CSV, Excel hoặc JSON thành trang báo cáo trực quan chuyên nghiệp.",
+    "pl": "Przekształca dane CSV, Excel lub JSON w dopracowaną wizualną stronę raportu.",
+    "id": "Mengubah data CSV, Excel, atau JSON menjadi halaman laporan visual yang rapi.",
+    "nl": "Zet CSV-, Excel- of JSON-gegevens om in een gepolijste visuele rapportpagina.",
+    "ar": "يحول بيانات CSV أو Excel أو JSON إلى صفحة تقرير مرئي احترافي.",
+    "tr": "CSV, Excel veya JSON verilerini şık bir görsel rapor sayfasına dönüştürür.",
+    "uk": "Перетворює дані CSV, Excel або JSON на відшліфовану сторінку візуального звіту."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/data-report",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "finance",
+    "web",
+    "desktop",
+    "data",
+    "report",
+    "chart",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "finance",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Data Visualization Report template to turn my CSV, Excel, or JSON data into a polished visual report page. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「数据可视化报告」模板把我的内容做成一份「把 CSV/Excel/JSON 数据转成漂亮的可视化报告页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Data Visualization Report",
+          "title_i18n": {
+            "en": "Data Visualization Report",
+            "zh-CN": "数据可视化报告"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

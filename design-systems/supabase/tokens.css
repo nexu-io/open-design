@@ -1,0 +1,294 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/supabase/tokens.css
+ *
+ * Structured token bindings for "Supabase" — the open-source Firebase
+ * alternative whose marketing surface reads like a dark-mode editor that
+ * grew up: near-black canvas (#171717), Postgres-emerald (#3ecf8e) reserved
+ * for the chromatic moments, Circular geometric sans for prose, Source
+ * Code Pro uppercase for the developer-console voice, and depth carried
+ * by a tight border hierarchy instead of drop shadows.
+ *
+ * Agents generating an artifact for Supabase should paste the `:root`
+ * block verbatim into the first `<style>` of the artifact, then reference
+ * everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each bends a schema convention to
+ * match Supabase's voice rather than the cross-brand default):
+ *
+ *   1. `--bg: #171717` and `--surface: #1c1c1c` instead of pure black.
+ *      DESIGN.md §1: "deep black backgrounds (`#0f0f0f`, `#171717`)" but
+ *      "never pure black". The #1c1c1c surface gives cards a faint
+ *      luminance step above the page without warm-shifting; Supabase
+ *      has no warm tier, so `--surface-warm` aliases `--surface` rather
+ *      than introducing a tint that doesn't exist in the brand.
+ *
+ *   2. Four-level foreground ramp — `#fafafa → #b4b4b4 → #898989 →
+ *      #4d4d4d` — bound to `--fg / --fg-2 / --muted / --meta`. DESIGN.md
+ *      §2 documents exactly these four text tiers (Off White / Light
+ *      Gray / Mid Gray / Dark Gray) and §9 calls them out as the
+ *      primary / secondary / muted / heavy-secondary ramp. Binding them
+ *      independently (no aliasing) lets the marketing surface render
+ *      genuine four-tier hierarchy — the dark canvas hides any two-tier
+ *      collapse, so the differentiation is real.
+ *
+ *   3. `--border: #2e2e2e` and `--border-soft: #242424` as solid hex,
+ *      not rgba. DESIGN.md §6 makes border-as-depth THE depth system
+ *      ("depth comes from borders, not shadows") and §9 names #242424
+ *      as the subtle tier and #2e2e2e as the standard tier. The hex
+ *      form (instead of rgba over the dark bg) is intentional: it
+ *      keeps the border's luminance constant regardless of what surface
+ *      it sits on, which is the brand's "edges define" promise.
+ *
+ *   4. `--accent: #3ecf8e` — Supabase brand green, the Postgres-emerald
+ *      identity marker. Used SPARINGLY (DESIGN.md §1: "always as a
+ *      signal of 'this is Supabase' rather than as a decorative
+ *      element"). `--accent-on` is `#0f0f0f` (near-black), not the
+ *      schema default of `#ffffff`, because emerald at this luminance
+ *      reads with dark text far better than white — the contrast ratio
+ *      against the bright green is what makes the brand button legible.
+ *      `--accent-hover` binds to `#00c573`, the documented "green link"
+ *      color (DESIGN.md §2 Brand) — Supabase ships TWO emerald values
+ *      with semantic distinction (brand vs. interactive) and the
+ *      hover state is exactly where the interactive variant belongs.
+ *
+ *   5. `--font-display` and `--font-body` share the Circular stack.
+ *      Hierarchy comes from size + weight (400 for prose, 500 for
+ *      interactive), never from a separate display face. DESIGN.md §3
+ *      Principles: "There is no bold (700) in the detected system —
+ *      hierarchy is created through size, not weight."
+ *      `--font-mono: "Source Code Pro"` for the developer-console
+ *      voice — the uppercase technical labels with 1.2px tracking that
+ *      DESIGN.md §3 calls "the developer-console marker that connects
+ *      the marketing site to the product".
+ *
+ *   6. `--text-4xl: 72px` with `--leading-tight: 1.00`. DESIGN.md §3
+ *      makes the 1.00 hero line-height "the defining typographic
+ *      gesture — text that feels like a terminal command: dense,
+ *      efficient, no wasted vertical space." Tracking stays at
+ *      `normal` (per DESIGN.md §3 hero row) — Supabase reads dense
+ *      from the leading collapse, not from negative letter-spacing
+ *      like Vercel's `-0.05em`.
+ *
+ *   7. Section rhythm is generous: 128px desktop, 80px tablet, 48px
+ *      phone. DESIGN.md §5 names 90–128px desktop spacing as
+ *      "dramatic, cinematic pacing — each section is its own scene in
+ *      the dark void". The top of that range (128px) matches the
+ *      brand's confidence; the 48px phone floor is the documented
+ *      mobile collapse.
+ *
+ *   8. Radius scale 6 / 8 / 16 / 9999. DESIGN.md §5: standard 6px
+ *      (ghost buttons, secondary), comfortable 8px (cards), large 16px
+ *      (feature cards), pill 9999px (primary CTAs and tab indicators).
+ *      DESIGN.md §7 forbids the 16px tier on buttons — "pills (9999px)
+ *      or standard (6px), nothing in between". Component CSS enforces
+ *      that policy at the component level.
+ *
+ *   9. `--elev-raised` uses the brand's "border + minimal shadow"
+ *      compromise: `0 0 0 1px var(--border), 0 4px 12px rgba(0, 0, 0,
+ *      0.4)`. DESIGN.md §6 says Supabase "deliberately avoids shadows"
+ *      but uses `rgba(0, 0, 0, 0.1) 0px 4px 12px` for focus states —
+ *      we deepen that alpha for the raised tier so a card actually
+ *      separates from the dark canvas, while keeping the ring as the
+ *      primary depth signal.
+ *
+ *  10. `--focus-ring` is a 2px ring at `color-mix(var(--accent),
+ *      transparent 50%)` — the green-tinted halo that DESIGN.md §6
+ *      Level 3 names as the "brand-highlighted" elevation. On a near-
+ *      black canvas the schema's default (3px alpha glow over accent)
+ *      reads weak; 2px at 50% transparency lands at the documented
+ *      `rgba(62, 207, 142, 0.3)`-ish weight and stays unmistakably
+ *      Supabase.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the schema. Circular and Source Code Pro do not need
+ * a CDN reference here — the font stacks list Helvetica Neue / Menlo
+ * fallbacks so artifacts render acceptably even when the brand faces
+ * are not loaded, and any host that wants the real Circular face links
+ * it externally.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — schema slot) ─────────────────────────────
+   * #171717 is the documented page canvas (DESIGN.md §1 "Dark"). The
+   * card surface bumps one luminance step to #1c1c1c so elevated
+   * containers carry a faint lift without warm-shifting — Supabase
+   * has no warm tier, so `--surface-warm` aliases `--surface` exactly
+   * the way Vercel's achromatic canvas does. */
+  --bg: #171717;
+  --surface: #1c1c1c;
+  --surface-warm: var(--surface);            /* alias — Supabase has no warm tier */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Off White → Light Gray → Mid Gray → Dark Gray, the documented
+   * four-tier text scale from DESIGN.md §2. Each tier is independently
+   * bound (no aliasing) because Supabase genuinely uses four distinct
+   * text registers: heading white, body silver, caption gray, and
+   * tertiary metadata gray. The four-stop ramp is the typography
+   * system; collapsing it to two tiers would flatten the marketing
+   * surface's voice. */
+  --fg: #fafafa;                             /* Off White — primary text, headings */
+  --fg-2: #b4b4b4;                           /* Light Gray — secondary body, links */
+  --muted: #898989;                          /* Mid Gray — captions, footer, muted */
+  --meta: #4d4d4d;                           /* Dark Gray — tertiary metadata, disabled */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Border-as-depth is THE depth system (DESIGN.md §6: "depth comes
+   * from borders, not shadows"). #2e2e2e is the standard card edge,
+   * #242424 the inner-row divider that "should not visually compete".
+   * Solid hex (not rgba over bg) keeps luminance constant regardless
+   * of what surface the border sits on. */
+  --border: #2e2e2e;                         /* standard border — cards, tabs, dividers */
+  --border-soft: #242424;                    /* subtle divider — inner row separators */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Supabase brand emerald — the Postgres-green identity marker.
+   * Hard cap of ≤2 visible uses per screen (lint enforced) because
+   * DESIGN.md §7 forbids using green "to backgrounds or large
+   * surfaces — it's for borders, links, and small accents".
+   *
+   * `--accent-on` is `#0f0f0f` (near-black), NOT the schema default
+   * `#ffffff` — bright emerald reads with dark text far better than
+   * white, and #0f0f0f is the documented "near-black" button surface
+   * already in the brand's neutral scale.
+   *
+   * `--accent-hover` is `#00c573` — DESIGN.md §2 documents this as
+   * the "green link" interactive variant of the brand color. Mapping
+   * it to the hover state preserves the brand's distinction between
+   * identity-green (#3ecf8e) and interactive-green (#00c573). */
+  --accent: #3ecf8e;                         /* Supabase emerald — brand identity marker */
+  --accent-on: #0f0f0f;                      /* near-black label on bright emerald */
+  --accent-hover: #00c573;                   /* documented interactive green link variant */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Supabase's marketing surface rarely renders state. DESIGN.md §7
+   * specifically forbids using the Radix warm tones (crimson, orange)
+   * as primary design elements — they exist purely as semantic
+   * tokens. We inherit the schema defaults rather than designing a
+   * custom warm palette that doesn't appear in the brand voice. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * Circular is Supabase's signature face — a geometric sans-serif
+   * with rounded terminals that softens the technical edge.
+   * `--font-display` and `--font-body` share the stack; the Helvetica
+   * Neue / Helvetica / Arial fallbacks come straight from DESIGN.md
+   * §3 and ensure artifacts render legibly even when Circular is not
+   * loaded. Source Code Pro is the developer-console voice — the
+   * uppercase technical labels with 1.2px tracking that DESIGN.md §3
+   * calls "the marker that connects the marketing site to the
+   * product". Office Code Pro / Menlo fallbacks match DESIGN.md §3. */
+  --font-display: "Circular", "custom-font", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Circular", "custom-font", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "Source Code Pro", "Office Code Pro", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * The scale tops out at 72px (display hero) and shoots straight up
+   * from 36px (section heading) — the missing intermediate steps are
+   * deliberate. Supabase reads BIG because the hero leading collapses
+   * to 1.00, not because the px count climbs gradually. */
+  --text-xs: 12px;                           /* small — fine print, code labels */
+  --text-sm: 14px;                           /* button, nav link, caption */
+  --text-base: 16px;                         /* body — standard reading */
+  --text-lg: 18px;                           /* sub-heading — secondary headings */
+  --text-xl: 24px;                           /* card title */
+  --text-2xl: 32px;                          /* mid-large heading */
+  --text-3xl: 36px;                          /* section heading */
+  --text-4xl: 72px;                          /* display hero — terminal-density */
+
+  /* `--leading-tight` is 1.00 — DESIGN.md §3 names this "the defining
+   * typographic gesture" and forbids relaxing it ("Don't increase
+   * hero line-height above 1.00 — the density is intentional").
+   * `--tracking-display` is `normal` (DESIGN.md §3 hero row) —
+   * Supabase reads dense from the leading collapse, not from negative
+   * letter-spacing like Vercel's -0.05em. */
+  --leading-body: 1.5;
+  --leading-tight: 1.00;
+  --tracking-display: normal;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 4px-grid base scale. DESIGN.md §5 documents micro-stops (1px /
+   * 4px / 6px) that are too fine to belong in the shared schema —
+   * those are inlined per-component when needed. The 4/8/12/16/20/
+   * 24/32/48 tier covers the structural rhythm of cards and stacks. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "Dramatic section spacing 90–128px
+   * creates a cinematic pacing — each section is its own scene in the
+   * dark void". We sit at the top of that range (128px desktop) to
+   * honor the brand confidence, drop to 80px on tablet, and 48px on
+   * phone (the documented mobile floor). */
+  --section-y-desktop: 128px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 6 / 8 / 11–12 / 16 / 9999. We bind
+   * the four schema tiers to 6 (ghost / functional / secondary), 8
+   * (cards / containers), 16 (feature cards / major containers),
+   * 9999 (primary CTAs and pill tabs). The 11–12px mid-panel tier is
+   * component-specific and not part of the shared schema. DESIGN.md
+   * §7 forbids in-between radii on buttons — components MUST pick
+   * pill or 6px, never 8/12/16. */
+  --radius-sm: 6px;                          /* ghost buttons, secondary, functional */
+  --radius-md: 8px;                          /* cards, containers */
+  --radius-lg: 16px;                         /* feature cards, major containers */
+  --radius-pill: 9999px;                     /* primary CTAs, tab indicators */
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * DESIGN.md §6: Supabase "deliberately avoids shadows" because they
+   * read as invisible on a dark canvas; depth is the border hierarchy
+   * (#242424 → #2e2e2e → #393939 → green-accent border). We map:
+   *
+   *   --elev-flat    no shadow (page background, text blocks)
+   *   --elev-ring    1px hairline ring at --border (the standard tier)
+   *   --elev-raised  ring + minimal ambient shadow (the brand's
+   *                  compromise: DESIGN.md's focus shadow alpha
+   *                  deepened from 0.1 to 0.4 so a card actually
+   *                  separates from the dark canvas at distance) */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border), 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * 2px ring at `color-mix(var(--accent), transparent 50%)` — the
+   * green-tinted halo that DESIGN.md §6 Level 3 names the "brand-
+   * highlighted" elevation (`rgba(62, 207, 142, 0.3)`). On a near-
+   * black canvas the schema's default 3px alpha glow reads weak;
+   * 2px at 50% transparency lands at the documented weight and stays
+   * unmistakably Supabase without dominating the surface. */
+  --focus-ring: 0 0 0 2px color-mix(in oklab, var(--accent), transparent 50%);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Two durations + one easing curve, per the anti-ai-slop "short,
+   * purposeful transitions (150–250ms) with stable easing". Supabase
+   * transitions are quick and unobtrusive — the brand reads as
+   * engineered, never choreographed. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1200px max content width — typical for marketing surfaces.
+   * Mobile gutter holds at 16px (instead of dropping to 12px) so
+   * code blocks and badges retain padding context on small screens;
+   * Supabase's developer-doc voice rarely edge-bleeds. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 16px;
+}

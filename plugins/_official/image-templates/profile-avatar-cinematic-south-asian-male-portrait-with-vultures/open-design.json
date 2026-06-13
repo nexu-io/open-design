@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-cinematic-south-asian-male-portrait-with-vultures",
+  "title": "Profile / Avatar - Cinematic South Asian Male Portrait with Vultures",
+  "title_i18n": {
+    "zh-CN": "个人资料 / 头像 - 电影感南亚男性肖像与秃鹫",
+    "zh-TW": "個人資料 / 頭像 - 電影感南亞男性肖像與禿鷲",
+    "ja": "プロフィール / アバター - シネマティック南アジア男性ポートレート（ハゲワシ付き）",
+    "ko": "프로필 / 아바타 - 독수리가 있는 영화적 남아시아 남성 초상화",
+    "de": "Profil / Avatar - Cinematisches südasiatisches männliches Porträt mit Geiern",
+    "fr": "Profil / Avatar - Portrait cinématographique d'homme sud-asiatique avec vautours",
+    "ru": "Профиль / Аватар - Кинематографический портрет южноазиатского мужчины со стервятниками",
+    "es": "Perfil / Avatar - Retrato cinematográfico de hombre sudasiático con buitres",
+    "pt-BR": "Perfil / Avatar - Retrato cinematográfico de homem sul-asiático com abutres",
+    "it": "Profilo / Avatar - Ritratto cinematografico di uomo sud-asiatico con avvoltoi",
+    "vi": "Hồ sơ / Ảnh đại diện - Chân dung điện ảnh nam giới Nam Á với kền kền",
+    "pl": "Profil / Awatar - Kinowy portret mężczyzny z Azji Południowej z sępami",
+    "id": "Profil / Avatar - Potret Sinematik Pria Asia Selatan dengan Burung Nasar",
+    "nl": "Profiel / Avatar - Filmisch Zuid-Aziatisch mannelijk portret met gieren",
+    "ar": "الملف الشخصي / الصورة الرمزية - صورة سينمائية لرجل من جنوب آسيا مع النسور",
+    "tr": "Profil / Avatar - Akbabalarla Sinematik Güney Asyalı Erkek Portresi",
+    "uk": "Профіль / Аватар - Кінематографічний портрет південноазіатського чоловіка зі стерв'ятниками",
+    "en": "Profile / Avatar - Cinematic South Asian Male Portrait with Vultures"
+  },
+  "version": "0.1.0",
+  "description": "A detailed cinematic portrait of a young South Asian man in a moody, dark fantasy setting surrounded by vultures and ravens.",
+  "description_i18n": {
+    "zh-CN": "一幅充满氛围感的南亚年轻男性肖像，置身于黑暗奇幻场景中，周围环绕着秃鹫和乌鸦。",
+    "zh-TW": "一幅充滿氛圍感的南亞年輕男性肖像，置身於黑暗奇幻場景中，周圍環繞著禿鷲和烏鴉。",
+    "ja": "ハゲワシとカラスに囲まれた、ムーディーなダークファンタジー設定の南アジア系青年の詳細なシネマティックポートレート。",
+    "ko": "독수리와 까마귀로 둘러싸인 어둡고 무드 있는 다크 판타지 배경의 남아시아 청년 시네마틱 초상화.",
+    "de": "Ein detailliertes cinematisches Porträt eines jungen südasiatischen Mannes in einer stimmungsvollen Dark-Fantasy-Umgebung, umgeben von Geiern und Raben.",
+    "fr": "Un portrait cinématographique détaillé d'un jeune homme sud-asiatique dans un cadre dark fantasy atmosphérique, entouré de vautours et de corbeaux.",
+    "ru": "Детальный кинематографический портрет молодого южноазиатского мужчины в атмосферном тёмно-фэнтезийном окружении со стервятниками и воронами.",
+    "es": "Un retrato cinematográfico detallado de un joven sudasiático en un ambiente oscuro y fantástico, rodeado de buitres y cuervos.",
+    "pt-BR": "Um retrato cinematográfico detalhado de um jovem sul-asiático em um cenário de fantasia sombria e atmosférico, cercado por abutres e corvos.",
+    "it": "Un ritratto cinematografico dettagliato di un giovane uomo sud-asiatico in un'ambientazione dark fantasy suggestiva, circondato da avvoltoi e corvi.",
+    "vi": "Chân dung điện ảnh chi tiết của một thanh niên Nam Á trong bối cảnh giả tưởng tối u đầy không khí, được bao quanh bởi kền kền và quạ.",
+    "pl": "Szczegółowy kinowy portret młodego mężczyzny z Azji Południowej w nastrojowej, mrocznej fantasy scenerii otoczonego sępami i krukami.",
+    "id": "Potret sinematik detail seorang pria muda Asia Selatan dalam setting dark fantasy yang moody, dikelilingi burung nasar dan gagak.",
+    "nl": "Een gedetailleerd filmisch portret van een jonge Zuid-Aziatische man in een sfeervolle, donkere fantasysetting omringd door gieren en raven.",
+    "ar": "صورة سينمائية مفصلة لشاب من جنوب آسيا في إطار خيالي مظلم ومليء بالأجواء، محاط بالنسور والغربان.",
+    "tr": "Akbabalar ve kargalarla çevrili, kasvetli ve karanlık fantezi ortamında genç bir Güney Asyalı erkeğin detaylı sinematik portresi.",
+    "uk": "Детальний кінематографічний портрет молодого південноазіатського чоловіка в атмосферному темно-фентезійному оточенні зі стерв'ятниками та воронами.",
+    "en": "A detailed cinematic portrait of a young South Asian man in a moody, dark fantasy setting surrounded by vultures and ravens."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Jahan Zaib",
+    "url": "https://x.com/jzaib4269/status/2048949396222489081"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453132629_dmkonb_HG9Und1aYAAyo9g.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed cinematic portrait of a handsome {argument name=\"ethnicity\" default=\"South Asian\"} man in his late 20s or early 30s, sitting on a metal railing with a soccer goal net behind him. He has sharp facial features, dark styled hair, light stubble, and intense dark eyes. He is wearing a {argument name=\"clothing\" default=\"black zip-up hoodie, black sweatpants, and white speckled sneakers\"}. His hands are clasped together resting on his knees as he looks directly at the viewer with a confident, slightly brooding expression.\n\nHe is surrounded by a dramatic flock of large black vultures and ravens. Some vultures are flying with wings spread in a dark stormy sky, while others are perched on the railing and goalpost near him. The atmosphere is {argument name=\"atmosphere\" default=\"dark, moody, and cinematic\"} with heavy storm clouds, dramatic lighting, and a mysterious, powerful vibe. High contrast, moody color grading, ultra-realistic, photorealistic, epic composition, dark fantasy aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed cinematic portrait of a handsome {argument name=\"ethnicity\" default=\"South Asian\"} man in his late 20s or early 30s, sitting on a metal railing with a soccer goal net behind him. He has sharp facial features, dark styled hair, light stubble, and intense dark eyes. He is wearing a {argument name=\"clothing\" default=\"black zip-up hoodie, black sweatpants, and white speckled sneakers\"}. His hands are clasped together resting on his knees as he looks directly at the viewer with a confident, slightly brooding expression.\n\nHe is surrounded by a dramatic flock of large black vultures and ravens. Some vultures are flying with wings spread in a dark stormy sky, while others are perched on the railing and goalpost near him. The atmosphere is {argument name=\"atmosphere\" default=\"dark, moody, and cinematic\"} with heavy storm clouds, dramatic lighting, and a mysterious, powerful vibe. High contrast, moody color grading, ultra-realistic, photorealistic, epic composition, dark fantasy aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

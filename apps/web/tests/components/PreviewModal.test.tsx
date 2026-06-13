@@ -20,7 +20,7 @@ describe('PreviewModal sandbox isolation', () => {
       />,
     );
 
-    expect(markup).toContain('sandbox="allow-scripts"');
+    expect(markup).toContain('sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"');
     expect(markup).not.toContain('allow-same-origin');
     expect(markup).toContain('srcDoc=');
   });
@@ -42,8 +42,28 @@ describe('PreviewModal sandbox isolation', () => {
       />,
     );
 
-    expect(markup).toContain('sandbox="allow-scripts"');
+    expect(markup).toContain('sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"');
     expect(markup).not.toContain('allow-same-origin');
     expect(markup).toContain('od:slide');
+  });
+
+  it('includes popup flags in the sandbox attribute', () => {
+    const markup = renderToStaticMarkup(
+      <PreviewModal
+        title="Popup preview"
+        views={[
+          {
+            id: 'popup',
+            label: 'Popup',
+            html: '<button onclick="window.open(\'https://example.com\')">Open Popup</button>',
+          },
+        ]}
+        exportTitleFor={() => 'popup-preview'}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('allow-popups');
+    expect(markup).toContain('allow-popups-to-escape-sandbox');
   });
 });

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-crimson-horizon-sci-fi-cinematic-sequence",
+  "title": "Crimson Horizon Sci-Fi Cinematic Sequence",
+  "title_i18n": {
+    "zh-CN": "深红地平线科幻电影序列",
+    "zh-TW": "深紅地平線科幻電影序列",
+    "ja": "クリムゾン・ホライズン SF映画シーケンス",
+    "ko": "크림슨 호라이즌 SF 영화 시퀀스",
+    "de": "Crimson Horizon Sci-Fi-Filmsequenz",
+    "fr": "Séquence cinématographique Sci-Fi Crimson Horizon",
+    "ru": "Кинематографическая последовательность Crimson Horizon в жанре научной фантастики",
+    "es": "Secuencia cinematográfica de ciencia ficción Crimson Horizon",
+    "pt-BR": "Sequência cinematográfica de ficção científica Crimson Horizon",
+    "it": "Sequenza cinematografica Sci-Fi Crimson Horizon",
+    "vi": "Chuỗi cảnh phim khoa học viễn tưởng Crimson Horizon",
+    "pl": "Sekwencja filmowa Sci-Fi Crimson Horizon",
+    "id": "Urutan Sinematik Sci-Fi Crimson Horizon",
+    "nl": "Crimson Horizon Sci-Fi filmsequentie",
+    "ar": "تسلسل سينمائي خيال علمي Crimson Horizon",
+    "tr": "Crimson Horizon Bilim Kurgu Sinematik Sekans",
+    "uk": "Кінематографічна послідовність Crimson Horizon у жанрі наукової фантастики",
+    "en": "Crimson Horizon Sci-Fi Cinematic Sequence"
+  },
+  "version": "0.1.0",
+  "description": "A comprehensive 9-shot cinematic video sequence for a sci-fi film titled 'Crimson Horizon', detailing everything from a rocket launch to an eerie alien encounter on Mars.",
+  "description_i18n": {
+    "zh-CN": "科幻电影《深红地平线》的完整9镜头电影视频序列，涵盖从火箭发射到火星上诡异外星人遭遇的所有场景。",
+    "zh-TW": "科幻電影《深紅地平線》的完整9鏡頭電影視訊序列，涵蓋從火箭發射到火星上詭異外星人遭遇的所有場景。",
+    "ja": "SF映画『クリムゾン・ホライズン』の包括的な9ショット映像シーケンス。ロケット発射から火星での不気味な宇宙人との遭遇まで、すべてのシーンを収録。",
+    "ko": "SF 영화 '크림슨 호라이즌'의 포괄적인 9개 샷 영화 비디오 시퀀스로, 로켓 발사부터 화성에서의 으스스한 외계인 조우까지 모든 장면을 담고 있습니다.",
+    "de": "Eine umfassende 9-Shot-Videosequenz für den Sci-Fi-Film 'Crimson Horizon', die alles vom Raketenstart bis zur unheimlichen Alien-Begegnung auf dem Mars zeigt.",
+    "fr": "Une séquence vidéo cinématographique complète de 9 plans pour le film de science-fiction 'Crimson Horizon', détaillant tout du lancement de fusée à la rencontre extraterrestre inquiétante sur Mars.",
+    "ru": "Полная кинематографическая видеопоследовательность из 9 кадров для научно-фантастического фильма 'Crimson Horizon', охватывающая всё от запуска ракеты до жуткой встречи с инопланетянами на Марсе.",
+    "es": "Una secuencia de video cinematográfica completa de 9 tomas para la película de ciencia ficción 'Crimson Horizon', que detalla desde el lanzamiento de un cohete hasta un espeluznante encuentro alienígena en Marte.",
+    "pt-BR": "Uma sequência de vídeo cinematográfica abrangente de 9 cenas para o filme de ficção científica 'Crimson Horizon', detalhando tudo desde o lançamento de um foguete até um sinistro encontro alienígena em Marte.",
+    "it": "Una sequenza video cinematografica completa di 9 inquadrature per il film di fantascienza 'Crimson Horizon', che descrive tutto dal lancio del razzo all'inquietante incontro alieno su Marte.",
+    "vi": "Chuỗi video điện ảnh toàn diện gồm 9 cảnh quay cho bộ phim khoa học viễn tưởng 'Crimson Horizon', mô tả mọi thứ từ phóng tên lửa đến cuộc gặp gỡ kỳ lạ với người ngoài hành tinh trên sao Hỏa.",
+    "pl": "Kompleksowa 9-ujęciowa sekwencja wideo kinowego dla filmu science fiction 'Crimson Horizon', przedstawiająca wszystko od startu rakiety po niesamowite spotkanie z obcymi na Marsie.",
+    "id": "Urutan video sinematik komprehensif 9 shot untuk film sci-fi 'Crimson Horizon', merinci semuanya mulai dari peluncuran roket hingga pertemuan alien yang menakutkan di Mars.",
+    "nl": "Een uitgebreide 9-shot filmische videosequentie voor de sci-fi film 'Crimson Horizon', met alles van een raketlancering tot een griezelige buitenaardse ontmoeting op Mars.",
+    "ar": "تسلسل فيديو سينمائي شامل من 9 لقطات لفيلم الخيال العلمي 'Crimson Horizon'، يوضح كل شيء من إطلاق الصاروخ إلى لقاء غامض مع كائنات فضائية على المريخ.",
+    "tr": "'Crimson Horizon' başlıklı bilim kurgu filmi için kapsamlı 9 çekimlik sinematik video sekansı; roket fırlatmadan Mars'taki ürkütücü uzaylı karşılaşmasına kadar her şeyi detaylandırır.",
+    "uk": "Повна кінематографічна відеопослідовність з 9 кадрів для науково-фантастичного фільму 'Crimson Horizon', що охоплює все від запуску ракети до моторошної зустрічі з інопланетянами на Марсі.",
+    "en": "A comprehensive 9-shot cinematic video sequence for a sci-fi film titled 'Crimson Horizon', detailing everything from a rocket launch to an eerie alien encounter on Mars."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "wonder",
+    "url": "https://x.com/WonderBoy023/status/2049086862858367347"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ff7d9d956d3e812f4f99cf99e0552382/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ff7d9d956d3e812f4f99cf99e0552382/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "SHOT 1: Cinematic wide angle format — rocket launching into night sky, city lights below, clouds parting, stars above. Dark, dramatic, photorealistic.\n\nSHOT 2: Medium two-shot format — man and woman in astronaut suits inside a dark capsule, Mars glowing red through the porthole behind them. Cinematic, intimate.\n\nSHOT 3: Dramatic aerial format — descent capsule burning through Mars atmosphere, heat shield glowing orange, red desert surface rushing up below. Hyperrealistic.\n\nSHOT 4: Ultra wide low angle format — two astronauts standing with backs to camera on Mars surface, vast red desert and amber sky stretching before them. Empty, eerie.\n\nSHOT 5: Extreme close-up format — female astronaut's gloved hand tracing ancient carved symbols on a canyon wall, helmet lamp lighting the carvings, her eyes wide with fear.\n\nSHOT 6: Tight close-up format — male astronaut's arm display glowing red reading \"UNKNOWN\", a massive dark shape looming behind him in the dust haze. Tense, cinematic.\n\nSHOT 7: Extreme wide format — colossal dark horned creature emerging from a dust storm, violet glowing eyes, two tiny astronauts dwarfed at the bottom of the frame. Cinematic horror.\n\nSHOT 8: Locked macro format — creature's enormous purple glowing eye filling the entire frame, two astronaut silhouettes reflected in the iris. Pure black background. Photorealistic.\n\nSHOT 9: Title card format — pure black background, bold cracked text reads CRIMSON HORIZON, tagline below: \"They came searching for life. Life was already waiting.\"",
+        "zh-CN": "使用这个插件完成以下任务：SHOT 1: Cinematic wide angle format — rocket launching into night sky, city lights below, clouds parting, stars above. Dark, dramatic, photorealistic.\n\nSHOT 2: Medium two-shot format — man and woman in astronaut suits inside a dark capsule, Mars glowing red through the porthole behind them. Cinematic, intimate.\n\nSHOT 3: Dramatic aerial format — descent capsule burning through Mars atmosphere, heat shield glowing orange, red desert surface rushing up below. Hyperrealistic.\n\nSHOT 4: Ultra wide low angle format — two astronauts standing with backs to camera on Mars surface, vast red desert and amber sky stretching before them. Empty, eerie.\n\nSHOT 5: Extreme close-up format — female astronaut's gloved hand tracing ancient carved symbols on a canyon wall, helmet lamp lighting the carvings, her eyes wide with fear.\n\nSHOT 6: Tight close-up format — male astronaut's arm display glowing red reading \"UNKNOWN\", a massive dark shape looming behind him in the dust haze. Tense, cinematic.\n\nSHOT 7: Extreme wide format — colossal dark horned creature emerging from a dust storm, violet glowing eyes, two tiny astronauts dwarfed at the bottom of the frame. Cinematic horror.\n\nSHOT 8: Locked macro format — creature's enormous purple glowing eye filling the entire frame, two astronaut silhouettes reflected in the iris. Pure black background. Photorealistic.\n\nSHOT 9: Title card format — pure black background, bold cracked text reads CRIMSON HORIZON, tagline below: \"They came searching for life. Life was already waiting.\""
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

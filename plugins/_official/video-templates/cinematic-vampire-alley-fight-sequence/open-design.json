@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-vampire-alley-fight-sequence",
+  "title": "Cinematic vampire alley fight sequence",
+  "title_i18n": {
+    "zh-CN": "电影风格吸血鬼巷战打斗场景",
+    "zh-TW": "電影風格吸血鬼巷戰打鬥場景",
+    "ja": "映画風ヴァンパイア路地戦闘シーン",
+    "ko": "시네마틱 뱀파이어 골목 전투 시퀀스",
+    "de": "Filmischer Vampir-Gassenkampf",
+    "fr": "Séquence de combat de vampire cinématographique dans une ruelle",
+    "ru": "Кинематографическая сцена драки вампиров в переулке",
+    "es": "Secuencia de pelea de vampiros cinematográfica en callejón",
+    "pt-BR": "Sequência cinematográfica de luta de vampiros no beco",
+    "it": "Sequenza cinematografica di combattimento vampiri nel vicolo",
+    "vi": "Cảnh chiến đấu ma cà rồng trong hẻm phong cách điện ảnh",
+    "pl": "Kinowa sekwencja walki wampirów w zaułku",
+    "id": "Sekuens perkelahian vampir sinematik di gang",
+    "nl": "Filmische vampier steeggevecht-sequentie",
+    "ar": "مشهد قتال مصاص دماء سينمائي في زقاق",
+    "tr": "Sinematik vampir sokak kavgası sekansı",
+    "uk": "Кінематографічна сцена бійки вампірів у провулку",
+    "en": "Cinematic vampire alley fight sequence"
+  },
+  "version": "0.1.0",
+  "description": "A comprehensive action prompt for a short film scene involving dynamic camera movements and high-speed combat in a neon-lit alley.",
+  "description_i18n": {
+    "zh-CN": "用于短片场景的综合动作提示词，包含霓虹灯照明小巷中的动态镜头运动和高速格斗。",
+    "zh-TW": "用於短片場景的綜合動作提示詞，包含霓虹燈照明巷弄中的動態鏡頭運動和高速格鬥。",
+    "ja": "ネオンライトの路地でのダイナミックなカメラワークと高速戦闘を含む短編映画シーン用の包括的アクションプロンプト。",
+    "ko": "네온 조명 골목에서의 역동적인 카메라 움직임과 고속 전투를 포함한 단편 영화 장면용 종합 액션 프롬프트.",
+    "de": "Ein umfassender Action-Prompt für eine Kurzfilmszene mit dynamischen Kamerabewegungen und Hochgeschwindigkeitskämpfen in einer neonbeleuchteten Gasse.",
+    "fr": "Un prompt d'action complet pour une scène de court métrage avec des mouvements de caméra dynamiques et un combat rapide dans une ruelle éclairée au néon.",
+    "ru": "Комплексный экшн-промпт для сцены короткометражного фильма с динамичными движениями камеры и скоростным боем в неоновом переулке.",
+    "es": "Un prompt de acción completo para una escena de cortometraje con movimientos de cámara dinámicos y combate de alta velocidad en un callejón iluminado con neón.",
+    "pt-BR": "Um prompt de ação abrangente para cena de curta-metragem com movimentos dinâmicos de câmera e combate em alta velocidade em um beco iluminado por neon.",
+    "it": "Un prompt d'azione completo per una scena di cortometraggio con movimenti di camera dinamici e combattimenti ad alta velocità in un vicolo illuminato al neon.",
+    "vi": "Prompt hành động toàn diện cho cảnh phim ngắn với chuyển động camera động và chiến đấu tốc độ cao trong hẻm ánh đèn neon.",
+    "pl": "Kompleksowy prompt akcji do sceny krótkometrażowej z dynamicznymi ruchami kamery i szybką walką w neonowo oświetlonej uliczce.",
+    "id": "Prompt aksi komprehensif untuk adegan film pendek dengan gerakan kamera dinamis dan pertarungan berkecepatan tinggi di gang dengan pencahayaan neon.",
+    "nl": "Een uitgebreide actie-prompt voor een kortfilmscène met dynamische camerabewegingen en snelle gevechten in een neonverlichte steeg.",
+    "ar": "موجه حركة شامل لمشهد فيلم قصير يتضمن حركات كاميرا ديناميكية وقتال عالي السرعة في زقاق مضاء بالنيون.",
+    "tr": "Neon ışıklı bir sokakta dinamik kamera hareketleri ve yüksek hızlı dövüş içeren kısa film sahnesi için kapsamlı aksiyon istemi.",
+    "uk": "Комплексний екшн-промпт для сцени короткометражного фільму з динамічними рухами камери та швидкісним боєм у неоновому провулку.",
+    "en": "A comprehensive action prompt for a short film scene involving dynamic camera movements and high-speed combat in a neon-lit alley."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Cortex Visual ・ AI Movies",
+    "url": "https://x.com/Cortex__Visual/status/2049070872426688714"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "cyberpunk"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/e665ecf343c35d97dd64e3b930a96fa5/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Draev stands in the center of the neon-lit alley, surrounded by multiple vampires positioned on rooftops and street level.\n\nThe vampires attack simultaneously.\nDraev reacts instantly with superhuman speed.\n\nHe dodges the first attacker with a fast sidestep and counters with a brutal punch, sending the vampire crashing into a wall.\n\nSecond vampire lunges from above Draev jumps unnaturally high, grabs him mid-air, and slams him into the ground.\n\nImpact creates a small shockwave on the wet street.\nThe defeated vampire rapidly disintegrates into ash and particles.\n\nCamera moves dynamically:\nstarts frontal wide shot transitions into fast tracking side movement then switches to over-the-shoulder following Draev More vampires rush in.\n\nDraev performs a fast acrobatic kick hitting two enemies at once.\n\nOne vampire is thrown into neon signs, sparks and electricity burst.\n\nAnother gets grabbed by the throat — Draev lifts him with one hand and crushes him, turning him into ash.\nRain reacts to movement, splashes intensify with impacts.\n\nFinal moment:\nDraev stands still in the center, surrounded by falling ash, breathing slightly, eyes glowing red.\nRemaining vampires hesitate, stepping back in fear. No music",
+        "zh-CN": "使用这个插件完成以下任务：Draev stands in the center of the neon-lit alley, surrounded by multiple vampires positioned on rooftops and street level.\n\nThe vampires attack simultaneously.\nDraev reacts instantly with superhuman speed.\n\nHe dodges the first attacker with a fast sidestep and counters with a brutal punch, sending the vampire crashing into a wall.\n\nSecond vampire lunges from above Draev jumps unnaturally high, grabs him mid-air, and slams him into the ground.\n\nImpact creates a small shockwave on the wet street.\nThe defeated vampire rapidly disintegrates into ash and particles.\n\nCamera moves dynamically:\nstarts frontal wide shot transitions into fast tracking side movement then switches to over-the-shoulder following Draev More vampires rush in.\n\nDraev performs a fast acrobatic kick hitting two enemies at once.\n\nOne vampire is thrown into neon signs, sparks and electricity burst.\n\nAnother gets grabbed by the throat — Draev lifts him with one hand and crushes him, turning him into ash.\nRain reacts to movement, splashes intensify with impacts.\n\nFinal moment:\nDraev stands still in the center, surrounded by falling ash, breathing slightly, eyes glowing red.\nRemaining vampires hesitate, stepping back in fear. No music"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

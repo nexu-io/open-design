@@ -1,0 +1,51 @@
+{
+  "slug": "zhangzara-capsule",
+  "name": "Capsule",
+  "tagline": "Modular pill-shaped cards on warm bone with a full pastel-pop palette.",
+  "mood": [
+    "playful",
+    "modern",
+    "warm",
+    "fresh",
+    "fun"
+  ],
+  "occasion": [
+    "lifestyle brand",
+    "creator portfolio",
+    "DTC product launch",
+    "wellness or beauty pitch",
+    "Y2K-tinged brand work"
+  ],
+  "tone": [
+    "upbeat",
+    "graphic",
+    "approachable",
+    "cool"
+  ],
+  "formality": "medium-low",
+  "density": "medium",
+  "palette": {
+    "bg": "#F5F5F0",
+    "fg": "#1A1A1A",
+    "coral": "#E85D4E",
+    "lime": "#C4D94E",
+    "lavender": "#C5B5E0",
+    "sky": "#8BB4F7",
+    "violet": "#A06CE8",
+    "yellow": "#F2D160",
+    "peach": "#F5B895",
+    "mint": "#A8E6CF",
+    "description": "warm bone background, ink-black structure, and a full pastel-pop palette (coral, lime, lavender, sky, violet, yellow, peach, mint) used as flat capsule shapes"
+  },
+  "typography": {
+    "display": "Bodoni Moda",
+    "body": "Space Grotesk",
+    "style": "high-contrast didone serif paired with a friendly geometric sans"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel modular, modern, and a little Y2K: lifestyle brands, creator portfolios, DTC launches, beauty / wellness, agency credentials. Also fun for a playful tech demo or a research deck that wants pop-art clarity instead of gravitas.",
+  "avoid_for": "Contexts that require traditional institutional weight — the capsule shapes and pastel pops actively soften authority.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page nav dots and slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/capsule"
+}

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Sticky Flowchart · HTML Anything Onboarding</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Patrick+Hand&family=Inter:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet" />
+<style>
+  body {
+    font-family:'Patrick Hand','Caveat',cursive;
+    background:
+      linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px),
+      #f4ede1;
+    background-size: 40px 40px;
+    color:#2a2a2a;
+    min-height:100vh;
+    margin:0;
+  }
+  .sticky {
+    width:200px; min-height:150px;
+    padding:14px 16px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+    position:absolute;
+    border-radius: 2px 2px 4px 4px;
+  }
+  .sticky::before {
+    content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%) rotate(-2deg);
+    width:80px; height:18px; background:rgba(255,255,255,0.6);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .yellow { background:#fcd34d; transform: rotate(-1.5deg); }
+  .peach { background:#fca5a5; transform: rotate(1.2deg); }
+  .mint { background:#a7f3d0; transform: rotate(-0.8deg); }
+  .sky { background:#a5b4fc; transform: rotate(2deg); }
+  .sticky h3 { font-family:'Caveat',cursive; font-size:22px; font-weight:700; line-height:1.1; }
+  .sticky p { font-family:'Patrick Hand',cursive; font-size:14px; line-height:1.3; margin-top:6px; opacity:0.85; }
+  .num { font-family:'Caveat',cursive; font-weight:700; font-size:28px; line-height:1; }
+  .mono { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
+  .cursor-tag {
+    position:absolute; transform: translate(-50%,-100%);
+    background:#1a1a1a; color:#fff; font-family:'Inter',sans-serif; font-size:10px;
+    padding:2px 8px; border-radius:10px; font-weight:600;
+  }
+</style>
+</head>
+<body class="relative overflow-hidden">
+  <!-- header -->
+  <header class="px-12 pt-10 flex items-baseline justify-between">
+    <div class="mono opacity-70">FLOW · ONBOARDING · 2026</div>
+    <h1 style="font-family:'Caveat',cursive;font-size:36px;font-weight:700">HTML Anything · 新用户上手</h1>
+    <div class="mono opacity-70">FRAME-FLOWCHART-STICKY</div>
+  </header>
+
+  <!-- canvas -->
+  <div class="relative" style="height:780px">
+
+    <!-- SVG connectors layer -->
+    <svg class="absolute inset-0 w-full h-full" viewBox="0 0 1500 780" preserveAspectRatio="none" style="pointer-events:none">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#2a2a2a"/>
+        </marker>
+      </defs>
+      <!-- 1 → 2 -->
+      <path d="M 240 240 C 320 240, 360 240, 420 240" fill="none" stroke="#2a2a2a" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <!-- 2 → 3 -->
+      <path d="M 620 240 C 700 240, 740 240, 800 240" fill="none" stroke="#2a2a2a" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <!-- 3 → 4 -->
+      <path d="M 1000 240 C 1100 240, 1140 290, 1100 360 S 980 480, 880 480" fill="none" stroke="#2a2a2a" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <!-- 4 → 5 -->
+      <path d="M 680 480 C 580 480, 540 480, 480 480" fill="none" stroke="#2a2a2a" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <!-- 5 → 6 -->
+      <path d="M 280 480 C 200 480, 160 540, 180 600 S 280 700, 380 700" fill="none" stroke="#2a2a2a" stroke-width="2.5" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <!-- branch: 2 → installer (dashed) -->
+      <path d="M 520 320 C 520 400, 560 440, 700 440" fill="none" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 6" marker-end="url(#arrow)"/>
+    </svg>
+
+    <!-- node 1: 打开 -->
+    <div class="sticky yellow" style="top:160px; left:60px">
+      <div class="num">01</div>
+      <h3 class="mt-1">打开 localhost:3456</h3>
+      <p>浏览器进入主界面</p>
+    </div>
+
+    <!-- node 2: 扫 agent -->
+    <div class="sticky peach" style="top:160px; left:420px">
+      <div class="num">02</div>
+      <h3 class="mt-1">扫描本地 Agent</h3>
+      <p>列出 17 个 CLI 中已登录的那几个</p>
+    </div>
+
+    <!-- node 3: 选模板 -->
+    <div class="sticky mint" style="top:160px; left:800px">
+      <div class="num">03</div>
+      <h3 class="mt-1">选 75 个模板之一</h3>
+      <p>按场景 / 关键字搜</p>
+    </div>
+
+    <!-- node 4: 粘内容 -->
+    <div class="sticky sky" style="top:400px; left:680px">
+      <div class="num">04</div>
+      <h3 class="mt-1">粘 MD / CSV / 图</h3>
+      <p>自动识别格式</p>
+    </div>
+
+    <!-- node 5: 转换 -->
+    <div class="sticky yellow" style="top:400px; left:280px">
+      <div class="num">05</div>
+      <h3 class="mt-1">⌘+Enter 转换</h3>
+      <p>SSE 流式刷新预览</p>
+    </div>
+
+    <!-- node 6: 复制 -->
+    <div class="sticky mint" style="top:620px; left:380px">
+      <div class="num">06</div>
+      <h3 class="mt-1">一键复制 / 下载</h3>
+      <p>公众号 / 推特 / PNG / HTML</p>
+    </div>
+
+    <!-- branch: 安装 agent -->
+    <div class="sticky peach" style="top:400px; left:700px; transform:rotate(3deg); width:200px">
+      <div class="num">⤳</div>
+      <h3 class="mt-1">分支: 装个 CLI</h3>
+      <p>没有? brew install claude</p>
+    </div>
+
+    <!-- cursor tag -->
+    <div class="cursor-tag" style="top:280px; left:520px;">🟠 you</div>
+  </div>
+
+  <footer class="px-12 pb-6 flex items-baseline justify-between mono opacity-60">
+    <span>FLOWCHART · WHITEBOARD STYLE · 6 NODES + 1 BRANCH</span>
+    <span>html-anything.dev/onboarding</span>
+  </footer>
+</body>
+</html>

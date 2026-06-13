@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-theverge",
+  "title": "The Verge",
+  "title_i18n": {
+    "zh-CN": "The Verge",
+    "zh-TW": "The Verge",
+    "ja": "The Verge",
+    "ko": "The Verge",
+    "de": "The Verge",
+    "fr": "The Verge",
+    "ru": "The Verge",
+    "es": "The Verge",
+    "pt-BR": "The Verge",
+    "it": "The Verge",
+    "vi": "The Verge",
+    "pl": "The Verge",
+    "id": "The Verge",
+    "nl": "The Verge",
+    "ar": "The Verge",
+    "tr": "The Verge",
+    "uk": "The Verge",
+    "en": "The Verge"
+  },
+  "version": "0.1.0",
+  "description": "Tech editorial media. Acid-mint and ultraviolet accents, Manuka display, rave-flyer story tiles.",
+  "description_i18n": {
+    "zh-CN": "科技编辑媒体。酸性薄荷和紫外色调，Manuka 展示字体，锐舞传单风格故事卡片。",
+    "zh-TW": "科技編輯媒體。酸性薄荷和紫外色調，Manuka 展示字體，銳舞傳單風格故事卡片。",
+    "ja": "テック編集メディア。アシッドミントとウルトラバイオレットのアクセント、Manukaディスプレイ、レイヴフライヤー風ストーリータイル。",
+    "ko": "테크 편집 미디어. 애시드 민트와 울트라바이올렛 액센트, Manuka 디스플레이, 레이브 플라이어 스토리 타일.",
+    "de": "Tech-Redaktionsmedium. Acid-Mint und Ultraviolett-Akzente, Manuka-Display, Rave-Flyer-Story-Kacheln.",
+    "fr": "Média éditorial tech. Accents acid-mint et ultraviolet, affichage Manuka, tuiles d'histoire style flyer rave.",
+    "ru": "Технологическое медиа. Кислотно-мятные и ультрафиолетовые акценты, дисплей Manuka, плитки-истории в стиле рейв-флаеров.",
+    "es": "Medio editorial de tecnología. Acentos acid-mint y ultravioleta, display Manuka, mosaicos de historias estilo flyer rave.",
+    "pt-BR": "Mídia editorial de tecnologia. Acentos acid-mint e ultravioleta, display Manuka, tiles de histórias estilo flyer rave.",
+    "it": "Media editoriale tech. Accenti acid-mint e ultravioletto, display Manuka, tile story stile flyer rave.",
+    "vi": "Phương tiện biên tập công nghệ. Điểm nhấn bạc hà acid và cực tím, hiển thị Manuka, ô câu chuyện phong cách tờ rơi rave.",
+    "pl": "Redakcyjne medium technologiczne. Akcenty acid-mint i ultrafiolet, wyświetlacz Manuka, kafelki historii w stylu ulotek rave.",
+    "id": "Media editorial teknologi. Aksen acid-mint dan ultraviolet, tampilan Manuka, tile cerita bergaya flyer rave.",
+    "nl": "Tech-redactiemedia. Acid-mint en ultraviolet accenten, Manuka-display, rave-flyer storytegels.",
+    "ar": "وسائط إعلامية تقنية. لمسات بلون النعناع الحمضي والبنفسجي الفائق، عرض Manuka، بلاطات قصص بأسلوب منشورات الرايف.",
+    "tr": "Teknoloji editoryal medyası. Asit-nane ve ultraviyole vurguları, Manuka ekranı, rave-broşür hikaye kartları.",
+    "uk": "Технологічне редакційне медіа. Кислотно-м'ятні та ультрафіолетові акценти, дисплей Manuka, плитки-історії у стилі рейв-флаєрів.",
+    "en": "Tech editorial media. Acid-mint and ultraviolet accents, Manuka display, rave-flyer story tiles."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the The Verge design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the The Verge design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "theverge",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

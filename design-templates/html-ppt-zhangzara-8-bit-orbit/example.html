@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8-BIT ORBIT | Pixel Art Presentation Template</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&family=Tektur:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --neon-pink: #F0A6CA;
+      --neon-cyan: #5EDCF4;
+      --neon-yellow: #F4D03F;
+      --deep-navy: #0F1B3D;
+      --dark-void: #0A0E27;
+      --soft-lavender: #E2D5F2;
+      --pixel-size: 4px;
+      --font-display: 'Tektur', cursive;
+      --font-body: 'Chakra Petch', sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-body);
+      color: var(--dark-void);
+      background: var(--dark-void);
+    }
+
+    /* Scroll behavior for slide navigation */
+    .deck {
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slides-container {
+      width: 100%;
+      height: 100%;
+      transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .slide {
+      width: 100%;
+      height: 100vh;
+      min-height: 100vh;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 3vh 4vw;
+    }
+
+    /* === GLOBAL ATMOSPHERIC OVERLAYS === */
+
+    /* Scanlines */
+    .scanlines::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0px,
+        transparent 2px,
+        rgba(10, 14, 39, 0.04) 2px,
+        rgba(10, 14, 39, 0.04) 4px
+      );
+      pointer-events: none;
+      z-index: 50;
+      mix-blend-mode: multiply;
+    }
+
+    /* Grain / Noise */
+    .grain::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.035;
+      pointer-events: none;
+      z-index: 49;
+    }
+
+    /* CRT vignette glow */
+    .crt-glow::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(10, 14, 39, 0.25) 100%);
+      pointer-events: none;
+      z-index: 51;
+    }
+
+    /* Pixel grid background pattern */
+    .bg-grid {
+      background-color: var(--dark-void);
+      background-image:
+        linear-gradient(rgba(94, 220, 244, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(94, 220, 244, 0.07) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .bg-grid-pink {
+      background-color: var(--neon-pink);
+      background-image:
+        linear-gradient(rgba(15, 27, 61, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 27, 61, 0.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .bg-grid-cyan {
+      background-color: var(--neon-cyan);
+      background-image:
+        linear-gradient(rgba(15, 27, 61, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 27, 61, 0.08) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    .bg-grid-lavender {
+      background-color: var(--soft-lavender);
+      background-image:
+        linear-gradient(rgba(15, 27, 61, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 27, 61, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Moving starfield for dark slides */
+    .starfield {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    .starfield .star {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--neon-cyan);
+      opacity: 0.6;
+      animation: twinkle 3s infinite ease-in-out;
+    }
+
+    .starfield .star:nth-child(2n) { background: var(--neon-yellow); }
+    .starfield .star:nth-child(3n) { background: var(--neon-pink); }
+    .starfield .star:nth-child(4n) { width: 6px; height: 6px; }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.9; transform: scale(1.3); }
+    }
+
+    /* Floating pixel particles */
+    .pixel-particles {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .pixel-particles .p {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      opacity: 0.4;
+      animation: float 8s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-30px) rotate(90deg); }
+    }
+
+    /* === PIXEL UI COMPONENTS === */
+
+    /* Pixel border effect */
+    .pixel-box {
+      position: relative;
+      background: var(--deep-navy);
+      color: white;
+    }
+
+    .pixel-box::before {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      background: var(--neon-cyan);
+      z-index: -1;
+      clip-path: polygon(
+        0 4px, 4px 4px, 4px 0,
+        calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+        100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%,
+        4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)
+      );
+    }
+
+    .pixel-box.yellow::before { background: var(--neon-yellow); }
+    .pixel-box.pink::before { background: var(--neon-pink); }
+
+    /* Pixel button */
+    .pixel-btn {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 16px 36px;
+      background: var(--neon-cyan);
+      color: var(--deep-navy);
+      border: none;
+      cursor: pointer;
+      position: relative;
+      box-shadow:
+        4px 0 0 0 var(--deep-navy),
+        0 4px 0 0 var(--deep-navy),
+        4px 4px 0 0 var(--deep-navy),
+        8px 4px 0 0 var(--neon-yellow),
+        4px 8px 0 0 var(--neon-yellow),
+        8px 8px 0 0 var(--neon-yellow);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    .pixel-btn:hover {
+      transform: translate(2px, 2px);
+      box-shadow:
+        2px 0 0 0 var(--deep-navy),
+        0 2px 0 0 var(--deep-navy),
+        2px 2px 0 0 var(--deep-navy),
+        4px 2px 0 0 var(--neon-yellow),
+        2px 4px 0 0 var(--neon-yellow),
+        4px 4px 0 0 var(--neon-yellow);
+    }
+
+    .pixel-btn.pink-btn {
+      background: var(--neon-pink);
+      box-shadow:
+        4px 0 0 0 var(--deep-navy),
+        0 4px 0 0 var(--deep-navy),
+        4px 4px 0 0 var(--deep-navy),
+        8px 4px 0 0 var(--neon-cyan),
+        4px 8px 0 0 var(--neon-cyan),
+        8px 8px 0 0 var(--neon-cyan);
+    }
+
+    /* Pixel text shadow like the reference image */
+    .pixel-hero-text {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: clamp(3rem, 10vw, 8rem);
+      line-height: 1.05;
+      color: var(--neon-cyan);
+      text-shadow:
+        4px 4px 0 var(--neon-yellow),
+        8px 8px 0 var(--deep-navy);
+      letter-spacing: 0.04em;
+    }
+
+    /* Decorative pixel corners */
+    .pixel-corners {
+      position: relative;
+    }
+
+    .pixel-corners::before,
+    .pixel-corners::after {
+      content: "";
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 4px solid var(--neon-cyan);
+    }
+
+    .pixel-corners::before {
+      top: -8px;
+      left: -8px;
+      border-right: none;
+      border-bottom: none;
+    }
+
+    .pixel-corners::after {
+      bottom: -8px;
+      right: -8px;
+      border-left: none;
+      border-top: none;
+    }
+
+    .pixel-corners.yellow-corners::before,
+    .pixel-corners.yellow-corners::after { border-color: var(--neon-yellow); }
+
+    .pixel-corners.pink-corners::before,
+    .pixel-corners.pink-corners::after { border-color: var(--neon-pink); }
+
+    /* Section labels */
+    .pixel-label {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--neon-yellow);
+      background: var(--deep-navy);
+      padding: 6px 14px;
+      display: inline-block;
+      margin-bottom: 1.5rem;
+    }
+
+    /* === SLIDE CONTENT LAYOUTS === */
+
+    .slide-content {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    h1 { font-size: clamp(2rem, 5vw, 4rem); }
+    h2 { font-size: clamp(1.5rem, 3.5vw, 2.8rem); }
+    h3 { font-size: clamp(1.1rem, 2vw, 1.5rem); }
+    p, li {
+      font-family: var(--font-body);
+      font-size: clamp(0.9rem, 1.2vw, 1.15rem);
+      line-height: 1.7;
+      font-weight: 400;
+    }
+
+    /* === NAVIGATION === */
+    .nav-dots {
+      position: fixed;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 100;
+    }
+
+    .nav-dot {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--neon-cyan);
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.3s;
+    }
+
+    .nav-dot::after {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      background: var(--neon-cyan);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .nav-dot.active::after { opacity: 1; }
+    .nav-dot:hover { border-color: var(--neon-yellow); }
+
+    .slide-counter {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--neon-cyan);
+      background: rgba(10, 14, 39, 0.8);
+      padding: 8px 20px;
+      z-index: 100;
+      letter-spacing: 0.15em;
+    }
+
+    /* === CUSTOM CURSOR AREA === */
+    .deck {
+      cursor: crosshair;
+    }
+
+    /* === SPECIFIC SLIDE STYLES === */
+
+    /* Slide 1: Hero */
+    .hero-subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      letter-spacing: 0.3em;
+      color: var(--neon-pink);
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-tagline {
+      font-family: var(--font-body);
+      font-size: clamp(0.9rem, 1.5vw, 1.2rem);
+      color: rgba(255,255,255,0.7);
+      max-width: 500px;
+      text-align: center;
+      margin-top: 2rem;
+      line-height: 1.8;
+    }
+
+    .hero-badges {
+      display: flex;
+      gap: 16px;
+      margin-top: 3rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .hero-badge {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 16px;
+      border: 2px solid var(--neon-yellow);
+      color: var(--neon-yellow);
+    }
+
+    /* Slide 2: Split Intro */
+    .split-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4vw;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      max-width: 1100px;
+    }
+
+    @media (max-width: 768px) {
+      .split-layout { grid-template-columns: 1fr; }
+    }
+
+    .pixel-avatar-zone {
+      width: 100%;
+      aspect-ratio: 1;
+      max-width: 380px;
+      margin: 0 auto;
+      background: var(--deep-navy);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pixel-avatar-zone::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 10px,
+          rgba(94, 220, 244, 0.1) 10px,
+          rgba(94, 220, 244, 0.1) 20px
+        );
+    }
+
+    .pixel-face {
+      width: 120px;
+      height: 120px;
+      position: relative;
+    }
+
+    .pixel-face .eye {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      background: var(--neon-cyan);
+      top: 30px;
+    }
+
+    .pixel-face .eye.left { left: 16px; }
+    .pixel-face .eye.right { right: 16px; }
+
+    .pixel-face .mouth {
+      position: absolute;
+      width: 60px;
+      height: 16px;
+      background: var(--neon-pink);
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    /* Slide 3: Feature Grid */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 1000px;
+    }
+
+    @media (max-width: 900px) {
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 500px) {
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+
+    .feature-card {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      padding: 32px 24px;
+      text-align: center;
+      position: relative;
+      border: 2px solid rgba(15, 27, 61, 0.2);
+    }
+
+    .feature-card::before {
+      content: "";
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      width: 16px;
+      height: 16px;
+      border-top: 4px solid var(--deep-navy);
+      border-left: 4px solid var(--deep-navy);
+    }
+
+    .feature-card::after {
+      content: "";
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 16px;
+      height: 16px;
+      border-bottom: 4px solid var(--deep-navy);
+      border-right: 4px solid var(--deep-navy);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      position: relative;
+    }
+
+    .feature-icon.cube {
+      background: var(--deep-navy);
+      box-shadow: 6px 6px 0 var(--neon-yellow);
+    }
+
+    .feature-icon.diamond {
+      background: var(--neon-cyan);
+      transform: rotate(45deg);
+      width: 36px;
+      height: 36px;
+      margin-bottom: 22px;
+      margin-top: 6px;
+    }
+
+    .feature-icon.cross {
+      background: var(--neon-pink);
+      position: relative;
+    }
+
+    .feature-icon.cross::before,
+    .feature-icon.cross::after {
+      content: "";
+      position: absolute;
+      background: var(--deep-navy);
+    }
+
+    .feature-icon.cross::before { inset: 10px 4px; }
+    .feature-icon.cross::after { inset: 4px 10px; }
+
+    .feature-icon.circle {
+      border: 6px solid var(--neon-yellow);
+      border-radius: 0; /* pixel circle = square with careful shading? actually keep square for pixel aesthetic */
+      background: transparent;
+      position: relative;
+    }
+
+    .feature-icon.circle::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      background: var(--neon-yellow);
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      color: var(--deep-navy);
+    }
+
+    .feature-card p {
+      font-size: 0.85rem;
+      color: rgba(15, 27, 61, 0.75);
+      line-height: 1.6;
+    }
+
+    /* Slide 4 & 5: Charts */
+    .chart-slide-layout {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .pixel-chart-title {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .pixel-chart-title h2 {
+      color: var(--neon-cyan);
+      margin-bottom: 0.5rem;
+    }
+
+    .pixel-chart-title .subtitle {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--neon-pink);
+      letter-spacing: 0.15em;
+    }
+
+    /* Bar Chart */
+    .pixel-bar-chart {
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 24px;
+      height: 320px;
+      padding: 0 20px;
+      position: relative;
+    }
+
+    .pixel-bar-chart::before {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--neon-cyan);
+      opacity: 0.5;
+    }
+
+    .chart-bar-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      max-width: 100px;
+    }
+
+    .chart-bar {
+      width: 100%;
+      background: var(--neon-cyan);
+      position: relative;
+      box-shadow: 4px 0 0 0 var(--deep-navy), 0 4px 0 0 var(--deep-navy), 4px 4px 0 0 var(--deep-navy);
+      transition: height 1s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .chart-bar.alt { background: var(--neon-pink); }
+    .chart-bar.alt2 { background: var(--neon-yellow); }
+
+    .chart-bar-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.8);
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    .chart-value {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--neon-yellow);
+      margin-bottom: 4px;
+    }
+
+    /* Horizontal Bar Chart */
+    .pixel-hbar-chart {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .hbar-row {
+      display: grid;
+      grid-template-columns: 120px 1fr 50px;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .hbar-label {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--deep-navy);
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .hbar-track {
+      height: 32px;
+      background: rgba(15, 27, 61, 0.1);
+      position: relative;
+    }
+
+    .hbar-fill {
+      height: 100%;
+      background: var(--deep-navy);
+      position: relative;
+      box-shadow: 4px 4px 0 var(--neon-yellow);
+      transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .hbar-fill.alt { background: var(--neon-cyan); box-shadow: 4px 4px 0 var(--deep-navy); }
+    .hbar-fill.alt2 { background: var(--neon-pink); box-shadow: 4px 4px 0 var(--deep-navy); }
+
+    .hbar-value {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--deep-navy);
+    }
+
+    /* Slide 6: Timeline */
+    .timeline-container {
+      width: 100%;
+      max-width: 900px;
+      position: relative;
+    }
+
+    .timeline-line {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: repeating-linear-gradient(
+        to bottom,
+        var(--deep-navy) 0px,
+        var(--deep-navy) 16px,
+        transparent 16px,
+        transparent 24px
+      );
+      transform: translateX(-50%);
+    }
+
+    .timeline-events {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      position: relative;
+    }
+
+    .timeline-event {
+      display: grid;
+      grid-template-columns: 1fr 60px 1fr;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .timeline-event:nth-child(even) .timeline-text { grid-column: 3; text-align: left; }
+    .timeline-event:nth-child(even) .timeline-spacer { grid-column: 2; }
+    .timeline-event:nth-child(even) .timeline-empty { grid-column: 1; }
+
+    .timeline-event:nth-child(odd) .timeline-text { grid-column: 1; text-align: right; }
+    .timeline-event:nth-child(odd) .timeline-spacer { grid-column: 2; }
+    .timeline-event:nth-child(odd) .timeline-empty { grid-column: 3; }
+
+    .timeline-node {
+      width: 24px;
+      height: 24px;
+      background: var(--neon-cyan);
+      border: 4px solid var(--deep-navy);
+      justify-self: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .timeline-node.active { background: var(--neon-yellow); }
+
+    .timeline-text h4 {
+      font-size: 1rem;
+      color: var(--deep-navy);
+      margin-bottom: 4px;
+    }
+
+    .timeline-text p {
+      font-size: 0.85rem;
+      color: rgba(15, 27, 61, 0.7);
+      line-height: 1.5;
+    }
+
+    .timeline-text .date {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--neon-cyan);
+      background: var(--deep-navy);
+      display: inline-block;
+      padding: 2px 10px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 700px) {
+      .timeline-event {
+        grid-template-columns: 40px 1fr !important;
+      }
+      .timeline-event .timeline-empty { display: none; }
+      .timeline-event .timeline-text { grid-column: 2 !important; text-align: left !important; }
+      .timeline-line { left: 20px; }
+      .timeline-node { justify-self: start; }
+    }
+
+    /* Slide 7: Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    @media (max-width: 800px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 400px) {
+      .stats-grid { grid-template-columns: 1fr; }
+    }
+
+    .stat-block {
+      text-align: center;
+      padding: 32px 16px;
+      background: rgba(94, 220, 244, 0.08);
+      border: 2px solid rgba(94, 220, 244, 0.2);
+      position: relative;
+    }
+
+    .stat-block::before {
+      content: "";
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      width: 20px;
+      height: 20px;
+      border-top: 4px solid var(--neon-cyan);
+      border-left: 4px solid var(--neon-cyan);
+    }
+
+    .stat-block::after {
+      content: "";
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 20px;
+      height: 20px;
+      border-bottom: 4px solid var(--neon-cyan);
+      border-right: 4px solid var(--neon-cyan);
+    }
+
+    .stat-number {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      font-weight: 900;
+      color: var(--neon-cyan);
+      line-height: 1;
+      margin-bottom: 8px;
+      text-shadow: 3px 3px 0 var(--deep-navy);
+    }
+
+    .stat-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--neon-pink);
+    }
+
+    /* Slide 8: Quote */
+    .quote-container {
+      max-width: 700px;
+      text-align: center;
+      position: relative;
+      padding: 48px;
+    }
+
+    .quote-mark {
+      font-family: var(--font-display);
+      font-size: 8rem;
+      line-height: 1;
+      color: var(--deep-navy);
+      opacity: 0.15;
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .quote-text {
+      font-family: var(--font-body);
+      font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+      font-weight: 500;
+      font-style: italic;
+      color: var(--deep-navy);
+      line-height: 1.8;
+      position: relative;
+      z-index: 2;
+    }
+
+    .quote-author {
+      margin-top: 2rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: rgba(15, 27, 61, 0.7);
+      letter-spacing: 0.1em;
+    }
+
+    .quote-line {
+      width: 60px;
+      height: 4px;
+      background: var(--neon-yellow);
+      margin: 1.5rem auto 0;
+      box-shadow: 4px 4px 0 var(--deep-navy);
+    }
+
+    /* Slide 9: Comparison / Cards */
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    @media (max-width: 800px) {
+      .tier-grid { grid-template-columns: 1fr; max-width: 400px; }
+    }
+
+    .tier-card {
+      background: white;
+      padding: 36px 28px;
+      position: relative;
+      text-align: center;
+    }
+
+    .tier-card.featured {
+      background: var(--deep-navy);
+      color: white;
+      transform: translateY(-12px);
+      box-shadow: 8px 8px 0 var(--neon-yellow);
+    }
+
+    .tier-card:not(.featured) {
+      box-shadow: 6px 6px 0 rgba(15, 27, 61, 0.15);
+    }
+
+    .tier-name {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      margin-bottom: 8px;
+    }
+
+    .tier-price {
+      font-family: var(--font-mono);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--neon-cyan);
+      margin-bottom: 4px;
+    }
+
+    .tier-price span {
+      font-size: 0.8rem;
+      color: rgba(15, 27, 61, 0.5);
+    }
+
+    .tier-card.featured .tier-price span { color: rgba(255,255,255,0.5); }
+
+    .tier-desc {
+      font-size: 0.8rem;
+      color: rgba(15, 27, 61, 0.6);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    .tier-card.featured .tier-desc { color: rgba(255,255,255,0.6); }
+
+    .tier-features {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 24px;
+    }
+
+    .tier-features li {
+      font-size: 0.8rem;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(15, 27, 61, 0.15);
+      position: relative;
+      padding-left: 20px;
+    }
+
+    .tier-features li::before {
+      content: "+";
+      position: absolute;
+      left: 0;
+      font-family: var(--font-mono);
+      color: var(--neon-cyan);
+      font-weight: 700;
+    }
+
+    .tier-card.featured .tier-features li { border-color: rgba(255,255,255,0.1); }
+
+    /* Slide 10: CTA */
+    .cta-content {
+      text-align: center;
+      max-width: 600px;
+    }
+
+    .cta-content h2 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      color: var(--neon-cyan);
+      margin-bottom: 1rem;
+      text-shadow: 4px 4px 0 var(--deep-navy), 8px 8px 0 var(--neon-yellow);
+    }
+
+    .cta-content p {
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 2.5rem;
+      font-size: 1.1rem;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* Decorative pixel landscape at bottom of CTA */
+    .pixel-landscape {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 120px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 0;
+      z-index: 2;
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .mountain {
+      background: var(--deep-navy);
+      width: 80px;
+      position: relative;
+    }
+
+    /* Arrow hints */
+    .nav-hint {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--neon-cyan);
+      opacity: 0.5;
+      z-index: 100;
+      letter-spacing: 0.1em;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .slides-container { transition: none; }
+      .starfield .star, .pixel-particles .p { animation: none; }
+      .chart-bar, .hbar-fill { transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- Navigation Dots -->
+  <div class="nav-dots" id="navDots"></div>
+
+  <!-- Slide Counter -->
+  <div class="slide-counter" id="slideCounter">01 / 10</div>
+
+  <!-- Keyboard hint -->
+  <div class="nav-hint">USE KEYS &uarr; &darr;</div>
+
+  <div class="slides-container" id="slidesContainer">
+
+    <!-- ========== SLIDE 1: HERO ========== -->
+    <section class="slide bg-grid scanlines grain crt-glow" data-slide="1">
+      <div class="starfield" id="starfield1"></div>
+      <div class="pixel-particles" id="particles1"></div>
+      <div class="slide-content" style="z-index:10;">
+        <div class="hero-subtitle">Pixel Perfect Presentation System</div>
+        <h1 class="pixel-hero-text" style="text-align:center;">8-BIT<br>ORBIT</h1>
+        <p class="hero-tagline">A retro-futuristic deck engine for bold storytellers. Built for arcades, engineered for boardrooms.</p>
+        <div class="hero-badges">
+          <span class="hero-badge">10 Slides</span>
+          <span class="hero-badge">CSS Native</span>
+          <span class="hero-badge">Zero Dependencies</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 2: SPLIT INTRO ========== -->
+    <section class="slide bg-grid-pink scanlines grain" data-slide="2">
+      <div class="slide-content">
+        <div class="split-layout">
+          <div class="pixel-avatar-zone pixel-corners yellow-corners">
+            <div class="pixel-face">
+              <div class="eye left"></div>
+              <div class="eye right"></div>
+              <div class="mouth"></div>
+            </div>
+          </div>
+          <div style="max-width: 460px;">
+            <span class="pixel-label">Mission Brief</span>
+            <h2 style="color: var(--deep-navy); margin-bottom: 1.2rem; font-size: clamp(1.6rem, 3vw, 2.4rem);">Rewiring How We Share Ideas</h2>
+            <p style="color: rgba(15,27,61,0.75); margin-bottom: 1rem;">
+              Every presentation is an opportunity to transport your audience. This template fuses the tactile nostalgia of 16-bit aesthetics with modern typographic discipline.
+            </p>
+            <p style="color: rgba(15,27,61,0.75);">
+              No canvas limits. No cookie-cutter layouts. Just pure CSS architecture delivering cinematic slide transitions and atmospheric depth through scanlines, grain, and glowing grids.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 3: FEATURE GRID ========== -->
+    <section class="slide bg-grid-cyan scanlines grain" data-slide="3">
+      <div class="slide-content">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+          <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-cyan);">Core Systems</span>
+          <h2 style="color: var(--deep-navy);">Four Engines Running</h2>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon cube"></div>
+            <h3>Modular Blocks</h3>
+            <p>Swap components without breaking the grid. Every element is containerized and responsive by default.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon diamond"></div>
+            <h3>Crisp Vectors</h3>
+            <p>All visual effects are native CSS. No image assets required for borders, shadows, or patterns.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon cross"></div>
+            <h3>Live Data</h3>
+            <p>Chart slides accept dynamic values. Bars grow with CSS transitions triggered on navigation.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon circle"></div>
+            <h3>Retro Atmosphere</h3>
+            <p>Scanlines, CRT vignettes, starfields, and noise layers create an immersive viewing environment.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 4: VERTICAL BAR CHART ========== -->
+    <section class="slide bg-grid scanlines grain crt-glow" data-slide="4">
+      <div class="starfield" id="starfield4"></div>
+      <div class="slide-content">
+        <div class="chart-slide-layout">
+          <div class="pixel-chart-title">
+            <span class="pixel-label">Analytics Core</span>
+            <h2>Quarterly Growth Metrics</h2>
+            <p class="subtitle">Fiscal performance across four sectors &mdash; normalized index</p>
+          </div>
+          <div class="pixel-bar-chart" id="barChart">
+            <div class="chart-bar-group">
+              <div class="chart-value" data-value="78">0</div>
+              <div class="chart-bar" data-height="78" style="height: 0%;"></div>
+              <div class="chart-bar-label">Alpha</div>
+            </div>
+            <div class="chart-bar-group">
+              <div class="chart-value" data-value="92">0</div>
+              <div class="chart-bar alt" data-height="92" style="height: 0%;"></div>
+              <div class="chart-bar-label">Beta</div>
+            </div>
+            <div class="chart-bar-group">
+              <div class="chart-value" data-value="64">0</div>
+              <div class="chart-bar alt2" data-height="64" style="height: 0%;"></div>
+              <div class="chart-bar-label">Gamma</div>
+            </div>
+            <div class="chart-bar-group">
+              <div class="chart-value" data-value="85">0</div>
+              <div class="chart-bar" data-height="85" style="height: 0%;"></div>
+              <div class="chart-bar-label">Delta</div>
+            </div>
+            <div class="chart-bar-group">
+              <div class="chart-value" data-value="56">0</div>
+              <div class="chart-bar alt" data-height="56" style="height: 0%;"></div>
+              <div class="chart-bar-label">Epsilon</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 5: HORIZONTAL BAR CHART ========== -->
+    <section class="slide bg-grid-lavender scanlines grain" data-slide="5">
+      <div class="slide-content">
+        <div class="chart-slide-layout">
+          <div class="pixel-chart-title" style="margin-bottom: 2.5rem;">
+            <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-yellow);">System Load</span>
+            <h2 style="color: var(--deep-navy);">Resource Allocation</h2>
+            <p class="subtitle" style="color: rgba(15,27,61,0.6);">Percentage distribution across operational units</p>
+          </div>
+          <div class="pixel-hbar-chart" id="hbarChart">
+            <div class="hbar-row">
+              <div class="hbar-label">Compute</div>
+              <div class="hbar-track">
+                <div class="hbar-fill" data-width="88" style="width: 0%;"></div>
+              </div>
+              <div class="hbar-value">88%</div>
+            </div>
+            <div class="hbar-row">
+              <div class="hbar-label">Storage</div>
+              <div class="hbar-track">
+                <div class="hbar-fill alt" data-width="72" style="width: 0%;"></div>
+              </div>
+              <div class="hbar-value">72%</div>
+            </div>
+            <div class="hbar-row">
+              <div class="hbar-label">Network</div>
+              <div class="hbar-track">
+                <div class="hbar-fill alt2" data-width="95" style="width: 0%;"></div>
+              </div>
+              <div class="hbar-value">95%</div>
+            </div>
+            <div class="hbar-row">
+              <div class="hbar-label">Memory</div>
+              <div class="hbar-track">
+                <div class="hbar-fill" data-width="61" style="width: 0%;"></div>
+              </div>
+              <div class="hbar-value">61%</div>
+            </div>
+            <div class="hbar-row">
+              <div class="hbar-label">Graphics</div>
+              <div class="hbar-track">
+                <div class="hbar-fill alt" data-width="44" style="width: 0%;"></div>
+              </div>
+              <div class="hbar-value">44%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 6: TIMELINE ========== -->
+    <section class="slide bg-grid-pink scanlines grain" data-slide="6">
+      <div class="slide-content">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+          <span class="pixel-label">Chronology</span>
+          <h2 style="color: var(--deep-navy);">Development Roadmap</h2>
+        </div>
+        <div class="timeline-container">
+          <div class="timeline-line"></div>
+          <div class="timeline-events">
+            <div class="timeline-event">
+              <div class="timeline-text">
+                <span class="date">Q1 2026</span>
+                <h4>Concept & Architecture</h4>
+                <p>Wireframes, palette selection, and core grid system established.</p>
+              </div>
+              <div class="timeline-spacer">
+                <div class="timeline-node active"></div>
+              </div>
+              <div class="timeline-empty"></div>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-empty"></div>
+              <div class="timeline-spacer">
+                <div class="timeline-node active"></div>
+              </div>
+              <div class="timeline-text">
+                <span class="date">Q2 2026</span>
+                <h4>Asset Generation</h4>
+                <p>Pixel components, iconography, and atmospheric effects coded.</p>
+              </div>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-text">
+                <span class="date">Q3 2026</span>
+                <h4>Data Integration</h4>
+                <p>Charting engine, animated counters, and dynamic state binding.</p>
+              </div>
+              <div class="timeline-spacer">
+                <div class="timeline-node"></div>
+              </div>
+              <div class="timeline-empty"></div>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-empty"></div>
+              <div class="timeline-spacer">
+                <div class="timeline-node"></div>
+              </div>
+              <div class="timeline-text">
+                <span class="date">Q4 2026</span>
+                <h4>Global Launch</h4>
+                <p>Public release with full documentation and community support.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 7: STATS / COUNTERS ========== -->
+    <section class="slide bg-grid scanlines grain crt-glow" data-slide="7">
+      <div class="starfield" id="starfield7"></div>
+      <div class="slide-content">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+          <span class="pixel-label">Live Telemetry</span>
+          <h2 style="color: var(--neon-cyan);">Platform Vitals</h2>
+          <p style="color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-top: 0.5rem;">Real-time aggregate figures from active deployments</p>
+        </div>
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-block">
+            <div class="stat-number" data-target="847">0</div>
+            <div class="stat-label">Active Worlds</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-number" data-target="12.4" data-suffix="M">0</div>
+            <div class="stat-label">Pixels Rendered</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-number" data-target="99.9" data-suffix="%">0</div>
+            <div class="stat-label">Uptime Score</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-number" data-target="2048">0</div>
+            <div class="stat-label">Max Resolution</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 8: QUOTE ========== -->
+    <section class="slide bg-grid-cyan scanlines grain" data-slide="8">
+      <div class="slide-content">
+        <div class="quote-container pixel-corners">
+          <div class="quote-mark">"</div>
+          <p class="quote-text">
+            The best presentations do not merely inform. They immerse. They transform the conference room into an arcade cabinet where every slide is a new level waiting to be unlocked.
+          </p>
+          <div class="quote-line"></div>
+          <div class="quote-author">&mdash; Lead Creative Technologist, Studio Orbital</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 9: PRICING TIERS ========== -->
+    <section class="slide bg-grid-lavender scanlines grain" data-slide="9">
+      <div class="slide-content">
+        <div style="text-align: center; margin-bottom: 2.5rem;">
+          <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-pink);">Access Tiers</span>
+          <h2 style="color: var(--deep-navy);">Choose Your Loadout</h2>
+        </div>
+        <div class="tier-grid">
+          <div class="tier-card">
+            <div class="tier-name">Rookie</div>
+            <div class="tier-price">$0<span>/mo</span></div>
+            <div class="tier-desc">For solo explorers testing the waters.</div>
+            <ul class="tier-features">
+              <li>5 slide maximum</li>
+              <li>Standard grid themes</li>
+              <li>Community support</li>
+              <li>Static export only</li>
+            </ul>
+            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+          </div>
+          <div class="tier-card featured">
+            <div class="tier-name" style="color: var(--neon-yellow);">Arcade</div>
+            <div class="tier-price" style="color: var(--neon-pink);">$29<span>/mo</span></div>
+            <div class="tier-desc">Serious builders need serious tooling.</div>
+            <ul class="tier-features">
+              <li>Unlimited slides</li>
+              <li>All atmospheric packs</li>
+              <li>Live data binding</li>
+              <li>Priority rendering</li>
+              <li>Custom cursor sets</li>
+            </ul>
+            <button class="pixel-btn pink-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+          </div>
+          <div class="tier-card">
+            <div class="tier-name">Boss</div>
+            <div class="tier-price">$79<span>/mo</span></div>
+            <div class="tier-desc">Enterprise-grade control and compliance.</div>
+            <ul class="tier-features">
+              <li>Everything in Arcade</li>
+              <li>White-label export</li>
+              <li>SSO & audit logs</li>
+              <li>Dedicated pipeline</li>
+            </ul>
+            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SLIDE 10: CLOSING CTA ========== -->
+    <section class="slide bg-grid scanlines grain crt-glow" data-slide="10">
+      <div class="starfield" id="starfield10"></div>
+      <div class="pixel-particles" id="particles10"></div>
+      <div class="pixel-landscape" id="landscape10"></div>
+      <div class="slide-content" style="z-index:10;">
+        <div class="cta-content">
+          <h2>Ready Player<br>One?</h2>
+          <p>Deploy your first 8-BIT ORBIT deck in under sixty seconds. No dependencies. No friction. Just pure presentation power.</p>
+          <div class="cta-buttons">
+            <button class="pixel-btn">Initialize Deck</button>
+            <button class="pixel-btn pink-btn">View Documentation</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function() {
+  const totalSlides = 10;
+  let currentSlide = 0;
+  const container = document.getElementById('slidesContainer');
+  const counter = document.getElementById('slideCounter');
+  const dotsContainer = document.getElementById('navDots');
+
+  // Generate nav dots
+  for (let i = 0; i < totalSlides; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goToSlide(i));
+    dotsContainer.appendChild(dot);
+  }
+
+  const dots = document.querySelectorAll('.nav-dot');
+
+  function updateUI() {
+    container.style.transform = `translateY(-${currentSlide * 100}vh)`;
+    counter.textContent = String(currentSlide + 1).padStart(2, '0') + ' / ' + totalSlides;
+    dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    triggerAnimations(currentSlide);
+  }
+
+  function goToSlide(index) {
+    if (index < 0 || index >= totalSlides) return;
+    currentSlide = index;
+    updateUI();
+  }
+
+  function nextSlide() { goToSlide(currentSlide + 1); }
+  function prevSlide() { goToSlide(currentSlide - 1); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      nextSlide();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      goToSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      goToSlide(totalSlides - 1);
+    }
+  });
+
+  // Touch / swipe support
+  let touchStartY = 0;
+  document.addEventListener('touchstart', (e) => { touchStartY = e.touches[0].clientY; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartY - e.changedTouches[0].clientY;
+    if (Math.abs(diff) > 50) {
+      diff > 0 ? nextSlide() : prevSlide();
+    }
+  });
+
+  // Wheel support with debounce
+  let wheelLock = false;
+  document.addEventListener('wheel', (e) => {
+    if (wheelLock) return;
+    wheelLock = true;
+    e.deltaY > 0 ? nextSlide() : prevSlide();
+    setTimeout(() => wheelLock = false, 800);
+  }, { passive: true });
+
+  // ===== ANIMATION TRIGGERS =====
+  function triggerAnimations(slideIndex) {
+    // Slide 4: Vertical bar chart
+    if (slideIndex === 3) {
+      document.querySelectorAll('#barChart .chart-bar').forEach((bar, i) => {
+        const h = bar.dataset.height;
+        setTimeout(() => {
+          bar.style.height = h + '%';
+        }, i * 120);
+      });
+      document.querySelectorAll('#barChart .chart-value').forEach((val, i) => {
+        const target = parseInt(val.dataset.value);
+        setTimeout(() => animateNumber(val, target, '', 800), i * 120);
+      });
+    } else {
+      document.querySelectorAll('#barChart .chart-bar').forEach(bar => bar.style.height = '0%');
+    }
+
+    // Slide 5: Horizontal bar chart
+    if (slideIndex === 4) {
+      document.querySelectorAll('#hbarChart .hbar-fill').forEach((fill, i) => {
+        const w = fill.dataset.width;
+        setTimeout(() => { fill.style.width = w + '%'; }, i * 100);
+      });
+    } else {
+      document.querySelectorAll('#hbarChart .hbar-fill').forEach(fill => fill.style.width = '0%');
+    }
+
+    // Slide 7: Stats counters
+    if (slideIndex === 6) {
+      document.querySelectorAll('#statsGrid .stat-number').forEach((el, i) => {
+        const target = parseFloat(el.dataset.target);
+        const suffix = el.dataset.suffix || '';
+        const isFloat = target % 1 !== 0;
+        setTimeout(() => animateNumber(el, target, suffix, 1200, isFloat), i * 150);
+      });
+    } else {
+      document.querySelectorAll('#statsGrid .stat-number').forEach(el => el.textContent = '0');
+    }
+  }
+
+  function animateNumber(el, target, suffix, duration, isFloat = false) {
+    const start = performance.now();
+    function tick(now) {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = eased * target;
+      el.textContent = (isFloat ? current.toFixed(1) : Math.floor(current)) + suffix;
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = (isFloat ? target.toFixed(1) : target) + suffix;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ===== GENERATE STARFIELD =====
+  function generateStars(containerId, count = 40) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const star = document.createElement('div');
+      star.className = 'star';
+      star.style.left = Math.random() * 100 + '%';
+      star.style.top = Math.random() * 100 + '%';
+      star.style.animationDelay = Math.random() * 3 + 's';
+      container.appendChild(star);
+    }
+  }
+
+  generateStars('starfield1', 50);
+  generateStars('starfield4', 30);
+  generateStars('starfield7', 35);
+  generateStars('starfield10', 45);
+
+  // ===== GENERATE FLOATING PARTICLES =====
+  function generateParticles(containerId, colors, count = 12) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'p';
+      const color = colors[i % colors.length];
+      p.style.background = color;
+      p.style.left = Math.random() * 100 + '%';
+      p.style.top = Math.random() * 100 + '%';
+      p.style.animationDelay = Math.random() * 5 + 's';
+      p.style.animationDuration = (6 + Math.random() * 6) + 's';
+      container.appendChild(p);
+    }
+  }
+
+  generateParticles('particles1', ['var(--neon-cyan)', 'var(--neon-pink)', 'var(--neon-yellow)'], 16);
+  generateParticles('particles10', ['var(--neon-cyan)', 'var(--neon-pink)', 'var(--neon-yellow)'], 20);
+
+  // ===== GENERATE PIXEL LANDSCAPE FOR CTA =====
+  function generateLandscape() {
+    const container = document.getElementById('landscape10');
+    if (!container) return;
+    const heights = [30, 50, 70, 40, 60, 35, 55, 45, 80, 25, 50, 40];
+    heights.forEach((h, i) => {
+      const mtn = document.createElement('div');
+      mtn.className = 'mountain';
+      mtn.style.height = h + 'px';
+      mtn.style.width = (60 + (i % 3) * 20) + 'px';
+      container.appendChild(mtn);
+    });
+  }
+  generateLandscape();
+
+  // Initialize
+  updateUI();
+})();
+</script>
+
+</body>
+</html>

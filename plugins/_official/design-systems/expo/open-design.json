@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-expo",
+  "title": "Expo",
+  "title_i18n": {
+    "zh-CN": "Expo",
+    "zh-TW": "Expo",
+    "ja": "Expo",
+    "ko": "Expo",
+    "de": "Expo",
+    "fr": "Expo",
+    "ru": "Expo",
+    "es": "Expo",
+    "pt-BR": "Expo",
+    "it": "Expo",
+    "vi": "Expo",
+    "pl": "Expo",
+    "id": "Expo",
+    "nl": "Expo",
+    "ar": "Expo",
+    "tr": "Expo",
+    "uk": "Expo",
+    "en": "Expo"
+  },
+  "version": "0.1.0",
+  "description": "React Native platform. Dark theme, tight letter-spacing, code-centric.",
+  "description_i18n": {
+    "zh-CN": "React Native 平台。深色主题，紧凑字间距，代码风格。",
+    "zh-TW": "React Native 平台。深色主題，緊湊字距，程式碼風格。",
+    "ja": "React Nativeプラットフォーム。ダークテーマ、タイトな字間、コード中心。",
+    "ko": "React Native 플랫폼. 다크 테마, 좁은 자간, 코드 중심.",
+    "de": "React Native-Plattform. Dunkles Theme, enger Zeichenabstand, Code-orientiert.",
+    "fr": "Plateforme React Native. Thème sombre, espacement serré, axé sur le code.",
+    "ru": "Платформа React Native. Темная тема, плотный межбуквенный интервал, ориентация на код.",
+    "es": "Plataforma React Native. Tema oscuro, espaciado estrecho, centrado en código.",
+    "pt-BR": "Plataforma React Native. Tema escuro, espaçamento apertado, focado em código.",
+    "it": "Piattaforma React Native. Tema scuro, spaziatura stretta, incentrato sul codice.",
+    "vi": "Nền tảng React Native. Giao diện tối, khoảng cách chữ gọn, tập trung vào code.",
+    "pl": "Platforma React Native. Ciemny motyw, wąskie odstępy, skoncentrowany na kodzie.",
+    "id": "Platform React Native. Tema gelap, spasi huruf ketat, berfokus pada kode.",
+    "nl": "React Native-platform. Donker thema, strakke letterafstand, code-gericht.",
+    "ar": "منصة React Native. سمة داكنة، تباعد أحرف ضيق، تركيز على الكود.",
+    "tr": "React Native platformu. Koyu tema, sıkı harf aralığı, kod odaklı.",
+    "uk": "Платформа React Native. Темна тема, щільний міжбуквенний інтервал, орієнтація на код.",
+    "en": "React Native platform. Dark theme, tight letter-spacing, code-centric."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "developer-tools"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Expo design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Expo design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "expo",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "skill_name": "create-prototype-dashboard",
+  "evals": [
+    {
+      "id": "ops-dashboard",
+      "prompt": "Create a dashboard prototype for customer success leads tracking enterprise onboarding risk.",
+      "expected_output": "A runnable HTML dashboard with metrics, risk queue, detail panel, and realistic states.",
+      "assertions": [
+        "The output includes index.html",
+        "The first screen is an application surface, not a landing page",
+        "The dashboard contains realistic operational data",
+        "At least three UI states are represented",
+        "The final response names the artifact path"
+      ]
+    }
+  ]
+}
+

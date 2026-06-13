@@ -1,0 +1,64 @@
+/* design-systems/vodafone/tokens.css
+ *
+ * Structured token bindings for Vodafone.
+ * bright red telecom clarity balanced by white service surfaces and practical controls.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f4f4f4;
+  --surface-warm: #fff1f1;
+  --fg: #1f1f1f;
+  --fg-2: #4a4d4e;
+  --muted: #6f7375;
+  --meta: #a61218;
+  --border: #d8d8d8;
+  --border-soft: #eeeeee;
+  --accent: #e60000;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #008a00;
+  --warn: #f5b400;
+  --danger: #bd0000;
+  --font-display: "Vodafone", "Vodafone Rg", Arial, sans-serif;
+  --font-body: "Vodafone", "Vodafone Rg", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 48px;
+  --text-4xl: 68px;
+  --leading-body: 1.48;
+  --leading-tight: 1.08;
+  --tracking-display: -0.015em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 44px rgba(0, 0, 0, 0.12);
+  --focus-ring: 0 0 0 4px rgba(230, 0, 0, 0.22);
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

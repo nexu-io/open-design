@@ -1,0 +1,285 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/tesla/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Tesla" —
+ * radical subtraction, full-viewport photography, near-zero UI. This
+ * file is the *machine-readable* form of the values described in
+ * `DESIGN.md`. Agents are expected to paste the `:root { … }` block
+ * verbatim into the first `<style>` of every artifact they generate
+ * against this design system, then reference everything via
+ * var(--name) from then on.
+ *
+ * Why this file exists:
+ *   DESIGN.md tells humans that Tesla uses "Pure White (#FFFFFF) as the
+ *   canvas that lets photography breathe" and "Electric Blue (#3E6AE1)
+ *   as the only chromatic color in the entire interface", but agents
+ *   have to translate those prose names into the standard token names
+ *   the lint enforces (`--bg`, `--accent`). That translation step is
+ *   where token misuse happens. This file pre-translates the brand
+ *   once, so agents copy structure instead of inventing it.
+ *
+ * Brand-specific schema decisions (non-obvious bindings worth flagging
+ * for reviewers and downstream brand authors):
+ *   1. --bg is pure #ffffff and --surface is Light Ash #f4f4f4 — the
+ *      "barely perceptible shift from pure white" Tesla uses to
+ *      differentiate alternate feature bands. --surface-warm aliases
+ *      to var(--surface): Tesla deliberately has only two light tiers
+ *      because photography (not surface) carries the visual richness.
+ *   2. The four-stop foreground ramp is real and worth keeping
+ *      independent — Carbon Dark → Graphite → Pewter → Silver Fog map
+ *      cleanly onto --fg / --fg-2 / --muted / --meta. DESIGN.md §2
+ *      names every stop; collapsing any of them would flatten the
+ *      hierarchy of headings → body → tertiary links → placeholders.
+ *   3. --border is bound to Pale Silver (#d0d1d2) for the rare strong
+ *      border, --border-soft to Cloud Gray (#eeeeee) for the more
+ *      common hairline divider. Tesla uses borders sparingly but the
+ *      two-stop split exists in DESIGN.md §2.
+ *   4. --accent-hover / --accent-active use the schema black-mix
+ *      formulas. DESIGN.md §4 says "subtle darkening of blue
+ *      background" without pinning a hex; the schema defaults satisfy
+ *      "subtle" without inventing a brand-specific value.
+ *   5. Semantic --success / --warn / --danger inherit schema defaults
+ *      verbatim. DESIGN.md §2: "Tesla's marketing site avoids semantic
+ *      color coding... Error, success, and warning states follow
+ *      standard browser defaults in form contexts."
+ *   6. --font-display and --font-body are split across the Universal
+ *      Sans Display / Universal Sans Text families with -apple-system
+ *      and Arial as the published Tesla fallback chain (DESIGN.md §3).
+ *   7. --text-base is 14px (NOT the 16px web norm). Tesla's UI
+ *      explicitly clusters at 14 for nav, body, button, and link —
+ *      DESIGN.md §3 lists six rows at 14px and only two breakaway
+ *      tiers (22px promo, 40px hero). Rebinding --text-base to 16
+ *      would lose the brand's engineered uniformity.
+ *   8. --text-4xl is 40px — Tesla's hard display ceiling. DESIGN.md §7
+ *      ("Don't use text larger than 40px on the web") makes this not
+ *      a soft cap but an identity rule.
+ *   9. --tracking-display is `normal`. DESIGN.md §3 Principles:
+ *      "'Normal' letter-spacing everywhere... Unlike most modern tech
+ *      brands that use negative tracking for headlines, Tesla uses
+ *      default letter-spacing at every level." Most brands in the
+ *      schema bind a negative em value here; Tesla deliberately does
+ *      not.
+ *  10. --section-y-desktop is 120px (vs schema default 80, Apple 100).
+ *      DESIGN.md §1 + §5 — "viewport-height sections" and "whitespace
+ *      as a luxury signal" mean Tesla's chapter breathing room is the
+ *      most generous in the schema after the dedicated print brands.
+ *  11. --radius-sm / --radius-md / --radius-lg are 4 / 12 / 12 (vs
+ *      schema 8 / 12 / 16). DESIGN.md §5 defines a deliberate Tesla
+ *      radius scale: 0 default, 4 buttons, 12 category cards, and
+ *      "no larger tier" — we bind --radius-lg to the same 12 because
+ *      Tesla has no softer card silhouette to address.
+ *  12. --elev-raised is the lightest in the schema (rgba 0.05).
+ *      DESIGN.md §6: "Tesla's approach to elevation is essentially
+ *      'none.'... Subtle shadow hints on rare hover states use
+ *      rgba(0,0,0,0.05)." The schema default (oklab fg-mix) reads as
+ *      Material weight by comparison; we hand-pick a flatter value.
+ *  13. --motion-fast / --motion-base / --ease-standard override the
+ *      schema. DESIGN.md §1 + §4 — "0.33s cubic-bezier transitions as
+ *      the universal timing for all interactive state changes" and a
+ *      documented `box-shadow 0.33s cubic-bezier(0.5, 0, 0, 0.75)`
+ *      curve. We bind base to 330ms (Tesla's universal duration),
+ *      fast to 250ms (the box-shadow micro-state), and easing to the
+ *      published Tesla text-link curve.
+ *  14. --container-max is 1383px. DESIGN.md §5: "Max width:
+ *      approximately 1383px". The number itself is a brand-specific
+ *      detail (most marketing sites round to 1280 / 1440); we keep
+ *      the literal value rather than collapse to the nearest round
+ *      number.
+ *
+ * Contract sources:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *       (TOKEN_SCHEMA — every name below appears there or as an
+ *        explicit B-slot alias.)
+ *   - A2 fallback values: design-systems/_schema/defaults.css
+ *       (We override --motion-fast, --motion-base, --ease-standard,
+ *        --elev-raised, --radius-sm, --radius-lg; the rest match
+ *        defaults.)
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the shared schema.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (2 levels) ──────────────────────────────────────────
+   * Pure white retail canvas with a single "barely perceptible" Light
+   * Ash tier for alternate bands. --surface-warm aliases to surface
+   * because Tesla has no third light tier — photography, not surface,
+   * carries the visual richness. */
+  --bg: #ffffff;                  /* Pure White — the canvas that lets photography breathe */
+  --surface: #f4f4f4;             /* Light Ash — alternate feature band, barely a shift */
+  --surface-warm: var(--surface); /* alias — Tesla has only two light tiers */
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Tesla's neutrals are explicitly named in DESIGN.md §2: Carbon Dark
+   * → Graphite → Pewter → Silver Fog. We bind all four — the ramp is
+   * genuinely walked across model names (Carbon Dark), body copy
+   * (Graphite), tertiary "Learn / Order" links (Pewter), and form
+   * placeholders / disabled (Silver Fog). Collapsing any stop would
+   * flatten the hierarchy. */
+  --fg: #171a20;                  /* Carbon Dark — headings, nav, model names */
+  --fg-2: #393c41;                /* Graphite — default body / paragraph color */
+  --muted: #5c5e62;               /* Pewter — tertiary links (Learn, Order, Experience) */
+  --meta: #8e8e8e;                /* Silver Fog — placeholders, disabled states */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Tesla uses borders sparingly — containers are usually defined by
+   * spacing, not lines (DESIGN.md §7: "Don't add borders to cards or
+   * containers"). When borders appear, --border is the stronger
+   * delineation (Pale Silver, used on rare hairlines and field
+   * outlines) and --border-soft is the lighter divider (Cloud Gray,
+   * used between dense rows). */
+  --border: #d0d1d2;              /* Pale Silver — strong border, field outline */
+  --border-soft: #eeeeee;         /* Cloud Gray — light divider between rows */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Electric Blue — Tesla's only chromatic move. DESIGN.md §2: "stands
+   * alone as the only chromatic color in the entire interface" and §7
+   * "Don't use more than one chromatic color besides the blue CTA"
+   * make this a strict one-color brand. The schema's ≤2-visible-uses
+   * cap aligns naturally with Tesla's "Use Electric Blue exclusively
+   * for primary CTAs". */
+  --accent: #3e6ae1;              /* Electric Blue — sole CTA color, sole accent */
+  --accent-on: #ffffff;           /* white label on the blue fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * DESIGN.md §4 documents "subtle darkening of blue background" on
+   * hover without pinning specific hex values. We inherit the schema
+   * black-mix formulas — subtle darkening is exactly what these
+   * formulas produce. */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * DESIGN.md §2: "Tesla's marketing site avoids semantic color coding
+   * (no green/red/yellow status indicators). Error, success, and
+   * warning states follow standard browser defaults in form contexts."
+   * Inherit the schema defaults; reserve under 5% of any surface area
+   * regardless. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Universal Sans Display / Universal Sans Text — the custom family
+   * that replaced Gotham to unify Tesla's website, mobile app, and
+   * vehicle interface. We mirror the published Tesla fallback chain
+   * (-apple-system, Arial) so artifacts rendered on non-Tesla clients
+   * land on the closest practical substitute. */
+  --font-display: "Universal Sans Display", -apple-system, Arial, sans-serif;
+  --font-body: "Universal Sans Text", -apple-system, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Tesla's reading baseline is 14px (NOT the 16px web norm); nav,
+   * body, button, sub-link all sit at 14. Only two tiers break away
+   * upward — 22px promo and 40px hero — and DESIGN.md §7 hard-caps
+   * web text at 40px ("Don't use text larger than 40px on the web").
+   * The 28px mid-display tier honors the §8 mobile hero scale
+   * ("hero text scales to ~28px"). */
+  --text-xs: 11px;                /* micro — fine print below the 14px baseline */
+  --text-sm: 12px;                /* small UI labels */
+  --text-base: 14px;              /* Tesla's reading baseline (nav, body, button, link) */
+  --text-lg: 16px;                /* Category Label — white text on category cards */
+  --text-xl: 17px;                /* Product Name — model names in nav panel and cards */
+  --text-2xl: 22px;               /* Promo Text — "0% APR Available" on hero */
+  --text-3xl: 28px;               /* mid display — mobile hero scale */
+  --text-4xl: 40px;               /* Hero Title — Tesla's hard display ceiling */
+
+  /* DESIGN.md §3 hierarchy table: hero 40/48 (1.20), body 14/20
+   * (1.43). Two values for the whole system — Tesla's leading
+   * envelope is as restrained as its weight set. */
+  --leading-body: 1.43;           /* SF Pro Text body, 17px */
+  --leading-tight: 1.20;          /* Hero Title 40/48 */
+
+  /* DESIGN.md §3 Principles: "'Normal' letter-spacing everywhere.
+   * Unlike most modern tech brands that use negative tracking for
+   * headlines, Tesla uses default letter-spacing at every level."
+   * Most schema brands bind a negative em value here; Tesla
+   * deliberately does not. */
+  --tracking-display: normal;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base grid (DESIGN.md §5). Schema defaults match Tesla's scale
+   * exactly — no overrides needed. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Tesla uses viewport-height sections (DESIGN.md §1 §5) and
+   * whitespace as a luxury signal. Token-level padding is the most
+   * generous in the schema — 120 desktop is 50% wider than the schema
+   * default (80) and 20% wider than Apple's 100. The full-viewport
+   * 100vh rhythm itself lives in components. */
+  --section-y-desktop: 120px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 documents Tesla's deliberate three-stop scale:
+   *   0px most elements (sharp default)
+   *   4px buttons (primary, secondary, nav items)
+   *   ~12px category cards (the largest sanctioned rounding)
+   *   50% carousel dots
+   *
+   * We bind --radius-sm to 4 (buttons), --radius-md to 12 (category
+   * cards), and --radius-lg to 12 as well — Tesla has no softer card
+   * tier beyond category. The schema's 16px lg default would invent a
+   * silhouette Tesla never uses. Pill stays at 9999 for dots / chips. */
+  --radius-sm: 4px;               /* buttons — "barely perceptible rounding" */
+  --radius-md: 12px;              /* category cards — the largest sanctioned */
+  --radius-lg: 12px;              /* same — Tesla has no third radius tier */
+  --radius-pill: 9999px;          /* carousel dots, badges */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * DESIGN.md §6: "Tesla's approach to elevation is essentially
+   * 'none.'" Three sanctioned levels but flatter than any other
+   * schema brand:
+   *   - flat   → none (the default; photography carries depth)
+   *   - ring   → 0 0 0 1px var(--border) (rare border-led containment)
+   *   - raised → 0 2px 8px rgba(0,0,0,0.05) (DESIGN.md §6 Level 3
+   *              "Subtle" — minimal shadow hints on rare hover states)
+   *
+   * The schema default oklab-mix raised reads as Material weight by
+   * comparison; Tesla flattens it to the lightest credible value. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Electric Blue ring at the accent — Tesla's single chromatic
+   * signal doubles as the focus halo. Schema default formula is
+   * already the correct color through var(--accent). */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * DESIGN.md §1 §4 — "0.33s cubic-bezier transitions as the
+   * universal timing for all interactive state changes." The
+   * documented Tesla Text Link curve is cubic-bezier(0.5, 0, 0,
+   * 0.75); we bind that as --ease-standard.
+   *   - fast → 250ms (the box-shadow micro-state from §4)
+   *   - base → 330ms (Tesla's universal 0.33s)
+   *
+   * No brand in the schema runs base this slow; Tesla's "consistency
+   * in motion is as important as consistency in color" (DESIGN.md §7)
+   * earns the override. */
+  --motion-fast: 250ms;
+  --motion-base: 330ms;
+  --ease-standard: cubic-bezier(0.5, 0, 0, 0.75);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * DESIGN.md §5: "Max width: approximately 1383px (full viewport
+   * width used for most content)." We keep the literal value rather
+   * than collapse to a rounder number — the figure itself is a Tesla
+   * artifact. Gutters step 24 → 16 → 12 on a clean 8px scale; mobile
+   * keeps horizontal padding tight so photography stays full-bleed. */
+  --container-max: 1383px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

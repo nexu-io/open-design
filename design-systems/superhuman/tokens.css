@@ -1,0 +1,160 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/superhuman/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Superhuman".
+ * Premium keyboard-first email client. Predominantly white canvas with a
+ * single dramatic gesture of color (deep purple hero), warm cream CTAs,
+ * lavender as the sole accent, and charcoal ink (warmer than #000) for text.
+ *
+ * Brand identity in three sentences:
+ *   1. Maximum confidence through minimum decoration — white dominates,
+ *      borders define containers, shadows are whispered. Lavender Glow
+ *      (#cbb7fb) is the only accent that ever leaves the warm-neutral
+ *      grayscale.
+ *   2. Super Sans VF with non-standard weight stops (460 / 540 / 600 / 700).
+ *      Body weight is 460 — slightly heavier than regular but lighter than
+ *      medium — the typographic signature that feels confident, never bold.
+ *   3. Two-radius binary system (8px / 16px) and ultra-tight 0.96 leading
+ *      on display sizes — headlines compress into architectural blocks
+ *      while body text breathes at 1.50 leading.
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff (Pure White) — the dominant content canvas.
+ *   - --surface: #ffffff — cards inherit the canvas; --border defines them.
+ *   - --surface-warm: #e9e5dd (Warm Cream) — lifted warm tier for CTAs.
+ *   - --fg: #292827 (Charcoal Ink) — warm near-black, never pure black.
+ *   - --fg-2 → var(--fg) — DESIGN.md uses one ink color on light surfaces.
+ *   - --muted: #6f6c69 — warm mid-gray for captions, derived to sit
+ *     between Charcoal Ink and Parchment Border on the warm hue family.
+ *   - --border: #dcd7d3 (Parchment Border) — warm light gray, slight pink.
+ *   - --accent: #cbb7fb (Lavender Glow); --accent-on: #292827 — charcoal
+ *     on lavender (DESIGN.md "Don't use bright/saturated CTA text").
+ *   - --leading-tight: 0.96 — the signature display compression.
+ *   - --tracking-display: -0.0275em ≈ -1.32px / 48px (DESIGN.md §3).
+ *   - --radius-md: 8px (no mid-tier — DESIGN.md mandates only 8 / 16).
+ *   - --elev-raised: charcoal-tinted whisper, never gray; matches the
+ *     warm-neutral palette used everywhere else.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * White canvas dominates. Warm Cream (#e9e5dd) lives in --surface-warm
+   * as the lifted warm tier — reserved for CTAs, never used as a card bg. */
+  --bg: #ffffff;             /* Pure White — primary page background */
+  --surface: #ffffff;        /* Cards inherit the canvas; --border contains them */
+  --surface-warm: #e9e5dd;   /* Warm Cream — primary button background only */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Charcoal Ink — warm near-black with faint brown undertone. Body
+   * text uses one ink color throughout; --muted is reserved for true
+   * subtext like captions and helper labels. */
+  --fg: #292827;             /* Charcoal Ink — primary text */
+  --fg-2: var(--fg);         /* alias — DESIGN.md uses one ink for body */
+  --muted: #6f6c69;          /* Warm mid-gray — captions, helper text */
+  --meta: var(--muted);      /* alias — same warm gray for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Parchment Border — warm light gray with slight pink undertone.
+   * Cards rely on borders for containment, not box shadows. */
+  --border: #dcd7d3;         /* Parchment Border — card edges, dividers */
+  --border-soft: var(--border); /* alias — no separate inner-row tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Lavender Glow — soft, approachable purple. The ONLY chromatic
+   * departure from the warm-neutral palette. Charcoal sits on it for
+   * AA contrast (lavender is too light for white text). */
+  --accent: #cbb7fb;
+  --accent-on: #292827;      /* Charcoal on lavender — DESIGN.md §4 */
+  --accent-hover: color-mix(in oklab, var(--accent), black 6%);
+  --accent-active: color-mix(in oklab, var(--accent), black 12%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Superhuman's marketing exercises extreme color restraint, but the
+   * schema requires semantic tokens for product-side usage (status pills,
+   * inline validation). Defaults from _schema/defaults.css; legible on white. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Super Sans VF — custom variable font with non-standard weight axis
+   * (460, 540, 600, 700). Body weight is 460 — the signature stop that
+   * sits between Regular and Medium. Fallback chain mirrors DESIGN.md §3. */
+  --font-display: "Super Sans VF", system-ui, -apple-system, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-body: "Super Sans VF", system-ui, -apple-system, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy. 64px hero / 48px section /
+   * 28px feature title / 22px card heading / 20px body heading.
+   * All eight stops appear verbatim in DESIGN.md — no interpolation. */
+  --text-xs: 12px;           /* Micro Label */
+  --text-sm: 14px;           /* Caption family */
+  --text-base: 16px;         /* Body / Button / Nav */
+  --text-lg: 20px;           /* Body Heading */
+  --text-xl: 22px;           /* Card Heading */
+  --text-2xl: 28px;          /* Feature Title */
+  --text-3xl: 48px;          /* Section Heading */
+  --text-4xl: 64px;          /* Display Hero */
+
+  /* Leading + tracking.
+   * 0.96 — the signature display compression (DESIGN.md §3).
+   * 1.50 — body text breathes generously by contrast.
+   * -0.0275em ≈ -1.32px / 48px from DESIGN.md §3, applied at display sizes only. */
+  --leading-body: 1.5;
+  --leading-tight: 0.96;
+  --tracking-display: -0.0275em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base. Scale per DESIGN.md §5: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 says 48–80px between major sections.
+   * Top of the range on desktop, compresses on smaller breakpoints. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Binary system — DESIGN.md §5: only 8px and 16px exist on the
+   * marketing site. No micro-rounding (2px), no pill buttons (50px+).
+   * --radius-md collapses to --radius-sm because the brand has no
+   * mid-tier; --radius-pill is reserved for status dots only. */
+  --radius-sm: 8px;          /* Buttons, inputs, inline elements */
+  --radius-md: 8px;          /* No mid-tier — DESIGN.md mandates only 8/16 */
+  --radius-lg: 16px;         /* Cards, links, larger containers */
+  --radius-pill: 9999px;     /* Status dots only — never buttons */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Depth lives in borders and color contrast, not shadow. The raised
+   * tier is a charcoal-tinted whisper for product-screenshot frames
+   * (DESIGN.md §6 "Subtle shadow … product screenshot containers"). */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 12px rgba(41, 40, 39, 0.06);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Lavender Glow at 45% — Superhuman is keyboard-first, so the focus
+   * indicator must read clearly without violating the muted palette. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 55%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Restrained — Superhuman's velocity is in the keyboard, not the page.
+   * Defaults from _schema/defaults.css. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px container — DESIGN.md §5 "~1200px content container, centered". */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

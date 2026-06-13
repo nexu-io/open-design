@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-bugatti",
+  "title": "Bugatti",
+  "title_i18n": {
+    "zh-CN": "Bugatti",
+    "zh-TW": "Bugatti",
+    "ja": "Bugatti",
+    "ko": "Bugatti",
+    "de": "Bugatti",
+    "fr": "Bugatti",
+    "ru": "Bugatti",
+    "es": "Bugatti",
+    "pt-BR": "Bugatti",
+    "it": "Bugatti",
+    "vi": "Bugatti",
+    "pl": "Bugatti",
+    "id": "Bugatti",
+    "nl": "Bugatti",
+    "ar": "Bugatti",
+    "tr": "Bugatti",
+    "uk": "Bugatti",
+    "en": "Bugatti"
+  },
+  "version": "0.1.0",
+  "description": "Hypercar brand. Cinema-black canvas, monochrome austerity, monumental display type.",
+  "description_i18n": {
+    "zh-CN": "超级跑车品牌。影院黑画布，单色简约风，宏伟展示字体。",
+    "zh-TW": "超級跑車品牌。影院黑畫布，單色簡約風，宏偉展示字體。",
+    "ja": "ハイパーカーブランド。シネマブラックのキャンバス、モノクロームの簡素さ、モニュメンタルなディスプレイ書体。",
+    "ko": "하이퍼카 브랜드. 시네마 블랙 캔버스, 모노크롬 간결함, 기념비적 디스플레이 서체.",
+    "de": "Hypercar-Marke. Kinoschwarz-Leinwand, monochromatische Strenge, monumentale Display-Schrift.",
+    "fr": "Marque de hypercar. Toile noire cinéma, austérité monochrome, typographie d'affichage monumentale.",
+    "ru": "Бренд гиперкаров. Кинематографический чёрный холст, монохромная строгость, монументальный дисплейный шрифт.",
+    "es": "Marca de hiperdeportivos. Lienzo negro cinematográfico, austeridad monocromática, tipografía monumental.",
+    "pt-BR": "Marca de hipercarro. Canvas preto cinema, austeridade monocromática, tipografia monumental.",
+    "it": "Brand di hypercar. Canvas nero cinema, austerità monocromatica, carattere tipografico monumentale.",
+    "vi": "Thương hiệu siêu xe. Canvas đen điện ảnh, tối giản đơn sắc, kiểu chữ hiển thị hoành tráng.",
+    "pl": "Marka hipersamochodów. Kinowa czerń, monochromatyczna surowość, monumentalna czcionka displayowa.",
+    "id": "Merek hypercar. Kanvas hitam sinema, austeritas monokrom, tipografi display monumental.",
+    "nl": "Hypercar-merk. Bioscoopzwart canvas, monochrome soberheid, monumentaal displaylettertype.",
+    "ar": "علامة السيارات الخارقة. لوحة سوداء سينمائية، تقشف أحادي اللون، خط عرض ضخم.",
+    "tr": "Hypercar markası. Sinema siyahı tuval, monokrom sadelik, anıtsal görüntüleme tipi.",
+    "uk": "Бренд гіперкарів. Кінематографічне чорне полотно, монохромна суворість, монументальний дисплейний шрифт.",
+    "en": "Hypercar brand. Cinema-black canvas, monochrome austerity, monumental display type."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "automotive"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Bugatti design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Bugatti design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "bugatti",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

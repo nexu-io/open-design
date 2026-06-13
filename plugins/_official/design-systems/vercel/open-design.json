@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-vercel",
+  "title": "Vercel",
+  "title_i18n": {
+    "zh-CN": "Vercel",
+    "zh-TW": "Vercel",
+    "ja": "Vercel",
+    "ko": "Vercel",
+    "de": "Vercel",
+    "fr": "Vercel",
+    "ru": "Vercel",
+    "es": "Vercel",
+    "pt-BR": "Vercel",
+    "it": "Vercel",
+    "vi": "Vercel",
+    "pl": "Vercel",
+    "id": "Vercel",
+    "nl": "Vercel",
+    "ar": "Vercel",
+    "tr": "Vercel",
+    "uk": "Vercel",
+    "en": "Vercel"
+  },
+  "version": "0.1.0",
+  "description": "Frontend deployment. Black and white precision, Geist font.",
+  "description_i18n": {
+    "zh-CN": "前端部署。黑白精准设计，Geist 字体。",
+    "zh-TW": "前端部署。黑白精準設計，Geist 字體。",
+    "ja": "フロントエンドデプロイ。モノクロの精密性、Geistフォント。",
+    "ko": "프론트엔드 배포. 흑백 정밀성, Geist 폰트.",
+    "de": "Frontend-Deployment. Schwarz-weiße Präzision, Geist-Schriftart.",
+    "fr": "Déploiement frontend. Précision noir et blanc, police Geist.",
+    "ru": "Развертывание фронтенда. Черно-белая точность, шрифт Geist.",
+    "es": "Despliegue frontend. Precisión en blanco y negro, fuente Geist.",
+    "pt-BR": "Deploy frontend. Precisão em preto e branco, fonte Geist.",
+    "it": "Deploy frontend. Precisione in bianco e nero, font Geist.",
+    "vi": "Triển khai frontend. Độ chính xác đen trắng, phông chữ Geist.",
+    "pl": "Wdrożenie frontendu. Precyzja czerni i bieli, czcionka Geist.",
+    "id": "Deployment frontend. Presisi hitam putih, font Geist.",
+    "nl": "Frontend-deployment. Zwart-wit precisie, Geist-lettertype.",
+    "ar": "نشر الواجهة الأمامية. دقة بالأبيض والأسود، خط Geist.",
+    "tr": "Frontend dağıtımı. Siyah beyaz hassasiyet, Geist fontu.",
+    "uk": "Розгортання фронтенду. Чорно-біла точність, шрифт Geist.",
+    "en": "Frontend deployment. Black and white precision, Geist font."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "developer-tools"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Vercel design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Vercel design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "vercel",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

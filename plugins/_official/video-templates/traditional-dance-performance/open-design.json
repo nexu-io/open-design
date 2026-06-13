@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-traditional-dance-performance",
+  "title": "Traditional Dance Performance",
+  "title_i18n": {
+    "zh-CN": "传统舞蹈表演",
+    "zh-TW": "傳統舞蹈表演",
+    "ja": "伝統舞踊パフォーマンス",
+    "ko": "전통 무용 공연",
+    "de": "Traditioneller Tanzauftritt",
+    "fr": "Performance de danse traditionnelle",
+    "ru": "Традиционный танцевальный номер",
+    "es": "Actuación de danza tradicional",
+    "pt-BR": "Performance de dança tradicional",
+    "it": "Esibizione di danza tradizionale",
+    "vi": "Biểu diễn múa truyền thống",
+    "pl": "Występ tradycyjnego tańca",
+    "id": "Pertunjukan Tari Tradisional",
+    "nl": "Traditionele dansvoorstelling",
+    "ar": "عرض رقص تقليدي",
+    "tr": "Geleneksel dans gösterisi",
+    "uk": "Традиційний танцювальний виступ",
+    "en": "Traditional Dance Performance"
+  },
+  "version": "0.1.0",
+  "description": "A comprehensive video prompt for Seedance 2.0 to generate a graceful traditional dance based on choreography and identity reference images.",
+  "description_i18n": {
+    "zh-CN": "为 Seedance 2.0 提供完整的视频提示词，根据编舞和身份参考图像生成优雅的传统舞蹈。",
+    "zh-TW": "為 Seedance 2.0 提供完整的影片提示詞，根據編舞和身份參考圖像生成優雅的傳統舞蹈。",
+    "ja": "振付とアイデンティティ参照画像に基づいて優雅な伝統舞踊を生成するための、Seedance 2.0 用の包括的な動画プロンプト。",
+    "ko": "안무 및 참조 이미지를 기반으로 우아한 전통 무용을 생성하는 Seedance 2.0용 포괄적인 비디오 프롬프트입니다.",
+    "de": "Ein umfassender Video-Prompt für Seedance 2.0 zur Generierung eines anmutigen traditionellen Tanzes basierend auf Choreografie- und Identitätsreferenzbildern.",
+    "fr": "Un prompt vidéo complet pour Seedance 2.0 permettant de générer une danse traditionnelle gracieuse basée sur des images de référence chorégraphiques et identitaires.",
+    "ru": "Полноценный видео-промпт для Seedance 2.0 для генерации изящного традиционного танца на основе референсных изображений хореографии и образа.",
+    "es": "Un prompt de video completo para Seedance 2.0 que genera una danza tradicional elegante basada en imágenes de referencia de coreografía e identidad.",
+    "pt-BR": "Um prompt de vídeo abrangente para o Seedance 2.0 que gera uma dança tradicional graciosa com base em imagens de referência de coreografia e identidade.",
+    "it": "Un prompt video completo per Seedance 2.0 che genera una danza tradizionale elegante basata su immagini di riferimento coreografiche e di identità.",
+    "vi": "Prompt video toàn diện cho Seedance 2.0 để tạo ra điệu múa truyền thống uyển chuyển dựa trên hình ảnh tham khảo về biên đạo và đặc điểm nhận dạng.",
+    "pl": "Kompleksowy prompt wideo dla Seedance 2.0 do generowania pełnego wdzięku tradycyjnego tańca na podstawie obrazów referencyjnych choreografii i tożsamości.",
+    "id": "Prompt video komprehensif untuk Seedance 2.0 yang menghasilkan tarian tradisional yang anggun berdasarkan gambar referensi koreografi dan identitas.",
+    "nl": "Een uitgebreide videoprompt voor Seedance 2.0 om een sierlijke traditionele dans te genereren op basis van choreografie- en identiteitsreferentiebeelden.",
+    "ar": "موجه فيديو شامل لـ Seedance 2.0 لإنشاء رقصة تقليدية رشيقة بناءً على صور مرجعية للرقصات والهوية.",
+    "tr": "Koreografi ve kimlik referans görsellerine dayalı zarif bir geleneksel dans oluşturmak için Seedance 2.0'a yönelik kapsamlı bir video istemi.",
+    "uk": "Комплексний відео-промпт для Seedance 2.0 для генерації витонченого традиційного танцю на основі референсних зображень хореографії та образу.",
+    "en": "A comprehensive video prompt for Seedance 2.0 to generate a graceful traditional dance based on choreography and identity reference images."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Sydney",
+    "url": "https://x.com/XSydneyFan/status/2049170241247449316"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "advertising",
+    "cinematic",
+    "fantasy",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://pbs.twimg.com/media/HHAdco5aQAAtTCa.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the first reference image as the exact choreography and motion-process guide. Use the second reference image as the identity reference for the adult woman dancer.\n\nCreate a graceful traditional dance performance that follows all 16 illustrated steps in order, from the confident opening pose to the respectful closing pose. The dancer performs with poised posture, soft knee bends, precise cross steps, elegant wrist waves, curved fingers, shoulder accents, hip sways, flowing turns, and expressive selendang sweeps.\n\nKeep the camera in a clean full-body cinematic frame, mostly front-facing, with slow controlled movement that supports the dance instead of distracting from it. During the left and right turns, allow a subtle circular camera drift, then return to a centered frontal composition. The dancer’s hands, feet, facial expression, and selendang fabric must remain visible throughout.\n\nUse soft studio lighting, refined contrast, and a calm traditional performance atmosphere. The motion should feel smooth, rhythmic, respectful, and feminine, with the selendang floating naturally as the dancer glides forward and backward. End on a still closing pose with hands at the heart, peaceful smile, and elegant silence.",
+        "zh-CN": "使用这个插件完成以下任务：Use the first reference image as the exact choreography and motion-process guide. Use the second reference image as the identity reference for the adult woman dancer.\n\nCreate a graceful traditional dance performance that follows all 16 illustrated steps in order, from the confident opening pose to the respectful closing pose. The dancer performs with poised posture, soft knee bends, precise cross steps, elegant wrist waves, curved fingers, shoulder accents, hip sways, flowing turns, and expressive selendang sweeps.\n\nKeep the camera in a clean full-body cinematic frame, mostly front-facing, with slow controlled movement that supports the dance instead of distracting from it. During the left and right turns, allow a subtle circular camera drift, then return to a centered frontal composition. The dancer’s hands, feet, facial expression, and selendang fabric must remain visible throughout.\n\nUse soft studio lighting, refined contrast, and a calm traditional performance atmosphere. The motion should feel smooth, rhythmic, respectful, and feminine, with the selendang floating naturally as the dancer glides forward and backward. End on a still closing pose with hands at the heart, peaceful smile, and elegant silence."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

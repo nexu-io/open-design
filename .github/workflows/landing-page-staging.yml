@@ -1,0 +1,201 @@
+name: landing-page-staging
+
+# Pushes to `main` deploy the landing page to the STAGING Cloudflare Pages
+# project (`open-design-landing-staging`, served at staging.open-design.ai).
+# Production (the separate `open-design-landing` project → open-design.ai) is
+# never named here — it is reached exclusively through the manual
+# `landing-page-production` workflow. This is the safety gate: project
+# separation means a merge to main can only ever change staging.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Workflow files
+      - .github/workflows/landing-page-staging.yml
+      - .github/workflows/landing-page-production.yml
+      - .github/workflows/landing-page-ci.yml
+      # Landing page sources
+      - apps/landing-page/**
+      # Design template source of truth for the homepage.
+      - design-templates/open-design-landing/**
+      # Content sources — Astro content collections glob these at build
+      # time. Adding/removing a SKILL.md, DESIGN.md, craft principle, or
+      # live-artifact template MUST trigger a redeploy or the published
+      # site falls behind silently.
+      - skills/**
+      - design-systems/**
+      - craft/**
+      - templates/**
+      # Plugin marketplace — the registry JSON and bundled official plugin
+      # manifests are read at build time by plugin-registry.ts to render the
+      # /plugins catalogue. Merging a plugin PR MUST trigger a redeploy or the
+      # published catalogue silently falls behind.
+      - plugins/**
+      # Workspace plumbing
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: landing-page-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy landing page to staging
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: landing-staging
+      url: https://staging.open-design.ai
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -p "require('./apps/landing-page/package.json').devDependencies.playwright.replace(/[^0-9.]/g,'')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache generated previews
+        id: previews-cache
+        uses: actions/cache@v5.0.5
+        with:
+          path: apps/landing-page/public/previews
+          key: landing-page-previews-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'apps/landing-page/package.json', 'apps/landing-page/scripts/generate-previews.ts', 'apps/landing-page/scripts/fallback-preview-card.ts', 'skills/**', 'design-templates/**', 'templates/live-artifacts/**', 'plugins/_official/**') }}
+          restore-keys: |
+            landing-page-previews-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
+
+      - name: Typecheck landing page
+        run: pnpm --filter @open-design/landing-page typecheck
+
+      # Generate previews before build so they end up in `out/previews/`.
+      # Soft vs. hard failure is enforced inside the script itself:
+      # individual broken `example.html` entries are logged and skipped,
+      # but a systemic failure (chromium launch error, every job failing)
+      # exits non-zero so we don't silently ship a deploy with zero
+      # thumbnails to production.
+      - name: Generate skill + template previews
+        # Skip only on an EXACT previews-cache hit: the cache key hashes every
+        # rendering input, so an exact hit means public/previews already holds
+        # the correct thumbnails and regenerating is wasted work. A restore-keys
+        # partial hit leaves cache-hit unset (false), so we still regenerate
+        # then — no stale-thumbnail drift. This is what lets a plugins-only
+        # deploy skip the slowest step (Playwright screenshotting) while a
+        # skill/template change still re-renders.
+        if: steps.previews-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @open-design/landing-page previews
+
+      # No PUBLIC_GA_MEASUREMENT_ID on staging: leaving it unset omits the
+      # Google Analytics tag entirely, so test-environment traffic does not
+      # pollute the production GA property. OD_LANDING_NOINDEX=1 makes every
+      # page emit <meta name="robots" content="noindex"> so the staging mirror
+      # stays out of search engines. Only `landing-page-production` builds
+      # without these (GA on, indexable).
+      - name: Build landing page
+        env:
+          OD_LANDING_NOINDEX: '1'
+        run: pnpm --filter @open-design/landing-page build:static
+
+      - name: Verify zero external JavaScript
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const html = readFileSync('apps/landing-page/out/index.html', 'utf8');
+          const forbidden = [
+            /<script\b[^>]*\bsrc=/i,
+            /type=["']module["']/i,
+            /\/_astro\/[^"'<>\s]+\.js/i,
+          ];
+          for (const pattern of forbidden) {
+            if (pattern.test(html)) {
+              console.error(`Unexpected client JavaScript matched ${pattern}`);
+              process.exit(1);
+            }
+          }
+          NODE
+
+      - name: Verify homepage ships optimized WebP art
+        run: |
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const html = readFileSync('apps/landing-page/out/index.html', 'utf8');
+          // The homepage serves its hero / gallery / method art as optimized,
+          // origin-hosted WebP (each kept <1MB by the changed-file blob guard)
+          // instead of Cloudflare Image Resizing variants — see PR #4158, the
+          // local-first homepage design refresh. Require the same floor of 16
+          // optimized references so a regression that reintroduces raw,
+          // unoptimized art (or drops the gallery) is still caught.
+          const webpRefs = html.match(/\/[A-Za-z0-9/_-]+\.webp/g) ?? [];
+          if (webpRefs.length < 16) {
+            console.error(`Expected at least 16 optimized WebP image references, found ${webpRefs.length}`);
+            process.exit(1);
+          }
+          if (/(?:src|content)=["']\/assets\/[A-Za-z0-9_.-]+\.png/.test(html)) {
+            console.error('Found local /assets/*.png image reference in generated landing HTML.');
+            process.exit(1);
+          }
+          NODE
+
+      - name: Verify deploy file count under Cloudflare Pages cap
+        run: |
+          # Cloudflare Pages rejects deployments over 20,000 files. Localized
+          # routes (especially per-locale catalog detail pages) can silently
+          # multiply the output, so fail well before the hard cap — a regression
+          # is caught here instead of at the wrangler deploy step. `out/`
+          # already includes the generated previews at this point.
+          count=$(find apps/landing-page/out -type f | wc -l | tr -d '[:space:]')
+          echo "landing-page deploy file count: $count"
+          if [ "$count" -ge 19000 ]; then
+            echo "::error::landing-page build emitted $count files; Cloudflare Pages caps deployments at 20,000. Reduce per-locale page fan-out (see PR #4158)."
+            exit 1
+          fi
+
+      # Deploys to the dedicated STAGING project. `--branch=main` is that
+      # project's production branch, so it serves at its custom domain
+      # staging.open-design.ai. The production project (open-design-landing)
+      # is a different project and is never named here.
+      - name: Deploy to Cloudflare Pages (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/landing-page
+          packageManager: npm
+          command: >
+            pages deploy out
+            --project-name=open-design-landing-staging
+            --branch=main

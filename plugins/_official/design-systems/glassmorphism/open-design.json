@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-glassmorphism",
+  "title": "Glassmorphism",
+  "title_i18n": {
+    "zh-CN": "玻璃拟态",
+    "zh-TW": "玻璃擬態",
+    "ja": "グラスモーフィズム",
+    "ko": "글래스모피즘",
+    "de": "Glassmorphism",
+    "fr": "Glassmorphisme",
+    "ru": "Глассморфизм",
+    "es": "Glassmorphism",
+    "pt-BR": "Glassmorphism",
+    "it": "Glassmorphism",
+    "vi": "Glassmorphism",
+    "pl": "Glassmorphism",
+    "id": "Glassmorphism",
+    "nl": "Glassmorphism",
+    "ar": "الزجاجية الشكلية",
+    "tr": "Glassmorphism",
+    "uk": "Глассморфізм",
+    "en": "Glassmorphism"
+  },
+  "version": "0.1.0",
+  "description": "Frosted glass effect with translucent layers, subtle blur, and luminous borders for depth and modern elegance.",
+  "description_i18n": {
+    "zh-CN": "磨砂玻璃效果，具有半透明图层、柔和模糊和发光边框，呈现深度感和现代优雅风格。",
+    "zh-TW": "磨砂玻璃效果，具有半透明圖層、柔和模糊和發光邊框，呈現深度感和現代優雅風格。",
+    "ja": "半透明レイヤー、柔らかなぼかし、光る境界線による曇りガラス効果で、奥行きとモダンなエレガンスを演出します。",
+    "ko": "반투명 레이어, 부드러운 블러, 빛나는 테두리가 있는 프로스티드 글라스 효과로 깊이감과 모던한 우아함을 표현합니다.",
+    "de": "Milchglas-Effekt mit durchscheinenden Ebenen, dezentem Weichzeichner und leuchtenden Rändern für Tiefe und moderne Eleganz.",
+    "fr": "Effet verre dépoli avec calques translucides, flou subtil et bordures lumineuses pour la profondeur et l'élégance moderne.",
+    "ru": "Эффект матового стекла с полупрозрачными слоями, мягким размытием и светящимися границами для глубины и современной элегантности.",
+    "es": "Efecto de vidrio esmerilado con capas translúcidas, desenfoque sutil y bordes luminosos para profundidad y elegancia moderna.",
+    "pt-BR": "Efeito de vidro fosco com camadas translúcidas, desfoque sutil e bordas luminosas para profundidade e elegância moderna.",
+    "it": "Effetto vetro satinato con livelli traslucidi, sfocatura sottile e bordi luminosi per profondità ed eleganza moderna.",
+    "vi": "Hiệu ứng kính mờ với các lớp mờ trong, làm mờ nhẹ và viền phát sáng tạo chiều sâu và vẻ đẹp hiện đại.",
+    "pl": "Efekt matowego szkła z półprzezroczystymi warstwami, subtelnym rozmyciem i świecącymi krawędziami dla głębi i nowoczesnej elegancji.",
+    "id": "Efek kaca buram dengan lapisan tembus pandang, blur halus, dan batas bercahaya untuk kedalaman dan keanggunan modern.",
+    "nl": "Mat glazen effect met doorschijnende lagen, subtiele vervaging en lichtgevende randen voor diepte en moderne elegantie.",
+    "ar": "تأثير زجاج مصنفر مع طبقات شفافة وتمويه خفيف وحدود مضيئة لإضافة العمق والأناقة الحديثة.",
+    "tr": "Yarı saydam katmanlar, ince bulanıklık ve parlak kenarlıklarla buzlu cam efekti, derinlik ve modern zarafet sunar.",
+    "uk": "Ефект матового скла з напівпрозорими шарами, м'яким розмиттям і світними межами для глибини та сучасної елегантності.",
+    "en": "Frosted glass effect with translucent layers, subtle blur, and luminous borders for depth and modern elegance."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "morphism-effects"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Glassmorphism design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Glassmorphism design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "glassmorphism",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

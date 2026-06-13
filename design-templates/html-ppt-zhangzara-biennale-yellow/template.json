@@ -1,0 +1,49 @@
+{
+  "slug": "zhangzara-biennale-yellow",
+  "name": "Biennale Yellow",
+  "tagline": "Solar yellow on warm parchment with deep indigo serif and atmospheric sun-glow gradients.",
+  "mood": [
+    "editorial",
+    "atmospheric",
+    "warm",
+    "cultural-institution",
+    "poster-like"
+  ],
+  "occasion": [
+    "exhibition or biennale",
+    "arts institution programme",
+    "design or typography conference",
+    "literary or curatorial publication",
+    "studio annual report",
+    "museum season announcement"
+  ],
+  "tone": [
+    "literary",
+    "considered",
+    "contemplative",
+    "warm-modern",
+    "Dutch-editorial"
+  ],
+  "formality": "high",
+  "density": "medium",
+  "palette": {
+    "paper": "#E9E5DB",
+    "ink": "#1B2566",
+    "sun": "#F1EE2E",
+    "ember": "#E26B4A",
+    "haze": "#F0DA7C",
+    "description": "warm parchment ground with a signature solar-yellow accent, deep indigo navy ink, and a soft peach/ember edge that bleeds out of corner gradients"
+  },
+  "typography": {
+    "display": "Instrument Serif",
+    "body": "Archivo",
+    "mono": "JetBrains Mono",
+    "style": "transitional Didone-flavored display serif paired with a clean grotesk sans for micro-typography and a mono for tabular data"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like an art-biennale poster or a museum's annual programme: exhibition decks, arts-institution announcements, design conference brochures, curatorial pitches, literary publications, studio retrospectives. Equally good for any deck wanting Dutch-editorial atmosphere with an unmistakable single-color signature.",
+  "avoid_for": "Decks that need visual punch or saturated multi-color energy — the warm-paper canvas and one-yellow palette are intentionally quiet and atmospheric.",
+  "slide_count": 8,
+  "navigation": "vanilla JS (arrow keys, space, Home/End, touch swipe)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/biennale-yellow"
+}

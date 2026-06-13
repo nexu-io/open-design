@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-gradient",
+  "title": "Gradient",
+  "title_i18n": {
+    "zh-CN": "渐变",
+    "zh-TW": "漸層",
+    "ja": "グラデーション",
+    "ko": "그라데이션",
+    "de": "Verlauf",
+    "fr": "Dégradé",
+    "ru": "Градиент",
+    "es": "Degradado",
+    "pt-BR": "Gradiente",
+    "it": "Gradiente",
+    "vi": "Gradient",
+    "pl": "Gradient",
+    "id": "Gradien",
+    "nl": "Verloop",
+    "ar": "التدرج",
+    "tr": "Degrade",
+    "uk": "Градієнт",
+    "en": "Gradient"
+  },
+  "version": "0.1.0",
+  "description": "Smooth color transitions and gradient-rich surfaces for modern, playful interfaces with visual depth.",
+  "description_i18n": {
+    "zh-CN": "平滑的色彩过渡和丰富的渐变效果，为现代界面增添趣味性和视觉层次。",
+    "zh-TW": "平滑的色彩過渡和豐富的漸層效果，為現代介面增添趣味性和視覺層次。",
+    "ja": "なめらかな色の遷移と豊かなグラデーション表現で、モダンで遊び心のある視覚的な奥行きを持つインターフェースを実現。",
+    "ko": "부드러운 색상 전환과 풍부한 그라데이션으로 시각적 깊이를 더한 현대적이고 활기찬 인터페이스를 구현합니다.",
+    "de": "Weiche Farbübergänge und verlaufsreiche Oberflächen für moderne, verspielte Interfaces mit visueller Tiefe.",
+    "fr": "Transitions de couleurs fluides et surfaces riches en dégradés pour des interfaces modernes et ludiques avec de la profondeur visuelle.",
+    "ru": "Плавные цветовые переходы и насыщенные градиентами поверхности для современных, игривых интерфейсов с визуальной глубиной.",
+    "es": "Transiciones de color suaves y superficies ricas en degradados para interfaces modernas y divertidas con profundidad visual.",
+    "pt-BR": "Transições suaves de cores e superfícies ricas em gradientes para interfaces modernas e divertidas com profundidade visual.",
+    "it": "Transizioni di colore fluide e superfici ricche di sfumature per interfacce moderne e giocose con profondità visiva.",
+    "vi": "Chuyển đổi màu mượt mà và bề mặt gradient phong phú cho giao diện hiện đại, vui tươi với chiều sâu thị giác.",
+    "pl": "Płynne przejścia kolorów i bogate w gradienty powierzchnie dla nowoczesnych, żywych interfejsów z głębią wizualną.",
+    "id": "Transisi warna yang mulus dan permukaan kaya gradien untuk antarmuka modern yang playful dengan kedalaman visual.",
+    "nl": "Vloeiende kleurovergangen en verlooprijke oppervlakken voor moderne, speelse interfaces met visuele diepte.",
+    "ar": "انتقالات لونية سلسة وأسطح غنية بالتدرجات لواجهات عصرية ومرحة ذات عمق بصري.",
+    "tr": "Görsel derinliğe sahip modern ve eğlenceli arayüzler için pürüzsüz renk geçişleri ve degrade açısından zengin yüzeyler.",
+    "uk": "Плавні колірні переходи та багаті на градієнти поверхні для сучасних, грайливих інтерфейсів із візуальною глибиною.",
+    "en": "Smooth color transitions and gradient-rich surfaces for modern, playful interfaces with visual depth."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "morphism-effects"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Gradient design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Gradient design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "gradient",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

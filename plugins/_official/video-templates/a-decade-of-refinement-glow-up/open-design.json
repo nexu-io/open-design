@@ -1,0 +1,123 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-a-decade-of-refinement-glow-up",
+  "title": "A Decade of Refinement Glow-Up",
+  "title_i18n": {
+    "zh-CN": "十年蜕变焕新颜",
+    "zh-TW": "十年蛻變煥新顏",
+    "ja": "10年の洗練と変貌",
+    "ko": "10년의 세련된 변화",
+    "de": "Ein Jahrzehnt der Verfeinerung",
+    "fr": "Une décennie de raffinement",
+    "ru": "Десятилетие совершенствования",
+    "es": "Una década de refinamiento",
+    "pt-BR": "Uma década de refinamento",
+    "it": "Un decennio di raffinatezza",
+    "vi": "Một thập kỷ hoàn thiện",
+    "pl": "Dekada doskonalenia",
+    "id": "Satu dekade penyempurnaan",
+    "nl": "Een decennium van verfijning",
+    "ar": "عقد من التحسين والتألق",
+    "tr": "On yıllık bir gelişim ve değişim",
+    "uk": "Десятиліття вдосконалення",
+    "en": "A Decade of Refinement Glow-Up"
+  },
+  "version": "0.1.0",
+  "description": "A transformation prompt for Seedance 2.0 showing a man's transition from a casual 2016 setting to a luxurious 2026 Dubai lifestyle while maintaining character consistency.",
+  "description_i18n": {
+    "zh-CN": "Seedance 2.0 转换提示词，展示男性角色从 2016 年休闲风格到 2026 年迪拜奢华生活方式的转变，同时保持角色一致性。",
+    "zh-TW": "Seedance 2.0 轉換提示詞，展示男性角色從 2016 年休閒風格到 2026 年杜拜奢華生活方式的轉變，同時保持角色一致性。",
+    "ja": "Seedance 2.0の変換プロンプト。2016年のカジュアルな雰囲気から2026年のドバイの豪華なライフスタイルへの男性キャラクターの変化を、一貫性を保ちながら表現します。",
+    "ko": "Seedance 2.0 변환 프롬프트로, 2016년 캐주얼 스타일에서 2026년 두바이 럭셔리 라이프스타일로의 남성 캐릭터 전환을 일관성 있게 표현합니다.",
+    "de": "Ein Transformations-Prompt für Seedance 2.0, der den Übergang eines Mannes von einem lockeren Setting 2016 zu einem luxuriösen Dubai-Lifestyle 2026 zeigt, bei gleichbleibender Charakterkonsistenz.",
+    "fr": "Un prompt de transformation pour Seedance 2.0 montrant la transition d'un homme d'un style décontracté de 2016 vers un lifestyle luxueux de Dubaï en 2026, tout en maintenant la cohérence du personnage.",
+    "ru": "Промпт трансформации для Seedance 2.0, показывающий переход мужского персонажа от повседневного стиля 2016 года к роскошному образу жизни в Дубае 2026 года с сохранением согласованности персонажа.",
+    "es": "Un prompt de transformación para Seedance 2.0 que muestra la transición de un hombre desde un entorno casual de 2016 a un estilo de vida lujoso en Dubái en 2026, manteniendo la coherencia del personaje.",
+    "pt-BR": "Um prompt de transformação para Seedance 2.0 mostrando a transição de um homem de um cenário casual de 2016 para um estilo de vida luxuoso em Dubai em 2026, mantendo a consistência do personagem.",
+    "it": "Un prompt di trasformazione per Seedance 2.0 che mostra la transizione di un uomo da un'ambientazione casual del 2016 a uno stile di vita lussuoso a Dubai nel 2026, mantenendo la coerenza del personaggio.",
+    "vi": "Prompt chuyển đổi cho Seedance 2.0 thể hiện sự chuyển mình của một người đàn ông từ phong cách thường ngày năm 2016 sang lối sống xa hoa ở Dubai năm 2026, đồng thời duy trì tính nhất quán của nhân vật.",
+    "pl": "Prompt transformacji dla Seedance 2.0 pokazujący przemianę mężczyzny z casualowego stylu 2016 roku do luksusowego stylu życia w Dubaju w 2026 roku, przy zachowaniu spójności postaci.",
+    "id": "Prompt transformasi untuk Seedance 2.0 yang menampilkan transisi seorang pria dari gaya kasual 2016 ke gaya hidup mewah Dubai 2026 sambil mempertahankan konsistensi karakter.",
+    "nl": "Een transformatieprompt voor Seedance 2.0 die de overgang van een man toont van een casual setting in 2016 naar een luxueuze Dubai-levensstijl in 2026, met behoud van karakterconsistentie.",
+    "ar": "موجه تحويل لـ Seedance 2.0 يعرض انتقال رجل من أسلوب عفوي في 2016 إلى أسلوب حياة فاخر في دبي عام 2026 مع الحفاظ على اتساق الشخصية.",
+    "tr": "Seedance 2.0 için bir dönüşüm promptu; bir erkeğin 2016'daki rahat ortamdan 2026 Dubai'deki lüks yaşam tarzına geçişini karakter tutarlılığını koruyarak gösterir.",
+    "uk": "Промпт трансформації для Seedance 2.0, що показує перехід чоловічого персонажа від повсякденного стилю 2016 року до розкішного способу життя в Дубаї 2026 року зі збереженням узгодженості персонажа.",
+    "en": "A transformation prompt for Seedance 2.0 showing a man's transition from a casual 2016 setting to a luxurious 2026 Dubai lifestyle while maintaining character consistency."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Maverick | AI",
+    "url": "https://x.com/RizwanAly07/status/2048948726623056366"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "advertising",
+    "cinematic",
+    "fantasy",
+    "product"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d2d6d15cbc6ef4d4d4c8c9a7de7007d7/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/d2d6d15cbc6ef4d4d4c8c9a7de7007d7/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a 15-second ultra-realistic cinematic transformation video using the exact same man from the uploaded reference image. Maintain perfect face consistency, same hairstyle, facial features, identity, and body proportions throughout. No face change. Concept: “2026 is the new 2016” nostalgia-to-luxury glow-up. Scene 1: 2016 version — simple casual clothes, basic hairstyle, walking alone on a normal street, warm nostalgic colors, old Instagram aesthetic, simple life, no luxury. Scene 2: Flashback cuts — old bike ride, cheap café alone, late-night dreams, city lights, silent ambition in his eyes. Scene 3: Strong transition — speed-ramp effect, screen crack cinematic transition, time shifts from 2016 to 2026, luxury watch appears, black suit transformation begins. Scene 4: 2026 version — walking confidently in Dubai downtown, luxury black suit, sunglasses, expensive watch, black luxury car behind him, people turn and stare. Scene 5: Hero shot — rooftop skyline at sunset, slow motion, wind moving, camera rotating around him, strong eye contact, main character energy. Final scene: cinematic ending with the feeling “Same Man. Different Era.” Style: hyper-realistic, Netflix-level production, luxury transformation, dramatic lighting, viral Instagram reel style, strong masculine aura, editorial fashion visuals, 4K ultra realism, emotional and powerful storytelling.",
+        "zh-CN": "使用这个插件完成以下任务：Create a 15-second ultra-realistic cinematic transformation video using the exact same man from the uploaded reference image. Maintain perfect face consistency, same hairstyle, facial features, identity, and body proportions throughout. No face change. Concept: “2026 is the new 2016” nostalgia-to-luxury glow-up. Scene 1: 2016 version — simple casual clothes, basic hairstyle, walking alone on a normal street, warm nostalgic colors, old Instagram aesthetic, simple life, no luxury. Scene 2: Flashback cuts — old bike ride, cheap café alone, late-night dreams, city lights, silent ambition in his eyes. Scene 3: Strong transition — speed-ramp effect, screen crack cinematic transition, time shifts from 2016 to 2026, luxury watch appears, black suit transformation begins. Scene 4: 2026 version — walking confidently in Dubai downtown, luxury black suit, sunglasses, expensive watch, black luxury car behind him, people turn and stare. Scene 5: Hero shot — rooftop skyline at sunset, slow motion, wind moving, camera rotating around him, strong eye contact, main character energy. Final scene: cinematic ending with the feeling “Same Man. Different Era.” Style: hyper-realistic, Netflix-level production, luxury transformation, dramatic lighting, viral Instagram reel style, strong masculine aura, editorial fashion visuals, 4K ultra realism, emotional and powerful storytelling."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

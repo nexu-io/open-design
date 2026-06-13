@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-minimax",
+  "title": "MiniMax",
+  "title_i18n": {
+    "zh-CN": "MiniMax",
+    "zh-TW": "MiniMax",
+    "ja": "MiniMax",
+    "ko": "MiniMax",
+    "de": "MiniMax",
+    "fr": "MiniMax",
+    "ru": "MiniMax",
+    "es": "MiniMax",
+    "pt-BR": "MiniMax",
+    "it": "MiniMax",
+    "vi": "MiniMax",
+    "pl": "MiniMax",
+    "id": "MiniMax",
+    "nl": "MiniMax",
+    "ar": "MiniMax",
+    "tr": "MiniMax",
+    "uk": "MiniMax",
+    "en": "MiniMax"
+  },
+  "version": "0.1.0",
+  "description": "AI model provider. Bold dark interface with neon accents.",
+  "description_i18n": {
+    "zh-CN": "AI 模型提供商。深色粗体界面，搭配霓虹色点缀。",
+    "zh-TW": "AI 模型供應商。粗體深色介面，搭配霓虹色點綴。",
+    "ja": "AIモデルプロバイダー。ネオンアクセントを配した大胆なダークインターフェース。",
+    "ko": "AI 모델 제공업체. 네온 액센트가 있는 대담한 다크 인터페이스.",
+    "de": "AI-Modellanbieter. Kräftige dunkle Oberfläche mit Neon-Akzenten.",
+    "fr": "Fournisseur de modèles IA. Interface sombre audacieuse avec accents néon.",
+    "ru": "Провайдер AI-моделей. Смелый тёмный интерфейс с неоновыми акцентами.",
+    "es": "Proveedor de modelos de IA. Interfaz oscura atrevida con acentos de neón.",
+    "pt-BR": "Provedor de modelos de IA. Interface escura ousada com detalhes neon.",
+    "it": "Provider di modelli AI. Interfaccia scura e audace con accenti neon.",
+    "vi": "Nhà cung cấp mô hình AI. Giao diện tối đậm với điểm nhấn neon.",
+    "pl": "Dostawca modeli AI. Odważny ciemny interfejs z neonowymi akcentami.",
+    "id": "Penyedia model AI. Antarmuka gelap berani dengan aksen neon.",
+    "nl": "AI-modelprovider. Gedurfde donkere interface met neonaccenten.",
+    "ar": "مزود نماذج AI. واجهة داكنة جريئة مع لمسات نيون.",
+    "tr": "AI model sağlayıcısı. Neon vurgularla cesur koyu arayüz.",
+    "uk": "Провайдер AI-моделей. Сміливий темний інтерфейс з неоновими акцентами.",
+    "en": "AI model provider. Bold dark interface with neon accents."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the MiniMax design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the MiniMax design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "minimax",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

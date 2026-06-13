@@ -1,0 +1,121 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-3d-stone-staircase-evolution-infographic",
+  "title": "3D Stone Staircase Evolution Infographic",
+  "title_i18n": {
+    "zh-CN": "3D 石制楼梯进化信息图",
+    "zh-TW": "3D 石製階梯進化資訊圖",
+    "ja": "3D石段進化インフォグラフィック",
+    "ko": "3D 석재 계단 진화 인포그래픽",
+    "de": "3D-Steintreppe-Evolutions-Infografik",
+    "fr": "Infographie d'escalier en pierre 3D sur l'évolution",
+    "ru": "3D инфографика эволюции в виде каменной лестницы",
+    "es": "Infografía de escalera de piedra 3D evolutiva",
+    "pt-BR": "Infográfico de escada de pedra 3D evolutiva",
+    "it": "Infografica scala in pietra 3D evolutiva",
+    "vi": "Infographic cầu thang đá 3D tiến hóa",
+    "pl": "Infografika ewolucji w formie kamiennych schodów 3D",
+    "id": "Infografis tangga batu 3D evolusi",
+    "nl": "3D stenen trap evolutie-infographic",
+    "ar": "إنفوجرافيك سلم حجري ثلاثي الأبعاد للتطور",
+    "tr": "3D taş merdiven evrim infografiği",
+    "uk": "3D інфографіка еволюції у вигляді кам'яних сходів",
+    "en": "3D Stone Staircase Evolution Infographic"
+  },
+  "version": "0.1.0",
+  "description": "Transforms a flat evolutionary timeline into a realistic 3D stone staircase infographic with detailed organism renders and structured side panels.",
+  "description_i18n": {
+    "zh-CN": "将平面进化时间线转换为逼真的 3D 石制楼梯信息图，包含详细的生物渲染和结构化侧边面板。",
+    "zh-TW": "將平面進化時間軸轉換為逼真的 3D 石製階梯資訊圖，包含詳細的生物渲染和結構化側邊面板。",
+    "ja": "平面的な進化タイムラインをリアルな3D石段インフォグラフィックに変換し、詳細な生物レンダリングと構造化されたサイドパネルを追加します。",
+    "ko": "평면 진화 타임라인을 사실적인 3D 석재 계단 인포그래픽으로 변환하며, 상세한 생물 렌더링과 구조화된 측면 패널을 제공합니다.",
+    "de": "Verwandelt eine flache evolutionäre Zeitleiste in eine realistische 3D-Steintreppe-Infografik mit detaillierten Organismen-Renderings und strukturierten Seitenpanels.",
+    "fr": "Transforme une chronologie évolutive plate en infographie d'escalier en pierre 3D réaliste avec des rendus détaillés d'organismes et des panneaux latéraux structurés.",
+    "ru": "Преобразует плоскую эволюционную временную шкалу в реалистичную 3D инфографику в виде каменной лестницы с детализированными изображениями организмов и структурированными боковыми панелями.",
+    "es": "Transforma una línea de tiempo evolutiva plana en una infografía de escalera de piedra 3D realista con renders detallados de organismos y paneles laterales estructurados.",
+    "pt-BR": "Transforma uma linha do tempo evolutiva plana em um infográfico de escada de pedra 3D realista com renderizações detalhadas de organismos e painéis laterais estruturados.",
+    "it": "Trasforma una timeline evolutiva piatta in un'infografica realistica a scala in pietra 3D con rendering dettagliati di organismi e pannelli laterali strutturati.",
+    "vi": "Chuyển đổi dòng thời gian tiến hóa phẳng thành infographic cầu thang đá 3D chân thực với các hình ảnh sinh vật chi tiết và bảng điều khiển bên có cấu trúc.",
+    "pl": "Przekształca płaską oś czasu ewolucji w realistyczną infografikę kamiennych schodów 3D ze szczegółowymi renderingami organizmów i uporządkowanymi panelami bocznymi.",
+    "id": "Mengubah garis waktu evolusi datar menjadi infografis tangga batu 3D yang realistis dengan render organisme terperinci dan panel samping terstruktur.",
+    "nl": "Transformeert een vlakke evolutionaire tijdlijn in een realistische 3D stenen trap-infographic met gedetailleerde organisme-renders en gestructureerde zijpanelen.",
+    "ar": "يحول جدولاً زمنياً مسطحاً للتطور إلى إنفوجرافيك سلم حجري ثلاثي الأبعاد واقعي مع عروض تفصيلية للكائنات الحية ولوحات جانبية منظمة.",
+    "tr": "Düz bir evrim zaman çizelgesini, detaylı organizma görselleştirmeleri ve yapılandırılmış yan panellerle gerçekçi bir 3D taş merdiven infografiğine dönüştürür.",
+    "uk": "Перетворює плоску еволюційну часову шкалу на реалістичну 3D інфографіку у вигляді кам'яних сходів з детальними зображеннями організмів та структурованими бічними панелями.",
+    "en": "Transforms a flat evolutionary timeline into a realistic 3D stone staircase infographic with detailed organism renders and structured side panels."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "知识猫图解",
+    "url": "https://x.com/GeekCatX/status/2045792240044511277#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "infographic",
+    "3d-render"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "{\n  \"type\": \"evolutionary timeline infographic\",\n  \"instruction\": \"Using REFERENCE_0 as a structural base, transform the flat vector design into a highly realistic 3D infographic. Replace the smooth ramps with distinct stone steps and upgrade all organisms to photorealistic 3D models.\",\n  \"style\": {\n    \"background\": \"{argument name=\\\"background style\\\" default=\\\"vintage textured parchment paper\\\"}\",\n    \"staircase\": \"{argument name=\\\"staircase material\\\" default=\\\"realistic textured stone blocks\\\"}\",\n    \"subjects\": \"{argument name=\\\"organism style\\\" default=\\\"highly detailed photorealistic 3D renders\\\"}\"\n  },\n  \"layout\": {\n    \"main_title\": \"{argument name=\\\"main title\\\" default=\\\"人类演化\\\"}\",\n    \"sections\": [\n      {\n        \"position\": \"left sidebar\",\n        \"count\": 8,\n        \"labels\": [\"L0: 单细胞生命\", \"L1: 多细胞生物\", \"L2: 动物界\", \"L3: 脊索动物\", \"L4: 上陆革命\", \"L5: 哺乳纲\", \"L6: 人科演化\", \"L7: 智人纪元\"]\n      },\n      {\n        \"position\": \"top right\",\n        \"title\": \"获得的功能 / 失去的功能\",\n        \"description\": \"Legend with plus and minus icons\"\n      },\n      {\n        \"position\": \"bottom center\",\n        \"title\": \"演化关键里程碑\",\n        \"count\": 6,\n        \"description\": \"Timeline with a silhouette graphic of 6 figures showing ape-to-human evolution\"\n      }\n    ],\n    \"centerpiece\": {\n      \"description\": \"Winding stone staircase with 25 numbered steps featuring specific organisms.\",\n      \"count\": 25,\n      \"notable_elements\": [\n        \"Step 07: Jellyfish\",\n        \"Step 09: Ammonite\",\n        \"Step 10: Trilobite\",\n        \"Step 24: Walking human\",\n        \"Step 25: {argument name=\\\"future evolution concept\\\" default=\\\"glowing cosmic silhouette with a question mark\\\"}\"\n      ]\n    }\n  }\n}",
+        "zh-CN": "{\n  \"type\": \"evolutionary timeline infographic\",\n  \"instruction\": \"Using REFERENCE_0 as a structural base, transform the flat vector design into a highly realistic 3D infographic. Replace the smooth ramps with distinct stone steps and upgrade all organisms to photorealistic 3D models.\",\n  \"style\": {\n    \"background\": \"{argument name=\\\"background style\\\" default=\\\"vintage textured parchment paper\\\"}\",\n    \"staircase\": \"{argument name=\\\"staircase material\\\" default=\\\"realistic textured stone blocks\\\"}\",\n    \"subjects\": \"{argument name=\\\"organism style\\\" default=\\\"highly detailed photorealistic 3D renders\\\"}\"\n  },\n  \"layout\": {\n    \"main_title\": \"{argument name=\\\"main title\\\" default=\\\"人类演化\\\"}\",\n    \"sections\": [\n      {\n        \"position\": \"left sidebar\",\n        \"count\": 8,\n        \"labels\": [\"L0: 单细胞生命\", \"L1: 多细胞生物\", \"L2: 动物界\", \"L3: 脊索动物\", \"L4: 上陆革命\", \"L5: 哺乳纲\", \"L6: 人科演化\", \"L7: 智人纪元\"]\n      },\n      {\n        \"position\": \"top right\",\n        \"title\": \"获得的功能 / 失去的功能\",\n        \"description\": \"Legend with plus and minus icons\"\n      },\n      {\n        \"position\": \"bottom center\",\n        \"title\": \"演化关键里程碑\",\n        \"count\": 6,\n        \"description\": \"Timeline with a silhouette graphic of 6 figures showing ape-to-human evolution\"\n      }\n    ],\n    \"centerpiece\": {\n      \"description\": \"Winding stone staircase with 25 numbered steps featuring specific organisms.\",\n      \"count\": 25,\n      \"notable_elements\": [\n        \"Step 07: Jellyfish\",\n        \"Step 09: Ammonite\",\n        \"Step 10: Trilobite\",\n        \"Step 24: Walking human\",\n        \"Step 25: {argument name=\\\"future evolution concept\\\" default=\\\"glowing cosmic silhouette with a question mark\\\"}\"\n      ]\n    }\n  }\n}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

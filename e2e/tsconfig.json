@@ -5,6 +5,10 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["lib/*.ts"]
+    },
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -19,10 +23,14 @@
   },
   "include": [
     "playwright.config.ts",
+    "playwright.visual.config.ts",
     "vitest.config.ts",
-    "cases/report-metadata.ts",
-    "reporters/**/*.ts",
-    "scripts/**/*.ts"
+    "lib/**/*.ts",
+    "resources/**/*.ts",
+    "scripts/**/*.ts",
+    "specs/**/*.ts",
+    "tests/**/*.ts",
+    "ui/**/*.ts"
   ],
   "exclude": ["node_modules", "reports", ".od-data"]
 }

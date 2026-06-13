@@ -1,0 +1,120 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-beat-synced-outfit-transformation-dance",
+  "title": "Beat-Synced Outfit Transformation Dance",
+  "title_i18n": {
+    "zh-CN": "节拍同步换装变身舞蹈",
+    "zh-TW": "節拍同步換裝變身舞蹈",
+    "ja": "ビート同期衣装チェンジダンス",
+    "ko": "비트 동기화 의상 변신 댄스",
+    "de": "Beat-synchronisierter Outfit-Wechsel-Tanz",
+    "fr": "Danse de transformation de tenue synchronisée au rythme",
+    "ru": "Танец с переодеванием под ритм",
+    "es": "Danza de transformación de atuendo sincronizada al ritmo",
+    "pt-BR": "Dança de transformação de roupa sincronizada com a batida",
+    "it": "Danza di trasformazione outfit sincronizzata al ritmo",
+    "vi": "Múa biến hóa trang phục theo nhịp",
+    "pl": "Taniec z przemianą stroju zsynchronizowaną z rytmem",
+    "id": "Tarian transformasi pakaian sinkron dengan beat",
+    "nl": "Beat-gesynchroniseerde outfit-transformatie dans",
+    "ar": "رقصة تحول الملابس متزامنة مع الإيقاع",
+    "tr": "Ritim senkronizeli kıyafet değişimi dansı",
+    "uk": "Танець зі зміною вбрання під ритм",
+    "en": "Beat-Synced Outfit Transformation Dance"
+  },
+  "version": "0.1.0",
+  "description": "A prompt for Seedance 2.0 that coordinates a character dance following breakdown frames while performing a beat-synced outfit change.",
+  "description_i18n": {
+    "zh-CN": "适用于 Seedance 2.0 的提示词，让角色跟随分解帧跳舞的同时进行节拍同步的服装变换。",
+    "zh-TW": "適用於 Seedance 2.0 的提示詞，讓角色跟隨分解幀跳舞的同時進行節拍同步的服裝變換。",
+    "ja": "Seedance 2.0用のプロンプト。ブレイクダウンフレームに従ったキャラクターダンスとビート同期の衣装チェンジを実現します。",
+    "ko": "Seedance 2.0용 프롬프트로, 브레이크다운 프레임을 따라 춤추는 캐릭터가 비트에 맞춰 의상을 변경합니다.",
+    "de": "Ein Prompt für Seedance 2.0, der einen Charaktertanz mit Breakdown-Frames und beat-synchronem Outfit-Wechsel koordiniert.",
+    "fr": "Un prompt pour Seedance 2.0 qui coordonne une danse de personnage suivant les images clés avec changement de tenue synchronisé au rythme.",
+    "ru": "Промпт для Seedance 2.0, координирующий танец персонажа по ключевым кадрам с синхронизированной со звуком сменой костюма.",
+    "es": "Un prompt para Seedance 2.0 que coordina un baile de personaje siguiendo fotogramas clave mientras realiza un cambio de atuendo sincronizado al ritmo.",
+    "pt-BR": "Um prompt para Seedance 2.0 que coordena uma dança de personagem seguindo quadros-chave enquanto realiza uma troca de roupa sincronizada com a batida.",
+    "it": "Un prompt per Seedance 2.0 che coordina una danza del personaggio seguendo i frame di breakdown mentre esegue un cambio outfit sincronizzato al ritmo.",
+    "vi": "Prompt cho Seedance 2.0 để điều phối nhân vật nhảy theo khung hình phân tách đồng thời thực hiện thay đổi trang phục đồng bộ theo nhịp.",
+    "pl": "Prompt dla Seedance 2.0, który koordynuje taniec postaci zgodnie z klatkami podziału podczas zsynchronizowanej z rytmem zmiany stroju.",
+    "id": "Prompt untuk Seedance 2.0 yang mengoordinasikan tarian karakter mengikuti breakdown frame sambil melakukan perubahan pakaian yang disinkronkan dengan beat.",
+    "nl": "Een prompt voor Seedance 2.0 die een karakterdans coördineert volgens breakdown frames tijdens een beat-gesynchroniseerde outfit-wissel.",
+    "ar": "موجه لـ Seedance 2.0 لتنسيق رقصة الشخصية وفقًا للإطارات التفصيلية مع تغيير الملابس بالتزامن مع الإيقاع.",
+    "tr": "Seedance 2.0 için, karakterin breakdown frame'leri takip ederek dans etmesini ve ritimle senkronize kıyafet değişimi yapmasını koordine eden bir prompt.",
+    "uk": "Промпт для Seedance 2.0, що координує танець персонажа за ключовими кадрами із синхронізованою зі звуком зміною вбрання.",
+    "en": "A prompt for Seedance 2.0 that coordinates a character dance following breakdown frames while performing a beat-synced outfit change."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Kashberg",
+    "url": "https://x.com/Kashberg_0/status/2049074008730247669"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "general",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://pbs.twimg.com/media/HG_FqHJboAA5vAe.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Have the character from Image 1 perform the dance based on the breakdown in Image 3. During the performance, include a beat-synced transformation into the character from Image 2. After the transformation, the character from Image 2 continues and completes the remaining dance steps from Image 3. Emphasize precise beat matching with the music",
+        "zh-CN": "使用这个插件完成以下任务：Have the character from Image 1 perform the dance based on the breakdown in Image 3. During the performance, include a beat-synced transformation into the character from Image 2. After the transformation, the character from Image 2 continues and completes the remaining dance steps from Image 3. Emphasize precise beat matching with the music"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

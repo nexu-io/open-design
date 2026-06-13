@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-wise",
+  "title": "Wise",
+  "title_i18n": {
+    "zh-CN": "Wise",
+    "zh-TW": "Wise",
+    "ja": "Wise",
+    "ko": "Wise",
+    "de": "Wise",
+    "fr": "Wise",
+    "ru": "Wise",
+    "es": "Wise",
+    "pt-BR": "Wise",
+    "it": "Wise",
+    "vi": "Wise",
+    "pl": "Wise",
+    "id": "Wise",
+    "nl": "Wise",
+    "ar": "Wise",
+    "tr": "Wise",
+    "uk": "Wise",
+    "en": "Wise"
+  },
+  "version": "0.1.0",
+  "description": "Money transfer. Bright green accent, friendly and clear.",
+  "description_i18n": {
+    "zh-CN": "汇款转账。明亮的绿色强调色，友好清晰。",
+    "zh-TW": "匯款轉帳。明亮的綠色強調色，友好清晰。",
+    "ja": "送金サービス。明るいグリーンのアクセント、フレンドリーで明快。",
+    "ko": "해외 송금. 밝은 그린 강조색, 친근하고 명확함.",
+    "de": "Geldtransfer. Helles Grün als Akzent, freundlich und klar.",
+    "fr": "Transfert d'argent. Vert vif en accent, convivial et clair.",
+    "ru": "Денежные переводы. Яркий зелёный акцент, дружелюбный и понятный.",
+    "es": "Transferencia de dinero. Acento verde brillante, amigable y claro.",
+    "pt-BR": "Transferência de dinheiro. Destaque verde vivo, amigável e claro.",
+    "it": "Trasferimento di denaro. Accento verde brillante, amichevole e chiaro.",
+    "vi": "Chuyển tiền. Màu xanh lá sáng nổi bật, thân thiện và rõ ràng.",
+    "pl": "Przelewy pieniężne. Jasny zielony akcent, przyjazny i przejrzysty.",
+    "id": "Transfer uang. Aksen hijau cerah, ramah dan jelas.",
+    "nl": "Geldoverschrijving. Helder groen accent, vriendelijk en duidelijk.",
+    "ar": "تحويل الأموال. لون أخضر فاتح مميز، ودود وواضح.",
+    "tr": "Para transferi. Parlak yeşil vurgu, samimi ve net.",
+    "uk": "Грошові перекази. Яскравий зелений акцент, дружній і зрозумілий.",
+    "en": "Money transfer. Bright green accent, friendly and clear."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "fintech-crypto"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Wise design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Wise design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "wise",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

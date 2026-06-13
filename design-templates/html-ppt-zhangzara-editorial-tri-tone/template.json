@@ -1,0 +1,44 @@
+{
+  "slug": "zhangzara-editorial-tri-tone",
+  "name": "Editorial Tri-Tone",
+  "tagline": "Three-color editorial system: dusty pink, mustard cream, and deep burgundy, set in Bricolage + Instrument Serif.",
+  "mood": [
+    "editorial",
+    "warm",
+    "intentional",
+    "moody"
+  ],
+  "occasion": [
+    "editorial / magazine pitch",
+    "fashion brand deck",
+    "lifestyle media",
+    "literary / cultural",
+    "art direction review"
+  ],
+  "tone": [
+    "literary",
+    "warm",
+    "considered",
+    "stylish"
+  ],
+  "formality": "medium-high",
+  "density": "medium",
+  "palette": {
+    "pink": "#F2B6C6",
+    "cream_yellow": "#F2D86A",
+    "burgundy": "#7A1F35",
+    "description": "dusty pink, mustard cream, and deep burgundy used as full-bleed color blocks; very high contrast tri-tone with no fourth color"
+  },
+  "typography": {
+    "display": "Bricolage Grotesque",
+    "serif": "Instrument Serif",
+    "mono": "JetBrains Mono",
+    "style": "expressive variable grotesk + literary serif + technical mono; magazine-page typographic system"
+  },
+  "scheme": "mixed",
+  "best_for": "Anything that should feel like a fashion-magazine spread: editorial pitches, fashion brand decks, lifestyle media, art direction reviews. Equally good for any deck — including tech, research, or business — that wants tri-tone discipline and serif/sans contrast instead of the usual neutrals.",
+  "avoid_for": "Decks that need to read as soft or comforting — the burgundy/pink/cream tri-tone is intentionally high-contrast and styled.",
+  "slide_count": 8,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/editorial-tri-tone"
+}

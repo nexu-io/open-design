@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-game-screenshot-three-kingdoms-zhaoyun-cradle-escape",
+  "title": "Game Screenshot - Three Kingdoms ARPG: Zhao Yun's Cradle Escape at Changbanpo",
+  "title_i18n": {
+    "zh-CN": "游戏截图 - 三国 ARPG：赵云长坂坡怀抱幼主突围",
+    "zh-TW": "遊戲截圖 - 三國 ARPG：趙雲長坂坡懷抱幼主突圍",
+    "ja": "ゲームスクリーンショット - 三国志 ARPG：趙雲の長坂坡脱出戦",
+    "ko": "게임 스크린샷 - 삼국지 ARPG: 조운의 장판파 탈출전",
+    "de": "Spiel-Screenshot - Three Kingdoms ARPG: Zhao Yuns Flucht bei Changbanpo",
+    "fr": "Capture d'écran - ARPG Three Kingdoms : L'évasion de Zhao Yun à Changbanpo",
+    "ru": "Игровой скриншот - ARPG «Троецарствие»: побег Чжао Юня в Чанбаньпо",
+    "es": "Captura de juego - ARPG Three Kingdoms: Escape de Zhao Yun en Changbanpo",
+    "pt-BR": "Screenshot de jogo - ARPG Three Kingdoms: Fuga de Zhao Yun em Changbanpo",
+    "it": "Screenshot di gioco - ARPG Three Kingdoms: Fuga di Zhao Yun a Changbanpo",
+    "vi": "Ảnh chụp màn hình game - ARPG Tam Quốc: Triệu Vân đột phá Trường Bản Pha",
+    "pl": "Zrzut ekranu gry - ARPG Three Kingdoms: Ucieczka Zhao Yuna w Changbanpo",
+    "id": "Screenshot Game - ARPG Three Kingdoms: Pelarian Zhao Yun di Changbanpo",
+    "nl": "Game-screenshot - Three Kingdoms ARPG: Zhao Yun's ontsnapping bij Changbanpo",
+    "ar": "لقطة شاشة لعبة - ARPG الممالك الثلاث: هروب تشاو يون في تشانغبانبو",
+    "tr": "Oyun Ekran Görüntüsü - Three Kingdoms ARPG: Zhao Yun'un Changbanpo Kaçışı",
+    "uk": "Скріншот гри - ARPG «Троє царств»: втеча Чжао Юня в Чанбаньпо",
+    "en": "Game Screenshot - Three Kingdoms ARPG: Zhao Yun's Cradle Escape at Changbanpo"
+  },
+  "version": "0.1.0",
+  "description": "An in-game action-RPG screenshot of the legendary Three Kingdoms scene where Zhao Yun cradles the infant Liu Chan in one arm and fights his way through enemy lines with a spear in the other at Changbanpo. Rendered in the cinematic photoreal style of Black Myth: Wukong combined with Elden Ring, Unreal Engine 5 with full Nanite, Lumen ray-tracing, and volumetric god-rays. The emotional core — one arm protecting the swaddled baby, one arm fighting for life — is reinforced by a full HUD overlay including a dedicated ESCORT protection bar for the baby, a combo counter, and mid-air damage-number popups on flung enemies. Tuned for gpt-image-2 at 16:9.",
+  "description_i18n": {
+    "zh-CN": "三国题材动作 RPG 游戏截图，展现赵云一手怀抱婴儿刘禅、一手持枪杀敌的长坂坡突围场景。采用《黑神话：悟空》与《艾尔登法环》风格的影视级写实渲染，包含护送保护条、连击计数器等完整 HUD 界面元素。",
+    "zh-TW": "三國題材動作 RPG 遊戲截圖，展現趙雲一手懷抱嬰兒劉禪、一手持槍殺敵的長坂坡突圍場景。採用《黑神話：悟空》與《艾爾登法環》風格的影視級寫實渲染，包含護送保護條、連擊計數器等完整 HUD 介面元素。",
+    "ja": "趙雲が片手で幼い劉禅を抱き、もう片手で槍を振るい敵陣を突破する三国志の名場面を描いた ARPG ゲームスクリーンショット。Black Myth: Wukong と Elden Ring スタイルの映画的フォトリアル表現で、護衛保護バーやコンボカウンターなど完全な HUD を搭載。",
+    "ko": "조운이 한 손에 유선을 안고 다른 손으로 창을 휘두르며 적진을 돌파하는 삼국지 명장면을 담은 ARPG 게임 스크린샷. Black Myth: Wukong과 Elden Ring 스타일의 영화적 포토리얼 렌더링으로, 호위 보호 바와 콤보 카운터 등 완전한 HUD를 포함.",
+    "de": "ARPG-Screenshot der legendären Three Kingdoms-Szene, in der Zhao Yun mit einem Arm den Säugling Liu Chan hält und mit dem anderen eine Lanze schwingt. Kinorealistischer Stil von Black Myth: Wukong und Elden Ring mit vollständigem HUD inklusive Eskort-Schutzleiste und Combo-Zähler.",
+    "fr": "Capture d'ARPG de la scène légendaire des Three Kingdoms où Zhao Yun protège le bébé Liu Chan d'un bras tout en combattant à la lance de l'autre. Style photoréaliste cinématique de Black Myth: Wukong et Elden Ring avec HUD complet incluant barre de protection d'escorte et compteur de combos.",
+    "ru": "Скриншот ARPG легендарной сцены из эпохи «Троецарствия», где Чжао Юнь одной рукой держит младенца Лю Чаня, а другой сражается копьём. Кинематографичный фотореалистичный стиль Black Myth: Wukong и Elden Ring с полным HUD, включая шкалу защиты escort и счётчик комбо.",
+    "es": "Captura de ARPG de la legendaria escena de Three Kingdoms donde Zhao Yun sostiene al bebé Liu Chan con un brazo mientras lucha con una lanza en el otro. Estilo fotorrealista cinematográfico de Black Myth: Wukong y Elden Ring con HUD completo que incluye barra de protección de escolta y contador de combos.",
+    "pt-BR": "Screenshot de ARPG da cena lendária de Three Kingdoms onde Zhao Yun segura o bebê Liu Chan com um braço enquanto luta com uma lança no outro. Estilo fotorrealista cinematográfico de Black Myth: Wukong e Elden Ring com HUD completo incluindo barra de proteção de escolta e contador de combos.",
+    "it": "Screenshot ARPG della leggendaria scena dei Three Kingdoms in cui Zhao Yun tiene il neonato Liu Chan con un braccio mentre combatte con una lancia nell'altro. Stile fotorealistico cinematografico di Black Myth: Wukong ed Elden Ring con HUD completo che include barra di protezione escort e contatore combo.",
+    "vi": "Ảnh chụp màn hình ARPG cảnh Tam Quốc huyền thoại với Triệu Vân một tay bồng bé Liu Chan, tay kia cầm thương chiến đấu. Phong cách điện ảnh như Black Myth: Wukong và Elden Ring với HUD đầy đủ bao gồm thanh bảo vệ hộ tống và bộ đếm combo.",
+    "pl": "Zrzut ekranu ARPG legendarnej sceny z Three Kingdoms, gdzie Zhao Yun trzyma niemowlę Liu Chana jedną ręką, walcząc włócznią drugą. Kinowy fotorealistyczny styl Black Myth: Wukong i Elden Ring z pełnym HUD zawierającym pasek ochrony eskortowanego i licznik combo.",
+    "id": "Screenshot ARPG adegan legendaris Three Kingdoms di mana Zhao Yun menggendong bayi Liu Chan dengan satu tangan sambil bertarung dengan tombak di tangan lainnya. Gaya fotorealistik sinematik Black Myth: Wukong dan Elden Ring dengan HUD lengkap termasuk bar perlindungan escort dan penghitung combo.",
+    "nl": "ARPG-screenshot van de legendarische Three Kingdoms-scène waarin Zhao Yun met één arm baby Liu Chan vasthoudt terwijl hij met een speer in de andere vecht. Cinematische fotorealistische stijl van Black Myth: Wukong en Elden Ring met volledige HUD inclusief escortbeschermingsbalk en comboteller.",
+    "ar": "لقطة شاشة ARPG للمشهد الأسطوري من Three Kingdoms حيث يحمل تشاو يون الرضيع ليو تشان بذراع ويقاتل بالرمح بالأخرى. أسلوب سينمائي واقعي مثل Black Myth: Wukong و Elden Ring مع HUD كامل يتضمن شريط حماية المرافقة وعداد الضربات المتتالية.",
+    "tr": "Zhao Yun'un bir kolunda bebek Liu Chan'ı taşıyıp diğer eliyle mızrakla savaştığı efsanevi Three Kingdoms sahnesinin ARPG ekran görüntüsü. Black Myth: Wukong ve Elden Ring tarzı sinematik fotorealist stil, eskort koruma çubuğu ve kombo sayacı içeren tam HUD ile.",
+    "uk": "Скріншот ARPG легендарної сцени з «Трьох царств», де Чжао Юнь однією рукою тримає немовля Лю Чаня, а іншою б'ється списом. Кінематографічний фотореалістичний стиль Black Myth: Wukong та Elden Ring з повним HUD, включаючи шкалу захисту escort та лічильник комбо.",
+    "en": "An in-game action-RPG screenshot of the legendary Three Kingdoms scene where Zhao Yun cradles the infant Liu Chan in one arm and fights his way through enemy lines with a spear in the other at Changbanpo. Rendered in the cinematic photoreal style of Black Myth: Wukong combined with Elden Ring, Unreal Engine 5 with full Nanite, Lumen ray-tracing, and volumetric god-rays. The emotional core — one arm protecting the swaddled baby, one arm fighting for life — is reinforced by a full HUD overlay including a dedicated ESCORT protection bar for the baby, a combo counter, and mid-air damage-number popups on flung enemies. Tuned for gpt-image-2 at 16:9."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "open-design contributors",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "game-ui",
+    "arpg",
+    "three-kingdoms",
+    "zhaoyun",
+    "escort-mission",
+    "cinematic",
+    "hud",
+    "combo",
+    "elden-ring",
+    "unreal-engine-5"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/game-screenshot-three-kingdoms-zhaoyun-cradle-escape.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Cinematic in-game screenshot from a AAA next-generation action RPG in the style of Black Myth Wukong combined with Elden Ring, rendered in Unreal Engine 5 with full Nanite and Lumen ray-tracing, cinematic post-processing, shallow DOF bokeh, ray-traced reflections, volumetric god-rays and atmospheric dust particles. Third-person gameplay camera, low-angle tracking shot positioned about 3 meters behind the player character.\n\n# Playable character\n{argument name=\"character\" default=\"Zhao Yun, a legendary Three Kingdoms warrior. Athletic build, heroic sharp-featured face visible from side angle, hair tied in a warrior's topknot with a gold band, wearing ornate polished silver-steel plate-lamellar armor with gold trim and deeply engraved dragon patterns etched into each plate — battle-weathered with scratches, dents, and dust stains showing realistic wear. The armor has cinematic PBR metal texture with ray-traced reflections catching the dawn light. A white silk cape tattered at the edges flows dynamically from his shoulders with realistic fabric physics and subsurface scattering\"}.\n\n# Critical pose — the emotional core\nThe character is cradling {argument name=\"child_protected\" default=\"a tiny infant baby (Liu Chan)\"} in the crook of his LEFT arm against his chest — the baby is wrapped in soft cream-white silk swaddling cloth like a traditional Chinese bundled newborn. Only the baby's small round face and one tiny fist are peeking out of the silk. The baby's face shows peaceful sleep: eyes closed, round cheeks, small mouth slightly open. The hero's left arm holds the baby securely and gently, pressed against his armored chest.\n\nHis RIGHT hand is free and wields {argument name=\"weapon\" default=\"a long silver-shafted spear with a gleaming polished mirror-finish tip, the weapon glowing with elegant pale blue wind-energy runes that swirl along the shaft with volumetric light\"}. His right arm is extended mid-swing executing a horizontal sweeping attack. This is the classic \"one arm protecting the precious cargo, one arm fighting for life\" heroic stance.\n\n# Action\nThe spear has just swept horizontally in a dramatic arc, knocking back two enemy cavalry soldiers mid-air — their bodies caught in dynamic motion arcs being thrown backward (not impaled). Visible blue-white energy shockwave ripples outward from the spear's trajectory with particle dust. The hero's white cape whips in a spiraling trail. The protected baby in his left arm remains peacefully undisturbed despite the violence around them — this is the emotional core of the image.\n\n# Setting\n{argument name=\"setting\" default=\"A dramatic hillside battlefield at dawn golden hour, soft pink-gold sunrise breaking over distant mountain silhouettes with painterly cloud formations. A dirt slope scarred with broken battle banners, scattered enemy helmets, spear shafts stuck into the earth. Dozens of dark-armored soldiers with realistic armor details in the middle and far distance, some retreating in panic, some still approaching with raised weapons. A shattered wooden war-chariot in the distant background with visible splintered wood. Volumetric god-rays piercing through morning mist and dust particles, creating tangible light shafts with tyndall effect.\"}\n\n# IN-GAME HUD OVERLAY (clean semi-transparent dark backgrounds with gold-trim borders, Elden Ring + Black Myth Wukong polished game-studio UI aesthetic)\n- Upper-left corner: large circular portrait of the hero with a bold red vertical HP bar and blue qi-energy bar beside it, a stylized Chinese calligraphy-like name character above (abstract brushstroke shapes). Below the portrait, a SMALLER secondary circular portrait representing the baby escort, with its own bright green horizontal protection bar labeled \"ESCORT\".\n- Upper-right corner: detailed round minimap with compass ring, showing the player blue dot surrounded by many red enemy dots, with a small yellow arrow indicating an escape route labeled to the edge.\n- Lower-left: 4 circular skill icons with subtle ornate borders, each showing different abstract martial-art glyphs (not readable Chinese, just brush-shape aesthetic), one glowing bright ready to use.\n- Lower-center: a combo counter showing \"x7\" in large bright white-gold numbers with a faint glow effect, above a narrow button prompt with thin bordered design.\n- Lower-right: a stamina ring almost depleted (visual tension), dodge prompt icon.\n- Top-center area: two damage-number popups in large orange-red numbers floating above two of the knocked-back enemies with a bright gold burst effect.\n\n# Rendering\nPhotorealistic PBR materials with sharp detail, detailed engraved silver armor reflecting dawn light, individual hair strands and cape fiber threads rendered, motion blur ONLY on the spinning spear and flung enemies (hero himself crystal sharp with anti-aliased edges), volumetric dawn light with strong Tyndall god-rays piercing through atmospheric dust, fine dust and cherry-petal particles swirling in the air. Cinematic-but-clear gameplay framing with strong rim-lighting separating the hero from background. Color grading: warm golden sunrise palette with cool blue shadows creating teal-orange cinematic contrast.\n\nThe baby face should be photorealistic, peaceful, and untouched by violence — a visual symbol of what the hero is fighting to protect.\n\nAspect ratio 16:9 landscape.\n\n# Negative prompt\nno watermark, no studio logos, no warped Chinese characters, no fake gibberish glyphs, no movie-cutscene framing, no first-person view, no anime cel-shading, no low-res UI, no duplicated HUD widgets, no extra fingers on the hero or the baby, no modern clothing, no firearms, no generic Western fantasy look, no cluttered or overlapping UI panels, no distressed or crying baby, no baby held awkwardly, no blood on the baby, no signature.",
+        "zh-CN": "使用这个插件完成以下任务：Cinematic in-game screenshot from a AAA next-generation action RPG in the style of Black Myth Wukong combined with Elden Ring, rendered in Unreal Engine 5 with full Nanite and Lumen ray-tracing, cinematic post-processing, shallow DOF bokeh, ray-traced reflections, volumetric god-rays and atmospheric dust particles. Third-person gameplay camera, low-angle tracking shot positioned about 3 meters behind the player character.\n\n# Playable character\n{argument name=\"character\" default=\"Zhao Yun, a legendary Three Kingdoms warrior. Athletic build, heroic sharp-featured face visible from side angle, hair tied in a warrior's topknot with a gold band, wearing ornate polished silver-steel plate-lamellar armor with gold trim and deeply engraved dragon patterns etched into each plate — battle-weathered with scratches, dents, and dust stains showing realistic wear. The armor has cinematic PBR metal texture with ray-traced reflections catching the dawn light. A white silk cape tattered at the edges flows dynamically from his shoulders with realistic fabric physics and subsurface scattering\"}.\n\n# Critical pose — the emotional core\nThe character is cradling {argument name=\"child_protected\" default=\"a tiny infant baby (Liu Chan)\"} in the crook of his LEFT arm against his chest — the baby is wrapped in soft cream-white silk swaddling cloth like a traditional Chinese bundled newborn. Only the baby's small round face and one tiny fist are peeking out of the silk. The baby's face shows peaceful sleep: eyes closed, round cheeks, small mouth slightly open. The hero's left arm holds the baby securely and gently, pressed against his armored chest.\n\nHis RIGHT hand is free and wields {argument name=\"weapon\" default=\"a long silver-shafted spear with a gleaming polished mirror-finish tip, the weapon glowing with elegant pale blue wind-energy runes that swirl along the shaft with volumetric light\"}. His right arm is extended mid-swing executing a horizontal sweeping attack. This is the classic \"one arm protecting the precious cargo, one arm fighting for life\" heroic stance.\n\n# Action\nThe spear has just swept horizontally in a dramatic arc, knocking back two enemy cavalry soldiers mid-air — their bodies caught in dynamic motion arcs being thrown backward (not impaled). Visible blue-white energy shockwave ripples outward from the spear's trajectory with particle dust. The hero's white cape whips in a spiraling trail. The protected baby in his left arm remains peacefully undisturbed despite the violence around them — this is the emotional core of the image.\n\n# Setting\n{argument name=\"setting\" default=\"A dramatic hillside battlefield at dawn golden hour, soft pink-gold sunrise breaking over distant mountain silhouettes with painterly cloud formations. A dirt slope scarred with broken battle banners, scattered enemy helmets, spear shafts stuck into the earth. Dozens of dark-armored soldiers with realistic armor details in the middle and far distance, some retreating in panic, some still approaching with raised weapons. A shattered wooden war-chariot in the distant background with visible splintered wood. Volumetric god-rays piercing through morning mist and dust particles, creating tangible light shafts with tyndall effect.\"}\n\n# IN-GAME HUD OVERLAY (clean semi-transparent dark backgrounds with gold-trim borders, Elden Ring + Black Myth Wukong polished game-studio UI aesthetic)\n- Upper-left corner: large circular portrait of the hero with a bold red vertical HP bar and blue qi-energy bar beside it, a stylized Chinese calligraphy-like name character above (abstract brushstroke shapes). Below the portrait, a SMALLER secondary circular portrait representing the baby escort, with its own bright green horizontal protection bar labeled \"ESCORT\".\n- Upper-right corner: detailed round minimap with compass ring, showing the player blue dot surrounded by many red enemy dots, with a small yellow arrow indicating an escape route labeled to the edge.\n- Lower-left: 4 circular skill icons with subtle ornate borders, each showing different abstract martial-art glyphs (not readable Chinese, just brush-shape aesthetic), one glowing bright ready to use.\n- Lower-center: a combo counter showing \"x7\" in large bright white-gold numbers with a faint glow effect, above a narrow button prompt with thin bordered design.\n- Lower-right: a stamina ring almost depleted (visual tension), dodge prompt icon.\n- Top-center area: two damage-number popups in large orange-red numbers floating above two of the knocked-back enemies with a bright gold burst effect.\n\n# Rendering\nPhotorealistic PBR materials with sharp detail, detailed engraved silver armor reflecting dawn light, individual hair strands and cape fiber threads rendered, motion blur ONLY on the spinning spear and flung enemies (hero himself crystal sharp with anti-aliased edges), volumetric dawn light with strong Tyndall god-rays piercing through atmospheric dust, fine dust and cherry-petal particles swirling in the air. Cinematic-but-clear gameplay framing with strong rim-lighting separating the hero from background. Color grading: warm golden sunrise palette with cool blue shadows creating teal-orange cinematic contrast.\n\nThe baby face should be photorealistic, peaceful, and untouched by violence — a visual symbol of what the hero is fighting to protect.\n\nAspect ratio 16:9 landscape.\n\n# Negative prompt\nno watermark, no studio logos, no warped Chinese characters, no fake gibberish glyphs, no movie-cutscene framing, no first-person view, no anime cel-shading, no low-res UI, no duplicated HUD widgets, no extra fingers on the hero or the baby, no modern clothing, no firearms, no generic Western fantasy look, no cluttered or overlapping UI panels, no distressed or crying baby, no baby held awkwardly, no blood on the baby, no signature."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

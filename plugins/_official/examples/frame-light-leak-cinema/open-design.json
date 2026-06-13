@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-frame-light-leak-cinema",
+  "title": "Light-Leak Cinematic Frame",
+  "title_i18n": {
+    "en": "Light-Leak Cinematic Frame",
+    "zh-CN": "胶片漏光电影帧",
+    "zh-TW": "漏光電影畫幅",
+    "ja": "ライトリーク シネマティックフレーム",
+    "ko": "라이트 리크 시네마틱 프레임",
+    "de": "Light-Leak Cinematic Frame",
+    "fr": "Cadre cinématographique Light-Leak",
+    "ru": "Кинематографическая рамка со световыми утечками",
+    "es": "Marco cinematográfico Light-Leak",
+    "pt-BR": "Quadro cinematográfico Light-Leak",
+    "it": "Cornice cinematografica Light-Leak",
+    "vi": "Khung điện ảnh rò ánh sáng",
+    "pl": "Kinowa ramka Light-Leak",
+    "id": "Frame sinematik Light-Leak",
+    "nl": "Light-Leak cinematisch frame",
+    "ar": "إطار سينمائي بتسرب ضوئي",
+    "tr": "Light-Leak sinematik çerçeve",
+    "uk": "Кінематографічна рамка зі світловими витоками"
+  },
+  "version": "0.1.0",
+  "description": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+  "description_i18n": {
+    "en": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+    "zh-CN": "胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡",
+    "zh-TW": "底片漏光效果、顆粒感、16:9 信箱畫幅和大號襯線字體，適用於電影開場或章節卡片。",
+    "ja": "フィルムライトリーク、粒子感、16:9レターボックス、大きなセリフ書体を使った映画的なオープニングやチャプターカード用。",
+    "ko": "필름 라이트 리크, 그레인, 16:9 레터박스, 큰 세리프 서체로 영화 오프닝 또는 챕터 카드 제작.",
+    "de": "Film-Light-Leaks, Körnung, 16:9-Letterbox und große Serifenschrift für filmische Eröffnungen oder Kapitelkarten.",
+    "fr": "Fuites de lumière de film, grain, letterbox 16:9 et grande typographie serif pour ouvertures cinématiques ou cartons de chapitre.",
+    "ru": "Пленочные световые утечки, зерно, леттербокс 16:9 и крупный шрифт с засечками для кинематографических заставок или титров глав.",
+    "es": "Fugas de luz de película, grano, letterbox 16:9 y tipografía serif grande para aperturas cinematográficas o tarjetas de capítulo.",
+    "pt-BR": "Vazamentos de luz de filme, grão, letterbox 16:9 e tipografia serifada grande para aberturas cinematográficas ou cartelas de capítulo.",
+    "it": "Perdite di luce da pellicola, grana, letterbox 16:9 e carattere serif grande per aperture cinematografiche o schede capitolo.",
+    "vi": "Hiệu ứng rò ánh sáng phim, hạt, letterbox 16:9 và chữ serif lớn cho cảnh mở đầu hoặc thẻ chương điện ảnh.",
+    "pl": "Przecieki światła na filmie, ziarno, letterbox 16:9 i duża czcionka szeryfowa do kinowych czołówek lub kart rozdziałów.",
+    "id": "Kebocoran cahaya film, grain, letterbox 16:9, dan tipografi serif besar untuk pembukaan sinematik atau kartu bab.",
+    "nl": "Filmlichtlekken, korrel, 16:9 letterbox en groot schreefloos lettertype voor filmische openingen of hoofdstukkaarten.",
+    "ar": "تسريبات ضوء الفيلم، والحبيبات، وصندوق الرسائل 16:9، وخط serif كبير لافتتاحيات سينمائية أو بطاقات الفصول.",
+    "tr": "Film ışık sızıntıları, tane, 16:9 letterbox ve sinematik açılışlar veya bölüm kartları için büyük serif yazı tipi.",
+    "uk": "Плівкові світлові витоки, зерно, леттербокс 16:9 та великий шрифт із зарубками для кінематографічних заставок або титрів розділів."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/frame-light-leak-cinema",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "cinema",
+    "film",
+    "light-leak",
+    "grain",
+    "letterbox",
+    "frame"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Light-Leak Cinematic Frame template to turn my content into a cinematic opening or chapter card with film light leaks, grain, letterbox framing, and large serif type. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Light-Leak Cinematic Frame",
+          "title_i18n": {
+            "en": "Light-Leak Cinematic Frame",
+            "zh-CN": "胶片漏光电影帧"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

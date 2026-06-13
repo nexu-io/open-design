@@ -1,0 +1,64 @@
+/* design-systems/tetris/tokens.css
+ *
+ * Structured token bindings for Tetris.
+ * arcade grid system with black board surfaces and bright geometric block colors.
+ */
+
+:root {
+  --bg: #050816;
+  --surface: #10162a;
+  --surface-warm: #17203a;
+  --fg: #f8fafc;
+  --fg-2: #cbd5e1;
+  --muted: #94a3b8;
+  --meta: #00f0f0;
+  --border: #26324f;
+  --border-soft: #1c2740;
+  --accent: #00f0f0;
+  --accent-on: #061018;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #00f000;
+  --warn: #f0f000;
+  --danger: #f00000;
+  --font-display: "Press Start 2P", "Arial Black", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Press Start 2P", ui-monospace, monospace;
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.6;
+  --leading-tight: 1.1;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 44px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 4px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 0 rgba(0, 0, 0, 0.32);
+  --focus-ring: 0 0 0 4px rgba(0, 240, 240, 0.32);
+  --motion-fast: 80ms;
+  --motion-base: 140ms;
+  --ease-standard: steps(2, end);
+  --container-max: 1100px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

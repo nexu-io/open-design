@@ -1,0 +1,255 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/binance/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Binance.US"
+ * — the polished urgency of a crypto trading floor: white surfaces and
+ * deep near-black `#222126` panels alternating in rhythm, Binance Yellow
+ * `#F0B90B` cutting through the monochrome as the single brand signal,
+ * BinancePlex headlines that carry proprietary gravitas, pill-shaped CTAs
+ * (50px+ radius) demanding attention, and whisper-light 5%-opacity card
+ * shadows that ground floating surfaces without ever feeling decorative.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating a Binance-flavored artifact should
+ * paste the `:root { … }` block verbatim into the first `<style>` of
+ * the artifact, then reference every value through `var(--name)`.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Binance's voice rather than the cross-brand default):
+ *
+ *   1. `--accent` is Binance Yellow (`#F0B90B`) — the singular point
+ *      of brand color. DESIGN.md §7 is unambiguous: "Don't introduce
+ *      additional brand colors — Binance Yellow is the only accent;
+ *      all other color is data-driven (green up, red down)". The
+ *      yellow lives inside a system of cold neutrals on purpose;
+ *      every CTA, link, and active state resolves to this one value.
+ *
+ *   2. `--accent-on` is Ink (`#1E2026`), not white. Yellow on white
+ *      text would smear; yellow on near-black text is the high-contrast
+ *      pairing DESIGN.md §4 documents for every primary button.
+ *
+ *   3. `--accent-hover` is Focus Blue (`#1EAEDB`), NOT a darker yellow.
+ *      DESIGN.md §4 explicitly defines the hover for every interactive
+ *      yellow surface as "shifts to Focus Blue with white text" — the
+ *      hue change IS the brand interaction. The hovered button's text
+ *      becomes white (component-level override), not Ink. This is the
+ *      single most counter-intuitive token in the file; rebinding to
+ *      a yellow-darken mix erases Binance's signature hover.
+ *
+ *   4. `--accent-active` is Active Yellow (`#D0980B`) — the documented
+ *      "clicked" gold from DESIGN.md §2, hand-picked rather than
+ *      formula-derived so the pressed state stays warm rather than
+ *      shifting cool with the hover.
+ *
+ *   5. Foreground ramp binds the full four-tier neutral scale from
+ *      DESIGN.md §2: Ink `#1E2026` (primary), Secondary `#32313A`
+ *      (nav links / descriptive copy), Slate `#848E9C` (the workhorse
+ *      grey for metadata / timestamps), Muted `#777E90` (secondary
+ *      nav / less-prominent footer text). Binance genuinely uses four
+ *      distinct text tiers across trading dashboards, so `--fg-2` and
+ *      `--meta` are independently bound, not aliased.
+ *
+ *   6. `--surface-warm` is Snow (`#F5F5F5`) — DESIGN.md §2 calls it
+ *      out as the "subtle surface differentiation, input backgrounds,
+ *      alternating row fills" tier. Bound independently (not aliased
+ *      to `--surface`) because dense data tables use it to visually
+ *      stripe rows without introducing a border weight.
+ *
+ *   7. `--success` is Crypto Green (`#0ECB81`) and `--danger` is
+ *      Crypto Red (`#F6465D`) — these are not generic semantic
+ *      colors, they are the bull/bear price-movement signals that
+ *      define the entire crypto-trading visual language. Binding the
+ *      schema slots to the documented brand values keeps semantic
+ *      pills, badges, and tickers on-brand without per-component
+ *      overrides.
+ *
+ *   8. Type scale tops out at 60px (`--text-4xl`). DESIGN.md §3
+ *      caps Display Hero at 60px / 700 with line-height 1.08 — the
+ *      ceiling expresses authority through weight, not size. Smaller
+ *      tiers map directly to the documented hierarchy table:
+ *      11 / 14 / 16 / 20 / 24 / 28 / 34 / 60.
+ *
+ *   9. `--leading-tight` is `1.0`, not the schema's 1.2. DESIGN.md §3
+ *      explicitly sets headings 1–4 to line-height 1.00 ("stacked,
+ *      compressed feel that mirrors the density of trading
+ *      dashboards"). `--tracking-display` is `0` — the brand uses
+ *      weight (600–700) and size, not negative letter-spacing.
+ *
+ *  10. `--radius-pill` is `9999px`, not the literal 50px DESIGN.md
+ *      cites for CTAs. 9999 is the schema convention for "always
+ *      fully rounded"; both values render identically at any button
+ *      height below 4998px tall, and 9999 is what other brands ship.
+ *
+ *  11. `--elev-raised` is the literal "whisper" card shadow from
+ *      DESIGN.md §6 — `0 3px 5px 0 rgba(32, 32, 37, 0.05)`. At 5%
+ *      opacity the shadow is barely perceptible by design; DESIGN.md
+ *      §6 calls heavier shadows "frivolous" for a financial platform.
+ *      Components that hover-elevate (per DESIGN.md §4) inline the
+ *      richer `rgba(8, 8, 8, 0.05) 0 3px 5px 5px` variant.
+ *
+ *  12. `--focus-ring` is a SOLID 2px Focus Blue (`#1EAEDB`) ring, NOT
+ *      the schema's accent-tinted alpha glow. DESIGN.md §2 specifies
+ *      Focus Blue as the universal "Accessibility focus state" color
+ *      for all interactive elements — reproducing it as a sharp 2px
+ *      box-shadow keeps keyboard focus razor-legible against either
+ *      white or `#222126` surfaces.
+ *
+ *  13. Section rhythm is 80 / 48 / 32 (`--section-y-*`). DESIGN.md §5
+ *      lists `space-10: 80px` as "Large section spacing" and `space-8:
+ *      48px` as "Major section padding" — the desktop hero gets the
+ *      80px tier, tablet collapses to 48px, phone tightens to 32px.
+ *      Container caps at 1200px per DESIGN.md §5; gutters compress
+ *      32 → 16 → 16 (DESIGN.md mobile = 16, no separate tablet step).
+ *
+ * Brand-specific extensions (Layer C): none. Crypto Green / Red /
+ * Focus Blue / Dark Card `#2B2F36` / Binance Dark `#222126` are used
+ * as inline expressions in components.html where dark sections and
+ * price-ticker tints are rendered. They are not promoted to shared
+ * tokens because no cross-brand component needs to reference them by
+ * name — DESIGN.md §7 forbids dark-section colorization in shared
+ * components anyway.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Pure white canvas for trust, Snow for input fields and alternating
+   * data-table rows. Dark sections (`#222126`) are component-scoped:
+   * shared components stay light-canvas; sections that flip dark
+   * carry their own inline backgrounds. */
+  --bg: #ffffff;                       /* Pure White — primary page canvas */
+  --surface: #ffffff;                  /* White cards on light sections */
+  --surface-warm: #f5f5f5;             /* Snow — input bg, alternating rows */
+
+  /* ─── Foreground ramp (4 tiers) ──────────────────────────────────
+   * Four distinct text tiers from DESIGN.md §2 — Ink for headings,
+   * Secondary for nav links, Slate for metadata (the workhorse grey),
+   * Muted for tertiary nav and quiet footer text. */
+  --fg: #1e2026;                       /* Ink — primary text, headings */
+  --fg-2: #32313a;                     /* Secondary — nav links, descriptive copy */
+  --muted: #848e9c;                    /* Slate — metadata, timestamps, captions */
+  --meta: #777e90;                     /* Muted — tertiary nav, footer text */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * One light border tier for cards and forms; a softer inner tier
+   * for row separators in dense data tables that must not compete
+   * with the card edge. */
+  --border: #e6e8ea;                   /* Border Light — cards, inputs, sections */
+  --border-soft: #f0f1f2;              /* Softer inner row separator */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * The signature. Binance Yellow is the ONE non-neutral color in
+   * the system — every primary CTA, every brand accent, every active
+   * state resolves here. DESIGN.md §7 forbids introducing additional
+   * brand colors. */
+  --accent: #f0b90b;                   /* Binance Yellow */
+  --accent-on: #1e2026;                /* Ink — high-contrast label on yellow */
+  --accent-hover: #1eaedb;             /* Focus Blue — DESIGN.md §4 hover hue-shift */
+  --accent-active: #d0980b;            /* Active Yellow — pressed state */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Crypto-native semantics: green is "up", red is "down". These are
+   * the bull/bear price-movement signals, not generic status colors,
+   * and they bind directly to the shared semantic slots so tickers
+   * and badges resolve on-brand without overrides. */
+  --success: #0ecb81;                  /* Crypto Green — up indicators */
+  --warn: #eab308;                     /* schema default — DESIGN.md has no warn tier */
+  --danger: #f6465d;                   /* Crypto Red — down indicators */
+
+  /* ─── Typography ─────────────────────────────────────────────────
+   * BinancePlex is the custom proprietary face; Arial is the
+   * documented fallback (DESIGN.md §3 — "replaced DIN Next to solve
+   * multi-language spacing issues"). Display and body share the
+   * stack; weight (500–700) and size carry the entire hierarchy. */
+  --font-display: BinancePlex, Arial, sans-serif;
+  --font-body: BinancePlex, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — direct mapping of DESIGN.md §3 hierarchy:
+   * 11 (Tiny) / 14 (Caption) / 16 (Body) / 20 (H4, Body Large) /
+   * 24 (H2/H3) / 28 (H1) / 34 (Display Secondary) / 60 (Display Hero).
+   * The 12px Small tier is collapsed into 11px (--text-xs); the 14.4px
+   * Button Small variant is inlined per-component. */
+  --text-xs: 11px;                     /* Tiny — micro-labels, chart annotations */
+  --text-sm: 14px;                     /* Caption — metadata, prices, button-small */
+  --text-base: 16px;                   /* Body — standard reading text, buttons */
+  --text-lg: 20px;                     /* Body Large / Heading 4 — card titles */
+  --text-xl: 24px;                     /* Heading 2 / Heading 3 — feature headings */
+  --text-2xl: 28px;                    /* Heading 1 — major section headings */
+  --text-3xl: 34px;                    /* Display Secondary — section titles on dark */
+  --text-4xl: 60px;                    /* Display Hero — maximum impact */
+
+  /* Leading & tracking — DESIGN.md §3 sets headings at 1.00 line-height
+   * (the "stacked, compressed feel that mirrors trading-dashboard
+   * density"). Body opens to 1.5 for reading. No letter-spacing on
+   * display — weight and size carry authority, not tracking. */
+  --leading-body: 1.5;
+  --leading-tight: 1.0;
+  --tracking-display: 0;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. 4/8/12/16/20/24/32/48 covers the
+   * structural ladder; the 64px/80px hero/section tiers live in
+   * --section-y-* below. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 "Large section spacing" 80px desktop,
+   * "Major section padding" 48px tablet, "Section breaks" 32px phone.
+   * The alternating light/dark rhythm DESIGN.md §1 calls out is handled
+   * per-section in components.html, not at the token level. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5 scale: 1/2/6/8/10/12/24/50. We bind: 8 (form inputs,
+   * data cards), 12 (content cards — the polished-but-not-overly-
+   * rounded middle), 24 (hero/video containers), 9999 (pill CTAs —
+   * DESIGN.md cites 50px but 9999 is the schema's "always full"
+   * convention and renders identically). */
+  --radius-sm: 8px;                    /* Form inputs, data cards */
+  --radius-md: 12px;                   /* Content cards, feature containers */
+  --radius-lg: 24px;                   /* Hero imagery, video containers */
+  --radius-pill: 9999px;               /* Pill CTAs — the signature interactive shape */
+
+  /* ─── Elevation (3 levels) ───────────────────────────────────────
+   * Whisper-light: DESIGN.md §6 caps card shadows at 5% opacity ("in
+   * a financial context, heavy shadows feel frivolous"). The raised
+   * shadow is the documented resting-state card; hover-elevated and
+   * pill-CTA shadows are component-scoped because they layer on top
+   * of the base. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 3px 5px 0 rgba(32, 32, 37, 0.05);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * Focus Blue (`#1EAEDB`) per DESIGN.md §2 — the universal a11y
+   * focus state for every interactive surface. Sharp 2px solid, not
+   * a soft halo; trading platforms need unambiguous keyboard focus. */
+  --focus-ring: 0 0 0 2px #1eaedb;
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * DESIGN.md §7 Don't list: "Don't add animation beyond subtle
+   * transitions (200ms ease) — financial platforms need stability".
+   * The brand voice is precision, not choreography. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1200px max content width per DESIGN.md §5. Desktop gutter 32px
+   * (DESIGN.md "Horizontal padding: 32px desktop"); mobile 16px
+   * (DESIGN.md "16px mobile"); tablet sits at 16px because DESIGN.md
+   * does not define a separate tablet gutter — better to match
+   * mobile than over-extend the container on narrow screens. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 16px;
+}

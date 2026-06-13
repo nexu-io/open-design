@@ -1,0 +1,63 @@
+/* design-systems/dithered/tokens.css
+ * Structured token bindings for Dithered.
+ * dithered retro interface with hard edges, bitmap texture, and compact monochrome controls.
+ */
+
+:root {
+  --bg: #fff4cf;
+  --surface: #fffaf0;
+  --surface-warm: #ffdca8;
+  --fg: #2a1810;
+  --fg-2: #593625;
+  --muted: #8a6652;
+  --meta: #d24b1f;
+  --border: #d9aa7a;
+  --border-soft: #efd0ab;
+  --accent: #d24b1f;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #3d8f4f;
+  --warn: #f2a93b;
+  --danger: #b83a2f;
+  --font-display: "Courier New", ui-monospace, monospace;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "Courier New", ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.45;
+  --leading-tight: 1.06;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 42px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 6px 6px 0 rgba(42, 24, 16, 0.26);
+  --focus-ring: 0 0 0 4px rgba(210, 75, 31, 0.28);
+  --motion-fast: 100ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1280px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

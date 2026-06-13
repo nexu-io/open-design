@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-contemporary",
+  "title": "Contemporary",
+  "title_i18n": {
+    "zh-CN": "现代简约",
+    "zh-TW": "現代簡約",
+    "ja": "コンテンポラリー",
+    "ko": "컨템포러리",
+    "de": "Contemporary",
+    "fr": "Contemporary",
+    "ru": "Contemporary",
+    "es": "Contemporary",
+    "pt-BR": "Contemporary",
+    "it": "Contemporary",
+    "vi": "Contemporary",
+    "pl": "Contemporary",
+    "id": "Contemporary",
+    "nl": "Contemporary",
+    "ar": "Contemporary",
+    "tr": "Contemporary",
+    "uk": "Contemporary",
+    "en": "Contemporary"
+  },
+  "version": "0.1.0",
+  "description": "Current-era minimalist design with bento grids, dark mode support, and high-performance accessible layouts.",
+  "description_i18n": {
+    "zh-CN": "当代极简设计，包含网格布局、深色模式和高性能无障碍布局。",
+    "zh-TW": "當代極簡設計，包含網格佈局、深色模式和高效能無障礙佈局。",
+    "ja": "ベントグリッド、ダークモード対応、高性能アクセシブルレイアウトを備えた現代的ミニマリストデザイン。",
+    "ko": "벤토 그리드, 다크 모드 지원, 고성능 접근성 레이아웃을 갖춘 현대적 미니멀리스트 디자인.",
+    "de": "Zeitgemäßes minimalistisches Design mit Bento-Grids, Dark-Mode-Unterstützung und barrierefreien Hochleistungs-Layouts.",
+    "fr": "Design minimaliste contemporain avec grilles bento, mode sombre et mises en page accessibles haute performance.",
+    "ru": "Современный минималистичный дизайн с bento-сетками, поддержкой тёмного режима и высокопроизводительными доступными макетами.",
+    "es": "Diseño minimalista contemporáneo con cuadrículas bento, soporte para modo oscuro y layouts accesibles de alto rendimiento.",
+    "pt-BR": "Design minimalista contemporâneo com grids bento, suporte a modo escuro e layouts acessíveis de alto desempenho.",
+    "it": "Design minimalista contemporaneo con griglie bento, supporto modalità scura e layout accessibili ad alte prestazioni.",
+    "vi": "Thiết kế tối giản đương đại với lưới bento, hỗ trợ chế độ tối và bố cục dễ truy cập hiệu suất cao.",
+    "pl": "Współczesny minimalistyczny design z siatkami bento, obsługą trybu ciemnego i wydajnymi dostępnymi layoutami.",
+    "id": "Desain minimalis era kini dengan grid bento, dukungan mode gelap, dan layout aksesibel berperforma tinggi.",
+    "nl": "Hedendaags minimalistisch ontwerp met bento-grids, dark mode ondersteuning en toegankelijke high-performance layouts.",
+    "ar": "تصميم معاصر بسيط مع شبكات بنتو، ودعم الوضع الداكن، وتخطيطات عالية الأداء وسهلة الوصول.",
+    "tr": "Bento ızgaraları, karanlık mod desteği ve yüksek performanslı erişilebilir düzenler içeren çağdaş minimalist tasarım.",
+    "uk": "Сучасний мінімалістичний дизайн із bento-сітками, підтримкою темного режиму та високопродуктивними доступними макетами.",
+    "en": "Current-era minimalist design with bento grids, dark mode support, and high-performance accessible layouts."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "modern-minimal"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Contemporary design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Contemporary design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "contemporary",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

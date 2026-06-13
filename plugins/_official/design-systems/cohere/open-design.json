@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-cohere",
+  "title": "Cohere",
+  "title_i18n": {
+    "zh-CN": "Cohere",
+    "zh-TW": "Cohere",
+    "ja": "Cohere",
+    "ko": "Cohere",
+    "de": "Cohere",
+    "fr": "Cohere",
+    "ru": "Cohere",
+    "es": "Cohere",
+    "pt-BR": "Cohere",
+    "it": "Cohere",
+    "vi": "Cohere",
+    "pl": "Cohere",
+    "id": "Cohere",
+    "nl": "Cohere",
+    "ar": "Cohere",
+    "tr": "Cohere",
+    "uk": "Cohere",
+    "en": "Cohere"
+  },
+  "version": "0.1.0",
+  "description": "Enterprise AI platform. Vibrant gradients, data-rich dashboard aesthetic.",
+  "description_i18n": {
+    "zh-CN": "企业级 AI 平台。鲜艳渐变色，数据丰富的仪表板美学。",
+    "zh-TW": "企業級 AI 平台。鮮豔漸層色，數據豐富的儀表板美學。",
+    "ja": "エンタープライズAIプラットフォーム。鮮やかなグラデーション、データリッチなダッシュボード美学。",
+    "ko": "엔터프라이즈 AI 플랫폼. 생동감 있는 그라데이션, 데이터가 풍부한 대시보드 미학.",
+    "de": "Enterprise-KI-Plattform. Lebendige Farbverläufe, datenreiche Dashboard-Ästhetik.",
+    "fr": "Plateforme IA d'entreprise. Dégradés vibrants, esthétique de tableau de bord riche en données.",
+    "ru": "Корпоративная AI-платформа. Яркие градиенты, эстетика дашборда с обилием данных.",
+    "es": "Plataforma de IA empresarial. Gradientes vibrantes, estética de panel con datos enriquecidos.",
+    "pt-BR": "Plataforma de IA empresarial. Gradientes vibrantes, estética de painel rico em dados.",
+    "it": "Piattaforma AI aziendale. Gradienti vivaci, estetica dashboard ricca di dati.",
+    "vi": "Nền tảng AI doanh nghiệp. Gradient sống động, thẩm mỹ bảng điều khiển giàu dữ liệu.",
+    "pl": "Korporacyjna platforma AI. Żywe gradienty, estetyka pulpitu bogatego w dane.",
+    "id": "Platform AI perusahaan. Gradien cerah, estetika dasbor kaya data.",
+    "nl": "Enterprise AI-platform. Levendige gradiënten, data-rijke dashboard-esthetiek.",
+    "ar": "منصة AI للشركات. تدرجات نابضة بالحياة، جمالية لوحة معلومات غنية بالبيانات.",
+    "tr": "Kurumsal AI platformu. Canlı gradyanlar, veri açısından zengin kontrol paneli estetiği.",
+    "uk": "Корпоративна AI-платформа. Яскраві градієнти, естетика панелі з багатим даними.",
+    "en": "Enterprise AI platform. Vibrant gradients, data-rich dashboard aesthetic."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "ai-llm"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Cohere design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Cohere design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "cohere",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

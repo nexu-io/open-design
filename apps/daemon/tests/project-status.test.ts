@@ -1,5 +1,5 @@
-// @ts-nocheck
 import assert from 'node:assert/strict';
+import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,8 @@ import {
   closeDatabase,
   insertConversation,
   insertProject,
+  getConversation,
+  listConversations,
   listLatestProjectRunStatuses,
   listProjectsAwaitingInput,
   openDatabase,
@@ -16,7 +18,7 @@ import {
 } from '../src/db.js';
 import { composeProjectDisplayStatus } from '../src/server.js';
 
-const tempDirs = [];
+const tempDirs: string[] = [];
 
 afterEach(() => {
   closeDatabase();
@@ -25,13 +27,13 @@ afterEach(() => {
   }
 });
 
-function createDb() {
+function createDb(): Database.Database {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-project-status-'));
   tempDirs.push(dir);
   return openDatabase(dir, { dataDir: path.join(dir, '.od') });
 }
 
-function seedProject(db, projectId, runStatus = 'succeeded') {
+function seedProject(db: Database.Database, projectId: string, runStatus = 'succeeded') {
   insertProject(db, {
     id: projectId,
     name: projectId,
@@ -56,7 +58,13 @@ function seedProject(db, projectId, runStatus = 'succeeded') {
   return `${projectId}-conversation`;
 }
 
-function addMessage(db, conversationId, id, role, content) {
+function addMessage(
+  db: Database.Database,
+  conversationId: string,
+  id: string,
+  role: 'user' | 'assistant',
+  content: string,
+) {
   upsertMessage(db, conversationId, { id, role, content });
 }
 
@@ -67,6 +75,17 @@ test('unanswered structured question marks project as awaiting input', () => {
   addMessage(db, conversationId, 'assistant-question', 'assistant', 'Need one choice\n<question-form id="q1">');
 
   assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a']);
+});
+
+test('ask-question alias of question-form also marks project as awaiting input', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-a-alias');
+
+  // <ask-question> is an accepted alias for <question-form>; an alias-form
+  // turn must mark the project awaiting input just like the canonical tag.
+  addMessage(db, conversationId, 'assistant-question', 'assistant', 'Need one choice\n<ask-question id="q1">');
+
+  assert.deepEqual([...listProjectsAwaitingInput(db)], ['project-a-alias']);
 });
 
 test('user reply after structured question clears awaiting input', () => {
@@ -97,6 +116,171 @@ test('plain text question does not mark awaiting input', () => {
   addMessage(db, conversationId, 'assistant-question', 'assistant', 'Can you clarify the color palette?');
 
   assert.equal(listProjectsAwaitingInput(db).has('project-d'), false);
+});
+
+test('conversation latest run follows assistant message position', () => {
+  const db = createDb();
+  const conversationId = seedProject(db, 'project-latest', 'succeeded');
+
+  upsertMessage(db, conversationId, {
+    id: 'project-latest-running',
+    role: 'assistant',
+    content: 'working',
+    runId: 'project-latest-running-id',
+    runStatus: 'running',
+    startedAt: 20,
+  });
+
+  assert.equal(listConversations(db, 'project-latest')[0]?.latestRun?.status, 'running');
+  assert.equal(getConversation(db, conversationId)?.latestRun?.status, 'running');
+});
+
+test('conversation summaries expose cumulative completed run duration', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-duration',
+    name: 'project-duration',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  insertConversation(db, {
+    id: 'project-duration-conversation',
+    projectId: 'project-duration',
+    title: 'Duration test',
+    createdAt: 1,
+    updatedAt: 4,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-first',
+    role: 'assistant',
+    content: 'first done',
+    runId: 'project-duration-first-run',
+    runStatus: 'succeeded',
+    startedAt: 10_000,
+    endedAt: 40_000,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-running',
+    role: 'assistant',
+    content: 'still running',
+    runId: 'project-duration-running-run',
+    runStatus: 'running',
+    startedAt: 45_000,
+  });
+  upsertMessage(db, 'project-duration-conversation', {
+    id: 'project-duration-second',
+    role: 'assistant',
+    content: 'second done',
+    runId: 'project-duration-second-run',
+    runStatus: 'failed',
+    startedAt: 50_000,
+    endedAt: 125_000,
+  });
+
+  const listed = listConversations(db, 'project-duration')[0] as { totalDurationMs?: number };
+  const fetched = getConversation(db, 'project-duration-conversation') as { totalDurationMs?: number } | null;
+
+  assert.equal(listed.totalDurationMs, 105_000);
+  assert.equal(fetched?.totalDurationMs, 105_000);
+});
+
+test('conversation summaries include usage-only terminal run durations', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-usage-duration',
+    name: 'project-usage-duration',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  insertConversation(db, {
+    id: 'project-usage-duration-conversation',
+    projectId: 'project-usage-duration',
+    title: 'Usage duration test',
+    createdAt: 1,
+    updatedAt: 4,
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-imported',
+    role: 'assistant',
+    content: 'imported done',
+    runId: 'project-usage-duration-imported-run',
+    runStatus: 'succeeded',
+    events: [{ kind: 'usage', durationMs: 22_000 }],
+  });
+  upsertMessage(db, 'project-usage-duration-conversation', {
+    id: 'project-usage-duration-timestamped',
+    role: 'assistant',
+    content: 'timestamped done',
+    runId: 'project-usage-duration-timestamped-run',
+    runStatus: 'succeeded',
+    startedAt: 30_000,
+    endedAt: 60_000,
+  });
+
+  const listed = listConversations(db, 'project-usage-duration')[0] as { totalDurationMs?: number };
+  const fetched = getConversation(db, 'project-usage-duration-conversation') as { totalDurationMs?: number } | null;
+
+  assert.equal(listed.totalDurationMs, 52_000);
+  assert.equal(fetched?.totalDurationMs, 52_000);
+});
+
+test('conversation listing batches latest run summaries for large projects', () => {
+  const db = createDb();
+  insertProject(db, {
+    id: 'project-large',
+    name: 'project-large',
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  for (let i = 0; i < 125; i += 1) {
+    const conversationId = `project-large-conversation-${i}`;
+    insertConversation(db, {
+      id: conversationId,
+      projectId: 'project-large',
+      title: `Conversation ${i}`,
+      createdAt: i,
+      updatedAt: i,
+    });
+    upsertMessage(db, conversationId, {
+      id: `${conversationId}-older`,
+      role: 'assistant',
+      content: 'done',
+      runId: `${conversationId}-older-run`,
+      runStatus: 'succeeded',
+      startedAt: 10,
+      endedAt: 20,
+    });
+    upsertMessage(db, conversationId, {
+      id: `${conversationId}-latest`,
+      role: 'assistant',
+      content: 'failed',
+      runId: `${conversationId}-latest-run`,
+      runStatus: 'failed',
+      startedAt: 100,
+      endedAt: 175,
+    });
+  }
+
+  const preparedSql: string[] = [];
+  const instrumentedDb = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'prepare') {
+        return (sql: string) => {
+          preparedSql.push(sql);
+          return target.prepare(sql);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as Database.Database;
+
+  const conversations = listConversations(instrumentedDb, 'project-large');
+
+  assert.equal(conversations.length, 125);
+  assert.equal(preparedSql.length, 1);
+  assert.equal(conversations[0]?.latestRun?.status, 'failed');
+  assert.equal(conversations[0]?.latestRun?.durationMs, 75);
+  assert.equal(conversations[0]?.messageCount, 2);
 });
 
 test('only succeeded statuses are overridden by awaiting input', () => {

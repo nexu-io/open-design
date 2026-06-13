@@ -1,6 +1,6 @@
-import type { ProxyStreamDeltaPayload, ProxyStreamEndPayload, ProxyStreamStartPayload } from '../api/proxy';
-import type { SseErrorPayload } from '../errors';
-import type { SseTransportEvent } from './common';
+import type { ProxyStreamDeltaPayload, ProxyStreamEndPayload, ProxyStreamStartPayload } from '../api/proxy.js';
+import type { SseErrorPayload } from '../errors.js';
+import type { SseTransportEvent } from './common.js';
 
 export const PROXY_SSE_PROTOCOL_VERSION = 1;
 

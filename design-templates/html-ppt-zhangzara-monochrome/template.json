@@ -1,0 +1,50 @@
+{
+  "slug": "zhangzara-monochrome",
+  "name": "Monochrome",
+  "tagline": "Ivory ledger paper with all-black type; Lora serif headlines, Jost body, no color at all.",
+  "mood": [
+    "restrained",
+    "literary",
+    "archival",
+    "ledger"
+  ],
+  "occasion": [
+    "user research synthesis",
+    "white paper",
+    "longform report",
+    "academic deck",
+    "policy brief",
+    "advisory deliverable",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "literary",
+    "considered",
+    "neutral",
+    "honest"
+  ],
+  "formality": "high",
+  "density": "high",
+  "palette": {
+    "bg": "#fafadf",
+    "bg_alt": "#f2f2d2",
+    "bg_cream": "#f5f0e4",
+    "fg": "#1a1a16",
+    "fg_2": "#5e5e54",
+    "description": "ivory and pale-cream paper with deep ink-black type only; no color at all; the system runs on typography, line, and white space"
+  },
+  "typography": {
+    "display": "Lora",
+    "body": "Jost",
+    "mono": "JetBrains Mono",
+    "serif_cn": "Noto Serif SC",
+    "sans_cn": "Noto Sans SC",
+    "style": "literary serif headlines + clean geometric sans body + technical mono; reads like a hand-typeset ledger"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like a hand-typeset ledger: user research synthesis, white papers, longform reports, academic and policy briefs, advisory deliverables, bilingual EN/CN reports. Equally good for tech, design, or brand decks that want their words to be the only thing on the page.",
+  "avoid_for": "Decks that need visual personality or color-led storytelling — the all-ink palette is intentionally austere.",
+  "slide_count": 16,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/monochrome"
+}

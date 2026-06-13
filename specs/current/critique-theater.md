@@ -61,7 +61,7 @@ Two new web component groups:
 | Component group | Responsibility |
 | --- | --- |
 | `apps/web/src/components/Theater/` | Live theater stage, collapsed score badge, transcript replay, interrupted state, degraded banner, interrupt button. Driven entirely by a pure reducer over the SSE event stream. |
-| `apps/web/src/prompts/panel.ts` | The protocol addendum injected into every artifact-generating prompt. Exports `PROTOCOL_VERSION`. |
+| `apps/daemon/src/prompts/panel.ts` | The protocol addendum injected into every artifact-generating prompt. Exports `PROTOCOL_VERSION`. |
 
 One new contract package extension:
 

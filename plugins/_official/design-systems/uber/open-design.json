@@ -1,0 +1,112 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-uber",
+  "title": "Uber",
+  "title_i18n": {
+    "zh-CN": "Uber",
+    "zh-TW": "Uber",
+    "ja": "Uber",
+    "ko": "Uber",
+    "de": "Uber",
+    "fr": "Uber",
+    "ru": "Uber",
+    "es": "Uber",
+    "pt-BR": "Uber",
+    "it": "Uber",
+    "vi": "Uber",
+    "pl": "Uber",
+    "id": "Uber",
+    "nl": "Uber",
+    "ar": "Uber",
+    "tr": "Uber",
+    "uk": "Uber",
+    "en": "Uber"
+  },
+  "version": "0.1.0",
+  "description": "Mobility platform. Bold black and white, tight type, urban energy.",
+  "description_i18n": {
+    "zh-CN": "出行平台。大胆的黑白配色，紧凑字体，都市活力。",
+    "zh-TW": "移動平台。大膽的黑白配色，緊湊字體，都市活力。",
+    "ja": "モビリティプラットフォーム。大胆な白黒、タイトなタイポグラフィ、都会的なエネルギー。",
+    "ko": "모빌리티 플랫폼. 대담한 흑백, 타이트한 타이포, 도시적 에너지.",
+    "de": "Mobilitätsplattform. Markantes Schwarz-Weiß, enge Schrift, urbane Energie.",
+    "fr": "Plateforme de mobilité. Noir et blanc audacieux, typographie serrée, énergie urbaine.",
+    "ru": "Платформа мобильности. Смелый черно-белый стиль, плотный шрифт, городская энергия.",
+    "es": "Plataforma de movilidad. Blanco y negro audaz, tipografía compacta, energía urbana.",
+    "pt-BR": "Plataforma de mobilidade. Preto e branco ousado, tipografia compacta, energia urbana.",
+    "it": "Piattaforma di mobilità. Bianco e nero deciso, tipografia stretta, energia urbana.",
+    "vi": "Nền tảng di chuyển. Đen trắng táo bạo, kiểu chữ gọn, năng lượng đô thị.",
+    "pl": "Platforma mobilności. Odważna czerń i biel, zwarta typografia, miejska energia.",
+    "id": "Platform mobilitas. Hitam putih berani, tipografi ketat, energi urban.",
+    "nl": "Mobiliteitsplatform. Gedurfd zwart-wit, strakke typografie, stedelijke energie.",
+    "ar": "منصة تنقل. أبيض وأسود جريء، طباعة مدمجة، طاقة حضرية.",
+    "tr": "Mobilite platformu. Cesur siyah beyaz, sıkı tipografi, kentsel enerji.",
+    "uk": "Платформа мобільності. Сміливий чорно-білий стиль, щільний шрифт, міська енергія.",
+    "en": "Mobility platform. Bold black and white, tight type, urban energy."
+  },
+  "license": "MIT",
+  "tags": [
+    "design-system",
+    "first-party",
+    "design",
+    "media-consumer"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} using the Uber design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} using the Uber design system. Stay faithful to its colour palette, typography, spacing, iconography, and component vocabulary as documented in DESIGN.md."
+      }
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "options": [
+          "landing page",
+          "dashboard",
+          "marketing site",
+          "app screen"
+        ],
+        "default": "landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "text",
+        "placeholder": "What should the page communicate?"
+      }
+    ],
+    "context": {
+      "designSystem": {
+        "ref": "uber",
+        "primary": true
+      },
+      "assets": [
+        "./DESIGN.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

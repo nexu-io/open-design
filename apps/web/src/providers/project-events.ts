@@ -1,14 +1,27 @@
 import { useEffect, useRef } from 'react';
-import type { LiveArtifactRefreshSsePayload, LiveArtifactSsePayload } from '@open-design/contracts';
+import type {
+  LiveArtifactRefreshSsePayload,
+  LiveArtifactSsePayload,
+  ProjectConversationCreatedSsePayload,
+} from '@open-design/contracts';
 export interface ProjectFileChangeEvent {
   type: 'file-changed';
   path: string;
   kind: 'add' | 'change' | 'unlink';
 }
 
+// Re-exported under the local "project event" naming so consumers in this
+// package keep their existing import shape; the canonical type lives in
+// `packages/contracts` alongside the other SSE payloads (per repo review
+// guidance on contract/protocol seams).
+export type ProjectConversationCreatedEvent = ProjectConversationCreatedSsePayload;
+
 export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefreshSsePayload;
 
-export type ProjectEvent = ProjectFileChangeEvent | ProjectLiveArtifactEvent;
+export type ProjectEvent =
+  | ProjectFileChangeEvent
+  | ProjectConversationCreatedEvent
+  | ProjectLiveArtifactEvent;
 
 export interface ProjectEventsConnectionOptions {
   /** Test seam: substitute a mock EventSource constructor. */
@@ -100,6 +113,22 @@ export function createProjectEventsConnection(
     };
     es.addEventListener('live_artifact', handleLiveArtifactEvent);
     es.addEventListener('live_artifact_refresh', handleLiveArtifactEvent);
+    es.addEventListener('conversation-created', (evt) => {
+      try {
+        const data = JSON.parse(
+          (evt as MessageEvent).data,
+        ) as ProjectConversationCreatedEvent;
+        onChange(data);
+      } catch (err) {
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed conversation-created payload', err);
+        }
+      }
+    });
     es.addEventListener('error', () => {
       if (cancelled) return;
       es.close();

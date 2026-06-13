@@ -125,6 +125,15 @@ export async function writeTranscript(
       return { path: 'transcript.ndjson', bytes: totalBytes, gzipped: false };
     }
   } catch (err) {
+    // Ensure the write stream has fully closed before unlinking. If the
+    // iterable fails before the lazy open completes, unlinking immediately can
+    // race with createWriteStream and leave a late-created temp file behind.
+    ws.destroy();
+    if (!ws.closed) {
+      await new Promise<void>((resolve) => {
+        ws.once('close', resolve);
+      });
+    }
     // Ensure temp file is cleaned up on any failure.
     await rm(tempPath, { force: true });
     throw err;
@@ -167,4 +176,3 @@ export async function* readTranscript(
     yield event;
   }
 }
-

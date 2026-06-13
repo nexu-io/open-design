@@ -1,0 +1,36 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "code-import",
+  "title": "Code import",
+  "version": "0.1.0",
+  "description": "Read an existing repository's structure into the project cwd as a normalised snapshot.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/code-import",
+  "tags": [
+    "atom",
+    "first-party",
+    "code-migration",
+    "phase-7"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "scenario": "code-migration",
+    "mode": "import",
+    "capabilities": [
+      "prompt:inject",
+      "fs:read"
+    ]
+  }
+}
