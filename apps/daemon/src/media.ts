@@ -67,6 +67,8 @@ import {
 import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
+import { spawnEnvForAgent } from './agents.js';
+import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import {
   ensureProject,
   kindFor,
@@ -933,8 +935,8 @@ function codexImagePrompt(ctx: MediaContext): string {
   return `${prefix} ${prompt}${aspect}`;
 }
 
-function codexImagegenEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+function sanitizeCodexImagegenEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...baseEnv };
   const blocked = new Set(['openai_api_key', 'codex_api_key', 'anthropic_api_key']);
   for (const key of Object.keys(env)) {
     if (blocked.has(key.toLowerCase())) delete env[key];
@@ -942,11 +944,23 @@ function codexImagegenEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-function codexImagegenArgs(ctx: MediaContext, generatedRoot: string): string[] {
+async function resolveCodexImagegenEnv(): Promise<NodeJS.ProcessEnv> {
+  const dataDir = process.env.OD_DATA_DIR?.trim();
+  if (!dataDir) return sanitizeCodexImagegenEnv(process.env);
+  try {
+    const appConfig = await readAppConfig(dataDir);
+    const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
+    return sanitizeCodexImagegenEnv(spawnEnvForAgent('codex', process.env, configuredEnv));
+  } catch {
+    return sanitizeCodexImagegenEnv(process.env);
+  }
+}
+
+function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS.ProcessEnv): string[] {
   const sandbox = codexNeedsDangerFullAccessSandbox()
     ? ['--sandbox', 'danger-full-access']
     : ['--sandbox', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=true'];
-  const model = process.env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL;
+  const model = env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL;
   const args = [
     'exec',
     '--json',
@@ -961,7 +975,7 @@ function codexImagegenArgs(ctx: MediaContext, generatedRoot: string): string[] {
     '--model',
     model,
   ];
-  if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') args.push('--disable', 'plugins');
+  if (env.OD_CODEX_DISABLE_PLUGINS === '1') args.push('--disable', 'plugins');
   for (const ref of ctx.imageRefs) args.push('-i', ref.abs);
   return args;
 }
@@ -998,11 +1012,15 @@ async function readCodexGeneratedImage(generatedRoot: string, threadId: string):
   return bytes;
 }
 
-async function runCodexImagegen(ctx: MediaContext, generatedRoot: string): Promise<{ stderr: string; stdout: string }> {
-  const codexBin = process.env.CODEX_BIN?.trim() || 'codex';
-  const child = spawn(codexBin, codexImagegenArgs(ctx, generatedRoot), {
+async function runCodexImagegen(
+  ctx: MediaContext,
+  generatedRoot: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ stderr: string; stdout: string }> {
+  const codexBin = env.CODEX_BIN?.trim() || 'codex';
+  const child = spawn(codexBin, codexImagegenArgs(ctx, generatedRoot, env), {
     cwd: ctx.projectRoot,
-    env: codexImagegenEnv(),
+    env,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const stdout: Buffer[] = [];
@@ -1031,15 +1049,16 @@ async function runCodexImagegen(ctx: MediaContext, generatedRoot: string): Promi
 }
 
 async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
-  const generatedRoot = codexGeneratedImagesRoot();
+  const env = await resolveCodexImagegenEnv();
+  const generatedRoot = codexGeneratedImagesRoot(env);
   await mkdir(generatedRoot, { recursive: true });
-  const { stdout } = await runCodexImagegen(ctx, generatedRoot);
+  const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
   const threadId = parseCodexThreadId(stdout);
   const bytes = await readCodexGeneratedImage(generatedRoot, threadId);
   const imageModel = codexImageModelLabel(ctx.model);
   return {
     bytes,
-    providerNote: `codex/${imageModel} via ${process.env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL} · ${ctx.aspect} · ${bytes.length} bytes`,
+    providerNote: `codex/${imageModel} via ${env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL} · ${ctx.aspect} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
