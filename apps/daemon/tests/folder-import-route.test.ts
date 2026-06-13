@@ -165,6 +165,64 @@ describe('POST /api/import/folder', () => {
     });
   });
 
+  it('persists orchestrator scratch provenance for sandbox folder imports under an explicit import root', async () => {
+    await withSandboxMode(async () => {
+      const root = makeFolder();
+      const folder = path.join(root, 'job-clone');
+      await mkdir(folder, { recursive: true });
+      await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+
+      await withSandboxImportAllowedRoots([root], async () => {
+        const importResp = await importFolder({
+          baseDir: folder,
+          orchestratorWorkspace: {
+            kind: 'scratch',
+            sourceLabel: 'checkout:main',
+            sourceRef: 'main@abc123',
+            baseRevision: 'abc123',
+            writeback: 'ignored-by-normalizer',
+          },
+        });
+        expect(importResp.status).toBe(200);
+        const { project } = (await importResp.json()) as {
+          project: {
+            id: string;
+            metadata?: {
+              baseDir?: string;
+              orchestratorWorkspace?: Record<string, unknown>;
+            };
+          };
+        };
+        expect(project.metadata?.baseDir).toBe(await realpath(folder));
+        expect(project.metadata?.orchestratorWorkspace).toEqual({
+          kind: 'scratch',
+          sourceLabel: 'checkout:main',
+          sourceRef: 'main@abc123',
+          baseRevision: 'abc123',
+          writeback: 'external',
+        });
+
+        const filesResp = await fetch(`${baseUrl}/api/projects/${project.id}/files`);
+        expect(filesResp.status).toBe(200);
+        const filesBody = (await filesResp.json()) as { files: Array<{ name: string }> };
+        expect(filesBody.files.map((file) => file.name)).toContain('index.html');
+
+        const runResp = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'missing-agent',
+            projectId: project.id,
+            message: 'Inspect the scratch workspace.',
+          }),
+        });
+        expect(runResp.status).toBe(202);
+        const runBody = (await runResp.json()) as { runId?: string };
+        expect(runBody.runId).toBeTruthy();
+      });
+    });
+  });
+
   it('rejects sandbox runs for imported folders before creating a run', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
