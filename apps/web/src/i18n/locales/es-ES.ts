@@ -1281,6 +1281,7 @@ export const esES: Dict = {
   'designs.subYours': 'Tus diseños',
   'designs.filterAria': 'Filtrar proyectos',
   'designs.searchPlaceholder': 'Buscar…',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'Aún no hay proyectos.',
   'designs.emptyNoMatch': 'Ningún proyecto coincide con tu búsqueda.',
   'designs.deleteTitle': 'Eliminar proyecto',

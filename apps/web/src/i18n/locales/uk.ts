@@ -1281,6 +1281,7 @@ export const uk: Dict = {
   'designs.subYours': 'Ваші дизайни',
   'designs.filterAria': 'Фільтрувати проекти',
   'designs.searchPlaceholder': 'Пошук…',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'Проектів ще немає.',
   'designs.emptyNoMatch': 'Проектів, що відповідають пошуку, не знайдено.',
   'designs.deleteTitle': 'Видалити проект',

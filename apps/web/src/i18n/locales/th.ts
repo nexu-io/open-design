@@ -1281,6 +1281,7 @@ export const th: Dict = {
   'designs.subYours': 'ดีไซน์ของคุณ',
   'designs.filterAria': 'ตัวกรอง',
   'designs.searchPlaceholder': 'ค้นหา…',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'ยังไม่มีโปรเจกต์',
   'designs.emptyNoMatch': 'ไม่พบโปรเจกต์',
   'designs.deleteTitle': 'ลบโปรเจกต์',

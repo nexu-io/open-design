@@ -1281,6 +1281,7 @@ export const it: Dict = {
   'designs.subYours': 'I tuoi design',
   'designs.filterAria': 'Filtra progetti',
   'designs.searchPlaceholder': 'Cerca…',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'Nessun progetto per ora.',
   'designs.emptyNoMatch': 'Nessun progetto corrisponde alla tua ricerca.',
   'designs.deleteTitle': 'Elimina progetto',

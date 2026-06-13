@@ -1801,6 +1801,7 @@ export interface Dict {
   'designs.subYours': string;
   'designs.filterAria': string;
   'designs.searchPlaceholder': string;
+  'designs.refresh': string;
   'designs.emptyNoProjects': string;
   'designs.emptyNoMatch': string;
   'designs.deleteTitle': string;

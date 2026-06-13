@@ -1281,6 +1281,7 @@ export const ja: Dict = {
   'designs.subYours': 'あなたのデザイン',
   'designs.filterAria': 'プロジェクトをフィルター',
   'designs.searchPlaceholder': '検索…',
+  'designs.refresh': '更新',
   'designs.emptyNoProjects': 'プロジェクトがまだありません。',
   'designs.emptyNoMatch': '検索に一致するプロジェクトがありません。',
   'designs.deleteTitle': 'プロジェクトを削除',

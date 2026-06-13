@@ -1281,6 +1281,7 @@ export const hu: Dict = {
   'designs.subYours': 'A te terveid',
   'designs.filterAria': 'Projektek szűrése',
   'designs.searchPlaceholder': 'Keresés…',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'Még nincs projekt.',
   'designs.emptyNoMatch': 'Egy projekt sem felel meg a keresésnek.',
   'designs.deleteTitle': 'Projekt törlése',

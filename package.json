@@ -61,5 +61,6 @@
       "protobufjs",
       "sharp"
     ]
-  }
+  },
+  "dependencies": {}
 }

@@ -1281,6 +1281,7 @@ export const id: Dict = {
   'designs.subYours': 'Desainmu',
   'designs.filterAria': 'Filter proyek',
   'designs.searchPlaceholder': 'Cari...',
+  'designs.refresh': 'Refresh',
   'designs.emptyNoProjects': 'Belum ada proyek.',
   'designs.emptyNoMatch': 'Tidak ada proyek yang cocok dengan pencarianmu.',
   'designs.deleteTitle': 'Hapus proyek',
