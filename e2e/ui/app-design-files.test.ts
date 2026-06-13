@@ -434,113 +434,41 @@ async function runDesignFilesDeleteFlow(page: Page) {
     .toBe(true);
 }
 
-test('design files batch delete removes only the selected files and clears the bulk action state', async ({ page }) => {
+test('[P1] design files page keeps the current single-file actions and context hint copy', async ({ page }) => {
   await routeMockAgents(page);
 
-  page.on('dialog', async (dialog) => {
-    await dialog.accept();
-  });
-
   await gotoEntryHome(page);
   await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill('Design files batch delete flow');
+  await page.getByTestId('new-project-name').fill('Design files current surface');
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
 
   const { projectId } = await getCurrentProjectContext(page);
-  await seedProjectFile(page, projectId, 'keep.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'trash-a.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'trash-b.png', TINY_PNG_B64, 'base64');
+  await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.reload();
   await expectWorkspaceReady(page);
   await page.getByTestId('design-files-tab').click();
 
-  const keepRow = page.getByTestId('design-file-row-keep.png');
-  const trashARow = page.getByTestId('design-file-row-trash-a.png');
-  const trashBRow = page.getByTestId('design-file-row-trash-b.png');
-  await expect(keepRow).toBeVisible();
-  await expect(trashARow).toBeVisible();
-  await expect(trashBRow).toBeVisible();
-
-  await trashARow.getByRole('checkbox').click();
-  await trashBRow.getByRole('checkbox').click();
-  const batchDelete = page.getByTestId('design-files-batch-delete');
-  await expect(batchDelete).toBeVisible();
-  await batchDelete.click();
-
-  await expect(trashARow).toHaveCount(0);
-  await expect(trashBRow).toHaveCount(0);
-  await expect(keepRow).toBeVisible();
-  await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
+  await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /paste/i })).toBeVisible();
 
-  await expect
-    .poll(async () => {
-      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
-      return (
-        names.length === 1 &&
-        names[0]?.endsWith('keep.png')
-      );
-    })
-    .toBe(true);
-});
-
-test('design files kind filter trims hidden selections before batch delete reaches the backend', async ({ page }) => {
-  page.on('dialog', async (dialog) => {
-    await dialog.accept();
-  });
-
-  await gotoEntryHome(page);
-  await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill('Design files filtered batch delete flow');
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const { projectId } = await getCurrentProjectContext(page);
-  await seedProjectFile(page, projectId, 'visible-image.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'hidden-image.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'notes.txt', 'plain text note');
-  await page.reload();
-  await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
-
-  const visibleImageRow = page.getByTestId('design-file-row-visible-image.png');
-  const hiddenImageRow = page.getByTestId('design-file-row-hidden-image.png');
-  const notesRow = page.getByTestId('design-file-row-notes.txt');
-  await expect(visibleImageRow).toBeVisible();
-  await expect(hiddenImageRow).toBeVisible();
-  await expect(notesRow).toBeVisible();
-
-  await visibleImageRow.getByRole('checkbox').click();
-  await notesRow.getByRole('checkbox').click();
-  await expect(page.getByTestId('design-files-batch-delete')).toBeVisible();
-
-  const filterBtn = page.getByRole('button', { name: /filter by kind/i });
-  await filterBtn.click();
-  const filterPopover = page.getByRole('dialog', { name: /filter by kind/i });
-  await expect(filterPopover).toBeVisible();
-  await filterPopover.getByRole('checkbox', { name: /image/i }).check();
-  await filterBtn.click();
-  await expect(filterPopover).toBeHidden();
-
-  await expect(visibleImageRow).toBeVisible();
-  await expect(hiddenImageRow).toBeVisible();
-  await expect(notesRow).toHaveCount(0);
-
-  const batchDelete = page.getByTestId('design-files-batch-delete');
-  await expect(batchDelete).toBeVisible();
-  await batchDelete.click();
-
-  await expect(visibleImageRow).toHaveCount(0);
-  await expect(hiddenImageRow).toBeVisible();
+  await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
 
-  await expect
-    .poll(async () => {
-      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name).sort();
-      return JSON.stringify(names);
-    })
-    .toBe(JSON.stringify(['hidden-image.png', 'notes.txt']));
+  const fileRow = page.getByTestId('design-file-row-alpha.html');
+  await expect(fileRow).toBeVisible();
+  await fileRow.hover();
+  await page.getByTestId('design-file-menu-alpha.html').click();
+
+  const menu = page.getByTestId('design-file-menu-popover');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button', { name: /open in tab/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
+
+  await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
 });
 
 async function runDesignFilesTabPersistenceFlow(page: Page) {

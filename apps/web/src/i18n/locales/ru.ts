@@ -1505,6 +1505,7 @@ export const ru: Dict = {
   'chat.annotationSendDisabledReason': 'Сейчас выполняется задача',
   'chat.annotationPreviewMissing': 'Не удалось сделать предпросмотр. Попробуйте ещё раз.',
   'chat.annotationPreviewMissingInk': 'Не удалось сделать предпросмотр. Попробуйте ещё раз, чтобы не отправить только рукописные пометки.',
+  'chat.annotationSentWithoutScreenshot': 'Не удалось захватить предпросмотр. Аннотация отправлена без скриншота.',
   'chat.annotationTimeout': 'Истекло время отправки аннотации. Попробуйте ещё раз.',
   'chat.annotationFailed': 'Не удалось отправить аннотацию. Попробуйте ещё раз.',
   'chat.annotationProjectCreateFailed': 'Не удалось создать проект, поэтому аннотация не была отправлена.',

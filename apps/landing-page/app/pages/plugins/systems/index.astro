@@ -44,7 +44,7 @@ const jsonLd = {
     <span aria-current="page">{pcopy.tileSystems}</span>
   </nav>
 
-  <header class="catalog-head">
+  <header class="catalog-head plugin-systems-head">
     <span class="label">{pcopy.systemsLabel}</span>
     <h1 class="display">{pcopy.systemsHeading(systems.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.systemsLead}</p>
@@ -55,4 +55,14 @@ const jsonLd = {
       {systems.map((s) => <SystemCard system={s} />)}
     </ul>
   </section>
+
+  <style>
+    .plugin-systems-head {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .plugin-systems-head .label {
+      display: none;
+    }
+  </style>
 </Layout>

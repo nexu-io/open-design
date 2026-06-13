@@ -1505,6 +1505,7 @@ export const ptBR: Dict = {
   'chat.annotationSendDisabledReason': 'Uma tarefa está em execução no momento',
   'chat.annotationPreviewMissing': 'Não foi possível capturar a prévia. Tente novamente.',
   'chat.annotationPreviewMissingInk': 'Não foi possível capturar a prévia. Tente novamente para evitar enviar apenas o traçado.',
+  'chat.annotationSentWithoutScreenshot': 'Não foi possível capturar a pré-visualização. A anotação foi enviada sem captura de tela.',
   'chat.annotationTimeout': 'O envio da anotação expirou. Tente novamente.',
   'chat.annotationFailed': 'Falha ao enviar a anotação. Tente novamente.',
   'chat.annotationProjectCreateFailed': 'Não foi possível criar um projeto, então a anotação não foi enviada.',

@@ -1,6 +1,10 @@
 name: ui-p0-pr
 
 on:
+  schedule:
+    # Daily UI P0 sweep on main. Includes the runtime-recovery shard, which
+    # covers real-daemon golden paths without adding more work to every PR.
+    - cron: '30 18 * * *'
   pull_request:
     paths:
       - apps/web/**
@@ -93,6 +97,8 @@ jobs:
             shard: entry-onboarding
           - name: project-workspace
             shard: project-workspace
+          - name: workspace-restoration
+            shard: workspace-restoration
           - name: runtime-recovery
             shard: runtime-recovery
           - name: settings-connectors
@@ -189,6 +195,32 @@ jobs:
                   "\($slow.name // "n/a") (\(fmt($slow.duration)))"
                 ])
             ' "$jobs_json"
+
+            echo
+            echo "### Failed UI P0 jobs"
+            echo
+            failed_rows="$(jq -r --arg run "$RUN_ID" '
+              def artifact_name:
+                if .name == "UI P0 smoke" then "ui-p0-pr-\($run)-smoke"
+                elif (.name | startswith("UI P0 (")) then
+                  "ui-p0-pr-\($run)-\(.name | sub("^UI P0 \\("; "") | sub("\\)$"; ""))"
+                else "ui-p0-pr-\($run)-unknown"
+                end;
+              .jobs
+              | map(select((.name | startswith("UI P0")) and ((.conclusion // .status) != "success") and ((.conclusion // .status) != "skipped")))
+              | sort_by(.name)
+              | .[]
+              | "| [\(.name)](\(.html_url)) | \(.conclusion // .status) | `\(artifact_name)` |"
+            ' "$jobs_json")"
+            if [ -n "$failed_rows" ]; then
+              echo "| Job | Result | Debug artifact |"
+              echo "| --- | --- | --- |"
+              echo "$failed_rows"
+              echo
+              echo "Use \`gh run view $RUN_ID --log-failed\` for failed-step logs; download the listed artifact for Playwright traces, screenshots, and HTML report."
+            else
+              echo "_No failed UI P0 jobs._"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check UI P0 jobs

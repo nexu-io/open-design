@@ -503,7 +503,7 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   // primary Use button replicates (seeds the prompt) while binding it as the
   // active driver; this case only asserts the active-plugin chip, which
   // appears on either Use variant.
-  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
@@ -536,27 +536,28 @@ test('[P2] home starters search and facet filters narrow the visible gallery', a
 
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('plugins-home-pill-category-all')).toContainText('4');
+  const home = await revealHomeTemplates(page);
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toContainText('4');
 
-  await page.getByTestId('plugins-home-pill-category-deck').click();
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
-  await expect(page.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
-  await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
+  await home.getByTestId('plugins-home-pill-category-deck').click({ force: true });
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
+  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
 
-  await page.getByTestId('plugins-home-pill-category-all').click();
-  await expect(page.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  await expect(home.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
 
-  const search = page.getByTestId('plugins-home-search');
+  const search = home.getByTestId('plugins-home-search');
   await search.fill('Deck Writer');
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
-  await expect(page.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
-  await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
-  await page.getByTestId('plugins-home-search-clear').click();
-  await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
+  await expect(home.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
+  await home.getByTestId('plugins-home-search-clear').click({ force: true });
+  await expect(home.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
 });
 
 test('[P1] home starters can jump into plugin creation through the registry browse flow', async ({ page }) => {
@@ -591,9 +592,12 @@ test('[P2] home starters search can enter a no-results state and recover with cl
   // `plugins-home-section` and its children are rendered in both the home and
   // plugins views (both stay mounted), so scope to the home view to keep these
   // strict-mode locators unambiguous.
-  const home = page.getByTestId('entry-view-home');
-  await home.getByTestId('plugins-home-pill-category-all').click();
-  await home.getByTestId('plugins-home-search').fill('no-such-starter');
+  const home = await revealHomeTemplates(page);
+  await home.getByTestId('plugins-home-pill-category-all').click({ force: true });
+  const search = home.getByTestId('plugins-home-search');
+  await search.click({ force: true });
+  await search.fill('no-such-starter');
+  await expect(search).toHaveValue('no-such-starter');
   await expect(home.getByTestId('plugins-home-section')).toContainText(
     'No plugins match the current filters.',
   );
@@ -613,18 +617,58 @@ test('[P2] home starters details modal opens from a gallery card and closes on E
 
   await gotoEntryHome(page);
 
-  const card = page.locator('[data-plugin-id="localized-plugin"]').first();
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('[data-plugin-id="localized-plugin"]').first();
   await expect(card).toBeVisible();
-  await card.hover();
-  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await home.getByTestId('plugins-home-details-localized-plugin').dispatchEvent('click');
 
-  const dialog = page.getByTestId('plugin-details-modal');
+  const dialog = page.getByRole('dialog', { name: /Localized Plugin details/i });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Localized Plugin');
   await expect(page.getByTestId('plugin-details-use-localized-plugin')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+});
+
+test('[P1] home starters gallery card click opens the large preview detail modal', async ({ page }) => {
+  const htmlPlugin = makeStarterPlugin({
+    id: 'community-gallery-plugin',
+    title: 'Community Gallery Plugin',
+    description: 'A gallery tile fixture with an HTML preview.',
+    mode: 'prototype',
+    featured: true,
+    query: 'Build a {{topic}} prototype.',
+    inputs: [{ name: 'topic', type: 'string', default: 'community gallery' }],
+    previewEntry: './example.html',
+  });
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [htmlPlugin] } });
+  });
+  await page.route('**/api/plugins/community-gallery-plugin/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main><h1>Community Gallery Preview</h1></main></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+
+  const card = home.locator('article.plugins-home__card[data-plugin-id="community-gallery-plugin"]');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveClass(/plugins-home__card--gallery/);
+  await expect(card).toHaveAttribute('data-preview-kind', 'html');
+  await expect(card.locator('.plugins-home__gallery-frame')).toBeVisible();
+
+  await card.dispatchEvent('click');
+  const dialog = page.getByRole('dialog', { name: /Community Gallery Plugin preview/i });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.ds-modal-stage')).toBeVisible();
+  await expect(dialog.locator('.ds-modal-stage-iframe-scaler iframe')).toBeVisible();
+  await expect(page.getByTestId('plugin-details-use-community-gallery-plugin')).toBeVisible();
 });
 
 test('[P2] home starters html details modal exposes header actions and closes from the close button', async ({ page }) => {
@@ -827,7 +871,7 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   // modal and use it from there. This starter ships an example query, so the
   // primary Use button now replicates (seeds the prompt) — the structure-only
   // freeform path lives in the caret menu's "Use plugin only" option.
-  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-localized-plugin').click();
   // "Use plugin only" routes the starter as the active driver (active-plugin
@@ -885,7 +929,7 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   // starter ships an example query, so the primary Use button replicates and
   // binds the plugin as the active driver (active-plugin chip); this case only
   // asserts that chip, which appears on either Use variant.
-  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
 });
@@ -905,14 +949,13 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-input');
-  const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
-  await starterCard.scrollIntoViewIfNeeded();
+  const home = await revealHomeTemplates(page);
   // Use the starter from its detail modal (gallery has no inline Use). This
   // starter ships an example query, so the primary Use button replicates: it
   // routes the plugin as the active run driver AND seeds the hydrated prompt.
   // We still fill the same brief explicitly to keep the assertion robust to the
   // async apply→seed roundtrip (the value is identical either way).
-  await page.getByTestId('plugins-home-details-localized-plugin').click({ force: true });
+  await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i, home);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await input.fill('Make a design systems brief.');
@@ -935,6 +978,263 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   // The picked starter drives the run instead of the hidden od-default router.
   expect(projectBody.pluginId).toBe('localized-plugin');
   expect(typeof projectBody.metadata?.kind).toBe('string');
+});
+
+test('[P0] @critical home plugin input edits are reapplied and carried into project creation', async ({ page }) => {
+  const parameterizedPlugin = makeStarterPlugin({
+    id: 'parameterized-deck-plugin',
+    title: 'Parameterized Deck Plugin',
+    mode: 'deck',
+    featured: true,
+    query: 'Draft a {{topic}} deck with {{notes}}.',
+    inputs: [
+      { name: 'topic', type: 'string', default: 'quarterly review' },
+      { name: 'notes', type: 'string', default: 'speaker notes' },
+    ],
+  });
+  const applyBodies: Array<Record<string, unknown>> = [];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [parameterizedPlugin] } });
+  });
+  await page.route('**/api/plugins/parameterized-deck-plugin/apply', async (route) => {
+    const body = route.request().postDataJSON() as { inputs?: Record<string, unknown> };
+    applyBodies.push(body);
+    await route.fulfill({
+      json: makeApplyResult(
+        'parameterized-deck-plugin',
+        'Draft a {{topic}} deck with {{notes}}.',
+        body.inputs ?? {},
+      ),
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  await home.getByTestId('plugins-home-details-parameterized-deck-plugin').click({ force: true });
+  await page.getByTestId('plugin-details-use-parameterized-deck-plugin').click();
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Parameterized Deck Plugin');
+
+  const input = page.getByTestId('home-hero-input');
+  await expect(input).toContainText('quarterly review');
+  await input.fill('Draft a Liquid Glasses deck with narrated speaker notes.');
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  await page.getByTestId('home-hero-submit').click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    pendingPrompt?: string;
+    pluginId?: string;
+    pluginInputs?: Record<string, unknown>;
+    appliedPluginSnapshotId?: string;
+  };
+  expect(body.pluginId).toBe('parameterized-deck-plugin');
+  expect(body.pendingPrompt).toBe('Draft a Liquid Glasses deck with narrated speaker notes.');
+  expect(body.pluginInputs).toMatchObject({
+    topic: 'Liquid Glasses',
+    notes: 'speaker notes',
+  });
+  expect(body.appliedPluginSnapshotId).toBe('snap-parameterized-deck-plugin');
+  expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
+});
+
+test('[P0] @critical required home plugin prompt parameters gate submit and bind the project snapshot', async ({ page }) => {
+  const guidedDeckPlugin = makeStarterPlugin({
+    id: 'guided-deck-plugin',
+    title: 'Guided Deck Plugin',
+    mode: 'deck',
+    featured: true,
+    query: 'Draft a {{topic}} deck in {{tone}} with {{speakerNotes}}.',
+    inputs: [
+      { name: 'topic', label: 'Topic', type: 'string', required: true },
+      {
+        name: 'tone',
+        label: 'Tone',
+        type: 'select',
+        required: true,
+        options: ['ink', 'forest'],
+      },
+      {
+        name: 'speakerNotes',
+        label: 'Speaker notes',
+        type: 'string',
+        default: 'include speaker notes',
+      },
+    ],
+  });
+  const applyBodies: Array<Record<string, unknown>> = [];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [guidedDeckPlugin] } });
+  });
+  await page.route('**/api/plugins/guided-deck-plugin/apply', async (route) => {
+    const body = route.request().postDataJSON() as { inputs?: Record<string, unknown> };
+    applyBodies.push(body);
+    await route.fulfill({
+      json: makeApplyResult(
+        'guided-deck-plugin',
+        'Draft a {{topic}} deck in {{tone}} with {{speakerNotes}}.',
+        body.inputs ?? {},
+      ),
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  await openHomePluginDetails(page, 'guided-deck-plugin', /Guided Deck Plugin/i, home);
+  await page.getByTestId('plugin-details-use-guided-deck-plugin').click();
+
+  const input = page.getByTestId('home-hero-input');
+  const submit = page.getByTestId('home-hero-submit');
+  await expect(input).toContainText('Topic');
+  await expect(input).toContainText('Tone');
+  await expect(submit).toBeDisabled();
+
+  await input.fill('Draft a Liquid Glasses deck in forest with include speaker notes.');
+  await expect(submit).toBeEnabled();
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await submit.click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    pendingPrompt?: string;
+    pluginId?: string;
+    pluginInputs?: Record<string, unknown>;
+    appliedPluginSnapshotId?: string;
+  };
+  expect(body.pluginId).toBe('guided-deck-plugin');
+  expect(body.pendingPrompt).toContain('Liquid Glasses');
+  expect(body.pendingPrompt).toContain('forest');
+  expect(body.pluginInputs).toMatchObject({
+    topic: 'Liquid Glasses',
+    tone: 'forest',
+  });
+  expect(body.appliedPluginSnapshotId).toBe('snap-guided-deck-plugin');
+  expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
+});
+
+test('[P0] @critical home Ask mode creates a chat conversation without the default design router plugin', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  await page.getByTestId('session-mode-trigger').click();
+  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
+  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
+
+  const input = page.getByTestId('home-hero-input');
+  await input.fill('Summarize the product positioning and point out gaps.');
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    pendingPrompt?: string;
+    conversationMode?: string;
+    pluginId?: string | null;
+    metadata?: { kind?: string };
+  };
+  expect(body.pendingPrompt).toBe('Summarize the product positioning and point out gaps.');
+  expect(body.conversationMode).toBe('chat');
+  expect(body.pluginId).toBeUndefined();
+  expect(body.metadata?.kind).toBe('other');
+});
+
+test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
+  const workingDir = '/Users/mac/Projects/Dashboard-UI-Liquid-Glass';
+  await page.route('**/api/recent-dirs', async (route) => {
+    await route.fulfill({ json: { dirs: [workingDir] } });
+  });
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: workingDir } });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        json: {
+          config: {
+            recentLinkedDirs: [workingDir],
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await gotoEntryHome(page);
+
+  await page.getByTestId('working-dir-trigger').click();
+  await page.getByTestId('working-dir-pick').click();
+  await expect(page.getByTestId('working-dir-trigger')).toContainText('Dashboard-UI-Liquid-Glass');
+
+  const input = page.getByTestId('home-hero-input');
+  await input.fill('Create a premium dashboard for operations review.');
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    metadata?: { linkedDirs?: string[]; baseDir?: string; userWorkingDir?: string };
+    pendingPrompt?: string;
+    conversationMode?: string;
+  };
+  expect(body.pendingPrompt).toBe('Create a premium dashboard for operations review.');
+  expect(body.conversationMode).toBe('design');
+  expect(body.metadata?.linkedDirs).toEqual([workingDir]);
+  expect(body.metadata?.baseDir).toBeUndefined();
+  expect(body.metadata?.userWorkingDir).toBeUndefined();
+});
+
+test('[P0] @critical clearing the home working directory removes linked dirs from project creation', async ({ page }) => {
+  const workingDir = '/Users/mac/Projects/Dashboard-UI-Liquid-Glass';
+  await page.route('**/api/recent-dirs', async (route) => {
+    await route.fulfill({ json: { dirs: [workingDir] } });
+  });
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: workingDir } });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        json: {
+          config: {
+            recentLinkedDirs: [workingDir],
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await gotoEntryHome(page);
+
+  await page.getByTestId('working-dir-trigger').click();
+  await page.getByTestId('working-dir-pick').click();
+  await expect(page.getByTestId('working-dir-trigger')).toContainText('Dashboard-UI-Liquid-Glass');
+
+  await page.getByTestId('working-dir-trigger').click();
+  await page.getByTestId('working-dir-clear').click();
+  await expect(page.getByTestId('working-dir-trigger')).toContainText('Select working directory');
+
+  await page.getByTestId('home-hero-input').fill('Create a premium dashboard without local folder context.');
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('home-hero-submit').click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    metadata?: { linkedDirs?: string[]; baseDir?: string; userWorkingDir?: string };
+    pendingPrompt?: string;
+  };
+  expect(body.pendingPrompt).toBe('Create a premium dashboard without local folder context.');
+  expect(body.metadata?.linkedDirs).toBeUndefined();
+  expect(body.metadata?.baseDir).toBeUndefined();
+  expect(body.metadata?.userWorkingDir).toBeUndefined();
 });
 
 test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits on Enter', async ({ page }) => {
@@ -1125,14 +1425,58 @@ test('[P1] rail can be collapsed again on coarse-pointer / non-hover devices', a
 });
 
 async function gotoEntryHome(page: Page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
+  if (!(await page.getByTestId('home-hero').isVisible().catch(() => false))) {
+    const homeWorkspaceTab = page.getByRole('tab', { name: /^Home$/ }).first();
+    if (await homeWorkspaceTab.isVisible().catch(() => false)) {
+      await homeWorkspaceTab.click();
+    } else if (await page.getByTestId('entry-nav-home').isVisible().catch(() => false)) {
+      await page.getByTestId('entry-nav-home').click();
+    }
+  }
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
+}
+
+async function revealHomeTemplates(page: Page) {
+  const home = page.getByTestId('entry-view-home');
+  const hint = home.getByTestId('home-templates-hint');
+  if (await hint.count()) {
+    await hint.click({ force: true });
+    await expect(home.locator('.home-templates-reveal')).toHaveClass(/is-revealed/);
+    await expect(home.locator('.home-templates-reveal__body')).not.toHaveAttribute('inert', '');
+    await page.waitForTimeout(450);
+  }
+  const section = home.getByTestId('plugins-home-section');
+  await expect(section).toBeVisible();
+  await page.locator('.entry-main--scroll').evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  return home;
+}
+
+async function openHomePluginDetails(
+  page: Page,
+  pluginId: string,
+  name: RegExp,
+  scopedHome = page.getByTestId('entry-view-home'),
+) {
+  let home = scopedHome;
+  let card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
+  if (!(await card.isVisible().catch(() => false))) {
+    home = await revealHomeTemplates(page);
+    card = home.locator(`article.plugins-home__card[data-plugin-id="${pluginId}"]`).first();
+  }
+  await expect(card).toBeVisible();
+  await card.dispatchEvent('click');
+  const dialog = page.getByRole('dialog').filter({ hasText: name });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 async function createProject(page: Page, name: string) {
@@ -1203,7 +1547,11 @@ function isCreateProjectRequest(request: Request): boolean {
 // Minimal `/api/plugins/:id/apply` response for routing a picked plugin as
 // the active driver. The Home composer only needs a resolvable snapshot id
 // plus the echoed query/inputs to bind the plugin on submit.
-function makeApplyResult(pluginId: string, query = 'Make a design systems brief.') {
+function makeApplyResult(
+  pluginId: string,
+  query = 'Make a design systems brief.',
+  appliedInputs: Record<string, unknown> = {},
+) {
   return {
     ok: true,
     query,
@@ -1219,7 +1567,7 @@ function makeApplyResult(pluginId: string, query = 'Make a design systems brief.
       pluginId,
       pluginVersion: '1.0.0',
       manifestSourceDigest: 'a'.repeat(64),
-      inputs: {},
+      inputs: appliedInputs,
       resolvedContext: { items: [] },
       capabilitiesGranted: ['prompt:inject'],
       capabilitiesRequired: ['prompt:inject'],
@@ -1260,7 +1608,14 @@ function makeStarterPlugin({
   featured?: boolean;
   tags?: string[];
   query?: string;
-  inputs?: Array<{ name: string; type: string; default?: string }>;
+  inputs?: Array<{
+    name: string;
+    type: string;
+    default?: string;
+    label?: string;
+    required?: boolean;
+    options?: string[];
+  }>;
   previewEntry?: string;
   authorName?: string;
   authorUrl?: string;

@@ -1732,10 +1732,14 @@ button.connector-action.is-loading {
   max-width: 420px;
   padding: 28px 28px 24px;
   text-align: center;
+  text-decoration: none;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.18));
+}
+.connector-gate-card:visited {
+  color: inherit;
 }
 .connector-gate-icon {
   display: inline-flex;
@@ -1761,6 +1765,15 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+.connector-gate-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
 }
 /* ------------------------------------------------------------------ */
 /* Connector detail drawer                                             */

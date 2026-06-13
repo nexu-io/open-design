@@ -1,6 +1,8 @@
 ---
 import Page from '../page';
 import '../globals.css';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
@@ -9,7 +11,11 @@ import PostHogAnalytics from '../_components/posthog-analytics.astro';
 import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
-import { heroImage, heroImageSrcset } from '../image-assets';
+import {
+  heroBgImage,
+  heroBgSrcset,
+  heroImage,
+} from '../image-assets';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
@@ -22,7 +28,6 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
-import { RELEASE_METADATA_URL } from '../_lib/release-metadata';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -37,7 +42,6 @@ const alternateLinks = alternateLinksForPath('/').map((entry) => ({
   href: new URL(entry.hrefPath, Astro.site).toString(),
 }));
 const xDefaultHref = new URL('/', Astro.site).toString();
-
 const REPO_URL = 'https://github.com/nexu-io/open-design';
 const RELEASES_URL = `${REPO_URL}/releases`;
 const ISSUES_URL = `${REPO_URL}/issues`;
@@ -45,14 +49,6 @@ const DOCS_URL = `${REPO_URL}#readme`;
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
 const OFFICIAL_URL = `${origin}official/`;
-
-// Pass bare hosts (not full URLs) so localized Q2 reads
-// "lives at open-design.ai" instead of the awkward
-// "lives at https://open-design.ai/" with a stray protocol/slash.
-const faq = getHomeFaq(locale, {
-  origin: 'open-design.ai',
-  repo: 'github.com/nexu-io/open-design',
-});
 
 const websiteSchema = {
   '@type': 'WebSite',
@@ -112,23 +108,37 @@ const softwareSchema = {
   publisher: { '@id': `${origin}#organization` },
 };
 
-const faqSchema = {
-  '@type': 'FAQPage',
-  '@id': `${canonical}#faq`,
-  inLanguage: localeDef.htmlLang,
-  mainEntity: faq.map(({ q, a }) => ({
-    '@type': 'Question',
-    name: q,
-    acceptedAnswer: { '@type': 'Answer', text: a },
-  })),
-};
-
 const homepageGraph = {
   '@context': 'https://schema.org',
-  '@graph': [websiteSchema, organizationSchema, softwareSchema, faqSchema],
+  '@graph': [websiteSchema, organizationSchema, softwareSchema],
 };
+const faq = getHomeFaq(locale, { origin, repo: REPO_URL });
 const pageHtml = renderToStaticMarkup(
-  Page({ counts, github, faq, locale }) as ReturnType<typeof createElement>,
+  Page({ counts, github, locale, faq }) as ReturnType<typeof createElement>,
+);
+
+// The homepage globe (cobe) and the Method-section FallingText (matter-js)
+// are progressive enhancements. The landing site ships ZERO bundled/module
+// JavaScript (see the `Verify zero external JavaScript` CI gate), so we can't
+// let Astro process `<script>` tags that `import` these packages — that would
+// emit external `/_astro/*.js` module bundles. Instead we read each library's
+// prebuilt runtime from `node_modules` at build time and inline it verbatim as
+// a classic (non-module) `<script is:inline>`, mirroring how
+// `locale-switcher-script.astro` injects its enhancer. cobe ships ESM only, so
+// we strip its single trailing `export { … as default }` and expose the globe
+// factory on `window.__cobe` instead; matter-js ships a UMD build that attaches
+// `Matter` to `window` on its own.
+const requireFromHere = createRequire(import.meta.url);
+const cobeRuntime = `(function(){${readFileSync(
+  requireFromHere.resolve('cobe'),
+  'utf8',
+).replace(
+  /export\s*\{\s*(\w+)\s+as\s+default\s*\}\s*;?\s*$/,
+  'window.__cobe=$1;',
+)}})();`;
+const matterRuntime = readFileSync(
+  requireFromHere.resolve('matter-js/build/matter.min.js'),
+  'utf8',
 );
 ---
 
@@ -163,9 +173,9 @@ const pageHtml = renderToStaticMarkup(
     <link
       rel="preload"
       as="image"
-      href={heroImage}
-      imagesrcset={heroImageSrcset}
-      imagesizes="(max-width: 768px) 100vw, 60vw"
+      href={heroBgImage}
+      imagesrcset={heroBgSrcset}
+      imagesizes="100vw"
       fetchpriority="high"
     />
 
@@ -174,7 +184,7 @@ const pageHtml = renderToStaticMarkup(
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={heroImage} />
+    <meta property="og:image" content={new URL(heroImage, Astro.site).toString()} />
     <meta property="og:locale" content={localeDef.ogLocale} />
     {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
       <meta property="og:locale:alternate" content={entry.ogLocale} />
@@ -183,12 +193,11 @@ const pageHtml = renderToStaticMarkup(
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={heroImage} />
+    <meta name="twitter:image" content={new URL(heroImage, Astro.site).toString()} />
 
     {/*
      * Single @graph JSON-LD block — WebSite + Organization +
-     * SoftwareApplication + FAQPage. The FAQPage entries must mirror
-     * the visible FAQ rendered by `<HomeFaq />` further down the page.
+     * SoftwareApplication.
      */}
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
@@ -196,7 +205,7 @@ const pageHtml = renderToStaticMarkup(
     <Fragment set:html={pageHtml} />
     <PreciseLazyload />
     <LocaleSwitcherScript />
-    <script is:inline define:vars={{ RELEASE_METADATA_URL }}>
+    <script is:inline>
       (() => {
         const formatStars = (count) => {
           if (!Number.isFinite(count) || count <= 0) return '0';
@@ -204,194 +213,179 @@ const pageHtml = renderToStaticMarkup(
           return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
         };
 
-        const formatVersion = (metadata) => {
-          const fromVersion = (version) => {
-            if (typeof version !== 'string') return null;
-            const m = version.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
-            return m ? `v${m[1]}` : null;
-          };
+        // Pull a clean 'v0.3.0'-style label from a GitHub release record.
+        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // what we hand-author; fall back to tag_name (e.g.
+        // 'open-design-v0.3.0') with the project prefix stripped.
+        //
+        // Expected input shapes (release.name / release.tag_name):
+        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
+        //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
+        //   { name: null,                 tag_name: null }                  → null (caller skips)
+        const formatVersion = (release) => {
           const fromTag = (tag) => {
             if (typeof tag !== 'string') return null;
             const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
             return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
           };
-          return (
-            fromVersion(metadata?.releaseVersion) ??
-            fromVersion(metadata?.stableVersion) ??
-            fromVersion(metadata?.baseVersion) ??
-            fromTag(metadata?.versionTag) ??
-            null
-          );
-        };
-
-        // Best-effort OS + arch detection so the download CTAs point straight
-        // at the matching installer from the stable R2 metadata instead of
-        // bouncing through the releases page. There is no Linux artifact, so
-        // Linux/unknown leaves the CTA's pre-rendered releases-page href
-        // untouched.
-        //
-        // arm64 vs x64 on macOS is NOT reliably exposed to the browser
-        // (Safari hides CPU arch). We sniff the WebGL renderer for an Intel/AMD
-        // GPU and otherwise DEFAULT TO arm64, since every Mac shipped since
-        // late 2020 is Apple Silicon. Intel-Mac holdouts can still grab the x64
-        // build from the releases page.
-        const detectPlatform = () => {
-          const ua = (navigator.userAgent || '').toLowerCase();
-          const uaPlatform = (
-            (navigator.userAgentData && navigator.userAgentData.platform) ||
-            navigator.platform ||
-            ''
-          ).toLowerCase();
-          const isWindows = /win/.test(uaPlatform) || /windows/.test(ua);
-          const isMac = /mac/.test(uaPlatform) || (/mac os x/.test(ua) && !/iphone|ipad|ipod/.test(ua));
-          const isLinux = /linux/.test(uaPlatform) || (/linux/.test(ua) && !/android/.test(ua));
-          if (isWindows) return { os: 'Windows', arch: 'Windows', artifact: (m) => m?.platforms?.win?.artifacts?.installer?.url };
-          if (isMac) {
-            const isIntel = (() => {
-              try {
-                const gl = document.createElement('canvas').getContext('webgl');
-                const dbg = gl && gl.getExtension('WEBGL_debug_renderer_info');
-                const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
-                return /intel|radeon|amd/i.test(renderer) && !/apple/i.test(renderer);
-              } catch {
-                return false;
-              }
-            })();
-            const arch = isIntel ? 'Apple Intel' : 'Apple Silicon';
-            const key = isIntel ? 'macIntel' : 'mac';
-            return { os: 'macOS', arch, artifact: (m) => m?.platforms?.[key]?.artifacts?.dmg?.url };
-          }
-          // Linux has no published artifact: report the OS for the label but
-          // never match an asset, so the CTA keeps its releases-page fallback.
-          if (isLinux) return { os: 'Linux', arch: '', artifact: () => null };
-          return null;
-        };
-
-        // Rewrite every [data-download-cta] anchor to the matching installer
-        // URL from the stable metadata, swap any [data-download-os] label to
-        // the detected OS, and append the arch suffix to [data-download-arch] slots
-        // (下载 -> 下载（Apple Silicon）). No-ops (keeping the releases-page
-        // fallback) when the platform is unknown or no matching asset exists.
-        const enhanceDownloadCtas = (metadata) => {
-          const ctas = document.querySelectorAll('[data-download-cta]');
-          if (ctas.length === 0) return;
-          const platform = detectPlatform();
-          if (!platform) return;
-          for (const slot of document.querySelectorAll('[data-download-os]')) {
-            slot.textContent = platform.os;
-          }
-          for (const slot of document.querySelectorAll('[data-download-arch]')) {
-            if (!platform.arch) continue;
-            slot.textContent = `（${platform.arch}）`;
-            slot.hidden = false;
-          }
-          const url = platform.artifact(metadata);
-          if (typeof url !== 'string' || url.length === 0) return;
-          for (const cta of ctas) {
-            // The header nav download button routes to the /download page on
-            // purpose (it carries data-download-page); it still gets the arch
-            // label above but keeps its page href. The hero CTA has no such
-            // marker and is rewritten to the direct installer as before.
-            if (cta.hasAttribute('data-download-page')) continue;
-            cta.href = url;
-            // A direct file download should not open a blank tab.
-            cta.removeAttribute('target');
-            cta.removeAttribute('rel');
-          }
+          const fromName = (name) => {
+            if (typeof name !== 'string') return null;
+            const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+            return m ? `v${m[1]}` : null;
+          };
+          return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
         };
 
         const enhanceHeader = () => {
           const chrome = document.querySelector('[data-chrome-headroom]');
           if (chrome) {
-            // Wrap the scroll listener's read + classList write in
-            // requestAnimationFrame. Trackpads and high-rate wheels fire
-            // scroll faster than the display refresh, and every callback
-            // that hits classList triggers a layout recalc. rAF collapses
-            // each burst to one DOM mutation per frame — PSI was
-            // attributing ~700ms of "forced reflow" to the un-throttled
-            // version on the previous build.
-            let lastY = window.scrollY;
+            const navBar = chrome.querySelector('.nav');
+            const glassMap = chrome.querySelector('[data-nav-glass-map]');
+
+            // Liquid Glass displacement map — ported 1:1 from Inspira UI's
+            // LiquidGlass.vue `displacementImage` computed (radius 16, border
+            // 0.07, lightness 50, alpha 0.93, blur 11, blend "difference").
+            // Built at the live bar's pixel size so the edge refraction
+            // tracks the bar as it condenses; mirrors the component's
+            // ResizeObserver-driven data URI.
+            const buildGlassMap = (w, h) => {
+              // Pill radius — half the bar height — so the refraction follows
+              // the condensed capsule's fully rounded ends.
+              const radius = Math.round(Math.min(w, h) / 2);
+              const borderRatio = 0.07;
+              const lightness = 50;
+              const alpha = 0.93;
+              const blur = 11;
+              const blend = 'difference';
+              const inset = Math.min(w, h) * (borderRatio * 0.5);
+              const svg =
+                '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
+                  '<defs>' +
+                    '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+                    '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+                  '</defs>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
+                  '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#blue)" style="mix-blend-mode:' + blend + '"/>' +
+                  '<rect x="' + inset + '" y="' + inset + '" width="' + (w - inset * 2) + '" height="' + (h - inset * 2) + '" rx="' + radius + '" fill="hsl(0 0% ' + lightness + '% / ' + alpha + ')" style="filter:blur(' + blur + 'px)"/>' +
+                '</svg>';
+              return 'data:image/svg+xml,' + encodeURIComponent(svg);
+            };
+
+            const syncGlassMap = () => {
+              if (!navBar || !glassMap) return;
+              const rect = navBar.getBoundingClientRect();
+              const w = Math.max(1, Math.round(rect.width));
+              const h = Math.max(1, Math.round(rect.height));
+              const uri = buildGlassMap(w, h);
+              glassMap.setAttribute('href', uri);
+              glassMap.setAttributeNS('http://www.w3.org/1999/xlink', 'href', uri);
+            };
+
+            // Debounced map rebuild — the capsule's width/height animate on
+            // condense, so rebuilding the displacement SVG every frame would
+            // re-rasterize the filter each frame and stutter. Rebuild once the
+            // size settles; the prior map covers the brief morph.
+            let mapTimer = 0;
+            const scheduleGlassMap = () => {
+              clearTimeout(mapTimer);
+              mapTimer = setTimeout(syncGlassMap, 140);
+            };
+
+            // Condense-on-scroll with hysteresis: condense past 64px, release
+            // below 24px. The dead-band stops a scroll that lingers near a
+            // single threshold from flipping the state — and the bar's
+            // geometry — back and forth (the "jitter"). rAF collapses each
+            // scroll burst to one read + at most one class change per frame.
+            const condenseOn = 64;
+            const condenseOff = 24;
+            let condensed = false;
             let ticking = false;
-            const showTopThreshold = 100;
-            const scrollDelta = 6;
+            const onScroll = () => {
+              ticking = false;
+              const y = window.scrollY;
+              if (!condensed && y > condenseOn) {
+                condensed = true;
+                chrome.classList.add('is-condensed');
+              } else if (condensed && y < condenseOff) {
+                condensed = false;
+                chrome.classList.remove('is-condensed');
+              }
+            };
             window.addEventListener(
               'scroll',
               () => {
                 if (ticking) return;
                 ticking = true;
-                requestAnimationFrame(() => {
-                  const y = window.scrollY;
-                  const delta = y - lastY;
-                  if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
-                  else if (delta > scrollDelta) chrome.classList.add('is-hidden');
-                  else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
-                  lastY = y;
-                  ticking = false;
-                });
+                requestAnimationFrame(onScroll);
               },
               { passive: true },
             );
+            condensed = window.scrollY > condenseOn;
+            chrome.classList.toggle('is-condensed', condensed);
+
+            syncGlassMap();
+            if (navBar) {
+              if (window.ResizeObserver) {
+                new ResizeObserver(scheduleGlassMap).observe(navBar);
+              }
+              window.addEventListener('resize', scheduleGlassMap, { passive: true });
+            }
           }
 
-          // Hamburger menu toggle. Active only at narrow viewports (CSS
-          // hides the toggle button at ≥1080px). Click toggles `.is-open`
-          // on the header; outside-click, Escape, and clicking any link
-          // inside the menu close it again. Keeps `aria-expanded` in sync.
-          // This mirrors the handler in `header-enhancer.astro` — the
-          // homepage runs its own inline enhancer instead of importing
-          // that component, so the toggle has to be wired up here too.
-          const navToggle = document.querySelector('[data-nav-toggle]');
-          const primaryNav = document.querySelector('[data-nav-primary]');
-          const navEl = navToggle ? navToggle.closest('header.nav') : null;
-          if (navToggle && primaryNav && navEl) {
-            const setNavOpen = (open) => {
-              navEl.classList.toggle('is-open', open);
-              navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-            };
-            navToggle.addEventListener('click', (ev) => {
-              ev.stopPropagation();
-              setNavOpen(!navEl.classList.contains('is-open'));
-            });
-            primaryNav.querySelectorAll('a').forEach((link) => {
-              link.addEventListener('click', () => setNavOpen(false));
-            });
-            document.addEventListener('click', (ev) => {
-              if (!navEl.contains(ev.target)) setNavOpen(false);
-            });
-            document.addEventListener('keydown', (ev) => {
-              if (ev.key === 'Escape') setNavOpen(false);
-            });
-          }
-
-          const stars = document.querySelector('[data-github-stars]');
-          if (stars) {
+          const starSlots = document.querySelectorAll('[data-github-stars]');
+          if (starSlots.length) {
             fetch('https://api.github.com/repos/nexu-io/open-design', {
               headers: { Accept: 'application/vnd.github+json' },
             })
               .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
               .then((data) => {
                 if (typeof data?.stargazers_count === 'number') {
-                  stars.textContent = formatStars(data.stargazers_count);
+                  const label = formatStars(data.stargazers_count);
+                  for (const slot of starSlots) slot.textContent = label;
                 }
               })
               .catch(() => {});
           }
 
-          // Stable release metadata powers every "v0.x.y" badge on the page
-          // (topbar pulse, hero CTA-foot, footer download) AND the per-OS
-          // direct download CTAs. Fetch it through the landing origin so
-          // deployed static pages stay fresh without depending on cross-origin
-          // R2 CORS headers.
+          // Live contributor count for the testimonial headline ("N 贡献者").
+          // The total is the last page number when paginating one-per-page; if
+          // there's no Link header the list fits on one page, so its length is
+          // the total. Static "100+" fallback stays if the request fails / 403s.
+          const contribSlots = document.querySelectorAll('[data-github-contributors]');
+          if (contribSlots.length) {
+            fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=1', {
+              headers: { Accept: 'application/vnd.github+json' },
+            })
+              .then((r) => {
+                if (!r.ok) throw new Error('http error');
+                const link = r.headers.get('link') || '';
+                const last = link.match(/[?&]page=(\d+)>;\s*rel="last"/);
+                if (last) return parseInt(last[1], 10);
+                return r.json().then((arr) => (Array.isArray(arr) ? arr.length : null));
+              })
+              .then((n) => {
+                if (typeof n === 'number' && n > 0) {
+                  for (const slot of contribSlots) slot.textContent = String(n);
+                }
+              })
+              .catch(() => {});
+          }
+
+          // Latest stable release powers every "v0.x.y" badge on the page
+          // (topbar pulse, hero CTA-foot, footer download). Hits one
+          // unauthenticated API call per page view; the static fallback in
+          // each slot keeps the layout sane if the request fails or 403s.
           const versionSlots = document.querySelectorAll('[data-github-version]');
-          const hasDownloadCtas = document.querySelector('[data-download-cta]') !== null;
-          if (versionSlots.length === 0 && !hasDownloadCtas) return;
-          fetch(RELEASE_METADATA_URL, {
-            headers: { Accept: 'application/json' },
+          if (versionSlots.length === 0) return;
+          fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+            headers: { Accept: 'application/vnd.github+json' },
           })
             .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-            .then((metadata) => {
-              enhanceDownloadCtas(metadata);
-              const label = formatVersion(metadata);
+            .then((data) => {
+              const label = formatVersion(data);
               if (!label) return;
               for (const slot of versionSlots) slot.textContent = label;
             })
@@ -471,42 +465,941 @@ const pageHtml = renderToStaticMarkup(
             .catch(() => {});
         };
 
-        const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
-        enhanceHeader();
-        enhanceWire();
+        // ABOUT statement — "Text Scroll Reveal" (Magic UI / Inspira port).
+        // The copy is a sticky, vertically-centered paragraph inside a tall
+        // track (`[data-about-reveal]`); as the reader scrolls through, each
+        // token brightens in turn. Progress is the track top's travel past
+        // the viewport top (`-rect.top / innerHeight`), and token i lights
+        // over the range [i/n, (i+1)/n] — exactly the component's mapping.
+        const enhanceStatementReveal = () => {
+          const host = document.querySelector('[data-about-reveal]');
+          if (!host) return;
+          const words = host.querySelectorAll('[data-reveal-word]');
+          if (!words.length) return;
+          // Reduced motion: leave the copy at full ink (no scroll dependence).
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-        // Fire a PostHog surface_view the first time a [data-od-id] section
-        // scrolls into view. Reuses the reveal observer below; a Set dedupes so
-        // each section reports once per page load. window.__odTrack is defined
-        // by posthog-analytics.astro and is a no-op when PostHog isn't loaded.
-        // Event shape matches 埋点文档2.0: surface_view + page_name/section_id/
-        // section_index, where section_index is the 1-based document order.
-        const seenSections = new Set();
-        let sectionOrder = 0;
-        const reportSection = (el) => {
-          const section = el.closest && el.closest('[data-od-id]');
-          if (!section) return;
-          const id = section.getAttribute('data-od-id');
-          if (!id || seenSections.has(id)) return;
-          seenSections.add(id);
-          sectionOrder += 1;
-          if (window.__odTrack)
-            window.__odTrack('surface_view', {
-              page_name: 'landing_home',
-              section_id: id,
-              section_index: sectionOrder,
-              locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase(),
-            });
+          host.classList.add('is-reveal-active');
+          const n = words.length;
+          let ticking = false;
+          const update = () => {
+            ticking = false;
+            const rect = host.getBoundingClientRect();
+            // Non-pinned mapping: reveal as the block travels up through the
+            // viewport. progress 0 when its top sits at 82% of the viewport
+            // (just risen into view), 1 by the time it reaches 22% (near the
+            // top) — so the copy lights word by word while it's on screen,
+            // without a tall pinned track.
+            const vh = window.innerHeight;
+            const start = vh * 0.82;
+            const end = vh * 0.22;
+            const progress = (start - rect.top) / (start - end);
+            for (let i = 0; i < n; i++) {
+              const start = i / n;
+              const end = (i + 1) / n;
+              let o;
+              if (progress <= start) o = 0;
+              else if (progress >= end) o = 1;
+              else o = (progress - start) / (end - start);
+              // Base faint 0.18 → full 1 (the dim-ghost → lit look).
+              words[i].style.opacity = String(0.18 + 0.82 * o);
+            }
+          };
+          const onScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.addEventListener('resize', onScroll, { passive: true });
+          update();
         };
 
+        // Labs filter Dock — macOS-style proximity magnification (React Bits
+        // "Dock", vanilla port). Each item scales by its distance to the
+        // cursor using a triangular falloff over `dist` px; a short CSS
+        // transition stands in for the spring. Centers come from offset
+        // geometry (unaffected by the scale transform), so there's no
+        // feedback wobble. rAF-throttled; resets on leave; no-ops under
+        // reduced-motion.
+        // Lab clips ship as VP9 WebM (sharp at a fraction of the H.264 size) with
+        // the original .mp4 kept as a fallback. Prefer WebM where the browser can
+        // decode it (Chrome/Edge/Firefox/Safari 16+); older Safari keeps the mp4.
+        // `data-preview-video` carries the .mp4 path; this swaps the extension.
+        const labPrefersWebm = (() => {
+          try {
+            const v = document.createElement('video');
+            return !!(v.canPlayType && v.canPlayType('video/webm; codecs="vp9"'));
+          } catch (e) {
+            return false;
+          }
+        })();
+        const labClipSrc = (src) =>
+          labPrefersWebm && /\.mp4$/i.test(src || '') ? src.replace(/\.mp4$/i, '.webm') : src;
+
+        const enhanceLabDock = () => {
+          const dock = document.querySelector('[data-lab-dock]');
+          if (!dock) return;
+          // Prefetch the lab clips (Video / HyperFrames tiles) so switching to
+          // them is instant rather than waiting 1-2s for the first byte — but
+          // only once the lab section is about to scroll into view, not on page
+          // load. Most visitors who never reach the lab never pay the ~1.7MB.
+          // An IntersectionObserver with a one-viewport bottom margin fires the
+          // fetch just before the dock enters, then disconnects (one-shot).
+          // Falls back to an idle prefetch where IntersectionObserver is absent.
+          (function prefetchLabVideos() {
+            const srcs = Array.from(dock.querySelectorAll('[data-preview-video]'))
+              .map((el) => el.getAttribute('data-preview-video'))
+              .filter(Boolean)
+              .map(labClipSrc);
+            if (srcs.length === 0) return;
+            let done = false;
+            const run = () => {
+              if (done) return;
+              done = true;
+              srcs.forEach((src) => { try { fetch(src).catch(() => {}); } catch (e) {} });
+            };
+            if ('IntersectionObserver' in window) {
+              const io = new IntersectionObserver((entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                  io.disconnect();
+                  run();
+                }
+              }, { rootMargin: '0px 0px 100% 0px' });
+              io.observe(dock);
+            } else if ('requestIdleCallback' in window) {
+              requestIdleCallback(run, { timeout: 4000 });
+            } else {
+              setTimeout(run, 2500);
+            }
+          })();
+          if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+          const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+          if (items.length === 0) return;
+          const MAX = 1.08; // peak scale (subtle pop, never towers over neighbours)
+          const DIST = 104; // px of cursor proximity that still magnifies
+          let ticking = false;
+          const apply = (cursorX) => {
+            const dockLeft = dock.getBoundingClientRect().left;
+            const x = cursorX - dockLeft;
+            for (const it of items) {
+              const center = it.offsetLeft + it.offsetWidth / 2;
+              const t = Math.max(0, 1 - Math.abs(x - center) / DIST);
+              // Keep the selected tile's CSS lift (translateY(-20px)) while we
+              // drive the magnify scale via inline transform.
+              const lift = it.classList.contains('active') ? 'translateY(-20px) ' : '';
+              it.style.transform = `${lift}scale(${(1 + (MAX - 1) * t).toFixed(3)})`;
+            }
+          };
+          dock.addEventListener(
+            'mousemove',
+            (event) => {
+              if (ticking) return;
+              ticking = true;
+              requestAnimationFrame(() => {
+                apply(event.clientX);
+                ticking = false;
+              });
+            },
+            { passive: true },
+          );
+          dock.addEventListener('mouseleave', () => {
+            for (const it of items) it.style.transform = '';
+          });
+        };
+
+        // Labs Dock — the tabs switch the command-window preview (image + title
+        // overlay) in place, no navigation. The active mode also auto-advances
+        // left→right as a self-running showcase: it pauses on hover, only runs
+        // while the dock is on screen, and the auto-advance is disabled under
+        // reduced-motion (the click-to-switch behaviour stays active).
+        const enhanceLabAutoCycle = () => {
+          const dock = document.querySelector('[data-lab-dock]');
+          if (!dock) return;
+          const autoPlay = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+          if (items.length < 2) return;
+          let previewImg = document.querySelector('[data-lab-preview] img');
+          // The Labs preview is now a CSS background on `.lab-stage` (no inner
+          // <img>), so this legacy <img> carousel no longer applies — switching
+          // is handled by `enhanceLabSwitch`. Bail before it touches a null img.
+          if (!previewImg) return;
+          const viewport = previewImg ? previewImg.parentElement : null;
+          const previewTitle = document.querySelector('[data-lab-preview-title]');
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+          // Preload every preview so switches are instant, no load flash.
+          for (const it of items) {
+            const src = it.getAttribute('data-preview-src');
+            if (src) {
+              const pre = new Image();
+              pre.src = src;
+            }
+          }
+
+          let index = items.findIndex((it) => it.classList.contains('active'));
+          if (index < 0) index = 0;
+
+          // Mark the active tile + sync the floating title for index `i`.
+          const setMeta = (i) => {
+            items.forEach((it, k) => it.classList.toggle('active', k === i));
+            const title = items[i].getAttribute('data-preview-title');
+            if (previewTitle && title) previewTitle.textContent = title;
+          };
+
+          // Swap the preview src in place — used for the initial paint and as
+          // the reduced-motion / same-index fallback.
+          const swapInPlace = (i) => {
+            setMeta(i);
+            const src = items[i].getAttribute('data-preview-src');
+            if (previewImg && src) {
+              previewImg.setAttribute('src', src);
+              // Keep the precise-lazyload observer from reverting our swap.
+              previewImg.setAttribute('data-precise-src', src);
+            }
+          };
+
+          const SLIDE_EASE = 'transform 560ms cubic-bezier(0.23, 1, 0.32, 1)';
+
+          // One PERSISTENT sliding track holds the images side by side; we only
+          // ever translate this single element and add/remove child images. It is
+          // never torn down or re-parented, which is what avoids the end-of-slide
+          // flash: previously `track.replaceWith(...)` destroyed a `will-change`
+          // compositor layer, and for one frame the compositor showed the stale
+          // texture (the outgoing image parked in the left gap) before repaint.
+          let track = null;
+          const ensureTrack = () => {
+            if (track) return;
+            track = document.createElement('div');
+            track.style.position = 'absolute';
+            track.style.inset = '0';
+            track.style.display = 'flex';
+            track.style.width = '100%';
+            track.style.willChange = 'transform';
+            track.style.transform = 'translateX(0)';
+            previewImg.style.flex = '0 0 100%';
+            previewImg.style.width = '100%';
+            viewport.appendChild(track);
+            track.appendChild(previewImg); // current image becomes the lone child
+          };
+
+          // The currently-running slide's finaliser, so a new slide (rapid click)
+          // can settle the previous one instantly before starting.
+          let activeCleanup = null;
+
+          // Slide to preview `i`: forward (dir +1) brings the incoming in from the
+          // right, backward (-1) from the left. The two images share the one track
+          // and move as a single layer, so their shared edge stays pixel-perfect
+          // (no seam / no 底图 bleed-through).
+          const slideTo = (i, dir) => {
+            const src = items[i].getAttribute('data-preview-src');
+            if (!previewImg || !viewport || reduceMotion || dir === 0 || !src) {
+              swapInPlace(i);
+              return;
+            }
+            // Settle any in-flight slide so we start from a clean resting state.
+            if (activeCleanup) activeCleanup();
+            setMeta(i);
+            ensureTrack();
+
+            const incoming = previewImg.cloneNode(false);
+            incoming.setAttribute('src', src);
+            // Src is already set, so the precise-lazyload observer has nothing to
+            // do — drop the attr so its MutationObserver ignores the clone.
+            incoming.removeAttribute('data-precise-src');
+            incoming.style.flex = '0 0 100%';
+            incoming.style.width = '100%';
+
+            const run = () => {
+              if (activeCleanup) activeCleanup();
+              const outgoing = previewImg;
+              previewImg = incoming;
+              const forward = dir > 0;
+
+              // Park the incoming next to the outgoing and show the outgoing.
+              track.style.transition = 'none';
+              if (forward) {
+                track.appendChild(incoming); // incoming is the right neighbour
+                track.style.transform = 'translateX(0)';
+              } else {
+                track.insertBefore(incoming, track.firstChild); // left neighbour
+                track.style.transform = 'translateX(-100%)';
+              }
+              void track.offsetWidth; // commit start state before animating
+
+              // Animate the strip so the incoming lands centered.
+              track.style.transition = SLIDE_EASE;
+              track.style.transform = forward ? 'translateX(-100%)' : 'translateX(0)';
+
+              let cleaned = false;
+              const cleanup = () => {
+                if (cleaned) return;
+                cleaned = true;
+                activeCleanup = null;
+                track.removeEventListener('transitionend', cleanup);
+                // Remove the outgoing child and rebase the (persistent) track to
+                // 0 in the SAME synchronous block — no repaint in between, and the
+                // track layer is never destroyed, so nothing flashes.
+                track.style.transition = 'none';
+                if (outgoing.parentNode === track) track.removeChild(outgoing);
+                track.style.transform = 'translateX(0)';
+              };
+              activeCleanup = cleanup;
+              track.addEventListener('transitionend', cleanup, { once: true });
+              window.setTimeout(cleanup, 700); // fallback if transitionend missed
+            };
+
+            // Decode the incoming bitmap BEFORE animating so it never paints a
+            // blank frame mid-slide. Images are preloaded, so decode resolves
+            // almost immediately; fall back to an immediate slide otherwise.
+            if (typeof incoming.decode === 'function') {
+              incoming.decode().then(run, run);
+            } else {
+              run();
+            }
+          };
+          swapInPlace(index);
+
+          const INTERVAL = 2400;
+          let timer = null;
+          let paused = false;
+          const tick = () => {
+            if (paused) return;
+            const next = (index + 1) % items.length;
+            slideTo(next, 1); // auto-advance always slides forward (left)
+            index = next;
+          };
+          const start = () => {
+            if (autoPlay && timer == null) timer = window.setInterval(tick, INTERVAL);
+          };
+          const stop = () => {
+            if (timer != null) {
+              clearInterval(timer);
+              timer = null;
+            }
+          };
+          dock.addEventListener('mouseenter', () => { paused = true; });
+          dock.addEventListener('mouseleave', () => { paused = false; });
+
+          // Clicking a tab slides the preview toward the picked tab — no
+          // navigation. Direction follows whether the target sits left or right
+          // of the current one. Restart the dwell so it stays put for a full
+          // interval.
+          items.forEach((it, i) => {
+            it.addEventListener('click', (event) => {
+              event.preventDefault();
+              const dir = i === index ? 0 : i > index ? 1 : -1;
+              slideTo(i, dir);
+              index = i;
+              if (timer != null) {
+                stop();
+                start();
+              }
+            });
+          });
+
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver(
+              (entries) => {
+                for (const entry of entries) {
+                  if (entry.isIntersecting) start();
+                  else stop();
+                }
+              },
+              { threshold: 0.2 },
+            );
+            io.observe(dock);
+          } else {
+            start();
+          }
+        };
+
+        // Roll the work-stats numbers up on scroll-into-view. The data lives
+        // as DOM text overlaid on the painterly cards (the values used to be
+        // baked into the card images). This page ships ZERO client React
+        // (renderToStaticMarkup, no @astrojs/react), so the count-up is driven
+        // here.
+        //
+        // Robustness contract: each [data-countup] span renders its FINAL value
+        // in static HTML. The roll is a pure enhancement — we reset to `from`
+        // ONLY at the moment the element enters view, inside run(). If the
+        // observer never fires (reduced motion, no IO, scrolled past before a
+        // frame) the final value is left untouched, so a number can never get
+        // stuck blank or at 0.
+        const enhanceCountups = () => {
+          const nodes = document.querySelectorAll('[data-countup]');
+          if (nodes.length === 0) return;
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          if (reduceMotion || !('IntersectionObserver' in window)) return;
+
+          const decimalsOf = (value) => {
+            const str = String(value);
+            return str.includes('.') ? str.split('.')[1].length : 0;
+          };
+          const makeFormatter = (el, to) => {
+            const suffix = el.dataset.countupSuffix || '';
+            const separator = el.dataset.countupSeparator || '';
+            const decimals = decimalsOf(to);
+            return (value) => {
+              const formatted = new Intl.NumberFormat('en-US', {
+                useGrouping: Boolean(separator),
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+              }).format(value);
+              return (separator ? formatted.replace(/,/g, separator) : formatted) + suffix;
+            };
+          };
+          const ease = (t) => 1 - Math.pow(1 - t, 4);
+
+          const done = new WeakSet();
+          const run = (el) => {
+            if (done.has(el)) return;
+            done.add(el);
+            const to = Number(el.dataset.countupTo);
+            if (!Number.isFinite(to)) return;
+            const from = Number(el.dataset.countupFrom || '0');
+            const duration = Math.max(0, Number(el.dataset.countupDuration || '2')) * 1000;
+            const format = makeFormatter(el, to);
+            let startTs = null;
+            const tick = (ts) => {
+              if (startTs === null) startTs = ts;
+              const progress = Math.min(1, (ts - startTs) / duration);
+              el.textContent = format(from + (to - from) * ease(progress));
+              if (progress < 1) requestAnimationFrame(tick);
+              else el.textContent = format(to);
+            };
+            requestAnimationFrame(tick);
+          };
+
+          const countObserver = new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                run(entry.target);
+                countObserver.unobserve(entry.target);
+              }
+            },
+            { threshold: 0, rootMargin: '0px 0px -8% 0px' },
+          );
+          for (const el of nodes) countObserver.observe(el);
+        };
+
+        // Platform-aware download buttons. Detects OS and — on macOS — the
+        // chip family (Apple Silicon vs Intel), resolves the matching asset from
+        // the latest GitHub release, and rewrites every [data-download-cta]
+        // href to a direct download. Only buttons marked with
+        // [data-download-chip-target] show the detected platform chip.
+        // Falls back to the server-rendered releases-page href when detection or
+        // the API fails.
+        const enhanceDownloadCta = () => {
+          // `[data-download-page]` CTAs (e.g. the nav "Download" button) must
+          // keep their server-rendered href to the /download/ page — only the
+          // direct-download CTAs (hero) are rewritten to the release asset.
+          const buttons = Array.from(
+            document.querySelectorAll('[data-download-cta]:not([data-download-page])'),
+          );
+          if (buttons.length === 0) return;
+          const ua = navigator.userAgent || '';
+          const isWin = /Windows|Win32|Win64|WOW64/i.test(ua);
+          const isMac = /Macintosh|Mac OS X/i.test(ua) && !/iPhone|iPad|iPod/i.test(ua);
+
+          const labelChip = (text) => {
+            const chipTargets = buttons.filter((button) => button.hasAttribute('data-download-chip-target'));
+            chipTargets.forEach((btn) => {
+              let chip = btn.querySelector('[data-download-chip]');
+              if (!chip) {
+                chip = document.createElement('span');
+                chip.setAttribute('data-download-chip', '');
+                chip.style.opacity = '0.7';
+                chip.style.fontWeight = '400';
+                // The download icon now LEADS the button, so the chip belongs at
+                // the end — right after the label text.
+                btn.appendChild(chip);
+              }
+              chip.textContent = ' · ' + text;
+            });
+          };
+
+          // Resolve the direct-download href from the latest release. Best
+          // effort and DECOUPLED from the label: the chip text shows the moment
+          // the platform is detected, even if this fetch is rate-limited or the
+          // network is down (the button keeps its releases-page fallback href).
+          const setHref = (matcher) => {
+            if (!matcher) return;
+            fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
+              headers: { Accept: 'application/vnd.github+json' },
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((rel) => {
+                if (!rel || !Array.isArray(rel.assets)) return;
+                const asset = rel.assets.find((a) => matcher(a.name || ''));
+                if (asset && asset.browser_download_url) {
+                  buttons.forEach((btn) => {
+                    btn.href = asset.browser_download_url;
+                    btn.setAttribute('download', '');
+                  });
+                }
+              })
+              .catch(() => {});
+          };
+
+          // Label first (always visible), then wire the direct link.
+          const apply = (label, matcher) => {
+            labelChip(label);
+            setHref(matcher);
+          };
+
+          const detectMacArch = async () => {
+            // Chromium exposes the real architecture; Safari does not, so fall
+            // back to the WebGL renderer string (Apple Silicon reports "Apple").
+            try {
+              const uad = navigator.userAgentData;
+              if (uad && typeof uad.getHighEntropyValues === 'function') {
+                const hv = await uad.getHighEntropyValues(['architecture']);
+                if (hv && hv.architecture) return hv.architecture === 'arm' ? 'arm64' : 'x64';
+              }
+            } catch (e) {}
+            try {
+              const cvs = document.createElement('canvas');
+              const gl = cvs.getContext('webgl') || cvs.getContext('experimental-webgl');
+              if (gl) {
+                const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+                if (/apple/i.test(renderer) && !/intel|amd|radeon|nvidia/i.test(renderer)) return 'arm64';
+                if (/intel|amd|radeon|nvidia/i.test(renderer)) return 'x64';
+              }
+            } catch (e) {}
+            return null;
+          };
+
+          // Only label + deep-link when we can name a concrete installer:
+          // Windows, Apple Silicon, or Intel Mac. Anything we can't positively
+          // identify (undetermined arch, Linux, unknown) shows NO chip and keeps
+          // the button's releases-page href — no guessing, no wrong binary.
+          if (isWin) {
+            apply('Windows', (n) => /win-x64-setup\.exe$/i.test(n));
+          } else if (isMac) {
+            detectMacArch().then((arch) => {
+              if (arch === 'arm64') apply('Apple Silicon', (n) => /mac-arm64\.dmg$/i.test(n));
+              else if (arch === 'x64') apply('Intel', (n) => /mac-x64\.dmg$/i.test(n));
+              // undetermined → no chip, keep the releases-page fallback
+            });
+          }
+        };
+
+        // Labs artifact switcher. The painting stays as the `.lab-stage`
+        // background; each dock tile floats its artifact (`data-preview-src`) as
+        // a window-card centred over it. The "图片" tile maps to the painting
+        // itself, so it just hides the card and shows the bare painting.
+        const enhanceLabSwitch = () => {
+          const stage = document.querySelector('.lab-stage');
+          const dock = document.querySelector('[data-lab-dock]');
+          const artifact = document.querySelector('[data-lab-artifact]');
+          const video = document.querySelector('[data-lab-video]');
+          if (!stage || !dock || !artifact) return;
+          const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+          if (items.length === 0) return;
+          const previewTitle = document.querySelector('[data-lab-preview-title]');
+          // The painting is the background; a tile pointing at it means "no
+          // floating card" (the bare-painting "图片" view).
+          const isBare = (src) => !src || src.indexOf('lab-stage-art') !== -1;
+
+          // Preload the floating artifacts so the first switch never flashes.
+          for (const it of items) {
+            const src = it.getAttribute('data-preview-src');
+            if (!isBare(src)) {
+              const pre = new Image();
+              pre.src = src;
+            }
+          }
+
+          const show = (it) => {
+            const src = it.getAttribute('data-preview-src');
+            const vsrc = it.getAttribute('data-preview-video');
+            items.forEach((x) => x.classList.toggle('active', x === it));
+            const title = it.getAttribute('data-preview-title');
+            if (previewTitle && title) previewTitle.textContent = title;
+            // Video mode: hide the still card, swap the source if the tile points
+            // at a different clip, then show + restart the looping video.
+            if (vsrc && video) {
+              artifact.classList.remove('is-visible');
+              const clip = labClipSrc(vsrc);
+              if (video.getAttribute('src') !== clip) video.setAttribute('src', clip);
+              video.classList.add('is-visible');
+              try {
+                video.currentTime = 0;
+                const pr = video.play();
+                if (pr && pr.catch) pr.catch(() => {});
+              } catch (_) {}
+              return;
+            }
+            // Any non-video mode: make sure the clip is hidden and paused.
+            if (video) {
+              video.classList.remove('is-visible');
+              try {
+                video.pause();
+              } catch (_) {}
+            }
+            if (isBare(src)) {
+              artifact.classList.remove('is-visible');
+              return;
+            }
+            // 16:9 stills (data-preview-wide) drop the 1592×1000 box and render at
+            // natural width like the video, so wide art isn't cropped.
+            artifact.classList.toggle('is-wide', it.hasAttribute('data-preview-wide'));
+            artifact.setAttribute('src', src);
+            artifact.classList.add('is-visible');
+          };
+
+          // Auto-play: cycle the tiles 1 → 6, 10s each. A click jumps to that
+          // tile and restarts the countdown; hovering the stage pauses so a
+          // viewer can dwell. Disabled under reduced-motion (clicks still work).
+          const INTERVAL = 10000;
+          const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          let idx = 0;
+          let timer = null;
+          const stop = () => {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          };
+          const start = () => {
+            if (reduceMotion) return;
+            stop();
+            timer = setInterval(() => {
+              idx = (idx + 1) % items.length;
+              show(items[idx]);
+            }, INTERVAL);
+          };
+
+          for (const it of items) {
+            it.addEventListener('click', (event) => {
+              event.preventDefault();
+              idx = items.indexOf(it);
+              show(it);
+              start();
+            });
+          }
+
+          // Show the first tile straight away (static), but only START cycling
+          // once the module scrolls into view — and restart from the first tile
+          // each time it (re)enters. Hovering still pauses; leaving resumes.
+          show(items[0]);
+          if (!reduceMotion) {
+            stage.addEventListener('mouseenter', stop);
+            stage.addEventListener('mouseleave', start);
+            const io = new IntersectionObserver(
+              (entries) => {
+                for (const e of entries) {
+                  if (e.isIntersecting) {
+                    idx = 0;
+                    show(items[0]);
+                    start();
+                  } else {
+                    stop();
+                  }
+                }
+              },
+              { threshold: 0.3 },
+            );
+            io.observe(stage);
+          }
+        };
+
+
+        // Pointer-draggable decorative marks ([data-drag-icon]). Pure
+        // enhancement — drag offset is held in a transform; without JS the
+        // mark just stays at its CSS-default position.
+        const enhanceDragIcon = () => {
+          const icons = document.querySelectorAll('[data-drag-icon]');
+          icons.forEach((el) => {
+            let tx = 0;
+            let ty = 0;
+            let sx = 0;
+            let sy = 0;
+            let dragging = false;
+            el.addEventListener('pointerdown', (e) => {
+              dragging = true;
+              sx = e.clientX;
+              sy = e.clientY;
+              el.classList.add('is-dragging');
+              try { el.setPointerCapture(e.pointerId); } catch (_) {}
+              e.preventDefault();
+            });
+            el.addEventListener('pointermove', (e) => {
+              if (!dragging) return;
+              el.style.transform =
+                'translate(' + (tx + (e.clientX - sx)) + 'px,' + (ty + (e.clientY - sy)) + 'px)';
+            });
+            const end = (e) => {
+              if (!dragging) return;
+              dragging = false;
+              tx += e.clientX - sx;
+              ty += e.clientY - sy;
+              el.classList.remove('is-dragging');
+              try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+            };
+            el.addEventListener('pointerup', end);
+            el.addEventListener('pointercancel', end);
+          });
+        };
+
+        // Capabilities scrollytelling — a tall track pins the two-column row; the
+        // scroll position through the track picks the active step (left) and the
+        // matching art (right), one-to-one. Clicking a step scrolls to its slice.
+        const enhanceCapScrolly = () => {
+          const scrolly = document.querySelector('[data-cap-scrolly]');
+          if (!scrolly) return;
+          const sticky = scrolly.querySelector('.cap-sticky');
+          const steps = Array.from(scrolly.querySelectorAll('[data-cap-step]'));
+          const frames = Array.from(scrolly.querySelectorAll('[data-cap-frame]'));
+          const n = steps.length;
+          if (n === 0) return;
+          // n steps -> n-1 slide transitions spread evenly across the scroll.
+          const span = Math.max(1, n - 1);
+          const range = () => {
+            const stickyH = sticky ? sticky.offsetHeight : window.innerHeight;
+            return Math.max(1, scrolly.offsetHeight - stickyH);
+          };
+          let activeStep = -1;
+          let ticking = false;
+          const update = () => {
+            ticking = false;
+            const r = range();
+            const scrolled = Math.min(Math.max(-scrolly.getBoundingClientRect().top, 0), r);
+            // Continuous progress 0..(n-1). The reel position tracks the scroll
+            // 1:1 — frame k slides up from 100% to 0 as `p` crosses k — so the
+            // motion follows the finger instead of snapping after a long ease,
+            // and each card advances at the same rhythm.
+            const p = (scrolled / r) * span;
+            frames.forEach((f, k) => {
+              f.style.zIndex = String(k + 1);
+              const ty = Math.min(Math.max(k - p, 0), 1) * 100;
+              f.style.transform = `translateY(${ty}%)`;
+            });
+            const idx = Math.min(Math.max(Math.round(p), 0), n - 1);
+            if (idx !== activeStep) {
+              activeStep = idx;
+              steps.forEach((s, k) => s.classList.toggle('is-active', k === idx));
+              frames.forEach((f, k) => f.classList.toggle('is-active', k === idx));
+            }
+          };
+          const onScroll = () => {
+            if (!ticking) {
+              ticking = true;
+              requestAnimationFrame(update);
+            }
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.addEventListener('resize', onScroll);
+          steps.forEach((s, i) => {
+            s.addEventListener('click', () => {
+              const targetY =
+                window.scrollY + scrolly.getBoundingClientRect().top + (i / span) * range();
+              window.scrollTo({ top: targetY, behavior: 'smooth' });
+            });
+          });
+          update();
+        };
+
+        // About tabs: scrolling through the pinned `.about-scrolly` advances the
+        // active tab (checks radio 1→2→3); clicking a tab still works and
+        // smooth-scrolls to that tab's scroll slice so click + scroll stay in
+        // sync. Mirrors `enhanceCapScrolly`.
+        const enhanceAboutScrolly = () => {
+          const scrolly = document.querySelector('[data-about-scrolly]');
+          if (!scrolly) return;
+          const sticky = scrolly.querySelector('.about-sticky');
+          const panels = Array.from(scrolly.querySelectorAll('.about-panel'));
+          const radios = [1, 2, 3]
+            .map((n) => document.getElementById('about-tab-' + n))
+            .filter(Boolean);
+          const labels = Array.from(scrolly.querySelectorAll('.about-tab'));
+          const n = radios.length;
+          if (n === 0 || panels.length === 0) return;
+          // Pinned (desktop) → scroll drives the stack 1:1 (跟手). Otherwise the
+          // CSS :checked rules handle click-only switching.
+          const pinned = () => window.innerWidth > 880;
+          // Fraction of the scroll over which the stack completes; the rest is
+          // dwell on the last panel before the pin releases.
+          const STACK_END = 0.85;
+          const range = () => {
+            const stickyH = sticky ? sticky.offsetHeight : window.innerHeight;
+            return Math.max(1, scrolly.offsetHeight - stickyH);
+          };
+          let ticking = false;
+          const update = () => {
+            ticking = false;
+            if (!pinned()) {
+              // Hand back to CSS (mobile / click-only).
+              panels.forEach((p) => {
+                p.style.transform = '';
+                p.style.transition = '';
+                p.style.zIndex = '';
+              });
+              return;
+            }
+            // Continuous stacking, no CSS transition so the cover tracks scroll
+            // 1:1: the next panel slides UP from below over the current one as
+            // you advance (it parks at 100% and rises to 0). The stack finishes
+            // by ~85% of the scroll (STACK_END) so the LAST panel is fully up
+            // and dwells before the section unpins and the page scrolls on.
+            const scrolled = Math.min(
+              Math.max(-scrolly.getBoundingClientRect().top, 0),
+              range(),
+            );
+            const progress =
+              Math.min(1, scrolled / (range() * STACK_END)) * (n - 1);
+            const base = Math.floor(progress);
+            const frac = progress - base;
+            panels.forEach((p, k) => {
+              p.style.transition = 'none';
+              p.style.zIndex = String(k + 1);
+              let ty;
+              if (k <= base) ty = 0;
+              else if (k === base + 1) ty = (1 - frac) * 100;
+              else ty = 100;
+              p.style.transform = 'translateY(' + ty + '%)';
+            });
+            const idx = Math.min(n - 1, Math.max(0, Math.round(progress)));
+            if (!radios[idx].checked) radios[idx].checked = true;
+          };
+          const onScroll = () => {
+            if (!ticking) {
+              ticking = true;
+              requestAnimationFrame(update);
+            }
+          };
+          window.addEventListener('scroll', onScroll, { passive: true });
+          window.addEventListener('resize', onScroll);
+          labels.forEach((label, i) => {
+            label.addEventListener('click', () => {
+              const frac = n > 1 ? (i / (n - 1)) * STACK_END : 0;
+              const targetY =
+                window.scrollY +
+                scrolly.getBoundingClientRect().top +
+                frac * range();
+              window.scrollTo({ top: targetY, behavior: 'smooth' });
+            });
+          });
+          update();
+        };
+
+        // FAQ: hover to expand. Opens the <details> on pointer-enter and closes
+        // it on leave, so an answer reveals while hovering its row. Native click
+        // / touch / keyboard still toggle, so it stays usable without a pointer.
+        const enhanceFaqHover = () => {
+          for (const li of document.querySelectorAll('.faq-item')) {
+            const d = li.querySelector('details');
+            if (!d) continue;
+            li.addEventListener('mouseenter', () => {
+              d.open = true;
+            });
+            li.addEventListener('mouseleave', () => {
+              d.open = false;
+            });
+          }
+        };
+
+        // Newsletter: no mailing-list backend exists yet, so intercept submit
+        // and swap the form for its localized thanks line (data-newsletter-done,
+        // from home-translations). Replace this with a real provider POST once
+        // a subscribe endpoint lands.
+        const enhanceNewsletter = () => {
+          for (const form of document.querySelectorAll('form[data-newsletter]')) {
+            form.addEventListener('submit', (event) => {
+              event.preventDefault();
+              if (!form.reportValidity()) return;
+              const input = form.querySelector('input[type="email"], input[name="email"]');
+              const email = input && input.value ? input.value.trim() : '';
+              if (!email) return;
+              const submit = form.querySelector('[type="submit"]');
+              // Drop any prior inline error, lock the button while in flight.
+              const priorErr = form.querySelector('.newsletter-error');
+              if (priorErr) priorErr.remove();
+              if (submit) submit.disabled = true;
+
+              const showDone = () => {
+                const done = document.createElement('p');
+                done.className = 'newsletter-done';
+                done.textContent = form.dataset.newsletterDone || 'Thanks!';
+                form.replaceChildren(done);
+              };
+              const showError = () => {
+                if (submit) submit.disabled = false;
+                if (form.querySelector('.newsletter-error')) return;
+                const err = document.createElement('p');
+                err.className = 'newsletter-error';
+                err.setAttribute('role', 'alert');
+                err.textContent =
+                  form.dataset.newsletterError || 'Couldn’t subscribe just now — please try again.';
+                form.appendChild(err);
+              };
+
+              // Real subscription: POST the email to the Cloudflare Pages
+              // Function at /subscribe (writes the Resend contact + KV backup).
+              // Success → thanks line; failure → inline error so the visitor
+              // knows it didn't go through (no silent fake-success).
+              fetch('/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, source: 'landing' }),
+              })
+                .then((r) => {
+                  if (r.ok) showDone();
+                  else showError();
+                })
+                .catch(showError);
+            });
+          }
+        };
+
+        const elements = document.querySelectorAll('[data-reveal]:not([data-revealed])');
+        enhanceHeader();
+        // Mobile hamburger toggle. `header-enhancer.astro` binds this on every
+        // sub-page (via sub-page-layout), but the homepage doesn't include it,
+        // so the toggle was inert here — wire the same behaviour inline.
+        (function enhanceMobileNav() {
+          const navToggle = document.querySelector('[data-nav-toggle]');
+          const primaryNav = document.querySelector('[data-nav-primary]');
+          const navHost = navToggle ? navToggle.closest('header.nav') : null;
+          if (!navToggle || !primaryNav || !navHost) return;
+          const setNavOpen = (open) => {
+            navHost.classList.toggle('is-open', open);
+            navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+          };
+          navToggle.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            setNavOpen(!navHost.classList.contains('is-open'));
+          });
+          primaryNav.querySelectorAll('a').forEach((link) => {
+            link.addEventListener('click', () => setNavOpen(false));
+          });
+          document.addEventListener('click', (ev) => {
+            if (!navHost.contains(ev.target)) setNavOpen(false);
+          });
+          document.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape') setNavOpen(false);
+          });
+        })();
+        enhanceDragIcon();
+        enhanceWire();
+        enhanceStatementReveal();
+        enhanceLabDock();
+        enhanceLabAutoCycle();
+        enhanceCountups();
+        enhanceDownloadCta();
+        enhanceLabSwitch();
+        enhanceCapScrolly();
+        enhanceAboutScrolly();
+        enhanceFaqHover();
+        enhanceNewsletter();
         if (elements.length === 0) return;
 
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (reduceMotion || !('IntersectionObserver' in window)) {
-          for (const el of elements) {
-            el.dataset.revealed = 'true';
-            reportSection(el);
-          }
+          for (const el of elements) el.dataset.revealed = 'true';
           return;
         }
 
@@ -515,7 +1408,6 @@ const pageHtml = renderToStaticMarkup(
             for (const entry of entries) {
               if (!entry.isIntersecting) continue;
               entry.target.dataset.revealed = 'true';
-              reportSection(entry.target);
               observer.unobserve(entry.target);
             }
           },
@@ -525,139 +1417,397 @@ const pageHtml = renderToStaticMarkup(
         for (const el of elements) observer.observe(el);
       })();
     </script>
+    <script is:inline set:html={cobeRuntime} />
     <script is:inline>
-      (() => {
-        const STORAGE_KEY = 'od-newsletter-dismissed';
-        const locale = (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
-        const track = (area, result) => {
-          if (window.__odTrack)
-            window.__odTrack('newsletter_signup', { page_name: 'landing_home', area, result, locale });
-        };
+      const initContributorGlobes = () => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const canvases = Array.from(
+          document.querySelectorAll('[data-testimonial-globe] canvas'),
+        );
+        if (canvases.length === 0) return;
 
-        const dismissed = () => {
-          try {
-            return window.localStorage.getItem(STORAGE_KEY) === '1';
-          } catch {
-            return false;
-          }
-        };
-        const setDismissed = () => {
-          try {
-            window.localStorage.setItem(STORAGE_KEY, '1');
-          } catch {
-            /* private mode — popup will just reappear next visit */
-          }
-        };
+        const markers = [
+          { location: [37.7749, -122.4194], size: 0.055 },
+          { location: [40.7128, -74.006], size: 0.045 },
+          { location: [52.52, 13.405], size: 0.052 },
+          { location: [35.6762, 139.6503], size: 0.05 },
+          { location: [31.2304, 121.4737], size: 0.045 },
+          { location: [1.3521, 103.8198], size: 0.04 },
+          { location: [-23.5505, -46.6333], size: 0.042 },
+          { location: [-33.8688, 151.2093], size: 0.042 },
+        ];
 
-        const wireForm = (form, area) => {
-          const input = form.querySelector('[data-newsletter-email]');
-          const msg = form.querySelector('[data-newsletter-msg]');
-          const submit = form.querySelector('.newsletter-submit');
-          const submitIdleText = submit ? (submit.textContent || '').trim() : '';
-          const successText = form.getAttribute('data-success') || '';
-          const errorText = form.getAttribute('data-error') || '';
-          form.addEventListener('submit', (ev) => {
-            ev.preventDefault();
-            const email = (input && input.value ? input.value : '').trim();
-            if (!email) return;
-            if (submit) {
-              submit.disabled = true;
-              submit.classList.add('is-loading');
-              submit.setAttribute('aria-busy', 'true');
-              submit.textContent = submitIdleText ? `${submitIdleText}...` : 'Loading...';
-            }
-            if (msg) msg.textContent = '';
-            fetch('/subscribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, source: form.getAttribute('data-source') || 'landing' }),
-            })
-              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
-              .then((data) => {
-                if (!data || data.ok !== true) throw new Error('rejected');
-                form.classList.add('is-success');
-                if (submit) {
-                  submit.classList.remove('is-loading');
-                  submit.removeAttribute('aria-busy');
-                  submit.textContent = submitIdleText;
-                }
-                if (msg) msg.textContent = successText;
-                if (input) input.value = '';
-                setDismissed();
-                track(area, 'success');
-              })
-              .catch(() => {
-                if (msg) msg.textContent = errorText;
-                if (submit) {
-                  submit.disabled = false;
-                  submit.classList.remove('is-loading');
-                  submit.removeAttribute('aria-busy');
-                  submit.textContent = submitIdleText;
-                }
-                track(area, 'error');
-              });
+        for (const canvas of canvases) {
+          if (canvas.dataset.globeReady === 'true') continue;
+          canvas.dataset.globeReady = 'true';
+
+          let width = 0;
+          let phi = 0.32;
+          let frameId = 0;
+          let active = false;
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const updateSize = () => {
+            width = Math.max(260, Math.floor(canvas.offsetWidth || 360));
+          };
+          updateSize();
+          window.addEventListener('resize', updateSize, { passive: true });
+
+          const globe = window.__cobe(canvas, {
+            devicePixelRatio: dpr,
+            width: width * dpr,
+            height: width * dpr,
+            phi,
+            theta: 0.28,
+            dark: 0,
+            diffuse: 0,
+            mapSamples: 12000,
+            mapBrightness: 1.0,
+            mapBaseBrightness: 0,
+            baseColor: [1, 1, 1],
+            markerColor: [0.31, 0.98, 0.08],
+            glowColor: [1, 1, 1],
+            opacity: 1,
+            scale: 1,
+            markerElevation: 0.015,
+            markers: markers.map((marker) => ({
+              location: [...marker.location],
+              size: marker.size,
+            })),
           });
-        };
 
-        document.querySelectorAll('[data-newsletter-form]').forEach((form) => {
-          const popup = form.closest('[data-newsletter-popup]');
-          wireForm(form, popup ? 'popup' : 'section');
-        });
+          const render = () => {
+            if (!active) return;
+            if (!reduceMotion) phi += 0.0042;
+            globe.update({
+              width: width * dpr,
+              height: width * dpr,
+              phi,
+            });
+            frameId = requestAnimationFrame(render);
+          };
+          const start = () => {
+            if (active) return;
+            active = true;
+            frameId = requestAnimationFrame(render);
+          };
+          const stop = () => {
+            active = false;
+            if (frameId) cancelAnimationFrame(frameId);
+            frameId = 0;
+          };
 
-        const popup = document.querySelector('[data-newsletter-popup]');
-        if (popup && !dismissed()) {
-          const syncPopupRailMask = () => {
-            if (popup.hidden || !popup.classList.contains('is-visible')) return;
-            const rect = popup.getBoundingClientRect();
-            document.body.style.setProperty('--newsletter-popup-mask-top', `${Math.max(0, rect.top)}px`);
-            document.body.style.setProperty(
-              '--newsletter-popup-mask-bottom',
-              `${Math.min(window.innerHeight, rect.bottom)}px`,
+          if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver(
+              ([entry]) => {
+                if (entry?.isIntersecting) start();
+                else stop();
+              },
+              { threshold: 0.05 },
             );
-          };
-          const clearPopupRailMask = () => {
-            document.body.classList.remove('newsletter-popup-visible');
-            document.body.style.removeProperty('--newsletter-popup-mask-top');
-            document.body.style.removeProperty('--newsletter-popup-mask-bottom');
-          };
-          const close = () => {
-            popup.hidden = true;
-            clearPopupRailMask();
-            setDismissed();
-          };
-          popup.querySelectorAll('[data-newsletter-dismiss]').forEach((btn) =>
-            btn.addEventListener('click', close),
-          );
-          document.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Escape' && !popup.hidden) close();
-          });
-          const reveal = () => {
-            if (dismissed()) return;
-            popup.hidden = false;
-            popup.classList.add('is-visible');
-            document.body.classList.add('newsletter-popup-visible');
-            requestAnimationFrame(syncPopupRailMask);
-            track('popup', 'view');
-          };
-          window.addEventListener('resize', syncPopupRailMask, { passive: true });
-          // Show after the visitor has scrolled past the hero, or a delay
-          // fallback — whichever comes first. Avoids interrupting the LCP.
-          let shown = false;
-          const showOnce = () => {
-            if (shown) return;
-            shown = true;
-            reveal();
-          };
-          const onScroll = () => {
-            if (window.scrollY > window.innerHeight * 0.5) {
-              window.removeEventListener('scroll', onScroll);
-              showOnce();
-            }
-          };
-          window.addEventListener('scroll', onScroll, { passive: true });
-          window.setTimeout(showOnce, 10000);
+            observer.observe(canvas);
+          } else {
+            start();
+          }
         }
-      })();
+      };
+
+      initContributorGlobes();
+
+      // Contributor avatars orbiting the globe. Fetches the same GitHub
+      // contributors list and lays the avatars out at even angles around a
+      // spinning ring (see `.contributor-orbit` in globals.css). No spokes.
+      const enhanceContributorOrbit = () => {
+        const mounts = Array.from(
+          document.querySelectorAll('[data-contributor-orbit]'),
+        );
+        if (mounts.length === 0) return;
+
+        const build = (avatars) => {
+          const count = avatars.length;
+          for (const mount of mounts) {
+            const ring = document.createElement('div');
+            ring.className = 'orbit-ring';
+            avatars.forEach((a, i) => {
+              const slot = document.createElement('div');
+              slot.className = 'orbit-slot';
+              slot.style.setProperty('--angle', `${(360 / count) * i}deg`);
+
+              const avatar = document.createElement('a');
+              avatar.className = 'orbit-avatar';
+              avatar.href = a.href;
+              avatar.target = '_blank';
+              avatar.rel = 'noreferrer noopener';
+              avatar.setAttribute('aria-label', `Open ${a.handle} on GitHub`);
+
+              const img = document.createElement('img');
+              img.src = a.src;
+              img.alt = '';
+              // Eager + no-referrer: these avatars come from
+              // avatars.githubusercontent.com, which is slow / flaky from some
+              // regions (notably mainland China). Lazy-loading them meant the
+              // ring looked empty for the first few seconds (or indefinitely on
+              // a dropped request). Eager-load as soon as the ring is built —
+              // well before the user scrolls the testimonial into view.
+              img.loading = 'eager';
+              img.decoding = 'async';
+              img.referrerPolicy = 'no-referrer';
+              // Hard-fail fallback: if the avatar can't load at all, show the
+              // contributor's initial on the neutral chip instead of a blank.
+              img.addEventListener('error', () => {
+                img.remove();
+                avatar.classList.add('orbit-avatar--fallback');
+                avatar.textContent = (a.handle.charAt(0) || '?').toUpperCase();
+              });
+
+              avatar.append(img);
+              slot.append(avatar);
+              ring.append(slot);
+            });
+            mount.replaceChildren(ring);
+          }
+        };
+
+        // Live GitHub API fallback — only used if the vendored manifest is
+        // missing (e.g. `pnpm vendor:contributors` hasn't run). These avatars
+        // come from avatars.githubusercontent.com and can be slow/flaky.
+        const buildFromGitHub = () => {
+          fetch('https://api.github.com/repos/nexu-io/open-design/contributors?per_page=60', {
+            headers: { Accept: 'application/vnd.github+json' },
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+            .then((data) => {
+              if (!Array.isArray(data)) return;
+              const avatars = data
+                .filter(
+                  (c) =>
+                    c &&
+                    typeof c.login === 'string' &&
+                    typeof c.avatar_url === 'string' &&
+                    typeof c.html_url === 'string' &&
+                    c.type !== 'Bot' &&
+                    !c.login.endsWith('[bot]'),
+                )
+                .slice(0, 16)
+                .map((c) => ({
+                  src: `${c.avatar_url}${c.avatar_url.includes('?') ? '&' : '?'}s=96`,
+                  href: c.html_url,
+                  handle: c.login,
+                }));
+              if (avatars.length === 0) return;
+              build(avatars);
+            })
+            .catch(() => {});
+        };
+
+        // Prefer locally vendored avatars (public/contributors/manifest.json):
+        // served from our own origin, so they load instantly and reliably with
+        // no cross-border request. Each entry is already { src, href, handle }.
+        fetch('/contributors/manifest.json')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('no manifest'))))
+          .then((data) => {
+            if (!Array.isArray(data) || data.length === 0) {
+              buildFromGitHub();
+              return;
+            }
+            build(data.slice(0, 16));
+          })
+          .catch(() => buildFromGitHub());
+      };
+
+      enhanceContributorOrbit();
+    </script>
+    <script is:inline set:html={matterRuntime} />
+    <script is:inline>
+      // FallingText (React Bits) ported to vanilla matter-js. The agent-name
+      // chips in the Method section drop into a physics playground on trigger;
+      // the words are server-rendered (.falling-word) so the text is readable
+      // and SEO-visible before any physics runs. matter-js is inlined as a
+      // classic (non-module) script above and attaches `Matter` to `window`.
+
+      const initFallingText = () => {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const containers = Array.from(
+          document.querySelectorAll('[data-falling-text]'),
+        );
+        if (containers.length === 0) return;
+
+        const { Engine, Render, World, Bodies, Runner, Mouse, MouseConstraint, Body } = window.Matter;
+
+        for (const container of containers) {
+          if (container.dataset.fallingReady === 'true') continue;
+          const target = container.querySelector('.falling-text-target');
+          const canvasContainer = container.querySelector('.falling-text-canvas');
+          if (!target || !canvasContainer) continue;
+
+          // The reveal banner is draggable: the user can grab it with the mouse
+          // and move it anywhere in the section. We keep the centring translate
+          // and layer the drag delta on top via `--drag-x` / `--drag-y`, and
+          // stop the pointer event from reaching the matter.js mouse so the
+          // physics chips behind it don't get grabbed at the same time.
+          const revealEl = container.querySelector('[data-falling-reveal]');
+          if (revealEl) {
+            let dragging = false;
+            let startX = 0;
+            let startY = 0;
+            let baseX = 0;
+            let baseY = 0;
+            const readVar = (name) =>
+              Number.parseFloat(revealEl.style.getPropertyValue(name)) || 0;
+            revealEl.addEventListener('pointerdown', (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              dragging = true;
+              startX = event.clientX;
+              startY = event.clientY;
+              baseX = readVar('--drag-x');
+              baseY = readVar('--drag-y');
+              revealEl.classList.add('is-dragging');
+              revealEl.setPointerCapture(event.pointerId);
+            });
+            revealEl.addEventListener('pointermove', (event) => {
+              if (!dragging) return;
+              revealEl.style.setProperty('--drag-x', `${baseX + (event.clientX - startX)}px`);
+              revealEl.style.setProperty('--drag-y', `${baseY + (event.clientY - startY)}px`);
+            });
+            const endDrag = (event) => {
+              if (!dragging) return;
+              dragging = false;
+              revealEl.classList.remove('is-dragging');
+              try {
+                revealEl.releasePointerCapture(event.pointerId);
+              } catch {
+                /* pointer already released */
+              }
+            };
+            revealEl.addEventListener('pointerup', endDrag);
+            revealEl.addEventListener('pointercancel', endDrag);
+          }
+
+          const gravity = Number.parseFloat(container.dataset.gravity || '1');
+          const stiffness = Number.parseFloat(container.dataset.stiffness || '0.2');
+          const trigger = container.dataset.trigger || 'hover';
+
+          let started = false;
+          const runPhysics = () => {
+            const rect = container.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            if (width <= 0 || height <= 0) return;
+
+            const engine = Engine.create();
+            engine.world.gravity.y = gravity;
+
+            const render = Render.create({
+              element: canvasContainer,
+              engine,
+              options: { width, height, background: 'transparent', wireframes: false },
+            });
+
+            const wall = { isStatic: true, render: { fillStyle: 'transparent' } };
+            const floor = Bodies.rectangle(width / 2, height + 25, width, 50, wall);
+            const leftWall = Bodies.rectangle(-25, height / 2, 50, height, wall);
+            const rightWall = Bodies.rectangle(width + 25, height / 2, 50, height, wall);
+            const ceiling = Bodies.rectangle(width / 2, -25, width, 50, wall);
+
+            const words = Array.from(target.querySelectorAll('.falling-word'));
+            const bodies = words.map((elem) => {
+              const r = elem.getBoundingClientRect();
+              const x = r.left - rect.left + r.width / 2;
+              const y = r.top - rect.top + r.height / 2;
+              const body = Bodies.rectangle(x, y, r.width, r.height, {
+                restitution: 0.8,
+                frictionAir: 0.01,
+                friction: 0.2,
+                render: { fillStyle: 'transparent' },
+              });
+              Body.setVelocity(body, { x: (Math.random() - 0.5) * 5, y: 0 });
+              Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+              return { elem, body };
+            });
+
+            for (const { elem } of bodies) {
+              elem.style.position = 'absolute';
+              elem.style.margin = '0';
+            }
+
+            const mouse = Mouse.create(container);
+            // Don't let the physics surface swallow page scroll over the canvas.
+            const m = mouse;
+            m.element.removeEventListener('wheel', m.mousewheel);
+            m.element.removeEventListener('DOMMouseScroll', m.mousewheel);
+            const mouseConstraint = MouseConstraint.create(engine, {
+              mouse,
+              constraint: { stiffness, render: { visible: false } },
+            });
+            render.mouse = mouse;
+
+            World.add(engine.world, [
+              floor,
+              leftWall,
+              rightWall,
+              ceiling,
+              mouseConstraint,
+              ...bodies.map((b) => b.body),
+            ]);
+
+            const runner = Runner.create();
+            Runner.run(runner, engine);
+            Render.run(render);
+
+            // Banner appears the moment the icons start dropping — no waiting
+            // for the pile to settle.
+            container
+              .querySelector('[data-falling-reveal]')
+              ?.classList.add('is-visible');
+
+            const loop = () => {
+              for (const { body, elem } of bodies) {
+                elem.style.left = `${body.position.x}px`;
+                elem.style.top = `${body.position.y}px`;
+                elem.style.transform = `translate(-50%, -50%) rotate(${body.angle}rad)`;
+              }
+              requestAnimationFrame(loop);
+            };
+            loop();
+          };
+
+          const start = () => {
+            if (started) return;
+            started = true;
+            container.dataset.fallingReady = 'true';
+            runPhysics();
+          };
+
+          if (reduceMotion) {
+            container.dataset.fallingReady = 'true';
+            // No physics for reduced-motion readers — just show the banner.
+            container.querySelector('[data-falling-reveal]')?.classList.add('is-visible');
+            continue;
+          }
+          if (trigger === 'auto') start();
+          else if (trigger === 'scroll') {
+            const io = new IntersectionObserver(
+              ([entry]) => {
+                if (entry?.isIntersecting) {
+                  start();
+                  io.disconnect();
+                }
+              },
+              // Fire once the icon row has scrolled up into roughly the top
+              // half of the viewport ("near the top"), not the moment it peeks
+              // in from the bottom.
+              { threshold: 0, rootMargin: '0px 0px -45% 0px' },
+            );
+            io.observe(container);
+          } else if (trigger === 'click') {
+            container.addEventListener('click', start, { once: true });
+          } else {
+            container.addEventListener('mouseenter', start, { once: true });
+          }
+        }
+      };
+
+      initFallingText();
     </script>
   </body>
 </html>

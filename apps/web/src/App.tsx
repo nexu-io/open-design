@@ -1116,7 +1116,7 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(persisted),
+      syncConfigToDaemon(persisted, { throwOnError: true }),
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
@@ -2067,6 +2067,7 @@ function AppInner() {
         onModeChange={handleModeChange}
         onAgentChange={handleAgentChange}
         onAgentModelChange={handleAgentModelChange}
+        onApiModelChange={handleApiModelChange}
         onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
         onOpenSettings={openSettings}

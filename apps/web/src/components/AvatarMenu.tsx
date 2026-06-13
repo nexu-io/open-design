@@ -176,7 +176,14 @@ export function AvatarMenu({
   )?.label;
 
   const apiProtocol = config.apiProtocol ?? 'openai';
-  const byokProvider = KNOWN_PROVIDERS.find((provider) => provider.protocol === apiProtocol);
+  const byokProvider =
+    KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === apiProtocol &&
+        (config.apiProviderBaseUrl
+          ? provider.baseUrl === config.apiProviderBaseUrl
+          : provider.baseUrl === config.baseUrl),
+    ) ?? KNOWN_PROVIDERS.find((provider) => provider.protocol === apiProtocol);
   const byokProviderModelsKey = providerModelsCacheKey(
     apiProtocol,
     config.baseUrl ?? '',
@@ -219,7 +226,9 @@ export function AvatarMenu({
 
   const byokModelOptions = mergeProviderModelOptions(
     fetchedByokModels,
-    SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
+    byokProvider?.models?.length
+      ? byokProvider.models
+      : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol] ?? [],
   );
 
   return (

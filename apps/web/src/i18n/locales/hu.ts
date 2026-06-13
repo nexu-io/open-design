@@ -1505,6 +1505,7 @@ export const hu: Dict = {
   'chat.annotationSendDisabledReason': 'Jelenleg fut egy feladat',
   'chat.annotationPreviewMissing': 'Nem sikerült rögzíteni az előnézetet. Kérjük, próbálja újra.',
   'chat.annotationPreviewMissingInk': 'Nem sikerült rögzíteni az előnézetet. Próbálja újra, hogy ne csak a tinta legyen elküldve.',
+  'chat.annotationSentWithoutScreenshot': 'Nem sikerült rögzíteni az előnézetet. A jegyzet képernyőkép nélkül lett elküldve.',
   'chat.annotationTimeout': 'Az annotáció küldése időtúllépés miatt megszakadt. Kérjük, próbálja újra.',
   'chat.annotationFailed': 'Az annotáció küldése nem sikerült. Kérjük, próbálja újra.',
   'chat.annotationProjectCreateFailed': 'Nem sikerült projektet létrehozni, ezért az annotáció nem lett elküldve.',

@@ -1505,6 +1505,7 @@ export const uk: Dict = {
   'chat.annotationSendDisabledReason': 'Наразі виконується завдання',
   'chat.annotationPreviewMissing': 'Не вдалося захопити попередній перегляд. Спробуйте ще раз.',
   'chat.annotationPreviewMissingInk': 'Не вдалося захопити попередній перегляд. Спробуйте ще раз, щоб не надіслати лише рукописні позначки.',
+  'chat.annotationSentWithoutScreenshot': 'Не вдалося захопити попередній перегляд. Анотацію надіслано без знімка екрана.',
   'chat.annotationTimeout': 'Час очікування надсилання анотації вичерпано. Спробуйте ще раз.',
   'chat.annotationFailed': 'Не вдалося надіслати анотацію. Спробуйте ще раз.',
   'chat.annotationProjectCreateFailed': 'Не вдалося створити проєкт, тому анотацію не надіслано.',

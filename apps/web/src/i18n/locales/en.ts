@@ -1505,6 +1505,7 @@ export const en: Dict = {
   'chat.annotationSendDisabledReason': 'A task is currently running',
   'chat.annotationPreviewMissing': 'Could not capture the preview. Please try again.',
   'chat.annotationPreviewMissingInk': 'Could not capture the preview. Try again to avoid sending only ink.',
+  'chat.annotationSentWithoutScreenshot': 'Could not capture the preview. The annotation was sent without a screenshot.',
   'chat.annotationTimeout': 'Annotation send timed out. Please try again.',
   'chat.annotationFailed': 'Annotation send failed. Please try again.',
   'chat.annotationProjectCreateFailed': 'Could not create a project, so the annotation was not sent.',

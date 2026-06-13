@@ -212,8 +212,9 @@ const jsonLd = [
   </nav>
 
   <article class="info-page agents-hub">
-    <header class="catalog-head">
-      <span class="label">{page.label}</span>
+    {/* Bare heading — the kicker label + top rule were removed from this
+        module per design; `catalog-head-bare` drops the border/padding. */}
+    <header class="catalog-head catalog-head-bare">
       <h1 class="display">{page.heading(allAgents.length)}</h1>
       <p class="lead">{page.lead(allAgents.length)}</p>
     </header>

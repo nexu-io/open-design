@@ -1505,6 +1505,7 @@ export const ar: Dict = {
   'chat.annotationSendDisabledReason': 'هناك مهمة قيد التشغيل حاليًا',
   'chat.annotationPreviewMissing': 'تعذّر التقاط المعاينة. يُرجى المحاولة مرة أخرى.',
   'chat.annotationPreviewMissingInk': 'تعذّر التقاط المعاينة. حاول مرة أخرى لتجنّب إرسال الحبر فقط.',
+  'chat.annotationSentWithoutScreenshot': 'تعذّر التقاط المعاينة. تم إرسال التعليق التوضيحي بدون لقطة شاشة.',
   'chat.annotationTimeout': 'انتهت مهلة إرسال التعليق التوضيحي. يُرجى المحاولة مرة أخرى.',
   'chat.annotationFailed': 'فشل إرسال التعليق التوضيحي. يُرجى المحاولة مرة أخرى.',
   'chat.annotationProjectCreateFailed': 'تعذّر إنشاء مشروع، لذا لم يتم إرسال التعليق التوضيحي.',

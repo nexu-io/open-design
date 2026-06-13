@@ -1,9 +1,8 @@
 import sitemap, { type SitemapItem } from '@astrojs/sitemap';
 import { appendFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AstroUserConfig } from 'astro';
+import type { AstroIntegration, AstroUserConfig } from 'astro';
 import { defineConfig } from 'astro/config';
-import type { AstroIntegration } from 'astro';
 import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
@@ -168,8 +167,38 @@ export default defineConfig({
   trailingSlash: 'always',
   vite: {
     define: {
+      // Staging / PR-preview builds set OD_LANDING_NOINDEX=1. SeoHead reads
+      // this compile-time constant (frontmatter can't read process.env).
       __OD_LANDING_NOINDEX__: JSON.stringify(landingNoindex),
     },
+    server: {
+      // The project path contains a space + emoji ("open design-👌"), which can
+      // break native fsevents file-watching and leave the dev server serving
+      // stale inlined CSS. Poll instead so edits (globals.css etc.) reliably
+      // hot-reload without needing a manual restart.
+      watch: { usePolling: true, interval: 250 },
+    },
+    plugins: [
+      {
+        // `/community/` is a static page served verbatim from
+        // `public/community/index.html`. Cloudflare Pages maps directory
+        // URLs to their index.html in production, but the Vite dev server
+        // does not — without this rewrite every /community/ link 404s
+        // locally. Dev-only; build output is untouched.
+        name: 'community-static-dir-index',
+        apply: 'serve' as const,
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            const [path = '', query] = (req.url ?? '').split('?');
+            if (path.startsWith('/community') && !path.includes('.')) {
+              const rewritten = `${path.endsWith('/') ? path : `${path}/`}index.html`;
+              req.url = query ? `${rewritten}?${query}` : rewritten;
+            }
+            next();
+          });
+        },
+      },
+    ],
   },
   build: {
     // Inline every emitted stylesheet directly into the HTML <head>.
@@ -257,11 +286,11 @@ export default defineConfig({
           item.priority = 0.9;
           item.changefreq = changefreq.weekly;
         } else if (
+          path === '/skills/' ||
+          path === '/systems/' ||
+          path === '/templates/' ||
           path === '/craft/' ||
-          path === '/plugins/' ||
-          path === '/plugins/skills/' ||
-          path === '/plugins/systems/' ||
-          path === '/plugins/templates/'
+          path === '/plugins/'
         ) {
           item.priority = 0.7;
           item.changefreq = changefreq.weekly;

@@ -1505,6 +1505,7 @@ export const ja: Dict = {
   'chat.annotationSendDisabledReason': 'タスクが実行中です',
   'chat.annotationPreviewMissing': 'プレビューをキャプチャできませんでした。もう一度お試しください。',
   'chat.annotationPreviewMissingInk': 'プレビューをキャプチャできませんでした。インクのみの送信を避けるため、もう一度お試しください。',
+  'chat.annotationSentWithoutScreenshot': 'プレビューをキャプチャできませんでした。注釈はスクリーンショットなしで送信されました。',
   'chat.annotationTimeout': '注釈の送信がタイムアウトしました。もう一度お試しください。',
   'chat.annotationFailed': '注釈の送信に失敗しました。もう一度お試しください。',
   'chat.annotationProjectCreateFailed': 'プロジェクトを作成できなかったため、注釈は送信されませんでした。',

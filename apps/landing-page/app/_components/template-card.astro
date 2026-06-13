@@ -34,7 +34,7 @@ import {
   resolveBundledTitle,
   type BundledPluginRecord,
 } from '../_lib/bundled-plugins';
-import { localeFromPath, localizedHref } from '../i18n';
+import { localeFromPath } from '../i18n';
 import { localizeTaxonomyValue } from '../content-i18n';
 import { getPluginsCopy } from '../_lib/plugins-i18n';
 
@@ -55,11 +55,14 @@ export interface Props {
 
 const { record, index, featured = false, dataScene } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
-const href = (path: string) => localizedHref(path, locale);
 
 const name = resolveBundledTitle(record, locale);
 const description = resolveBundledDescription(record, locale);
-const detailHref = href(record.detailHref);
+// Plugin detail pages exist only at the canonical `/plugins/<slug>/` URL —
+// there are no `/{locale}/plugins/<slug>/` variants — so the card must NOT
+// run the href through `localizedHref` even when it renders on a localized
+// catalog or solutions page.
+const detailHref = record.detailHref;
 
 /*
  * Share text — bake the localized share template into a `data-share-text`
@@ -81,17 +84,19 @@ const shareText = pcopy.shareTemplate({ title: name, url: shareUrl });
  * visually. The seven-slot palette mirrors YouMind's color-coded
  * top-band pattern but uses our paper-tone-friendly hues.
  */
+// Hues come from the skill palette's functional colors (references/颜色.md)
+// so the categorical bands stay inside the fixed color system.
 const ACCENT_BY_MODE: Record<string, string> = {
-  video: '#7fb46a',           // mossy green
-  prototype: '#5b8db8',        // dusty blue
-  deck: '#e9b94a',             // mustard (matches token)
-  image: '#a285c2',            // wisteria
-  hyperframes: '#d97373',      // coral-rose
-  audio: '#d28d3f',            // amber
-  'live-artifact': '#5fb0a8',  // teal
-  'design-system': '#7a8857',  // olive (matches token's --olive ish)
+  video: '#00aa54',            // 成功 green
+  prototype: '#1a74ff',        // 链接/信息 blue
+  deck: '#ffba12',             // 警告 yellow
+  image: '#8ecc29',            // 通过 yellow-green
+  hyperframes: '#ff5e5e',      // 错误辅助 rose
+  audio: '#ff7528',            // 提醒 orange
+  'live-artifact': '#3bbf7d',  // 成功辅助 teal-green
+  'design-system': '#70b500',  // 通过辅助 olive-green
 };
-const PALETTE = ['#7fb46a', '#5b8db8', '#e9b94a', '#a285c2', '#d97373', '#d28d3f', '#5fb0a8', '#7a8857'];
+const PALETTE = ['#00aa54', '#1a74ff', '#ffba12', '#8ecc29', '#ff5e5e', '#ff7528', '#3bbf7d', '#70b500'];
 const accent = (record.mode && ACCENT_BY_MODE[record.mode]) ?? PALETTE[index % PALETTE.length];
 
 /*
@@ -129,10 +134,11 @@ const isVideoPreview = record.previewType === 'video' && record.previewVideo;
         muted
         loop
         playsinline
-        preload="none"
+        preload="metadata"
         poster={record.previewPoster}
         data-tpl-autoplay
         data-src={record.previewVideo}
+        data-tpl-hold-ms={record.previewHoldMs != null ? String(record.previewHoldMs) : undefined}
       />
     ) : record.previewPoster ? (
       <img
@@ -160,6 +166,6 @@ const isVideoPreview = record.previewType === 'video' && record.previewVideo;
   </a>
 
   <div class="tpl-actions">
-    <a class="tpl-cta" href={href('/download/')}>{pcopy.cardUseTemplate}</a>
+    <a class="tpl-cta" href={detailHref}>{pcopy.cardUseTemplate}</a>
   </div>
 </article>
