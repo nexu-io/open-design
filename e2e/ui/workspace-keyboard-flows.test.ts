@@ -73,6 +73,37 @@ test('[P1] quick switcher keeps the current file when search has no matches', as
   await expect(alphaTab).toHaveAttribute('aria-selected', 'true');
 });
 
+test('[P1] quick switcher overlay escapes the workspace stacking context (#4148)', async ({ page }) => {
+  await gotoEntryHome(page);
+  await createProject(page, 'Quick switcher composer stacking');
+  await expectWorkspaceReady(page);
+
+  await openQuickSwitcher(page);
+  const quickSwitcher = page.locator('.qs-overlay');
+  await expect(quickSwitcher).toBeVisible();
+
+  // The search input is auto-focused on open, and that must survive the overlay
+  // being portaled to <body>.
+  await expect(page.locator('.qs-input')).toBeFocused();
+
+  // #4148: the overlay is a `position: fixed; z-index: 1500` dimming layer, but
+  // when the file workspace gets `contain: paint` (chat resize / focus mode) it
+  // becomes a stacking context that traps that z-index beneath the chat
+  // composer — portaled to <body> at z-index 45 — so the composer paints over
+  // the backdrop and looks highlighted. The fix portals the overlay out of the
+  // workspace subtree into the top-level stacking context. Asserting the
+  // overlay is no longer a descendant of the workspace is the direct, stable
+  // contract: rendered inline (the bug) it lives under `[data-testid=
+  // "file-workspace"]`; portaled to <body> it does not. This goes red on main.
+  const escapedWorkspace = await quickSwitcher.evaluate(
+    (el) => el.closest('[data-testid="file-workspace"]') === null,
+  );
+  expect(escapedWorkspace).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(quickSwitcher).toBeHidden();
+});
+
 test('[P1] quick switcher arrow keys move selection before opening a file', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher arrow navigation flow');
