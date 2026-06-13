@@ -230,6 +230,7 @@ describe('FileWorkspace design-system project surface', () => {
                 src="/assets/site/root.png"
                 srcset="/assets/site/root.png 1x, /assets/site/root@2x.png 2x"
               >
+              <img alt="Runtime artifact" src="/api/live-artifacts/hero.png">
               <script type="text/babel" src="Widget.jsx"></script>
               <script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<Widget />);</script>
             </body>
@@ -289,6 +290,8 @@ describe('FileWorkspace design-system project surface', () => {
     expect(srcdoc).toContain(
       'srcset="/api/projects/ds-acme/raw/assets/site/root.png 1x, /api/projects/ds-acme/raw/assets/site/root%402x.png 2x"',
     );
+    expect(srcdoc).toContain('src="/api/live-artifacts/hero.png"');
+    expect(srcdoc).not.toContain('/api/projects/ds-acme/raw/api/live-artifacts/hero.png');
     expect(srcdoc).not.toContain('src="Widget.jsx"');
   });
 

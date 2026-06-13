@@ -3920,14 +3920,27 @@ async function fetchDesignSystemPreviewRelativeText(
 }
 
 function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(assetRef)) return null;
+  const ref = assetRef.trim();
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
+  if (isDesignSystemPreviewAppRootRef(ref)) return null;
   try {
-    const url = new URL(assetRef, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
+    const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
     if (url.origin !== 'https://od.local') return null;
     return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
   } catch {
     return null;
   }
+}
+
+function isDesignSystemPreviewAppRootRef(ref: string): boolean {
+  if (!ref.startsWith('/') || ref.startsWith('//')) return false;
+  const pathOnly = ref.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+  return pathOnly === '/api'
+    || pathOnly.startsWith('/api/')
+    || pathOnly === '/artifacts'
+    || pathOnly.startsWith('/artifacts/')
+    || pathOnly === '/frames'
+    || pathOnly.startsWith('/frames/');
 }
 
 function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
