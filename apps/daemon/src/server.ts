@@ -2158,6 +2158,38 @@ function renderRunContextPrompt(selection, metadata) {
   return ['## Selected run context', ...lines].join('\n');
 }
 
+function objectRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function stringField(value, field) {
+  const record = objectRecord(value);
+  const raw = record && typeof record[field] === 'string' ? record[field].trim() : '';
+  return raw || null;
+}
+
+function sameResolvedPath(left, right) {
+  if (!left || !right) return false;
+  return path.resolve(left) === path.resolve(right);
+}
+
+function isOrchestratorIsolatedWorkspace(runRequest, projectMetadata, cwd) {
+  const metadata = objectRecord(runRequest?.metadata);
+  const cloneDir =
+    stringField(metadata, 'orchestrator_workspace_clone_dir') ??
+    stringField(runRequest, 'orchestrator_workspace_clone_dir');
+  const sourceDir =
+    stringField(metadata, 'orchestrator_workspace_source_dir') ??
+    stringField(runRequest, 'orchestrator_workspace_source_dir');
+  const baseDir = stringField(projectMetadata, 'baseDir');
+  if (!cwd || !baseDir || !cloneDir || !sourceDir) return false;
+  return (
+    sameResolvedPath(cwd, baseDir) &&
+    sameResolvedPath(cwd, cloneDir) &&
+    !sameResolvedPath(cwd, sourceDir)
+  );
+}
+
 export function normalizeProjectDisplayStatus(status) {
   return status === 'starting' || status === 'queued' ? 'running' : status;
 }
@@ -11447,8 +11479,13 @@ export async function startServer({
     const importedFolderProject =
       projectRecord?.metadata?.importedFrom === 'folder' &&
       typeof projectRecord?.metadata?.baseDir === 'string';
+    const disposableImportedFolderWorkspace =
+      importedFolderProject &&
+      isOrchestratorIsolatedWorkspace(chatBody, projectRecord?.metadata, cwd);
     const importedFolderWorkspaceSafetyEnabled =
-      importedFolderProject && isImportedFolderWorkspaceSafetyEnabled(process.env);
+      importedFolderProject &&
+      !disposableImportedFolderWorkspace &&
+      isImportedFolderWorkspaceSafetyEnabled(process.env);
     const emitWorkspaceSafetyStatus = (detail) => {
       const payload = {
         type: 'status',

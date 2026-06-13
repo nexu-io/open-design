@@ -65,6 +65,17 @@ describe('POST /api/import/folder', () => {
     }
   }
 
+  function runGitOutput(cwd: string, args: string[]): string {
+    const result = spawnSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) {
+      throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+    }
+    return result.stdout.trim();
+  }
+
   async function withFakeAgent<T>(
     binName: string,
     script: string,
@@ -313,6 +324,71 @@ process.stdin.on('end', () => {
         expect(events).toContain('workspace_safety');
         expect(events).toContain('command: git checkout');
         expect(events).toContain('Open Design git command guard blocked');
+      },
+    );
+  });
+
+  it('does not treat orchestrator-isolated imported folders as user workspaces', async () => {
+    if (!gitAvailable()) return;
+    const sourceFolder = makeFolder();
+    const folder = makeFolder();
+    runGit(folder, ['init']);
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    runGit(folder, ['add', 'index.html']);
+    runGit(folder, ['-c', 'user.name=Open Design Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'init']);
+    const baseCommit = runGitOutput(folder, ['rev-parse', 'HEAD']);
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html><main>scratch change</main>');
+
+    delete process.env.OD_GIT_COMMAND_GUARD;
+    delete process.env.OD_IMPORTED_FOLDER_WORKSPACE_SAFETY;
+    delete process.env.OD_IMPORTED_FOLDER_ALLOW_DIRTY;
+
+    const cloneDir = await realpath(folder);
+    const importResp = await importFolder({ baseDir: cloneDir });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    await withFakeAgent(
+      'opencode',
+      `
+const cp = require('node:child_process');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const result = cp.spawnSync('git', ['checkout', '--', 'index.html'], { encoding: 'utf8' });
+  if (result.stderr) process.stderr.write(result.stderr);
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'checkout-status:' + result.status } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createRunResp = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId: project.id,
+            message: 'Try a destructive checkout in a scratch clone.',
+            metadata: {
+              orchestrator_workspace_source_dir: await realpath(sourceFolder),
+              orchestrator_workspace_clone_dir: cloneDir,
+              orchestrator_workspace_base_commit: baseCommit,
+              orchestrator_workspace_git_repo: true,
+            },
+          }),
+        });
+        expect(createRunResp.status).toBe(202);
+        const { runId } = (await createRunResp.json()) as { runId: string };
+
+        const eventsResp = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const events = await readSseUntil(eventsResp, 'event: end');
+        const status = await waitForRunStatus(runId);
+
+        expect(status.status).toBe('succeeded');
+        expect(events).toContain('checkout-status:0');
+        expect(events).not.toContain('workspace_safety');
+        expect(events).not.toContain('Open Design git command guard blocked');
       },
     );
   });
