@@ -215,6 +215,12 @@
   max-width: calc(100vw - 24px);
   overflow: hidden;
 }
+.plus-menu__flyout--toolbox {
+  min-width: 0;
+  max-width: none;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+}
 .plus-menu__plugin-pane {
   display: flex;
   gap: 8px;
@@ -309,6 +315,9 @@
 /* Narrow surfaces (contained flyout) have no room for a side column, so
    the preview drops below the list and the hero height is capped. */
 .plus-menu__popup--flyout-contained .plus-menu__flyout--plugins {
+  width: auto;
+}
+.plus-menu__popup--flyout-contained .plus-menu__flyout--toolbox {
   width: auto;
 }
 .plus-menu__popup--flyout-contained .plus-menu__plugin-pane {

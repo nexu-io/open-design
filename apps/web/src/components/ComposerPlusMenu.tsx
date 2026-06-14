@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type ReactNode,
 } from 'react';
@@ -31,6 +32,7 @@ const PLUS_MENU_FLYOUT_WIDTH = 360;
 const PLUS_MENU_PLUGIN_FLYOUT_WIDTH = 466;
 const PLUS_MENU_PREFERRED_MIN_HEIGHT = 180;
 const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
+const PLUS_MENU_SEARCH_LEAVE_GRACE_MS = 400;
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
 type PlusMenuFlyoutVerticalPlacement = 'down' | 'up';
 type PlusMenuPopupStyle = CSSProperties & Record<'--plus-menu-flyout-max-height', string>;
@@ -456,9 +458,7 @@ export function ComposerPlusMenu({
             testId="composer-plus-plugins"
             onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
-            flyoutClassName={
-              filteredPlugins.length > 0 ? 'plus-menu__flyout--plugins' : undefined
-            }
+            flyoutClassName="plus-menu__flyout--plugins"
           >
             <div className="plus-menu__plugin-pane">
               <div className="plus-menu__plugin-main">
@@ -584,6 +584,7 @@ export function ComposerPlusMenu({
               open={submenu === 'toolbox'}
               onOpen={(row) => openSubmenu('toolbox', row)}
               onClose={scheduleCloseSubmenu}
+              flyoutClassName="plus-menu__flyout--toolbox"
             >
               {renderToolbox(close)}
             </PlusSubmenuRow>
@@ -616,12 +617,36 @@ function PlusSubmenuRow({
   children: ReactNode;
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
+  const lastTextInputChangeAt = useRef<number | null>(null);
+  function isSubmenuTextInput(element: Element | null): element is HTMLElement {
+    return element instanceof HTMLElement
+      && element.matches('input, textarea, [contenteditable="true"], [role="textbox"]');
+  }
+
+  function handleChangeCapture(event: ChangeEvent<HTMLDivElement>) {
+    if (isSubmenuTextInput(event.target instanceof Element ? event.target : null)) {
+      lastTextInputChangeAt.current = Date.now();
+    }
+  }
+
+  function handleMouseLeave() {
+    const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
+    const focusedTextInput =
+      isSubmenuTextInput(activeElement instanceof Element ? activeElement : null)
+      && rowRef.current?.contains(activeElement)
+      && lastTextInputChangeAt.current !== null
+      && Date.now() - lastTextInputChangeAt.current <= PLUS_MENU_SEARCH_LEAVE_GRACE_MS;
+    if (focusedTextInput) return;
+    onClose();
+  }
+
   return (
     <div
       ref={rowRef}
       className={`plus-menu__submenu-row${open ? ' is-open' : ''}`}
       onMouseEnter={() => onOpen(rowRef.current)}
-      onMouseLeave={onClose}
+      onMouseLeave={handleMouseLeave}
+      onChangeCapture={handleChangeCapture}
     >
       <button
         type="button"
@@ -641,7 +666,7 @@ function PlusSubmenuRow({
           className={`plus-menu__flyout${flyoutClassName ? ` ${flyoutClassName}` : ''}`}
           role="menu"
           onMouseEnter={() => onOpen(rowRef.current)}
-          onMouseLeave={onClose}
+          onMouseLeave={handleMouseLeave}
         >
           {children}
         </div>

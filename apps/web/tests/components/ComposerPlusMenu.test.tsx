@@ -7,15 +7,16 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ComponentProps } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { ComposerPlusMenu } from '../../src/components/ComposerPlusMenu';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 const CONNECTOR = { id: 'c1', name: 'Notion', status: 'connected' } as never;
@@ -71,6 +72,31 @@ function expectPickRowPreventsMousedown(name: RegExp) {
   expect(event.defaultPrevented).toBe(true);
 }
 
+function SearchableToolboxFixture() {
+  const [query, setQuery] = useState('');
+  const hasResults = query.trim().length === 0;
+  return (
+    <>
+      <div className="plus-menu__search">
+        <input
+          aria-label="Search design toolbox resources"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+      </div>
+      {hasResults ? (
+        <div className="plus-menu__list">
+          <button type="button" role="menuitem" className="plus-menu__item">
+            <span>Toolbox action</span>
+          </button>
+        </div>
+      ) : (
+        <div className="plus-menu__empty">No toolbox resources</div>
+      )}
+    </>
+  );
+}
+
 describe('ComposerPlusMenu pick-row caret protection', () => {
   it('cancels mousedown on the connector / plugin / MCP pick rows', () => {
     renderMenu();
@@ -100,6 +126,119 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
     const mcpSearch = screen.getByPlaceholderText('MCP') as HTMLInputElement;
     expect(mcpSearch.value).toBe('');
     expect(screen.getByText('Linear')).toBeTruthy();
+  });
+
+  it('keeps the plugins flyout width class when search returns no plugins', () => {
+    renderMenu();
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
+      'plus-menu__flyout--plugins',
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Plugins'), {
+      target: { value: 'definitely-no-plugin' },
+    });
+
+    expect(screen.getByText('No installed plugins')).toBeTruthy();
+    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
+      'plus-menu__flyout--plugins',
+    );
+  });
+
+  it('keeps the plugins flyout open when empty-search layout changes fire mouseleave', () => {
+    vi.useFakeTimers();
+    renderMenu();
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+
+    const pluginSearch = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
+    pluginSearch.focus();
+    expect(document.activeElement).toBe(pluginSearch);
+
+    fireEvent.change(pluginSearch, {
+      target: { value: 'definitely-no-plugin' },
+    });
+    const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
+    fireEvent.mouseLeave(flyout);
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(screen.getByText('No installed plugins')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Plugins')).toBeTruthy();
+  });
+
+  it('closes the plugins flyout after the empty-search mouseleave grace period', () => {
+    vi.useFakeTimers();
+    renderMenu();
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+
+    const pluginSearch = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
+    pluginSearch.focus();
+    fireEvent.change(pluginSearch, {
+      target: { value: 'definitely-no-plugin' },
+    });
+    act(() => {
+      vi.advanceTimersByTime(450);
+    });
+    fireEvent.mouseLeave(document.querySelector('.plus-menu__flyout') as HTMLDivElement);
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(screen.queryByText('No installed plugins')).toBeNull();
+    expect(screen.getByRole('menuitem', { name: /Plugins/i }).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps the design toolbox flyout width class when search returns no resources', () => {
+    renderMenu({
+      toolboxLabel: 'Design toolbox',
+      renderToolbox: () => <SearchableToolboxFixture />,
+    });
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
+    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
+      'plus-menu__flyout--toolbox',
+    );
+
+    fireEvent.change(screen.getByLabelText('Search design toolbox resources'), {
+      target: { value: 'definitely-no-resource' },
+    });
+
+    expect(screen.getByText('No toolbox resources')).toBeTruthy();
+    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
+      'plus-menu__flyout--toolbox',
+    );
+  });
+
+  it('keeps the design toolbox flyout open when empty-search layout changes fire mouseleave', () => {
+    vi.useFakeTimers();
+    renderMenu({
+      toolboxLabel: 'Design toolbox',
+      renderToolbox: () => <SearchableToolboxFixture />,
+    });
+    fireEvent.click(screen.getByTestId('plus-trigger'));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
+
+    const toolboxSearch = screen.getByLabelText('Search design toolbox resources') as HTMLInputElement;
+    toolboxSearch.focus();
+    expect(document.activeElement).toBe(toolboxSearch);
+
+    fireEvent.change(toolboxSearch, {
+      target: { value: 'definitely-no-resource' },
+    });
+    const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
+    fireEvent.mouseLeave(flyout);
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(screen.getByText('No toolbox resources')).toBeTruthy();
+    expect(screen.getByLabelText('Search design toolbox resources')).toBeTruthy();
   });
 
   it('portals the menu and constrains it to the available viewport height', async () => {
