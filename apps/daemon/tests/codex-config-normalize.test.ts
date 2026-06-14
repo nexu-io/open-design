@@ -17,7 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { readFile, writeFile, rename, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join, normalize } from 'node:path';
 import {
   normalizeCodexConfigContent,
@@ -374,6 +374,63 @@ describe('normalizeCodexConfigFile', () => {
     expect(after).toContain('service_tier = "fast"');
     expect(after).not.toContain('"priority"');
     expect(after).toContain('model = "gpt-5.5"');
+  });
+
+  // -------------------------------------------------------------------------
+  // FIX 3 regression: tilde CODEX_HOME mismatch — #4276
+  //
+  // The Codex child process sees an expanded absolute CODEX_HOME because
+  // spawnEnvForAgent calls expandConfiguredEnv which expands ~/. But
+  // resolveCodexConfigPath previously took env.CODEX_HOME literally, so
+  // CODEX_HOME="~/.codex-alt" resolved to the literal path "~/.codex-alt/
+  // config.toml" rather than "<homedir>/.codex-alt/config.toml". The config
+  // at the expanded location was therefore never found and never patched.
+  // -------------------------------------------------------------------------
+
+  it('FIX 3 tilde regression: resolveCodexConfigPath expands ~/... to an absolute path', () => {
+    // resolveCodexConfigPath must expand "~/" to homedir() so the path it
+    // returns matches what the Codex child process sees after spawnEnvForAgent
+    // runs expandConfiguredEnv. Before this fix, the literal "~/" was passed
+    // directly to path.join, yielding a path that can never be found on disk.
+    const home = homedir();
+    const resolved = resolveCodexConfigPath({ CODEX_HOME: '~/.codex-alt' });
+    expect(normalize(resolved)).toBe(
+      normalize(join(home, '.codex-alt', 'config.toml')),
+    );
+  });
+
+  it('FIX 3 tilde regression: patches config.toml at the EXPANDED location when CODEX_HOME contains a tilde prefix', async () => {
+    // Place the stale config in a subdirectory of homedir so we can form a
+    // real tilde path. On all supported platforms homedir() is writable by
+    // the current user, so creating a nested temp directory there is safe.
+    const home = homedir();
+    const tildeTmpDir = mkdtempSync(join(home, '.od-codex-config-test-'));
+    const configPath = join(tildeTmpDir, 'config.toml');
+    try {
+      writeFileSync(
+        configPath,
+        `[model]\nservice_tier = "priority"\nmodel = "gpt-5.5"\n`,
+        'utf8',
+      );
+
+      // Build the tilde path that maps to tildeTmpDir.
+      // path.relative(home, tildeTmpDir) → ".od-codex-config-test-XXXXXX"
+      const relSuffix = tildeTmpDir.slice(home.length).replace(/\\/g, '/');
+      const tildeCodexHome = '~' + relSuffix; // e.g. "~/.od-codex-config-test-abc123"
+
+      // Before the fix: resolveCodexConfigPath('~/.od-...') returned a literal
+      // "~/.od-.../config.toml" which does not exist → file NOT patched (RED).
+      // After the fix: resolveCodexConfigPath expands "~/" to homedir → correct
+      // absolute path → file IS patched (GREEN).
+      await normalizeCodexConfigFile({ ...process.env, CODEX_HOME: tildeCodexHome });
+
+      const after = readFileSync(configPath, 'utf8');
+      expect(after).toContain('service_tier = "fast"');
+      expect(after).not.toContain('"priority"');
+      expect(after).toContain('model = "gpt-5.5"');
+    } finally {
+      rmSync(tildeTmpDir, { recursive: true, force: true });
+    }
   });
 
   it('FIX 1 regression (negative): without CODEX_HOME in env, default path is used (not the alt location)', async () => {

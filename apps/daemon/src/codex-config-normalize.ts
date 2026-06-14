@@ -20,17 +20,27 @@ import { randomBytes } from 'node:crypto';
 import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { expandHomePath } from './runtimes/paths.js';
 
 /**
  * Resolve the path to the Codex CLI config file, respecting CODEX_HOME.
  *
  * Mirrors the resolution used by codex-pets.ts and the codex agentCliEnv
  * allowlist so all daemon code agrees on the config location.
+ *
+ * `~/` and `~\` prefixes in CODEX_HOME are expanded to the OS home directory,
+ * matching the behaviour of `expandConfiguredEnv` in `runtimes/paths.ts` that
+ * the Codex child process sees via `spawnEnvForAgent`. Without this expansion
+ * a user-configured `CODEX_HOME=~/.codex-alt` would resolve to the literal
+ * path `~/.codex-alt/config.toml` in the normalizer while the child process
+ * expands it to `<homedir>/.codex-alt/config.toml`, causing the normalizer to
+ * patch the wrong (non-existent) path and leave the real config untouched.
  */
 export function resolveCodexConfigPath(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  const home = env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+  const raw = env.CODEX_HOME?.trim();
+  const home = raw ? expandHomePath(raw) : path.join(os.homedir(), '.codex');
   return path.join(home, 'config.toml');
 }
 

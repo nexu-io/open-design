@@ -12543,17 +12543,17 @@ export async function startServer({
     // if the write fails. See issue #4276.
     if (def.id === 'codex') {
       const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
-      // Pass the same effective env the Codex child will launch with so that
-      // resolveCodexConfigPath resolves the same CODEX_HOME the child sees.
-      // Passing bare process.env misses CODEX_HOME values a user configured
-      // via Open Design's agentCliEnv.codex, causing the normalizer to patch
-      // the wrong path (~/.codex/config.toml) while the real config at the
-      // user's CODEX_HOME retains the stale "priority" value. See issue #4276.
-      await normalizeCodexConfigFile({
-        ...process.env,
-        ...(def.env || {}),
-        ...configuredAgentEnv,
-      });
+      // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
+      // fully-expanded CODEX_HOME the Codex child process will see. In
+      // particular, spawnEnvForAgent calls expandConfiguredEnv which expands
+      // `~/` / `~\` prefixes — a user-configured CODEX_HOME="~/.codex-alt"
+      // would otherwise resolve to the literal path "~/.codex-alt/config.toml"
+      // in the normalizer while the child resolves it to the absolute path,
+      // leaving the real config untouched. Mirrors the diagnostics-export.ts
+      // `envFor('codex')` pattern. See issue #4276.
+      await normalizeCodexConfigFile(
+        spawnEnvForAgent('codex', process.env, configuredAgentEnv),
+      );
     }
 
     // Serialize antigravity spawns whose buildArgs writes a concrete
