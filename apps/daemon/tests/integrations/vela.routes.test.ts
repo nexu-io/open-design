@@ -24,6 +24,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
+import { parseAmrEntryAnalyticsPayload } from '../../src/integrations/vela.js';
 
 interface StartedServer {
   url: string;
@@ -616,7 +617,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
-  it('forwards optional onboarding profile (odRole/odOrgSize) to the AMR ingest body', async () => {
+  it('forwards optional onboarding profile (role/orgSize/useCase/source) to the AMR ingest body', async () => {
     const requests: Array<{ events: Array<{ payload: Record<string, unknown> }> }> = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -650,6 +651,8 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
       entryOccurredAt: '2026-06-03T12:00:00.000Z',
       odRole: 'pm',
       odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
     };
 
     try {
@@ -664,6 +667,8 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
       expect(requests[0]?.events[0]?.payload).toMatchObject({
         odRole: 'pm',
         odOrgSize: 'startup',
+        odUseCase: ['product', 'design-system'],
+        odSource: 'github',
       });
     } finally {
       await new Promise<void>((resolve) => {
@@ -672,10 +677,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
-  it('drops an over-long profile value rather than mirroring it', async () => {
-    const { parseAmrEntryAnalyticsPayload } = await import(
-      '../../src/integrations/vela'
-    );
+  it('drops an over-long profile value rather than mirroring it', () => {
     const base = {
       pageName: 'open_design',
       sourcePageName: 'chat_panel',
@@ -693,6 +695,22 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     expect(
       parseAmrEntryAnalyticsPayload({
         payload: { ...base, odRole: 'x'.repeat(65) },
+      }),
+    ).toBeNull();
+    // useCase is an array; valid lists pass through, a bad element rejects.
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: ['product', 'landing'], odSource: 'github' },
+      }),
+    ).toMatchObject({ odUseCase: ['product', 'landing'], odSource: 'github' });
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: ['product', 'x'.repeat(65)] },
+      }),
+    ).toBeNull();
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: 'not-an-array' },
       }),
     ).toBeNull();
   });

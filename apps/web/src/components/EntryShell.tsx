@@ -1597,9 +1597,14 @@ function OnboardingView({
     if (!onboardingSessionId) return;
     aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
-    // Persist role/orgSize so later AMR entries (outside onboarding) can forward
+    // Persist the survey so later AMR entries (outside onboarding) can forward
     // the visitor's profile to AMR for paid-conversion segmentation.
-    saveOnboardingProfile({ role: snapshot.role, orgSize: snapshot.orgSize });
+    saveOnboardingProfile({
+      role: snapshot.role,
+      orgSize: snapshot.orgSize,
+      useCase: snapshot.useCase,
+      source: snapshot.source,
+    });
     trackOnboardingClick(analytics.track, {
       page_name: 'onboarding',
       area: 'about_you',

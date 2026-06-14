@@ -1,4 +1,5 @@
-// Persisted snapshot of the onboarding "About you" survey (role, org size).
+// Persisted snapshot of the onboarding "About you" survey: role, org size,
+// use case(s), and how they heard about us.
 //
 // Onboarding collects these in component state that is discarded once the flow
 // ends. We persist a tiny copy so any later AMR entry — from the chat error
@@ -8,14 +9,17 @@
 // carry a profile.
 //
 // Values are kept as open strings (mirroring onboarding's own open-string
-// options), trimmed and length-capped defensively.
+// options), trimmed and length/count-capped defensively.
 
 const STORAGE_KEY = 'open-design:onboarding-profile:v1';
 const MAX_VALUE_LENGTH = 64;
+const MAX_USE_CASES = 20;
 
 export interface OnboardingProfile {
   role?: string;
   orgSize?: string;
+  useCase?: string[];
+  source?: string;
 }
 
 function sanitize(value: unknown): string | undefined {
@@ -25,16 +29,35 @@ function sanitize(value: unknown): string | undefined {
   return trimmed.slice(0, MAX_VALUE_LENGTH);
 }
 
-export function saveOnboardingProfile(profile: OnboardingProfile): void {
-  if (typeof window === 'undefined') return;
+function sanitizeList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = value
+    .map((entry) => sanitize(entry))
+    .filter((entry): entry is string => Boolean(entry))
+    .slice(0, MAX_USE_CASES);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+function compact(profile: OnboardingProfile): OnboardingProfile | null {
   const role = sanitize(profile.role);
   const orgSize = sanitize(profile.orgSize);
-  if (!role && !orgSize) return;
+  const useCase = sanitizeList(profile.useCase);
+  const source = sanitize(profile.source);
+  if (!role && !orgSize && !useCase && !source) return null;
+  return {
+    ...(role ? { role } : {}),
+    ...(orgSize ? { orgSize } : {}),
+    ...(useCase ? { useCase } : {}),
+    ...(source ? { source } : {}),
+  };
+}
+
+export function saveOnboardingProfile(profile: OnboardingProfile): void {
+  if (typeof window === 'undefined') return;
+  const compacted = compact(profile);
+  if (!compacted) return;
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ ...(role ? { role } : {}), ...(orgSize ? { orgSize } : {}) }),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compacted));
   } catch {
     // Persistence is best-effort; never block onboarding completion.
   }
@@ -45,11 +68,7 @@ export function readOnboardingProfile(): OnboardingProfile | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<OnboardingProfile>;
-    const role = sanitize(parsed.role);
-    const orgSize = sanitize(parsed.orgSize);
-    if (!role && !orgSize) return null;
-    return { ...(role ? { role } : {}), ...(orgSize ? { orgSize } : {}) };
+    return compact(JSON.parse(raw) as Partial<OnboardingProfile>);
   } catch {
     return null;
   }

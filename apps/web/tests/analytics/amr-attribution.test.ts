@@ -101,17 +101,29 @@ describe('AMR attribution helper', () => {
   });
 
   it('attaches the persisted onboarding profile and forwards it to AMR', () => {
-    saveOnboardingProfile({ role: 'pm', orgSize: 'startup' });
+    saveOnboardingProfile({
+      role: 'pm',
+      orgSize: 'startup',
+      useCase: ['product', 'design-system'],
+      source: 'github',
+    });
     const track = vi.fn();
     const now = new Date('2026-06-03T12:00:00.000Z');
 
     const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
 
-    expect(attribution).toMatchObject({ odRole: 'pm', odOrgSize: 'startup' });
+    expect(attribution).toMatchObject({
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(init.body)).payload).toMatchObject({
       odRole: 'pm',
       odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
     });
   });
 

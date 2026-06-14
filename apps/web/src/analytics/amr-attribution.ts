@@ -60,6 +60,10 @@ export function recordAmrEntry(
     occurredAt: now.toISOString(),
     ...(profile?.role ? { odRole: profile.role } : {}),
     ...(profile?.orgSize ? { odOrgSize: profile.orgSize } : {}),
+    ...(profile?.useCase && profile.useCase.length > 0
+      ? { odUseCase: profile.useCase }
+      : {}),
+    ...(profile?.source ? { odSource: profile.source } : {}),
   };
   writeAmrAttribution(attribution);
   trackAmrEntryClick(track, {
@@ -156,6 +160,10 @@ async function mirrorAmrEntryToAmrAnalytics(
           // redirect URL — kept to the consent-gated mirror channel only.
           ...(attribution.odRole ? { odRole: attribution.odRole } : {}),
           ...(attribution.odOrgSize ? { odOrgSize: attribution.odOrgSize } : {}),
+          ...(attribution.odUseCase && attribution.odUseCase.length > 0
+            ? { odUseCase: attribution.odUseCase }
+            : {}),
+          ...(attribution.odSource ? { odSource: attribution.odSource } : {}),
         },
       }),
     });
