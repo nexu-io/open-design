@@ -34,6 +34,73 @@ export type SrcdocOptions = {
   previewFocusGuard?: boolean;
 };
 
+/**
+ * Sanitize a document title string so the resulting PDF filename is accepted by
+ * Microsoft Teams. Teams rejects filenames that contain any of:
+ *   : # % & * { } \ < > ? / + | "
+ * as well as leading/trailing spaces and the prefix sequence "~$".
+ *
+ * Each disallowed character (or run of disallowed characters) is replaced with
+ * a single hyphen. The result is trimmed of leading and trailing whitespace.
+ * Titles that are already safe pass through unchanged.
+ *
+ * Invariant: the returned string contains none of the Teams-disallowed
+ * characters and has no leading or trailing spaces.
+ */
+export function sanitizePreviewTitle(text: string): string {
+  // Remove the ~$ prefix Teams rejects (temporary-file marker).
+  let result = text.replace(/^~\$/, '');
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
+  // eslint-disable-next-line no-useless-escape
+  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Trim leading and trailing spaces that remain after substitution.
+  result = result.trim();
+  return result;
+}
+
+/**
+ * Decode the minimal HTML entities that browsers render in <title> text:
+ * &amp; → & , &lt; → < , &gt; → > , &quot; → " , &apos; → ' , &#N; / &#xN;
+ * This is intentionally narrow — <title> does not support rich HTML, and a
+ * full entity-decode table is not needed.
+ */
+function decodeHtmlEntitiesForTitle(encoded: string): string {
+  return encoded
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+}
+
+/**
+ * Rewrite the <title> element in an HTML string so its text content is
+ * Teams-filename-safe. Only the <title> tag text is changed; all other
+ * document content is passed through unchanged.
+ *
+ * Strategy: locate the first <title>…</title> in the <head> region, decode
+ * any HTML entities in its text (because browsers decode them before using
+ * the title as a filename), sanitize the decoded text, then substitute the
+ * plain sanitized text back. After sanitization the text is guaranteed free
+ * of characters that need HTML encoding in a title context.
+ *
+ * Pure string replacement — no DOMParser — so it works identically in Node
+ * test environments and in the browser.
+ */
+function sanitizeTitleInDoc(html: string): string {
+  return html.replace(
+    /(<title[^>]*>)([\s\S]*?)(<\/title>)/i,
+    (_match, open, raw, close) => {
+      const decoded = decodeHtmlEntitiesForTitle(raw);
+      const safe = sanitizePreviewTitle(decoded);
+      return `${open}${safe}${close}`;
+    },
+  );
+}
+
 export function buildSrcdoc(
   html: string,
   options: SrcdocOptions = {}
@@ -50,7 +117,12 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withOdIds = annotateMissingOdIds(wrapped);
+  // Sanitize <title> text before any other transformation so that when the
+  // user prints the preview iframe (Cmd+P → Save as PDF), Chromium uses the
+  // sanitized title as the default filename — one that Microsoft Teams will
+  // accept. Only the title text changes; visible page content is untouched.
+  const withSafeTitle = sanitizeTitleInDoc(wrapped);
+  const withOdIds = annotateMissingOdIds(withSafeTitle);
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
