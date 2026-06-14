@@ -337,7 +337,165 @@ describe('FileViewer manual edit history regressions', () => {
         .not.toContain('data-od-id="hero"');
     });
   });
+
+  it('restores and redoes a deleted element from edit history controls', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persistedSource = initialSource;
+    const savedSources: string[] = [];
+    vi.stubGlobal('fetch', createPersistenceFetchMock({
+      getPersistedSource: () => persistedSource,
+      setPersistedSource: (source) => {
+        persistedSource = source;
+        savedSources.push(source);
+      },
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'remove-element' },
+        'Delete element',
+      );
+    });
+
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).not.toContain('data-od-id="hero"');
+    await waitFor(() => expect(screen.queryByTestId('mock-manual-edit-panel')).toBeNull());
+
+    const undoButton = screen.getByTestId('manual-edit-toolbar-undo') as HTMLButtonElement;
+    const redoButton = screen.getByTestId('manual-edit-toolbar-redo') as HTMLButtonElement;
+    expect(undoButton.disabled).toBe(false);
+    expect(redoButton.disabled).toBe(true);
+
+    fireEvent.click(undoButton);
+
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .toContain('data-od-id="hero"');
+    });
+    expect((screen.getByTestId('manual-edit-toolbar-undo') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('manual-edit-toolbar-redo') as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByTestId('manual-edit-toolbar-redo'));
+
+    await waitFor(() => expect(savedSources).toHaveLength(3));
+    expect(savedSources[2]).not.toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .not.toContain('data-od-id="hero"');
+    });
+  });
+
+  it('handles edit history shortcuts without intercepting native text input undo', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persistedSource = initialSource;
+    const savedSources: string[] = [];
+    vi.stubGlobal('fetch', createPersistenceFetchMock({
+      getPersistedSource: () => persistedSource,
+      setPersistedSource: (source) => {
+        persistedSource = source;
+        savedSources.push(source);
+      },
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'remove-element' },
+        'Delete element',
+      );
+    });
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+
+    const input = document.createElement('input');
+    const textarea = document.createElement('textarea');
+    const select = document.createElement('select');
+    const contentEditable = document.createElement('div');
+    const contentEditableChild = document.createElement('span');
+    contentEditable.setAttribute('contenteditable', 'true');
+    contentEditable.appendChild(contentEditableChild);
+    const textbox = document.createElement('div');
+    textbox.setAttribute('role', 'textbox');
+
+    for (const target of [input, textarea, select, contentEditableChild, textbox]) {
+      document.body.appendChild(target === contentEditableChild ? contentEditable : target);
+      fireEvent.keyDown(target, { key: 'z', ctrlKey: true });
+      expect(savedSources).toHaveLength(1);
+      (target === contentEditableChild ? contentEditable : target).remove();
+    }
+
+    expect(fireEvent.keyDown(window, { key: 'z', metaKey: true })).toBe(false);
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toContain('data-od-id="hero"');
+
+    fireEvent.keyDown(window, { key: 'y', metaKey: true });
+    expect(savedSources).toHaveLength(2);
+
+    expect(fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true })).toBe(false);
+    await waitFor(() => expect(savedSources).toHaveLength(3));
+    expect(savedSources[2]).not.toContain('data-od-id="hero"');
+
+    expect(fireEvent.keyDown(window, { key: 'z', ctrlKey: true })).toBe(false);
+    await waitFor(() => expect(savedSources).toHaveLength(4));
+    expect(fireEvent.keyDown(window, { key: 'y', ctrlKey: true })).toBe(false);
+    await waitFor(() => expect(savedSources).toHaveLength(5));
+    expect(savedSources[4]).not.toContain('data-od-id="hero"');
+
+    clickManualTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(savedSources).toHaveLength(5);
+  });
 });
+
+function createPersistenceFetchMock({
+  getPersistedSource,
+  setPersistedSource,
+}: {
+  getPersistedSource: () => string;
+  setPersistedSource: (source: string) => void;
+}) {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+    if (url.includes('/api/projects/project-1/deployments')) {
+      return new Response(JSON.stringify({ deployments: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { content: string };
+      setPersistedSource(payload.content);
+      return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/projects/project-1/raw/preview.html')) {
+      return new Response(getPersistedSource(), { status: 200 });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+}
 
 function htmlPreviewFile(): ProjectFile {
   return {

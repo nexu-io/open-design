@@ -150,6 +150,14 @@ function resolveChromeActionsHost(): HTMLElement | null {
     ?? document.getElementById(APP_CHROME_FILE_ACTIONS_ID);
 }
 
+function isManualEditNativeUndoTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  const editable = target.closest('input, textarea, select, [role="textbox"], [contenteditable]');
+  if (!editable) return false;
+  const contentEditable = editable.getAttribute('contenteditable');
+  return contentEditable == null || contentEditable.toLowerCase() !== 'false';
+}
+
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
@@ -6316,6 +6324,29 @@ function HtmlViewer({
     }
   }
 
+  useEffect(() => {
+    if (!manualEditMode) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (manualEditSavingRef.current || event.altKey || event.isComposing) return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (isManualEditNativeUndoTarget(event.target)) return;
+
+      const key = event.key.toLowerCase();
+      const undo = key === 'z' && !event.shiftKey;
+      const redo = (key === 'z' && event.shiftKey)
+        || (key === 'y' && event.ctrlKey && !event.metaKey && !event.shiftKey);
+      if (undo && manualEditHistory.length > 0) {
+        event.preventDefault();
+        void undoManualEdit();
+      } else if (redo && manualEditUndone.length > 0) {
+        event.preventDefault();
+        void redoManualEdit();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [manualEditHistory, manualEditMode, manualEditUndone]);
+
   // Inspect-mode picker: same `od:comment-target` payload, different sink.
   // The bridge tags the message with a computed-style snapshot so the panel
   // can show real starting values for color / typography / spacing / radius.
@@ -8123,6 +8154,40 @@ function HtmlViewer({
               >
                 <RemixIcon name="edit-line" size={15} />
               </button>
+              {manualEditMode && !manualEditPanelActive ? (
+                <>
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    data-testid="manual-edit-toolbar-undo"
+                    data-tooltip={t('manualEdit.undo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.undo')}
+                    aria-label={t('manualEdit.undo')}
+                    disabled={manualEditSaving || manualEditHistory.length === 0}
+                    onClick={() => {
+                      void undoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-back-line" size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="viewer-action viewer-action-icon od-tooltip"
+                    data-testid="manual-edit-toolbar-redo"
+                    data-tooltip={t('manualEdit.redo')}
+                    data-tooltip-placement="bottom"
+                    title={t('manualEdit.redo')}
+                    aria-label={t('manualEdit.redo')}
+                    disabled={manualEditSaving || manualEditUndone.length === 0}
+                    onClick={() => {
+                      void redoManualEdit();
+                    }}
+                  >
+                    <RemixIcon name="arrow-go-forward-line" size={15} />
+                  </button>
+                </>
+              ) : null}
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 type="button"

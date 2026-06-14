@@ -1011,6 +1011,18 @@
 .manual-edit-footer-left {
   flex: 1 1 auto;
 }
+.manual-edit-footer-history {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.manual-edit-history-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--radius);
+}
 .manual-edit-footer-right {
   flex: 0 0 auto;
 }
