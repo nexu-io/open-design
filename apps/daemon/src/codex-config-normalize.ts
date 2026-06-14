@@ -16,23 +16,10 @@
 // The normalization is idempotent: if the file is absent, already correct,
 // or contains an unknown service_tier value, it is left unchanged.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-
-/**
- * The set of service_tier values that are valid in the current Codex CLI
- * and do NOT need normalization.
- */
-const VALID_SERVICE_TIERS = new Set(['fast', 'flex']);
-
-/**
- * Maps stale/renamed service_tier values to their current valid equivalent.
- * `priority` was the old name for `fast` before the Codex CLI migration.
- */
-const STALE_TIER_MAP: Readonly<Record<string, 'fast' | 'flex'>> = {
-  priority: 'fast',
-};
 
 /**
  * Resolve the path to the Codex CLI config file, respecting CODEX_HOME.
@@ -59,54 +46,97 @@ export function resolveCodexConfigPath(
  * patched content.
  */
 export function normalizeCodexConfigContent(content: string): string | null {
-  // Match: service_tier = "priority" or service_tier = 'priority' with
-  // optional surrounding whitespace. TOML allows both quote styles.
+  // Match ONLY a standalone service_tier key line, anchored to the start of
+  // the line (multiline `m` flag) so that `priority` appearing inside an
+  // unrelated string value or comment is never touched.
+  //
+  // Pattern breakdown:
+  //   ^(\s*)            — leading whitespace / indentation (capture group 1)
+  //   service_tier      — literal key name
+  //   (\s*=\s*)         — = with optional surrounding whitespace (group 2)
+  //   (["'])priority\3  — quoted "priority" or 'priority' (group 3 back-ref)
+  //   (\s*(?:#.*)?)$    — optional trailing inline comment (group 4)
+  //
+  // This deliberately avoids matching:
+  //   - `some_key = "I need priority service_tier"`  (value of another key)
+  //   - `# service_tier = "priority"`               (commented-out key)
+  //   - `service_tier = "flex"`                     (valid value — not matched)
+  //   - `service_tier = "fast"`                     (valid value — not matched)
   const pattern =
-    /\bservice_tier\s*=\s*(?:"([^"]+)"|'([^']+)')/g;
+    /^(\s*)service_tier(\s*=\s*)(["'])priority\3(\s*(?:#.*)?)$/gm;
 
   let changed = false;
-  const patched = content.replace(pattern, (match, dq: string | undefined, sq: string | undefined) => {
-    const raw = (dq ?? sq ?? '').trim();
-    if (VALID_SERVICE_TIERS.has(raw)) return match; // already valid
-    const replacement = STALE_TIER_MAP[raw];
-    if (!replacement) return match; // unknown value — leave for CLI to reject
-    changed = true;
-    return `service_tier = "${replacement}"`;
-  });
+  const patched = content.replace(
+    pattern,
+    (_match, indent: string, eq: string, _quote: string, trail: string) => {
+      changed = true;
+      // Preserve indentation, spacing, and any trailing inline comment.
+      return `${indent}service_tier${eq}"fast"${trail}`;
+    },
+  );
 
   return changed ? patched : null;
 }
 
 /**
- * Read `~/< codex-home>/config.toml`, normalize any stale `service_tier`
- * value in-place, and write the file back only when a change was made.
+ * Injectable I/O layer for `normalizeCodexConfigFile`.
+ * Production code uses the real `node:fs/promises` functions; tests inject
+ * stubs to exercise failure paths without filesystem tricks.
+ */
+export interface CodexConfigIO {
+  readFile: (path: string, encoding: BufferEncoding) => Promise<string>;
+  writeFile: (path: string, data: string, encoding: BufferEncoding) => Promise<void>;
+  rename: (oldPath: string, newPath: string) => Promise<void>;
+  unlink: (path: string) => Promise<void>;
+}
+
+const defaultIO: CodexConfigIO = { readFile, writeFile, rename, unlink };
+
+/**
+ * Read `~/<codex-home>/config.toml`, normalize any stale `service_tier`
+ * value, and write the result back only when a change was made.
  *
- * Errors from missing files or read/write failures are silently swallowed:
- * a missing or unreadable config.toml is fine (Codex uses defaults), and a
- * write failure should not block the launch — the CLI will surface the
- * original parse error which is still actionable for the user.
+ * The write is performed atomically: the patched content is written to a
+ * sibling temp file in the same directory (same filesystem, so the rename is
+ * always atomic), then renamed over the original. This prevents partial writes
+ * from corrupting the config if the process is interrupted mid-write.
+ *
+ * A missing or unreadable config.toml is silently ignored — Codex uses
+ * built-in defaults in that case. Write/rename failures are logged with
+ * `console.warn` so they appear in daemon logs without blocking the launch.
  *
  * @param env - Process environment, injectable for testing.
+ * @param io  - I/O layer, injectable for testing (defaults to node:fs/promises).
  */
 export async function normalizeCodexConfigFile(
   env: NodeJS.ProcessEnv = process.env,
+  io: CodexConfigIO = defaultIO,
 ): Promise<void> {
   const configPath = resolveCodexConfigPath(env);
   let content: string;
   try {
-    content = await readFile(configPath, 'utf8');
+    content = await io.readFile(configPath, 'utf8');
   } catch {
     // File absent or unreadable — nothing to normalize.
     return;
   }
 
   const patched = normalizeCodexConfigContent(content);
-  if (patched === null) return; // no stale value found
+  if (patched === null) return; // no stale value found — file untouched
 
+  // Write to a sibling temp file, then atomically rename over the target.
+  // Same directory → same filesystem → rename is atomic on POSIX and
+  // effectively atomic on Windows (no partial-read window).
+  const tmpPath =
+    configPath + '.' + randomBytes(4).toString('hex') + '.tmp';
   try {
-    await writeFile(configPath, patched, 'utf8');
-  } catch {
-    // Write failed (permissions, etc.) — do not block the launch.
-    // The original error from the Codex CLI is still actionable.
+    await io.writeFile(tmpPath, patched, 'utf8');
+    await io.rename(tmpPath, configPath);
+  } catch (err) {
+    // Log the failure so it surfaces in daemon logs, but do not block launch.
+    // The Codex CLI will surface the original parse error which is actionable.
+    console.warn('[codex-config-normalize] atomic write failed:', err);
+    // Best-effort removal of the temp file; ignore secondary errors.
+    await io.unlink(tmpPath).catch(() => {});
   }
 }
