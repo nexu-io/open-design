@@ -687,6 +687,12 @@ export function composeSystemPrompt({
     );
   }
 
+  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    parts.push(
+      `\n\n## Design system compliance pass${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nBefore finalizing any artifact with an active design system, run this check against the DESIGN.md, tokens.css contract, and component guidance above:\n\n- Verify colors use existing design-system tokens instead of raw hex values outside the pasted \`:root\` contract.\n- Verify radius, elevation/shadow, focus ring, spacing, layout density, and motion values come from the active token contract when available.\n- Verify buttons, inputs, cards, tooltips, navigation, modals, and product-specific component states match the documented component guidance.\n- Verify hover, active, disabled, focus, loading, tooltip, and input error states do not drift into a parallel visual language.\n- If a needed rule is marked unknown or is absent from the source evidence, use the nearest existing token conservatively rather than inventing a new style system.\n- Do not create a parallel visual language, duplicate token vocabulary, or override the brand with generic gradients, default blues, mismatched radii, or unsupported motion.`,
+    );
+  }
+
   if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
     parts.push(
       `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,

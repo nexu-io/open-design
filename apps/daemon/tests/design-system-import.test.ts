@@ -124,6 +124,14 @@ describe('importLocalDesignSystemProject', () => {
 
     const design = fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8');
     expect(design).toContain('A focused workspace for AI design reviews.');
+    expect(design).toContain('## Source Representativeness');
+    expect(design).toContain('loose logos, icons, and font files as brand cues only');
+    expect(design).toContain('## Spacing, Layout, Shape, and Elevation');
+    expect(design).toContain('## Component States');
+    expect(design).toContain('tooltip, and input error states');
+    expect(design).toContain('## Motion & Interaction');
+    expect(design).toContain('## Extraction Confidence');
+    expect(design).toContain('source-backed, inferred, fallback, or unknown');
     expect(design).toContain('Button: `src/components/Button.tsx`');
     expect(design).toContain('`--color-primary: #ff3366`');
 

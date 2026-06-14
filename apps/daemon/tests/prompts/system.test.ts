@@ -470,6 +470,22 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('class="btn btn-primary"');
     });
 
+    it('adds an active design-system compliance pass before artifact finalization', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# Neutral Modern\n\n> Category: Utility\n\nProse description.',
+        designSystemTokensCss: sampleTokensCss,
+        designSystemComponentsManifest: sampleComponentsManifest,
+      });
+
+      expect(prompt).toContain('## Design system compliance pass — default');
+      expect(prompt).toContain('Verify colors use existing design-system tokens instead of raw hex values');
+      expect(prompt).toContain('Verify radius, elevation/shadow, focus ring, spacing, layout density, and motion values');
+      expect(prompt).toContain('buttons, inputs, cards, tooltips, navigation, modals');
+      expect(prompt).toContain('hover, active, disabled, focus, loading, tooltip, and input error states');
+      expect(prompt).toContain('Do not create a parallel visual language');
+    });
+
     it('places USAGE.md before DESIGN.md so it acts as the package router', () => {
       const prompt = composeSystemPrompt({
         designSystemTitle: 'default',

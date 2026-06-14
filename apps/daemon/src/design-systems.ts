@@ -2334,41 +2334,49 @@ function buildDraftDesignSystemBody(input: UserDesignSystemInput & { title: stri
 
 ${summary}
 
-## 1. Visual Theme & Atmosphere
+## 1. Source Representativeness
 
-Describe the visual mood, product context, and the feeling this system should create.
+Rank the provided Figma files, GitHub/local code, screenshots, and loose assets by how well they represent the target product. Prefer canonical token/theme files, component libraries, Storybook or docs examples, and production UI screens. Use loose assets for logo, font, icon, and brand cues only; do not infer a complete UI system from assets alone. Ignore drafts, deprecated pages, unrelated screenshots, one-off decorative colors, and isolated marketing art unless another source confirms them.
 ${sourceNotes ? `\nSource context: ${sourceNotes}\n` : ''}
-## 2. Color
+## 2. Visual Theme & Product Context
 
-List brand colors, semantic roles, background surfaces, text colors, borders, and states.
+Describe the visual mood, product context, primary surfaces, information density, and the feeling this system should create.
 
-## 3. Typography
+## 3. Color
 
-Define display, heading, body, caption, and code typography. Include fallback stacks.
+List brand colors, semantic roles, background surfaces, text colors, borders, accent usage limits, and success/warn/danger states.
 
-## 4. Spacing
+## 4. Typography
 
-Define the spacing scale, density, radius, and layout rhythm.
+Define display, heading, body, caption, code typography, type scale, line-height, tracking, and fallback stacks.
 
-## 5. Layout & Composition
+## 5. Spacing, Layout Density & Shape
 
-Describe grids, page structure, information density, navigation, and responsive behavior.
+Define the spacing scale, container max width, gutters, section rhythm, card density, radius for buttons/inputs/cards/modals/chips/popovers, and layout rhythm across desktop, tablet, and phone.
 
-## 6. Components
+## 6. Elevation, Focus & Motion
 
-Document buttons, cards, forms, tables, navigation, modals, and product-specific components.
+Define shadows, elevation levels, focus ring behavior, hover timing, easing, loading motion, page or section transitions, and reduced-motion fallbacks.
 
-## 7. Motion & Interaction
+## 7. Components & States
 
-Define hover, focus, loading, transition, and reduced-motion behavior.
+Document buttons, cards, forms, tables, navigation, modals, tooltips, and product-specific components. Include primary/secondary/ghost/destructive, hover, active, disabled, focus, loading, tooltip, and input error states when evidence exists.
 
-## 8. Voice & Brand
+## 8. Layout & Composition
+
+Describe grids, page structure, navigation density, repeated composition patterns, responsive behavior, and how screens should preserve the product's hierarchy.
+
+## 9. Voice & Brand
 
 Describe copy style, terminology, capitalization, and tone.
 
-## 9. Anti-patterns
+## 10. Anti-patterns
 
-List visual and interaction choices the agent must avoid when generating with this system.
+List visual and interaction choices the agent must avoid when generating with this system, especially generic gradients, invented colors, mismatched radius, off-brand component shapes, overused accent colors, and unsupported motion.
+
+## 11. Extraction Confidence
+
+For each major rule, mark whether it is source-backed, cross-source-confirmed, inferred, fallback, or unknown. When sources conflict, preserve the chosen rule and the conflict note instead of blending both silently. Do not invent values when evidence is missing.
 `;
 }
 

@@ -119,6 +119,26 @@ describe('design systems registry', () => {
       .toMatchObject({
         content: expect.stringContaining('window.App = App'),
       });
+    await expect(readUserDesignSystemFile(root, created.id, 'DESIGN.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.stringContaining('## 1. Source Representativeness'),
+      });
+    await expect(readUserDesignSystemFile(root, created.id, 'DESIGN.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.stringContaining('## 5. Spacing, Layout Density & Shape'),
+      });
+    await expect(readUserDesignSystemFile(root, created.id, 'DESIGN.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.stringContaining('## 7. Components & States'),
+      });
+    await expect(readUserDesignSystemFile(root, created.id, 'DESIGN.md'))
+      .resolves
+      .toMatchObject({
+        content: expect.stringContaining('source-backed, cross-source-confirmed, inferred, fallback, or unknown'),
+      });
     await expect(readUserDesignSystemFile(root, created.id, 'README.md'))
       .resolves
       .toMatchObject({
