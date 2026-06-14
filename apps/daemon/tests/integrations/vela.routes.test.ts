@@ -26,6 +26,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
+import { parseAmrEntryAnalyticsPayload } from '../../src/integrations/vela.js';
 
 interface StartedServer {
   url: string;
@@ -740,6 +741,104 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
         captureServer.close(() => resolve());
       });
     }
+  });
+
+  it('forwards optional onboarding profile (role/orgSize/useCase/source) to the AMR ingest body', async () => {
+    const requests: Array<{ events: Array<{ payload: Record<string, unknown> }> }> = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'chat_panel',
+      area: 'amr_entry',
+      element: 'chat_error_recharge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-456',
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    };
+
+    try {
+      const { status } = await postJson<{ mirrored: boolean }>(
+        `${baseUrl}/api/integrations/vela/analytics-entry`,
+        { payload },
+        { 'x-od-analytics-device-id': 'od-device-2' },
+      );
+
+      expect(status).toBe(202);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.events[0]?.payload).toMatchObject({
+        odRole: 'pm',
+        odOrgSize: 'startup',
+        odUseCase: ['product', 'design-system'],
+        odSource: 'github',
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
+  });
+
+  it('drops an over-long profile value rather than mirroring it', () => {
+    const base = {
+      pageName: 'open_design',
+      sourcePageName: 'chat_panel',
+      area: 'amr_entry',
+      element: 'chat_error_recharge',
+      action: 'click_amr_entry',
+      entryId: 'od-amr-entry-789',
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+    };
+    // Valid optional values pass through; an over-long value rejects the event.
+    expect(parseAmrEntryAnalyticsPayload({ payload: { ...base, odRole: 'student' } }))
+      .toMatchObject({ odRole: 'student' });
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odRole: 'x'.repeat(65) },
+      }),
+    ).toBeNull();
+    // useCase is an array; valid lists pass through, a bad element rejects.
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: ['product', 'landing'], odSource: 'github' },
+      }),
+    ).toMatchObject({ odUseCase: ['product', 'landing'], odSource: 'github' });
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: ['product', 'x'.repeat(65)] },
+      }),
+    ).toBeNull();
+    expect(
+      parseAmrEntryAnalyticsPayload({
+        payload: { ...base, odUseCase: 'not-an-array' },
+      }),
+    ).toBeNull();
   });
 
   it('rejects malformed AMR entry analytics payloads', async () => {
