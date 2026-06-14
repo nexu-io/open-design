@@ -339,6 +339,56 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   return false;
 }
 
+function handleKimiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
+  if (!isRecord(obj)) return false;
+
+  if (obj.role === 'assistant' && Array.isArray(obj.tool_calls)) {
+    for (const rawCall of obj.tool_calls) {
+      const call = isRecord(rawCall) ? rawCall : null;
+      const fn = isRecord(call?.function) ? call.function : null;
+      const id = typeof call?.id === 'string' && call.id.trim()
+        ? call.id.trim()
+        : null;
+      const name = typeof fn?.name === 'string' && fn.name.trim()
+        ? fn.name.trim()
+        : null;
+      if (!id || !name) continue;
+      const input = safeParseJson(fn?.arguments) ?? fn?.arguments ?? null;
+      onEvent({ type: 'tool_use', id, name, input });
+    }
+    return true;
+  }
+
+  if (
+    obj.role === 'tool' &&
+    typeof obj.tool_call_id === 'string' &&
+    obj.tool_call_id.trim()
+  ) {
+    onEvent({
+      type: 'tool_result',
+      toolUseId: obj.tool_call_id.trim(),
+      content: stringifyContent(obj.content),
+      isError: false,
+    });
+    return true;
+  }
+
+  if (
+    obj.role === 'assistant' &&
+    typeof obj.content === 'string' &&
+    obj.content.length > 0
+  ) {
+    onEvent({ type: 'text_delta', delta: obj.content });
+    return true;
+  }
+
+  if (obj.role === 'meta' && obj.type === 'session.resume_hint') {
+    return true;
+  }
+
+  return false;
+}
+
 function extractCursorText(message: unknown): string {
   const content = isRecord(message) ? message.content : undefined;
   const blocks = Array.isArray(content) ? content : [];
@@ -767,6 +817,7 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
 
     if (kind === 'opencode' && handleOpenCodeEvent(obj, onEvent, state)) return;
     if (kind === 'gemini' && handleGeminiEvent(obj, onEvent, state)) return;
+    if (kind === 'kimi' && handleKimiEvent(obj, onEvent)) return;
     if (kind === 'cursor-agent' && handleCursorEvent(obj, onEvent, state)) return;
     if (kind === 'codex' && handleCodexEvent(obj, onEvent, state)) return;
 
