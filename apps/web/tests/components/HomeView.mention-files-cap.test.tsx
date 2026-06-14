@@ -46,6 +46,11 @@ function stubContextFetch() {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  // The Home hero persists the typed prompt draft across unmount/remount
+  // (see #4270) so a test that types "X" in one case would otherwise
+  // rehydrate "X" on the next case's fresh mount. Clear localStorage
+  // between cases to keep each test anchored to a clean composer.
+  window.localStorage.clear();
 });
 
 describe('HomeView design-files mention picker', () => {
