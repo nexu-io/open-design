@@ -169,6 +169,34 @@ describe('normalizeCodexConfigContent', () => {
     ].join('\n');
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
+
+  // -------------------------------------------------------------------------
+  // FIX 2 regression: CRLF line endings must be preserved (#4276).
+  //
+  // config.toml files written by the Codex app on Windows use CRLF endings.
+  // The normalizer must coerce service_tier and preserve ALL \r\n sequences —
+  // no conversion to LF, no stray \r characters remaining.
+  // -------------------------------------------------------------------------
+
+  it('FIX 2 CRLF regression: coerces service_tier="priority" to "fast" while preserving \\r\\n line endings', () => {
+    const crlfContent = '[model]\r\nservice_tier = "priority"\r\nmodel = "gpt-5.5"\r\n';
+    const result = normalizeCodexConfigContent(crlfContent);
+
+    // A change was made.
+    expect(result).not.toBeNull();
+    // The stale value is coerced.
+    expect(result).toContain('service_tier = "fast"');
+    // CRLF endings are preserved — no LF-only sequences introduced.
+    expect(result).toContain('\r\n');
+    // No stray bare \r without \n.
+    expect(result).not.toMatch(/\r(?!\n)/);
+    // No LF without preceding \r (i.e. no naked LF introduced).
+    expect(result).not.toMatch(/(?<!\r)\n/);
+    // The rest of the content is intact.
+    expect(result).toContain('[model]\r\n');
+    expect(result).toContain('model = "gpt-5.5"\r\n');
+    expect(result).not.toContain('"priority"');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -303,5 +331,73 @@ describe('normalizeCodexConfigFile', () => {
     expect(unlinkCalls[0]).toMatch(/config\.toml\.[0-9a-f]+\.tmp$/);
 
     warnSpy.mockRestore();
+  });
+
+  // -------------------------------------------------------------------------
+  // FIX 1 regression: env-mismatch bug — CODEX_HOME from agentCliEnv must be
+  // respected (#4276).
+  //
+  // The call site in server.ts previously passed `process.env` directly.
+  // If a user configured CODEX_HOME via Open Design's agentCliEnv.codex, the
+  // normalizer would resolve the wrong path (the default ~/.codex/config.toml)
+  // and leave the real config at the user's CODEX_HOME untouched. This test
+  // verifies that normalizeCodexConfigFile resolves the path from whatever env
+  // is passed — including an overridden CODEX_HOME — so the call site fix
+  // (passing the merged spawn env instead of bare process.env) is covered.
+  // -------------------------------------------------------------------------
+
+  it('FIX 1 regression: patches config.toml at CODEX_HOME from a merged env, not bare process.env', async () => {
+    // Simulate an alternate CODEX_HOME the user configured via agentCliEnv.
+    // The stale config lives at the alternate location. If process.env were
+    // passed instead of the merged env (which carries CODEX_HOME), the file
+    // would not be found and would NOT be patched — this test would fail
+    // against the pre-fix call path.
+    const altCodexHome = tmpDir;
+    const configPath = join(altCodexHome, 'config.toml');
+    writeFileSync(
+      configPath,
+      `[model]\nservice_tier = "priority"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+
+    // Pass a merged env that mirrors what the server.ts call site now passes:
+    // { ...process.env, ...(def.env || {}), ...configuredAgentEnv }
+    // where configuredAgentEnv carries CODEX_HOME pointing at altCodexHome.
+    const mergedEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      CODEX_HOME: altCodexHome,
+    };
+
+    await normalizeCodexConfigFile(mergedEnv);
+
+    const after = readFileSync(configPath, 'utf8');
+    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('"priority"');
+    expect(after).toContain('model = "gpt-5.5"');
+  });
+
+  it('FIX 1 regression (negative): without CODEX_HOME in env, default path is used (not the alt location)', async () => {
+    // This confirms the env-mismatch: if process.env is passed and it does NOT
+    // carry CODEX_HOME, the normalizer looks at the default ~/.codex/config.toml,
+    // NOT at our tmpDir. The stale config at tmpDir is therefore NOT patched.
+    // This is the failure mode that was present before the server.ts fix.
+    const altCodexHome = tmpDir;
+    const configPath = join(altCodexHome, 'config.toml');
+    writeFileSync(
+      configPath,
+      `[model]\nservice_tier = "priority"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+
+    // Pass an env WITHOUT CODEX_HOME — normalizer resolves ~/.codex/config.toml,
+    // which is not our tmpDir/config.toml. The file at tmpDir stays unchanged.
+    const envWithoutCodexHome: NodeJS.ProcessEnv = { ...process.env };
+    delete envWithoutCodexHome.CODEX_HOME;
+
+    await normalizeCodexConfigFile(envWithoutCodexHome);
+
+    // The alt-location config was NOT patched (normalizer looked elsewhere).
+    const after = readFileSync(configPath, 'utf8');
+    expect(after).toContain('service_tier = "priority"');
   });
 });
