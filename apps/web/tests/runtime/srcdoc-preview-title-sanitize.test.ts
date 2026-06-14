@@ -12,7 +12,11 @@
  * Plus: leading/trailing spaces, and the sequence ~$
  */
 import { describe, expect, it } from 'vitest';
-import { buildSrcdoc, sanitizePreviewTitle } from '../../src/runtime/srcdoc';
+import {
+  buildSrcdoc,
+  sanitizePreviewTitle,
+  sanitizeTitleInDoc,
+} from '../../src/runtime/srcdoc';
 
 // Characters that Teams rejects in filenames.
 const TEAMS_DISALLOWED = /[:#%&*{}\\<>?/+|"]/;
@@ -123,5 +127,118 @@ describe('buildSrcdoc – Teams-safe title', () => {
     expect(TEAMS_DISALLOWED.test(title!)).toBe(false);
     // Must not expose the literal &amp; or & in the title
     expect(title).not.toContain('&');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Defect #2: decodeHtmlEntitiesForTitle must not throw on out-of-range entities
+// ---------------------------------------------------------------------------
+describe('decodeHtmlEntitiesForTitle – out-of-range numeric entities', () => {
+  it('does not throw on a decimal numeric entity beyond Unicode range (&#9999999999;)', () => {
+    // Out-of-range code point — String.fromCodePoint throws RangeError without
+    // the fix. buildSrcdoc must succeed and produce a Teams-safe title.
+    const html = `<!doctype html>
+<html>
+  <head><title>Invoice &#9999999999; Report</title></head>
+  <body><p>Content</p></body>
+</html>`;
+
+    expect(() => buildSrcdoc(html)).not.toThrow();
+    const result = buildSrcdoc(html);
+    const title = extractTitle(result);
+    expect(title).not.toBeNull();
+    // The entity itself should have been replaced by a fallback (original text or U+FFFD),
+    // not left as a raw code-point that would crash the filename logic.
+    expect(TEAMS_DISALLOWED.test(title!)).toBe(false);
+  });
+
+  it('does not throw on a hex numeric entity beyond Unicode range (&#x110000;)', () => {
+    const html = `<!doctype html>
+<html>
+  <head><title>Doc &#x110000; End</title></head>
+  <body></body>
+</html>`;
+
+    expect(() => buildSrcdoc(html)).not.toThrow();
+    const result = buildSrcdoc(html);
+    const title = extractTitle(result);
+    expect(title).not.toBeNull();
+    expect(TEAMS_DISALLOWED.test(title!)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Defect #3: named non-ASCII entities must not leave orphaned `name;` remnants
+// ---------------------------------------------------------------------------
+describe('sanitizeTitleInDoc – named non-ASCII entities', () => {
+  it('does not leave orphaned entity text when a named non-ASCII entity is in the title', () => {
+    // &ccedil; is ç. Before the fix: "&" is stripped, leaving literal "ccedil;"
+    // in the title. After the fix: ç should appear (or be decoded then sanitized).
+    const html = `<!doctype html>
+<html>
+  <head><title>Fran&ccedil;ois Invoice</title></head>
+  <body></body>
+</html>`;
+
+    const result = sanitizeTitleInDoc(html);
+    const title = extractTitle(result);
+    expect(title).not.toBeNull();
+    // The word "ccedil;" must not appear literally in the title
+    expect(title).not.toContain('ccedil;');
+    // The title should still contain "ois Invoice" (the non-entity parts)
+    expect(title).toContain('ois Invoice');
+  });
+
+  it('handles &eacute; without leaving orphaned entity text', () => {
+    const html = `<!doctype html>
+<html>
+  <head><title>R&eacute;sum&eacute; 2025</title></head>
+  <body></body>
+</html>`;
+
+    const result = sanitizeTitleInDoc(html);
+    const title = extractTitle(result);
+    expect(title).not.toBeNull();
+    expect(title).not.toContain('eacute;');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Defect #4: sanitizeTitleInDoc must not match <title> inside comments or scripts
+// ---------------------------------------------------------------------------
+describe('sanitizeTitleInDoc – only rewrites the real <head> title', () => {
+  it('does not treat a <title> inside an HTML comment as the document title', () => {
+    // The comment's <title> must not be matched; only the real <head><title> is changed.
+    const html = `<!doctype html>
+<html>
+  <head>
+    <!-- <title>Fake Title &amp; Bad</title> -->
+    <title>Real Invoice Title</title>
+  </head>
+  <body></body>
+</html>`;
+
+    const result = sanitizeTitleInDoc(html);
+    // The real title must still be present and unchanged (it's already safe)
+    expect(result).toContain('<title>Real Invoice Title</title>');
+    // The comment content must be unchanged
+    expect(result).toContain('<!-- <title>Fake Title &amp; Bad</title> -->');
+  });
+
+  it('does not treat a <title> inside a <script> string as the document title', () => {
+    const html = `<!doctype html>
+<html>
+  <head>
+    <script>var x = '<title>Script Title & Broken</title>';</script>
+    <title>Real Safe Title</title>
+  </head>
+  <body></body>
+</html>`;
+
+    const result = sanitizeTitleInDoc(html);
+    // Real title must still be there (already safe, so unchanged)
+    expect(result).toContain('<title>Real Safe Title</title>');
+    // Script content must not have been mutated
+    expect(result).toContain("var x = '<title>Script Title & Broken</title>';");
   });
 });

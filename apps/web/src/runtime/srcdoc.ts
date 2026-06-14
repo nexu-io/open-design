@@ -60,45 +60,169 @@ export function sanitizePreviewTitle(text: string): string {
 }
 
 /**
+ * A small set of common named non-ASCII entities that appear in real-world
+ * titles (e.g. &ccedil; → ç, &eacute; → é). Keeping this narrow avoids
+ * shipping a full HTML entity table while still preventing the "orphaned
+ * name;" garbage that results when & is stripped before entity detection.
+ * Characters produced here that are Teams-disallowed get cleaned up by the
+ * subsequent sanitizePreviewTitle pass.
+ */
+const NAMED_ENTITY_MAP: Record<string, string> = {
+  // Latin-1 letters most likely to appear in design/business titles
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç',
+  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
+  eth: 'ð', ntilde: 'ñ',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
+  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç',
+  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
+  ETH: 'Ð', Ntilde: 'Ñ',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
+  Yacute: 'Ý', THORN: 'Þ',
+  // Common punctuation / symbols that can appear in business document titles
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
+  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
+  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+/**
+ * Safe wrapper around String.fromCodePoint that returns U+FFFD for
+ * out-of-range values instead of throwing RangeError.
+ */
+function safeFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff) return '�';
+  return String.fromCodePoint(cp);
+}
+
+/**
  * Decode the minimal HTML entities that browsers render in <title> text:
  * &amp; → & , &lt; → < , &gt; → > , &quot; → " , &apos; → ' , &#N; / &#xN;
- * This is intentionally narrow — <title> does not support rich HTML, and a
- * full entity-decode table is not needed.
+ * Also decodes a small set of common named non-ASCII entities (e.g. &ccedil;)
+ * so they do not leave orphaned "name;" fragments after the & is sanitized.
+ * Numeric entities with out-of-range code points fall back to U+FFFD instead
+ * of throwing RangeError.
  */
 function decodeHtmlEntitiesForTitle(encoded: string): string {
   return encoded
+    // Named non-ASCII entities first — before the standard 5 named entities
+    // below, so &amp; still converts to & (not left as a lookup miss).
+    .replace(/&([A-Za-z]+);/g, (match, name: string) => NAMED_ENTITY_MAP[name] ?? match)
+    // Standard 5 named entities.
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&apos;/gi, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+    // Numeric entities — range-checked to avoid RangeError on huge code points.
+    .replace(/&#(\d+);/g, (_, n: string) => safeFromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
+}
+
+/**
+ * Find the character offset of the first real `<title>` tag in an HTML string
+ * that is not inside an HTML comment (`<!-- … -->`), a `<script>` block, or a
+ * `<style>` block. Returns -1 when no real title is found.
+ *
+ * The scan is O(n) over the head region. It keeps track of whether the current
+ * cursor is inside a comment / script / style and skips any `<title>` found
+ * within those contexts.
+ */
+function findRealTitleOffset(html: string, searchLimit: number): number {
+  let i = 0;
+  const limit = Math.min(html.length, searchLimit);
+  while (i < limit) {
+    // Check for HTML comment start
+    if (html.charCodeAt(i) === 60 /* < */ && html.slice(i, i + 4) === '<!--') {
+      const end = html.indexOf('-->', i + 4);
+      if (end < 0) return -1; // unclosed comment — no title after this
+      i = end + 3;
+      continue;
+    }
+    // Check for <script or <style (case-insensitive)
+    if (html.charCodeAt(i) === 60 /* < */) {
+      const tagMatch = /^<(script|style)\b/i.exec(html.slice(i, i + 20));
+      if (tagMatch) {
+        const closingTag = `</${tagMatch[1]}`;
+        const end = html.toLowerCase().indexOf(closingTag.toLowerCase(), i + tagMatch[0].length);
+        if (end < 0) return -1; // unclosed script/style — no title after this
+        const closeEnd = html.indexOf('>', end);
+        i = closeEnd >= 0 ? closeEnd + 1 : end + closingTag.length;
+        continue;
+      }
+    }
+    // Check for <title (case-insensitive)
+    if (html.charCodeAt(i) === 60 /* < */) {
+      if (/^<title[\s>]/i.test(html.slice(i, i + 8))) {
+        return i;
+      }
+    }
+    i++;
+  }
+  return -1;
 }
 
 /**
  * Rewrite the <title> element in an HTML string so its text content is
- * Teams-filename-safe. Only the <title> tag text is changed; all other
- * document content is passed through unchanged.
+ * Teams-filename-safe. Only the real `<title>` in the `<head>` region is
+ * changed — `<title>` occurrences inside HTML comments, `<script>` blocks,
+ * or `<style>` blocks are left untouched.
  *
- * Strategy: locate the first <title>…</title> in the <head> region, decode
- * any HTML entities in its text (because browsers decode them before using
- * the title as a filename), sanitize the decoded text, then substitute the
- * plain sanitized text back. After sanitization the text is guaranteed free
- * of characters that need HTML encoding in a title context.
+ * Strategy:
+ *   1. Locate the `<head>`…`</head>` region (or the area before `<body>`).
+ *   2. Within that region, scan past comments and script/style blocks to find
+ *      the first unambiguous `<title>` start tag.
+ *   3. Decode HTML entities in its text, sanitize, and splice back.
  *
- * Pure string replacement — no DOMParser — so it works identically in Node
+ * Pure string operations — no DOMParser — so it works identically in Node
  * test environments and in the browser.
+ *
+ * @public — exported for daemon-side URL-load title sanitization.
  */
-function sanitizeTitleInDoc(html: string): string {
-  return html.replace(
-    /(<title[^>]*>)([\s\S]*?)(<\/title>)/i,
-    (_match, open, raw, close) => {
-      const decoded = decodeHtmlEntitiesForTitle(raw);
-      const safe = sanitizePreviewTitle(decoded);
-      return `${open}${safe}${close}`;
-    },
-  );
+export function sanitizeTitleInDoc(html: string): string {
+  const lower = html.toLowerCase();
+
+  // Find the end of the <head> region. Use the last </head> before <body>
+  // (mirrors injectBeforeHeadEnd logic) so we don't pick up </head> literals
+  // inside <script>/<style>.
+  const bodyStart = lower.indexOf('<body');
+  const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
+
+  // The region to search: up to (and including) </head> if found, otherwise
+  // up to <body> if found, otherwise the entire document.
+  const searchLimit = headEnd >= 0
+    ? headEnd + 7 // include the </head> tag itself
+    : bodyStart >= 0
+      ? bodyStart
+      : html.length;
+
+  // Find the real <title> start offset, skipping comments and script/style.
+  const titleStart = findRealTitleOffset(html, searchLimit);
+  if (titleStart < 0) return html;
+
+  // Locate the end of the <title> open tag.
+  const openTagEnd = html.indexOf('>', titleStart);
+  if (openTagEnd < 0) return html;
+
+  // Locate the matching </title>.
+  const closingTagStart = html.toLowerCase().indexOf('</title>', openTagEnd + 1);
+  if (closingTagStart < 0) return html;
+  const closingTagEnd = html.indexOf('>', closingTagStart);
+  if (closingTagEnd < 0) return html;
+
+  const openTag = html.slice(titleStart, openTagEnd + 1);
+  const rawContent = html.slice(openTagEnd + 1, closingTagStart);
+  const closeTag = html.slice(closingTagStart, closingTagEnd + 1);
+
+  const decoded = decodeHtmlEntitiesForTitle(rawContent);
+  const safe = sanitizePreviewTitle(decoded);
+
+  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
 }
 
 export function buildSrcdoc(
