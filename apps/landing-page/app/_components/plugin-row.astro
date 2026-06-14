@@ -14,7 +14,7 @@ import {
   resolveBundledTitle,
   type BundledPluginRecord,
 } from '../_lib/bundled-plugins';
-import { localeFromPath, localizedHref } from '../i18n';
+import { localeFromPath } from '../i18n';
 import { localizeTaxonomyValue } from '../content-i18n';
 
 interface SkillItem {
@@ -44,7 +44,6 @@ export interface Props {
 
 const { item, index, dataScene } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
-const href = (path: string) => localizedHref(path, locale);
 
 // Catalog rows use native lazy-loading; the first three rows above the
 // fold get eager + high fetchpriority so first paint is unblocked.
@@ -94,7 +93,9 @@ if (item.kind === 'skill') {
 ---
 
 <li class="catalog-row catalog-row-skill" data-scene={dataScene}>
-  <a href={href(detailHref)}>
+  {/* Detail pages (`/skills/<slug>/`, `/templates/<slug>/`,
+      `/plugins/<slug>/`) are canonical-only — never locale-prefixed. */}
+  <a href={detailHref}>
     <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
     <span class="row-thumb">
       {previewUrl ? (

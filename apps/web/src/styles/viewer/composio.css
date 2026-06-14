@@ -307,7 +307,10 @@
 
 .present-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--workspace-tabs-chrome-height, 38px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1000;
   background: black;
   display: flex;
@@ -414,7 +417,7 @@
 .topbar-title .title.editable,
 .app-project-title .title.editable {
   outline: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   padding: 1px 4px;
   margin: 0px;
   max-width: min(100%, 420px);
@@ -456,7 +459,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 6px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 10px;
@@ -497,7 +500,7 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .conv-item.active { background: var(--bg-subtle); }
 .conv-item-button {
@@ -509,7 +512,7 @@
   border: none;
   background: transparent;
   text-align: left;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .conv-item-button:hover { background: var(--bg-subtle); }
@@ -530,13 +533,13 @@
   font-size: 16px;
   width: 24px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .conv-item-del:hover { background: var(--bg-subtle); color: var(--text); }
 .conv-rename-input {
   flex: 1;
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   padding: 6px 8px;
   font: inherit;
@@ -608,7 +611,7 @@
 .op-waiting-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
@@ -624,7 +627,7 @@
   font-size: 11px;
   background: var(--bg-panel);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-muted);
   overflow-wrap: anywhere;
   white-space: normal;
@@ -660,52 +663,6 @@
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--text-strong);
-}
-
-/*
- * Pinned task list above the chat composer. The card sits just above the
- * prompt input, persistent for the whole conversation rather than buried
- * in a single assistant message. It mirrors the Cursor / Codex / Claude
- * Code TTY pattern where the todo list is always one click away while you
- * are typing the next prompt. The card is collapsible via its own
- * header — see `.op-todo-toggle` below.
- */
-.chat-pinned-todo {
-  position: relative;
-  padding: 0 16px;
-  transition:
-    transform 220ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-/* Slide-down dismiss: matches the global animation philosophy
- * (strong ease-out, ~200ms). The wrapper animates away while the
- * Done click still resolves the snapshot key. */
-.chat-pinned-todo-exit {
-  transform: translateY(24px);
-  opacity: 0;
-  pointer-events: none;
-}
-/* Soft fade above the pinned card so chat text scrolling beneath it
- * dissolves into the panel background instead of getting hard-clipped
- * at the card's top edge. Sits in the gutter directly above the card,
- * pulled up by negative bottom so it overlaps the chat scroll area. */
-.chat-pinned-todo::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 100%;
-  height: 28px;
-  background: linear-gradient(to top, var(--bg-panel), transparent);
-  pointer-events: none;
-}
-.chat-pinned-todo .op-card.op-todo {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  /* Square the bottom corners so the card reads as tucked under the
-   * composer below it, rather than as a floating pill with a gap. */
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom: 0;
 }
 
 /*
@@ -794,7 +751,7 @@
   margin-left: 4px;
   font-size: 11px;
   color: var(--text-muted);
-  transition: transform 120ms ease;
+  transition: transform 120ms var(--ease-out);
 }
 
 /* Question form — interactive form a planning agent can post into chat */
@@ -825,7 +782,7 @@
 .question-form-icon {
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: white;
   font-weight: 600;
@@ -856,7 +813,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -896,11 +853,11 @@
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .qf-chip input { width: auto; margin: 0; display: none; }
 .qf-chip-copy {
@@ -970,12 +927,12 @@
   padding: 14px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
-    border-color 0.12s ease,
-    background 0.12s ease,
-    transform 0.06s ease;
+    border-color 0.12s var(--ease-out),
+    background 0.12s var(--ease-out),
+    transform 0.06s var(--ease-out);
 }
 .qf-card input { display: none; }
 .qf-card:hover { border-color: var(--border-strong); }
@@ -1007,7 +964,7 @@
   padding: 2px 6px;
   background: var(--accent, #c96442);
   color: #fff;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
 .qf-card-swatches {
@@ -1083,7 +1040,7 @@
   box-shadow: var(--shadow-md);
   cursor: pointer;
   color: var(--text);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .questions-banner:hover {
   border-color: var(--accent);
@@ -1092,13 +1049,29 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Answered: a quiet "done" marker. No hover/click affordance, muted surface,
+   and a green check in place of the question icon. */
+.questions-banner-answered,
+.questions-banner-answered:hover {
+  cursor: default;
+  border-color: var(--border);
+  background: var(--bg-panel);
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.questions-banner-answered .questions-banner-icon {
+  background: var(--success, #16a34a);
+}
+.questions-banner-answered .questions-banner-label {
+  font-weight: 500;
+}
 .questions-banner-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   color: white;
   flex-shrink: 0;
@@ -1164,7 +1137,7 @@
 .questions-panel-dot {
   width: 6px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
   opacity: 0.3;
   animation: questions-dot 1.1s ease-in-out infinite;
@@ -1238,7 +1211,7 @@
   padding: 10px 22px;
   font-size: 14px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -1260,7 +1233,7 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
 }
@@ -1296,7 +1269,7 @@
 .ds-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 900;
+  z-index: 1700;
   background: rgba(28, 27, 26, 0.42);
   backdrop-filter: blur(2px);
   -webkit-app-region: no-drag;
@@ -1331,28 +1304,32 @@
 .ds-modal-header {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 20px;
+  gap: 10px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
 }
+/* One row: title + description stacked on the left, action buttons and
+   close on the right. Vertically centering the right cluster against the
+   two-line title block drops the buttons down so they sit balanced with
+   the description instead of hugging the top edge. */
 .ds-modal-header-top {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 20px;
+}
+.ds-modal-title-block {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .ds-modal-header-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-.ds-modal-title-block {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
 }
 .ds-modal-title {
   font-size: 16px;
@@ -1364,23 +1341,28 @@
   color: var(--text-strong, var(--text));
 }
 .ds-modal-subtitle {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-muted);
-  line-height: 1.5;
-  /* Allow up to two lines for long descriptions (e.g. Chinese plugin
-     subtitles) instead of clipping at the first word — keeps the
-     vertical footprint bounded but readable. */
+  line-height: 1.55;
+  /* Clamp to two lines so a long brief stays readable without growing
+     the header. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
 }
+.ds-modal-actions {
+  flex-shrink: 0;
+}
+.ds-modal-header-top .ds-modal-close {
+  flex-shrink: 0;
+}
 .ds-modal-tabs {
   display: inline-flex;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 3px;
   gap: 2px;
   flex-shrink: 0;
@@ -1388,7 +1370,7 @@
 .ds-modal-tab {
   background: transparent;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 6px 16px;
   font-size: 12.5px;
   font-weight: 500;
@@ -1451,6 +1433,39 @@
 .ds-modal-stage.has-sidebar .ds-modal-stage-iframe {
   flex: 1 1 60%;
 }
+/* Fullscreen affordance: hidden until the pointer hovers the preview,
+   then a compact icon-only button in the top-right of the preview. */
+.ds-modal-stage-fullscreen {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 140ms ease, transform 140ms ease, color 140ms ease,
+    background 140ms ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+}
+.ds-modal-stage-iframe:hover .ds-modal-stage-fullscreen,
+.ds-modal-stage-fullscreen:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.ds-modal-stage-fullscreen:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
 .ds-modal-sidebar {
   position: relative;
   flex: 1 1 40%;
@@ -1462,6 +1477,39 @@
   scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
+  /* Slide + fade in when "Plugin info" reveals the panel. A soft,
+     slightly longer ease-out keeps it from snapping. */
+  animation: ds-modal-sidebar-in 340ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes ds-modal-sidebar-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+/* Stagger the panel's own content in just behind the panel so the
+   reveal reads as one fluid motion rather than a hard pop. */
+.ds-modal-sidebar .plugin-info-pane {
+  animation: ds-modal-sidebar-content-in 360ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+@keyframes ds-modal-sidebar-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-modal-sidebar {
+    animation: none;
+  }
 }
 .ds-modal-stage-handle {
   position: absolute;
@@ -1481,7 +1529,7 @@
   padding: 0;
   z-index: 3;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .ds-modal-stage-handle:hover { color: var(--text); background: var(--bg-subtle); }
 .ds-modal-stage-handle.is-expand {
@@ -1530,7 +1578,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.16);
   background: white;
 }
@@ -1582,7 +1630,7 @@
 }
 .plugin-media-sidebar__prompt {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   background: var(--surface-1, var(--bg-panel));
   display: flex;
@@ -1612,9 +1660,9 @@
   align-items: center;
   gap: 4px;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .plugin-media-sidebar__prompt-copy:hover {
   color: var(--text);
@@ -1699,7 +1747,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
   background: var(--accent);
   color: white;
@@ -1707,8 +1755,8 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    transform 120ms ease;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 .ds-modal-primary-action:hover:not(:disabled) {
   background: var(--accent-strong, var(--accent));
@@ -1721,6 +1769,52 @@
   cursor: progress;
   opacity: 0.6;
 }
+/* Split-button variant: the "Use plugin" CTA grows a caret toggle that opens
+   a menu of use-variants ("Use plugin" / "Use with query"). Mirrors the home
+   plugin-card use-menu. The group anchors the absolutely-positioned popover. */
+.ds-modal-primary-action-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+.ds-modal-primary-action--split {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ds-modal-primary-action-caret {
+  padding-left: 8px;
+  padding-right: 8px;
+  gap: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-color: rgba(255, 255, 255, 0.32);
+  margin-left: -1px;
+}
+.ds-modal-primary-action-popover {
+  min-width: 248px;
+  /* The group container is not a `.share-menu`, so the shared
+     `--viewer-action-menu-z` custom property is out of scope here. Supply an
+     explicit fallback so the popover paints above the preview stage iframe
+     instead of being covered by it. */
+  z-index: var(--viewer-action-menu-z, 240);
+}
+.ds-modal-primary-action-option {
+  align-items: flex-start;
+}
+.ds-modal-primary-action-option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ds-modal-primary-action-option__label {
+  font-weight: 600;
+  color: var(--text);
+}
+.ds-modal-primary-action-option__desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 /* Dedicated icon-button shape for the modal close affordance. Matches the
    visual language used by plugin-media-detail__close and
    new-project-modal__close so every modal closes with the same control. */
@@ -1728,7 +1822,7 @@
   appearance: none;
   width: 32px;
   height: 32px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-muted);
@@ -1738,8 +1832,8 @@
   justify-content: center;
   padding: 0;
   flex-shrink: 0;
-  transition: background-color 120ms ease, color 120ms ease,
-    border-color 120ms ease;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
 }
 .ds-modal-close svg {
   display: block;
@@ -1818,6 +1912,14 @@
   border: 1px solid rgba(0, 0, 0, 0.12);
   vertical-align: middle;
 }
+/* Plugin detail suppresses the header sidebar toggle on desktop (the
+   preview-edge handle opens the info panel there). Hide it on desktop but
+   expose it again on small screens, where the edge handle is hidden and
+   would otherwise leave the collapsed info panel unreachable. */
+.ds-modal-sidebar-toggle--compact-only {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .ds-modal-backdrop { padding: 0; }
   .ds-modal { border-radius: 0; }
@@ -1835,6 +1937,7 @@
   /* On stacked layout the side handles (which assume horizontal split)
      would float over content awkwardly — fall back to the header toggle. */
   .ds-modal-stage-handle { display: none; }
+  .ds-modal-sidebar-toggle--compact-only { display: inline-flex; }
 }
 
 /* Examples gallery toolbar — filter pills + richer card metadata */
@@ -1870,7 +1973,7 @@
   padding: 7px 12px 7px 32px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
   color: var(--text);
 }
@@ -1907,7 +2010,7 @@
 .filter-pill {
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 5px 12px;
   font-size: 12px;
   color: var(--text-muted);
@@ -1990,7 +2093,7 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   font-weight: 500;
   color: white;
   background: rgba(28, 27, 26, 0.78);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   opacity: 0;
   transition: opacity 0.15s;
   pointer-events: none;
@@ -2082,7 +2185,7 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
   background: transparent;
   border: 0;
   padding: 0;
-  transition: background-color 120ms ease;
+  transition: background-color 120ms var(--ease-out);
 }
 .entry-side-resizer:hover,
 .entry-side-resizer.dragging { background: var(--accent-soft); }
@@ -2171,7 +2274,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   letter-spacing: 0;
   background: var(--accent);
   color: white;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2226,7 +2329,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   margin: 6px 8px 3px;
   padding: 0 7px;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg) 88%, var(--bg-panel));
   color: var(--text-faint);
   transition:
@@ -2264,7 +2367,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   height: 18px;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2286,7 +2389,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   height: 22px;
   padding: 0 7px;
   font-size: 10.5px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-subtle) 84%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   color: var(--text-muted);
@@ -2341,7 +2444,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   gap: 6px;
   min-height: 32px;
   padding: 4px 7px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   background: transparent;
   border: 1px solid transparent;
   color: var(--text);
@@ -2403,7 +2506,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border: none;
   background: transparent;
   color: var(--text-faint);
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2493,7 +2596,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-faint);
   width: fit-content;
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity 150ms var(--ease-out);
 }
 .msg.assistant:hover .assistant-footer,
 .assistant-footer[data-streaming="true"],
@@ -2539,9 +2642,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: center;
   justify-content: center;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .assistant-action-btn:hover {
   color: var(--text);

@@ -62,6 +62,7 @@ import {
 import { resolveProviderConfig } from './media-config.js';
 import { AIHUBMIX_APP_CODE } from './aihubmix.js';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import { createCommandInvocation } from '@open-design/platform';
 import {
   applyAgentLaunchEnv,
@@ -127,7 +128,7 @@ const PROVIDER_DEFAULTS = {
     apiVersion: '2024-10-21',
   },
   google: {
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.5-flash',
     baseUrl: 'https://generativelanguage.googleapis.com',
   },
   // Ollama Cloud speaks OpenAI-compatible chat-completions, so the
@@ -836,10 +837,15 @@ async function callLocalCli(provider, system, user, options) {
     throw new Error(`${def.name} CLI is not installed or not on PATH`);
   }
 
+  // The memory extractor is a tool-less, JSON-only background call that never
+  // reads project files, so it has no reason to run in the daemon's own cwd.
+  // Falling back to process.cwd() there meant a bun-based agent (OpenCode) ran
+  // its startup `bun install` in whatever directory the daemon was launched from
+  // — clobbering a pnpm workspace (dev checkout). Use a neutral temp cwd.
   const cwd =
     typeof options?.projectRoot === 'string' && options.projectRoot.trim()
       ? options.projectRoot
-      : process.cwd();
+      : os.tmpdir();
   const prompt = [
     system,
     '',

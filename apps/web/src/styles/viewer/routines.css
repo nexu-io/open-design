@@ -89,7 +89,7 @@
 .project-actions-chip {
   font-size: 11.5px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--warning, #d97706) 14%, transparent);
   color: var(--warning, #d97706);
 }
@@ -118,8 +118,9 @@
   pointer-events: auto;
 }
 .od-toast.placement-top {
-  top: 24px;
+  top: 64px;
   bottom: auto;
+  z-index: 1200;
 }
 .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 42%, var(--border));
@@ -283,7 +284,7 @@
   font-size: 14px;
   color: var(--text);
   font-family: inherit;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 
 /* Restore custom dropdown chevron for select elements in routines form.
@@ -355,7 +356,7 @@
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 120ms ease;
+  transition: all 120ms var(--ease-out);
 }
 .routines-weekday:hover { color: var(--text); border-color: var(--text-soft); }
 .routines-weekday.active {
@@ -396,7 +397,7 @@
   border: 1px solid var(--border);
   background: var(--bg-panel);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 
 .routines-radio:hover {
@@ -623,13 +624,13 @@
   gap: 6px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition: border-color 140ms var(--ease-out), background 140ms var(--ease-out), color 140ms var(--ease-out);
 }
 .newproj-aspect-pill:hover { color: var(--text); background: var(--bg-subtle); }
 .newproj-aspect-pill.active {
@@ -683,7 +684,7 @@
   padding: 1px 5px;
   background: var(--accent-tint);
   color: var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   margin-left: 6px;
 }
 .model-picker .ds-picker-group-head {
@@ -698,7 +699,7 @@
 
 .palette-tweaks-anchor { position: relative; display: inline-flex; }
 .palette-tweaks-badge {
-  width: 8px; height: 8px; border-radius: 999px; margin-left: 4px;
+  width: 8px; height: 8px; border-radius: var(--radius-pill); margin-left: 4px;
   box-shadow: 0 0 0 1px var(--bg-panel);
 }
 .palette-tweaks {
@@ -720,12 +721,12 @@
   display: flex; align-items: center; gap: 10px;
   padding: 6px 8px; border-radius: var(--radius-sm, 6px);
   cursor: pointer; font-size: 12.5px; color: var(--text);
-  transition: background 100ms ease;
+  transition: background 100ms var(--ease-out);
 }
 .palette-tweaks-item:hover, .palette-tweaks-item.hovered { background: var(--bg-subtle); }
 .palette-tweaks-item.selected { background: var(--bg-muted); }
 .palette-tweaks-stripe {
-  display: inline-flex; border-radius: 4px; overflow: hidden;
+  display: inline-flex; border-radius: var(--radius-xs); overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); flex-shrink: 0;
 }
 .palette-tweaks-chip { width: 14px; height: 18px; display: inline-block; }
@@ -739,7 +740,7 @@
     var(--text-muted) calc(50% + 1px),
     transparent calc(50% + 1px)
   );
-  border: 1px dashed var(--border-strong, var(--border)); border-radius: 4px;
+  border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--radius-xs);
 }
 .palette-tweaks-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .palette-tweaks-check { display: inline-flex; align-items: center; color: var(--text-muted); }
@@ -772,11 +773,18 @@
   width: 156px;
   height: 26px;
   min-height: 26px;
-  min-width: 112px;
+  /* Auto-shrink in the project shell: tabs sit at 156px when there's room and
+     shrink toward --workspace-tab-min-width as more open, keeping the whole row
+     visible without scrolling for as long as possible. flex-grow 0 stops a lone
+     tab from ballooning; only once every tab hits its min do we fall back to the
+     shared strip's horizontal scroll. */
+  min-width: var(--workspace-tab-min-width, 56px);
   max-width: 168px;
-  flex: 0 0 156px;
+  flex: 0 1 156px;
   grid-template-columns: minmax(0, 1fr) 22px;
   align-self: center;
+  /* Intentional compact-chrome value (26px tab); kept off the radius scale
+     and pinned by workspace-tabs-chrome.test.ts. */
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
@@ -784,6 +792,22 @@
 }
 .workspace-shell .workspace-tab + .workspace-tab::before {
   display: none;
+}
+/* The pinned Home tab is fixed: it never shrinks with the project tabs and
+   stays stuck to the left edge so it remains fully visible after the rest
+   overflow into horizontal scroll. The opaque tab-bar background keeps scrolled
+   tabs from showing through it. Declared before .is-active so an active Home
+   tab still picks up the active highlight. */
+.workspace-shell .workspace-tab.is-pinned {
+  flex: 0 0 104px;
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
+  grid-template-columns: minmax(0, 1fr);
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--workspace-tab-bar-bg);
 }
 .workspace-shell .workspace-tab.is-active {
   background: color-mix(in srgb, var(--bg-panel) 94%, var(--bg-subtle));
@@ -829,13 +853,13 @@
 .workspace-shell .workspace-tab__close {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .workspace-shell .workspace-tabs-new-btn,
 .workspace-shell .workspace-tabs-icon-btn {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .app {
@@ -852,11 +876,10 @@
 }
 .app .app-chrome-back,
 .app .settings-icon-btn,
-.app .avatar-btn,
-.app .project-instructions-toggle {
+.app .avatar-btn {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .app-chrome-content {
   gap: 8px;
@@ -930,7 +953,7 @@
 .app .chat-header-tab {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 12.5px;
 }
 .app .chat-header-tab.active {
@@ -941,7 +964,7 @@
 .app .chat-header-actions .icon-only {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .chat-log {
   gap: 14px;
@@ -997,7 +1020,7 @@
 }
 .app .msg.assistant .role .role-agent-icon {
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .app .msg-time {
   font-size: 10.5px;
@@ -1053,7 +1076,7 @@
   font-size: 11px;
   color: var(--text-faint);
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity 150ms var(--ease-out);
 }
 .app .msg.assistant:hover .assistant-footer,
 .app .assistant-footer[data-streaming="true"],
@@ -1099,7 +1122,7 @@
   min-height: 36px;
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
 }
 .app .action-card-toggle:hover {
@@ -1108,7 +1131,7 @@
 .app .action-card-status {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1124,7 +1147,7 @@
   border-radius: 0;
   background: none;
   box-shadow: none;
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .app .op-card:hover {
   background: none;
@@ -1132,7 +1155,7 @@
 .app .op-card-head {
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .op-card-head:hover {
   background: var(--bg-fill-tertiary);
@@ -1141,7 +1164,7 @@
    code box framing inside the app scope so the streaming panel stays boxed. */
 .app .live-code-box {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-fill-secondary);
 }
 .app .live-code-box .live-code-head {
@@ -1155,7 +1178,7 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1169,7 +1192,7 @@
   min-height: 36px;
   padding: 4px;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
 }
 .app .thinking-toggle:hover {
@@ -1178,7 +1201,7 @@
 .app .thinking-status {
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-panel);
 }
@@ -1208,12 +1231,12 @@
 }
 .app .produced-file {
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   gap: 10px;
   background: none;
   border: none;
   box-shadow: none;
-  transition: background 160ms ease;
+  transition: background 160ms var(--ease-out);
 }
 .app .produced-file:hover {
   background: var(--bg-fill-tertiary);
@@ -1239,7 +1262,7 @@
 .app .produced-file-actions .ghost-link {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   background: none;
   color: var(--text-muted);
@@ -1286,7 +1309,7 @@
   min-height: 0;
   padding: 10px 12px;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
   animation: none;
   opacity: 1;
@@ -1301,7 +1324,7 @@
 .app .chat-example-icon {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--bg-fill-secondary);
   box-shadow: none;
 }
@@ -1326,15 +1349,15 @@
 .app .chat-design-artifact {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text);
   overflow: hidden;
   cursor: default;
   box-shadow: none;
   transition:
-    border-color 120ms ease,
-    background 120ms ease;
+    border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out);
 }
 .app .chat-design-artifact[role='button'] {
   cursor: pointer;
@@ -1440,7 +1463,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   color: var(--text-muted);
   font-size: 12.5px;
@@ -1449,7 +1472,7 @@
   max-width: none;
   padding: 10px 12px;
   gap: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
   animation: none;
   opacity: 1;
@@ -1458,7 +1481,7 @@
 .app .chat-connect-repo-icon {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .chat-connect-repo-title {
   font-size: 12.8px;
@@ -1484,15 +1507,26 @@
 .app .composer-shell {
   padding: 7px;
   border-color: color-mix(in srgb, var(--border) 84%, var(--border-strong));
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle));
   box-shadow: var(--shadow-sm);
 }
 .chat-composer-fixed-layer .composer-shell {
-  padding: 0;
+  /* Vertical breathing room only. The side inset is applied as a margin on the
+     children below instead of horizontal padding here, so the shell's
+     content-box width — which is what the shared label-collapse @container in
+     chat.css measures — stays full and that breakpoint can remain generic. */
+  padding: 6px 0;
   border-color: var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: none;
+}
+/* Inset the staged chips, the input field and the toolbar off the card's
+   rounded frame (giving + and Send a real side margin) without shrinking the
+   @container width — see the .composer-shell padding note above. */
+.chat-composer-fixed-layer .composer-shell > * {
+  margin-left: 8px;
+  margin-right: 8px;
 }
 .app .composer-shell:focus-within {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border-strong));
@@ -1511,6 +1545,13 @@
 .chat-composer-fixed-layer .composer.drag-active .composer-shell {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* Keep the typing area a clean white field with a soft border so it reads as
+   the one input surface inside the tinted card — the resting border replaces
+   the removed toolbar divider as the only separator in the footer. */
+.chat-composer-fixed-layer .composer-input-wrap {
+  background: var(--bg-panel);
+  border-color: var(--border-soft);
 }
 .app .composer textarea {
   min-height: 56px;
@@ -1535,28 +1576,39 @@
   gap: 6px;
 }
 .chat-composer-fixed-layer .composer-row {
-  min-height: 32px;
-  padding-top: 2px;
+  /* Match the 28px control height exactly — the old 32px min-height left 4px
+     of dead space that made the footer band feel too tall. */
+  min-height: 28px;
+  /* No divider above the toolbar: the white input box already separates it
+     from the textarea, so the extra border-top + its 2px spacing just stacked
+     another line into the footer. Drop both so the card reads as fewer layers. */
+  padding-top: 0;
+  border-top: none;
 }
 .app .composer-row .icon-btn,
 .app .composer-import,
 .app .composer-research,
 .app .composer-send {
-  border-radius: 7px;
+  /* radius-sm to match the unified 28px composer-row control system; this is
+     the later/winning stylesheet, so it owns the + and Send radius. */
+  border-radius: var(--radius-sm);
 }
 .chat-composer-fixed-layer .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-import,
 .chat-composer-fixed-layer .composer-research,
 .chat-composer-fixed-layer .composer-send {
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
 }
-.app .composer-row .icon-btn {
-  width: 28px;
-  height: 28px;
-}
+.app .composer-row .icon-btn,
 .chat-composer-fixed-layer .composer-row .icon-btn {
+  /* Clear the 32px min-width/min-height that leaks from chat.css's base
+     `.composer-row .icon-btn`; without these, width/height: 28px is floored
+     back up to 32px and the + drifts taller than the rest of the toolbar. */
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send {
   height: 28px;
@@ -1568,12 +1620,28 @@
   box-shadow: none;
 }
 .chat-composer-fixed-layer .composer-send {
-  height: 30px;
-  min-height: 30px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 12px;
   font-size: 12.5px;
   font-weight: 600;
   box-shadow: none;
+}
+/* The session-mode ("Design"/CLI) toggle and the agent avatar are authored in
+   their own components and default to 32px. The composer now mounts under
+   .chat-composer-fixed-layer (a body-level portal), so chat.css's .app-scoped
+   normalization never reaches them and they drift taller than the + and the
+   working-dir pill. Pin both to the same 28px control height here — this is the
+   last-loaded stylesheet, so it wins — so the toolbar reads as one row. */
+.app .composer-row .session-mode-toggle,
+.app .composer-row .session-mode-toggle__trigger,
+.app .composer-row .avatar-agent-trigger,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle,
+.chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
+.chat-composer-fixed-layer .composer-row .avatar-agent-trigger {
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 .app .composer-send:disabled {
   background: var(--bg-subtle);
@@ -1587,13 +1655,20 @@
   color: var(--text-faint);
   cursor: default;
 }
-.app .working-dir-pill {
+/* The pill renders under `.app` (legacy header host) and under
+   `.chat-composer-fixed-layer` (its current home in the composer toolbar).
+   Paired selectors cover both contexts — matching the `.icon-btn` convention
+   above — instead of `:is(.app, .chat-composer-fixed-layer)`, whose inner
+   comma would also break selector-literal style tests. */
+.app .working-dir-pill,
+.chat-composer-fixed-layer .working-dir-pill {
   position: relative;
   display: inline-flex;
   margin-top: 0;
   font-size: 11.5px;
 }
-.app .working-dir-pill-trigger {
+.app .working-dir-pill-trigger,
+.chat-composer-fixed-layer .working-dir-pill-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1601,51 +1676,57 @@
   height: 28px;
   padding: 3px 9px 3px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
 }
-.app .working-dir-pill-trigger:hover {
+.app .working-dir-pill-trigger:hover,
+.chat-composer-fixed-layer .working-dir-pill-trigger:hover {
   background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-panel));
   border-color: var(--border-strong, var(--border));
 }
-.app .working-dir-pill-trigger:disabled {
+.app .working-dir-pill-trigger:disabled,
+.chat-composer-fixed-layer .working-dir-pill-trigger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.app .working-dir-pill-label {
+.app .working-dir-pill-label,
+.chat-composer-fixed-layer .working-dir-pill-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu {
+.app .working-dir-pill-menu,
+.chat-composer-fixed-layer .working-dir-pill-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 220;
   min-width: 260px;
   max-width: 340px;
   padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-panel);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
 }
-.app .working-dir-pill-menu-path {
+.app .working-dir-pill-menu-path,
+.chat-composer-fixed-layer .working-dir-pill-menu-path {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
   word-break: break-all;
 }
-.app .working-dir-pill-menu-item {
+.app .working-dir-pill-menu-item,
+.chat-composer-fixed-layer .working-dir-pill-menu-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   padding: 6px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -1653,25 +1734,31 @@
   font-size: 12px;
   text-align: left;
 }
-.app .working-dir-pill-menu-item.small {
+.app .working-dir-pill-menu-item.small,
+.chat-composer-fixed-layer .working-dir-pill-menu-item.small {
   font-size: 11.5px;
 }
-.app .working-dir-pill-menu-item:hover {
+.app .working-dir-pill-menu-item:hover,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:hover {
   background: color-mix(in srgb, var(--text-muted) 8%, transparent);
 }
-.app .working-dir-pill-menu-item:disabled {
+.app .working-dir-pill-menu-item:disabled,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled {
   color: var(--text-faint);
   cursor: not-allowed;
 }
-.app .working-dir-pill-menu-item:disabled:hover {
+.app .working-dir-pill-menu-item:disabled:hover,
+.chat-composer-fixed-layer .working-dir-pill-menu-item:disabled:hover {
   background: transparent;
 }
-.app .working-dir-pill-menu-divider {
+.app .working-dir-pill-menu-divider,
+.chat-composer-fixed-layer .working-dir-pill-menu-divider {
   height: 1px;
   margin: 4px 0;
   background: var(--border);
 }
-.app .working-dir-pill-menu-section {
+.app .working-dir-pill-menu-section,
+.chat-composer-fixed-layer .working-dir-pill-menu-section {
   padding: 4px 10px;
   color: var(--text-muted);
   font-size: 10.5px;
@@ -1679,16 +1766,38 @@
   letter-spacing: 0;
   text-transform: uppercase;
 }
-.app .working-dir-pill-menu-recent {
+.app .working-dir-pill-menu-recent,
+.chat-composer-fixed-layer .working-dir-pill-menu-recent {
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app .working-dir-pill-menu-error {
+.app .working-dir-pill-menu-error,
+.chat-composer-fixed-layer .working-dir-pill-menu-error {
   padding: 4px 10px 6px;
   color: var(--red, #c0392b);
   font-size: 11.5px;
+}
+/* Hosted in the composer's bottom toolbar (left of the spacer): flip the menu
+   to open upward and anchor it left so it neither drops below the viewport nor
+   overflows the composer's left edge. */
+.app .composer-row .working-dir-pill-menu,
+.chat-composer-fixed-layer .composer-row .working-dir-pill-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+/* The toolbar is a flex row; without this the pill gets squeezed below its
+   content width and the trailing chevron wraps to a second line. */
+.app .composer-row .working-dir-pill,
+.chat-composer-fixed-layer .composer-row .working-dir-pill {
+  flex: 0 0 auto;
+}
+.app .composer-row .working-dir-pill-trigger,
+.chat-composer-fixed-layer .composer-row .working-dir-pill-trigger {
+  flex-wrap: nowrap;
 }
 .app .composer-hint {
   margin: 4px 8px 0;
@@ -1729,7 +1838,7 @@
 .app .ws-focus-expand {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 .app .ws-tabs-bar {
   gap: 6px;
@@ -1741,7 +1850,7 @@
 .app .ws-tab {
   min-height: 30px;
   padding: 0 11px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   box-shadow: none;
 }
@@ -1766,13 +1875,19 @@
   background: var(--bg-panel);
 }
 .app .df-panel:not(.no-preview) {
-  grid-template-columns: minmax(320px, 1fr) minmax(320px, 360px);
+  /* Keep a usable minimum for the file list (toolbar + names stay
+     clickable) but let the preview pane YIELD instead of forcing a rigid
+     320px track. A rigid min on both columns overflowed the panel on
+     narrow splits (list 460 + preview 320 = 780px), pushing the toolbar
+     buttons and the preview off-screen. With `minmax(0, …)` the preview
+     shrinks first so the panel never exceeds its container width. */
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 360px);
 }
 .app .df-main {
   border-right-color: var(--border);
 }
 .app .df-body {
-  padding: 16px 20px 20px;
+  padding: 4px 20px 20px;
   background: var(--bg-panel);
 }
 .app .df-controls-row {
@@ -1793,7 +1908,7 @@
   width: 31px;
   height: 31px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   box-shadow: none;
   flex: 0 0 auto;
@@ -1810,7 +1925,7 @@
   min-height: 31px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   box-shadow: none;
 }
@@ -1823,7 +1938,7 @@
   margin: 0;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--bg-subtle);
   box-shadow: none;
 }
@@ -1833,7 +1948,7 @@
 .app .df-group-toggle button {
   min-height: 26px;
   padding: 2px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .df-group-toggle button.active {
   background: var(--bg-panel);
@@ -1867,12 +1982,12 @@
 .app .df-pagination select,
 .app .df-page-btn {
   min-height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background-color: var(--bg-panel);
   box-shadow: none;
 }
 .app .df-select-all {
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 .app .df-table {
   width: 100%;
@@ -1967,10 +2082,16 @@
 .app .df-file-row:hover {
   background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
 }
+/* A selected row must keep its blue fill on hover — otherwise the generic
+   hover background wins (higher specificity) and the white selected text
+   lands on a light fill and "disappears". Darken slightly for feedback. */
+.app .df-file-row.selected:hover {
+  background: color-mix(in srgb, var(--blue) 90%, #000);
+}
 .app .df-row-icon {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .app .df-row-name {
   font-size: 13px;
@@ -1992,20 +2113,6 @@
 .app .df-page-info {
   color: var(--text-soft);
 }
-.app .df-drop {
-  margin: 18px 0 0;
-  padding: 18px;
-  border-radius: 10px;
-  background: var(--bg-panel);
-}
-.app .df-drop .label {
-  font-size: 10.5px;
-}
-.app .df-drop .desc {
-  font-size: 12px;
-  max-width: 48ch;
-}
-
 /* -- Hand-off button in ChatPane header (paseo-style open-in-editor) -- */
 .app .handoff-wrap {
   position: relative;
@@ -2017,7 +2124,7 @@
 .app .handoff-split {
   display: inline-flex;
   align-items: stretch;
-  border-radius: 7px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   overflow: hidden;
@@ -2055,7 +2162,7 @@
   align-items: center;
   gap: 8px;
   padding: 3px 12px 3px 4px;
-  border-radius: 7px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
@@ -2100,7 +2207,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   flex: 0 0 auto;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent) inset;
@@ -2114,7 +2221,7 @@
   overflow: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
   padding: 7px;
   z-index: 50;
@@ -2128,14 +2235,14 @@
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--text-muted) 5%, transparent);
 }
 .app .handoff-menu-tab {
   height: 28px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -2168,7 +2275,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-panel) 94%, var(--text) 3%);
   color: var(--text);
   font: inherit;
@@ -2206,7 +2313,7 @@
   width: 20px;
   height: 20px;
   flex: 0 0 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text);
 }
@@ -2239,7 +2346,7 @@
   background: transparent;
   font-size: 12px;
   color: var(--text);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -2362,7 +2469,7 @@
   min-height: 30px;
   padding: 5px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--text);
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
   font-size: 11.5px;
@@ -2387,7 +2494,7 @@
 .app .handoff-framework-chip {
   height: 22px;
   padding: 0 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
@@ -2450,7 +2557,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text);
@@ -2489,7 +2596,7 @@
 .project-ds-picker-swatch {
   width: 10px;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
 }
 .project-ds-picker-popover {
@@ -2499,7 +2606,7 @@
      within the viewport. */
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-md, 0 18px 48px rgba(0, 0, 0, 0.16));
   display: flex;
   flex-direction: column;
@@ -2548,7 +2655,7 @@
   padding: 6px 8px;
   border: 0;
   background: transparent;
-  border-radius: 7px;
+  border-radius: var(--radius);
   text-align: left;
   cursor: pointer;
 }
@@ -2577,7 +2684,7 @@
 .project-ds-picker-option-cat {
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
@@ -2636,7 +2743,7 @@
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-panel);
 }
@@ -2650,7 +2757,7 @@
   gap: 5px;
   height: 28px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
   -webkit-backdrop-filter: saturate(1.1) blur(8px);
@@ -2688,7 +2795,7 @@
 .project-ds-picker-preview-cat {
   font-size: 10.5px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text-muted) 12%, transparent);
   color: var(--text-muted);
 }
@@ -2706,7 +2813,7 @@
 .project-ds-picker-preview-swatch {
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border);
 }
 .project-ds-picker-preview-frame {
@@ -2741,7 +2848,7 @@
 .project-ds-picker-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 210;
+  z-index: 1800;
   background: color-mix(in srgb, var(--text) 38%, transparent);
   backdrop-filter: blur(2px);
   display: flex;
@@ -2755,7 +2862,7 @@
   height: min(820px, calc(100vh - 56px));
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg, 0 32px 80px rgba(0, 0, 0, 0.24));
   display: flex;
   flex-direction: column;
@@ -2779,7 +2886,7 @@
   margin-left: auto;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text);
@@ -2827,6 +2934,6 @@
   .project-ds-picker-fullscreen-frame {
     width: calc(100vw - 24px);
     height: calc(100vh - 24px);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
   }
 }

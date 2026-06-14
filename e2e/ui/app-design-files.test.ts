@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -59,25 +60,28 @@ const designFileFlows = new Set([
   'uploaded-image-renders-in-preview',
   'python-source-preview',
 ]);
+const CRITICAL_DESIGN_FILE_SCENARIO_IDS = new Set([
+  'design-files-upload',
+  'design-files-delete',
+  'design-files-tab-persistence',
+]);
+
+async function routeMockAgents(page: Page) {
+  await routeAgents(page, [
+    {
+      id: 'mock',
+      name: 'Mock Agent',
+      bin: 'mock-agent',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
+}
 
 for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.has(scenario.flow ?? ''))) {
-  test(`[${designFileScenarioPriority(entry)}] ${entry.id}: ${entry.title}`, async ({ page }) => {
-    await page.route('**/api/agents', async (route) => {
-      await route.fulfill({
-        json: {
-          agents: [
-            {
-              id: 'mock',
-              name: 'Mock Agent',
-              bin: 'mock-agent',
-              available: true,
-              version: 'test',
-              models: [{ id: 'default', label: 'Default' }],
-            },
-          ],
-        },
-      });
-    });
+  test(`[${designFileScenarioPriority(entry)}]${criticalDesignFileScenarioTag(entry)} ${entry.id}: ${entry.title}`, async ({ page }) => {
+    await routeMockAgents(page);
 
     await gotoEntryHome(page);
     await createProject(page, entry);
@@ -123,7 +127,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -282,6 +286,16 @@ async function expectProjectFilesToIncludeSuffixes(
     .toBe(true);
 }
 
+async function clickDesignFilePreviewOpen(page: Page) {
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await expect(async () => {
+    const openButton = preview.getByRole('button', { name: /^Open$/ });
+    await expect(openButton).toBeVisible({ timeout: 1_000 });
+    await openButton.click({ timeout: 1_000 });
+  }).toPass({ timeout: T.medium });
+}
+
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
   if (await preview.isVisible()) return;
@@ -298,7 +312,7 @@ async function openDesignFile(page: Page, fileName: string) {
   });
   await expect(fileRow).toBeVisible();
   await fileRow.getByRole('button').first().click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await clickDesignFilePreviewOpen(page);
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -359,8 +373,11 @@ async function runDesignFilesUploadFlow(page: Page) {
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/moodboard\.png/i)).toBeVisible();
+  await expect(preview.getByText(/Image/i)).toBeVisible();
+  await expect(preview.getByText(/1 KB|1024 B|67 B|68 B/i)).toBeVisible();
+  await expect(preview.getByRole('link', { name: /Download/i })).toHaveAttribute('download', /moodboard\.png$/);
 
-  await nameBtn.dblclick();
+  await preview.getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['moodboard.png']);
 }
@@ -417,128 +434,41 @@ async function runDesignFilesDeleteFlow(page: Page) {
     .toBe(true);
 }
 
-test('design files batch delete removes only the selected files and clears the bulk action state', async ({ page }) => {
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-
-  page.on('dialog', async (dialog) => {
-    await dialog.accept();
-  });
+test('[P1] design files page keeps the current single-file actions and context hint copy', async ({ page }) => {
+  await routeMockAgents(page);
 
   await gotoEntryHome(page);
   await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill('Design files batch delete flow');
+  await page.getByTestId('new-project-name').fill('Design files current surface');
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
 
   const { projectId } = await getCurrentProjectContext(page);
-  await seedProjectFile(page, projectId, 'keep.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'trash-a.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'trash-b.png', TINY_PNG_B64, 'base64');
+  await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.reload();
   await expectWorkspaceReady(page);
   await page.getByTestId('design-files-tab').click();
 
-  const keepRow = page.getByTestId('design-file-row-keep.png');
-  const trashARow = page.getByTestId('design-file-row-trash-a.png');
-  const trashBRow = page.getByTestId('design-file-row-trash-b.png');
-  await expect(keepRow).toBeVisible();
-  await expect(trashARow).toBeVisible();
-  await expect(trashBRow).toBeVisible();
-
-  await trashARow.getByRole('checkbox').click();
-  await trashBRow.getByRole('checkbox').click();
-  const batchDelete = page.getByTestId('design-files-batch-delete');
-  await expect(batchDelete).toBeVisible();
-  await batchDelete.click();
-
-  await expect(trashARow).toHaveCount(0);
-  await expect(trashBRow).toHaveCount(0);
-  await expect(keepRow).toBeVisible();
-  await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
+  await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /paste/i })).toBeVisible();
 
-  await expect
-    .poll(async () => {
-      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
-      return (
-        names.length === 1 &&
-        names[0]?.endsWith('keep.png')
-      );
-    })
-    .toBe(true);
-});
-
-test('design files kind filter trims hidden selections before batch delete reaches the backend', async ({ page }) => {
-  page.on('dialog', async (dialog) => {
-    await dialog.accept();
-  });
-
-  await gotoEntryHome(page);
-  await openNewProjectModal(page);
-  await page.getByTestId('new-project-name').fill('Design files filtered batch delete flow');
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const { projectId } = await getCurrentProjectContext(page);
-  await seedProjectFile(page, projectId, 'visible-image.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'hidden-image.png', TINY_PNG_B64, 'base64');
-  await seedProjectFile(page, projectId, 'notes.txt', 'plain text note');
-  await page.reload();
-  await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
-
-  const visibleImageRow = page.getByTestId('design-file-row-visible-image.png');
-  const hiddenImageRow = page.getByTestId('design-file-row-hidden-image.png');
-  const notesRow = page.getByTestId('design-file-row-notes.txt');
-  await expect(visibleImageRow).toBeVisible();
-  await expect(hiddenImageRow).toBeVisible();
-  await expect(notesRow).toBeVisible();
-
-  await visibleImageRow.getByRole('checkbox').click();
-  await notesRow.getByRole('checkbox').click();
-  await expect(page.getByTestId('design-files-batch-delete')).toBeVisible();
-
-  const filterBtn = page.getByRole('button', { name: /filter by kind/i });
-  await filterBtn.click();
-  const filterPopover = page.getByRole('dialog', { name: /filter by kind/i });
-  await expect(filterPopover).toBeVisible();
-  await filterPopover.getByRole('checkbox', { name: /image/i }).check();
-  await filterBtn.click();
-  await expect(filterPopover).toBeHidden();
-
-  await expect(visibleImageRow).toBeVisible();
-  await expect(hiddenImageRow).toBeVisible();
-  await expect(notesRow).toHaveCount(0);
-
-  const batchDelete = page.getByTestId('design-files-batch-delete');
-  await expect(batchDelete).toBeVisible();
-  await batchDelete.click();
-
-  await expect(visibleImageRow).toHaveCount(0);
-  await expect(hiddenImageRow).toBeVisible();
+  await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
 
-  await expect
-    .poll(async () => {
-      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name).sort();
-      return JSON.stringify(names);
-    })
-    .toBe(JSON.stringify(['hidden-image.png', 'notes.txt']));
+  const fileRow = page.getByTestId('design-file-row-alpha.html');
+  await expect(fileRow).toBeVisible();
+  await fileRow.hover();
+  await page.getByTestId('design-file-menu-alpha.html').click();
+
+  const menu = page.getByTestId('design-file-menu-popover');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button', { name: /open in tab/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
+
+  await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
 });
 
 async function runDesignFilesTabPersistenceFlow(page: Page) {
@@ -575,17 +505,25 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   await expect(restoredFirstTab).toBeVisible();
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'true');
 
-  // The refreshed workspace restores the active file tab, while other project files
-  // remain available from the Design Files list until the user reopens them.
-  await page.getByTestId('design-files-tab').click();
-  const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
-    hasText: 'second-tab.png',
-  });
-  await expect(secondFileRow).toBeVisible();
-  await secondFileRow.getByRole('button').first().click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
-
   const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
+  const secondTabAlreadyRestored = await restoredSecondTab
+    .waitFor({ state: 'visible', timeout: 3_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (secondTabAlreadyRestored) {
+    await restoredSecondTab.click();
+  } else {
+    // Depending on restoration timing, inactive files can either be restored as
+    // tabs already or remain available from the Design Files list.
+    await page.getByTestId('design-files-tab').click();
+    const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
+      hasText: 'second-tab.png',
+    });
+    await expect(secondFileRow).toBeVisible();
+    await secondFileRow.getByRole('button').first().click();
+    await clickDesignFilePreviewOpen(page);
+  }
+
   await expect(restoredSecondTab).toBeVisible();
   await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'true');
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'false');
@@ -609,4 +547,8 @@ function designFileScenarioPriority(entry: UiScenario): 'P0' | 'P1' {
     default:
       return 'P1';
   }
+}
+
+function criticalDesignFileScenarioTag(entry: UiScenario): string {
+  return CRITICAL_DESIGN_FILE_SCENARIO_IDS.has(entry.id) ? ' @critical' : '';
 }

@@ -1,0 +1,1 @@
+import "./publish-metadata.ts";

@@ -1,0 +1,37 @@
+{
+  "id": "frame-liquid-bg-hero",
+  "surface": "hyperframes",
+  "title": "Liquid Background Hero",
+  "summary": "WebGL-style fluid displacement background with a quote overlay, suited to video intros, landing heroes, or posters.",
+  "category": "Marketing",
+  "tags": [
+    "hero",
+    "liquid",
+    "gradient",
+    "mesh",
+    "editorial",
+    "cover"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Product launch hero",
+    "SaaS landing video",
+    "Editorial cover"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-liquid-bg-hero",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

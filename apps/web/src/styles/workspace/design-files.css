@@ -3,7 +3,7 @@
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 380px);
   min-height: 0;
   background: var(--bg);
 }
@@ -19,11 +19,15 @@
   backdrop-filter: blur(1px);
 }
 .df-main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--bg);
   border-right: 1px solid var(--border);
+  /* Query container so the toolbar can react to the *list column* width
+     (which depends on the chat/preview split, not the viewport). */
+  container-type: inline-size;
 }
 .df-main:last-child { border-right: none; }
 .df-body {
@@ -41,6 +45,7 @@
   padding: 0 20px 6px;
   font-size: 14px;
   color: var(--text-muted);
+  min-width: 0;
 }
 .df-breadcrumb-btn {
   all: unset;
@@ -50,19 +55,38 @@
   border-radius: 3px;
   font-size: 14px;
   transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .df-breadcrumb-btn:hover { color: var(--text); background: var(--bg-subtle); }
 .df-breadcrumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.df-breadcrumb-segment { display: inline-flex; align-items: center; }
+.df-breadcrumb-segment { display: inline-flex; align-items: center; min-width: 0; }
 .df-breadcrumb-sep { padding: 0 2px; color: var(--text-faint); font-size: 12px; user-select: none; }
-.df-breadcrumb-current { padding: 2px 4px; color: var(--text-strong); font-weight: 600; font-size: 14px; }
+.df-breadcrumb-current {
+  padding: 2px 4px;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: 14px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Single-line top toolbar: left = up + refresh + breadcrumbs, right = file actions. */
 .df-topbar {
-  margin: 0 20px 8px;
+  margin: 0 20px 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* Stay on a single row: the breadcrumb (min-width:0 + ellipsis) shrinks
+     and the actions hold their place on the right, instead of the actions
+     wrapping below the breadcrumb. */
+  flex-wrap: nowrap;
 }
 .df-topbar-left {
   display: flex;
@@ -74,10 +98,14 @@
   padding: 0;
   margin: 0;
   min-width: 0;
+  max-width: 100%;
 }
 .df-topbar-right {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
   flex-shrink: 0;
 }
 .df-actions {
@@ -85,6 +113,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  /* Keep the action cluster intact on one row; the breadcrumb yields space
+     instead. Combined with the icon-only collapse below, the toolbar never
+     wraps to a second line. */
   flex-wrap: nowrap;
   flex-shrink: 0;
 }
@@ -107,6 +138,15 @@
 .df-actions button.danger:hover:not(:disabled) {
   background: var(--red-bg);
   color: var(--red);
+}
+/* When the list column is too narrow to fit labelled actions beside the
+   breadcrumb (~180px breadcrumb basis + ~243px of action text), drop the
+   button text to icons-only so the toolbar stays on a single row instead
+   of wrapping below the breadcrumb. The `title`/tooltip on each button is
+   kept for hover + a11y. */
+@container (max-width: 470px) {
+  .df-actions button > span { display: none; }
+  .df-actions button { padding: 6px; }
 }
 /* Upload error banner. */
 .df-upload-banner {
@@ -202,7 +242,7 @@
   letter-spacing: 0;
 }
 .df-file-row {
-  transition: background 120ms ease;
+  transition: background 120ms var(--ease-out);
 }
 .df-file-row:hover { background: var(--blue-bg); }
 .df-file-row.active:not(.selected) { background: var(--blue-bg); }
@@ -256,11 +296,11 @@
 
 .df-row {
   display: grid;
-  grid-template-columns: 28px 36px 1fr auto auto;
+  grid-template-columns: 20px 30px 1fr auto auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin: 0;
-  padding: 11px 20px;
+  padding: 11px 16px;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border-soft);
@@ -302,7 +342,7 @@
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg-panel);
   color: var(--text-muted);
   cursor: pointer;
@@ -356,11 +396,11 @@
   font-size: 13px;
   color: var(--text-muted);
   user-select: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-xs);
   opacity: 0;
-  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms ease, color 120ms ease;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .df-row:hover .df-row-check,
 .df-row-check:focus-visible,
@@ -377,7 +417,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text-muted);
   font-size: 14px;
@@ -418,7 +458,7 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--bg-panel);
   color: var(--text);
   font: inherit;
@@ -461,9 +501,9 @@
   padding: 4px 6px;
   color: var(--text-muted);
   font-size: 16px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 120ms var(--ease-out);
 }
 .df-row:hover .df-row-menu { opacity: 1; }
 .df-row-menu:focus { opacity: 1; }
@@ -544,7 +584,7 @@
   gap: 6px;
   padding: 7px 14px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -552,7 +592,7 @@
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
 .df-empty-cta:hover {
   background: var(--bg-subtle);
@@ -564,59 +604,146 @@
 }
 
 /* Static useful-info footer pinned above the drop zone. */
-.df-useful-info {
-  margin: auto 20px 4px;
-  padding: 12px 0 0;
+/* Footer cluster pinned to the bottom: drag hint above the useful-info. */
+/* Footer band pinned to the bottom, mirroring Claude Design's empty-state
+   hint strip: a faint warm band carrying the drag hint above a typewriter
+   "tip" line. */
+.df-footer-info {
+  margin: auto 0 0;
+  min-height: 100px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  border-top: 1px solid var(--border);
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--accent) 3.5%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
-.df-useful-info-label {
-  font-size: 10.5px;
+.df-drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.df-drop-hint-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-weight: 600;
-  color: var(--accent);
+  line-height: 1.2;
+  color: var(--text-faint);
 }
-.df-useful-info-tip {
-  font-size: 12px;
+.df-drop-hint-label svg {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.df-drop-hint-desc {
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
+.df-useful-info {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.df-useful-info-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+.df-useful-info-head > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.df-useful-info-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.df-useful-info-tip {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  min-height: 1.5em;
+}
+.df-tip-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 2px;
+}
+.df-tip-link:hover {
+  color: var(--accent);
+}
+.df-tip-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: df-tip-caret-blink 1s steps(1) infinite;
+}
+@keyframes df-tip-caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .df-tip-caret {
+    animation: none;
+    opacity: 0;
+  }
+}
 
-.df-drop {
-  margin: 12px 16px 16px;
-  padding: 16px;
-  border: 1px dashed var(--border-strong);
+/* Drag-to-upload: the whole panel is a drop target. While dragging files
+   over the Design Files panel, an accent overlay invites the drop. */
+.df-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.df-drop-overlay-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  text-align: center;
-  color: var(--text-muted);
-}
-.df-drop.dragging {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  padding: 18px 26px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
   color: var(--text);
+  text-align: center;
 }
-.df-drop .label {
+.df-drop-overlay-card svg {
+  color: var(--accent);
+}
+.df-drop-overlay-card .label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--text-faint);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
   font-weight: 600;
 }
-.df-drop .desc {
+.df-drop-overlay-card .desc {
   font-size: 12px;
   line-height: 1.5;
-  max-width: 56ch;
+  color: var(--text-muted);
+  max-width: 48ch;
 }
 
 /* Right preview pane in design files */
@@ -650,6 +777,13 @@
 }
 .df-preview-thumb.is-openable {
   cursor: pointer;
+  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Hover affordance lives on the container border, NOT a translucent layer
+   over the iframe: painting a semi-transparent fill on top of a sandboxed
+   iframe makes Chromium/Electron repaint the iframe white on hover. */
+.df-preview-thumb.is-openable:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 .df-preview-thumb-open {
   position: absolute;
@@ -663,9 +797,6 @@
   background: transparent;
   cursor: pointer;
 }
-.df-preview-thumb-open:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
 .df-preview-thumb-open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -3px;
@@ -674,6 +805,11 @@
 .df-preview-thumb img,
 .df-preview-thumb video {
   width: 100%; height: 100%; border: none; background: white; object-fit: cover; display: block;
+}
+/* The transparent overlay button already captures the click; letting hover
+   fall through to the iframe avoids any compositing repaint flash. */
+.df-preview-thumb iframe {
+  pointer-events: none;
 }
 .df-preview-thumb .sketch-preview,
 .df-preview-thumb .sketch-preview svg {
@@ -777,14 +913,14 @@
   height: 30px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-xs);
-  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -831,7 +967,7 @@
   padding: 7px 10px;
   font-size: 12.5px;
   text-align: left;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text);
 }
 .df-row-popover button:hover { background: var(--bg-subtle); }

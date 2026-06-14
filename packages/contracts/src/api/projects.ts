@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
+import type { OrchestratorWorkspace } from './workspaces.js';
 import type {
   ProjectContextConnectorRef,
   ProjectContextMcpServerRef,
@@ -130,6 +131,9 @@ export interface ProjectMetadata {
   // it set `baseDir` outside the trusted flow. Privileged: rejected
   // by `POST /api/projects` and `PATCH /api/projects/:id`.
   fromTrustedPicker?: true;
+  // Externally prepared scratch workspace provenance. OD may read/write
+  // metadata.baseDir, but source authority and writeback stay outside OD.
+  orchestratorWorkspace?: OrchestratorWorkspace;
   // Hint stamped by the Home composer working-directory chip. It records
   // where the user wanted the project to live without granting write access
   // to that path; actual filesystem roots still use baseDir/import flows.
@@ -327,6 +331,7 @@ export interface ImportFolderRequest {
   name?: string;
   skillId?: string | null;
   designSystemId?: string | null;
+  orchestratorWorkspace?: OrchestratorWorkspace;
 }
 
 export interface ImportFolderResponse {
@@ -337,6 +342,7 @@ export interface ImportFolderResponse {
 
 export interface ReplaceProjectWorkingDirRequest {
   baseDir: string;
+  orchestratorWorkspace?: OrchestratorWorkspace;
 }
 
 export interface ReplaceProjectWorkingDirResponse {

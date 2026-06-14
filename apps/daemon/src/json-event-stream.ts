@@ -5,11 +5,16 @@ type ParserKind = string;
 
 type ParserState = {
   cursorTextSoFar: string;
+  cursorTurnStart: number;
   openCodeToolUses: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
   codexPreviousEventWasAgentMessage: boolean;
   codexLastAgentMessageEndedWithNewline: boolean;
+  suppressNextArtifactText: boolean;
+  suppressDuplicateArtifactText: boolean;
+  artifactOpenCandidate: string;
+  pendingArtifactText: string;
 };
 
 type Usage = {
@@ -214,8 +219,17 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   return false;
 }
 
-function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
+function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
+
+  const isAssistantTextMessage =
+    obj.type === 'message' &&
+    obj.role === 'assistant' &&
+    typeof obj.content === 'string' &&
+    obj.content.length > 0;
+  if (!isAssistantTextMessage) {
+    flushPendingArtifactText(state, onEvent);
+  }
 
   if (obj.type === 'init') {
     onEvent({
@@ -236,7 +250,8 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     typeof obj.content === 'string' &&
     obj.content.length > 0
   ) {
-    onEvent({ type: 'text_delta', delta: obj.content });
+    const delta = stripDuplicateArtifactText(obj.content, state);
+    if (delta) onEvent({ type: 'text_delta', delta });
     return true;
   }
 
@@ -245,11 +260,27 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
     typeof obj.tool_id === 'string' &&
     typeof obj.tool_name === 'string'
   ) {
+    const input = safeParseJson(obj.parameters) ?? obj.parameters ?? null;
+    if (obj.tool_name === 'write_todos') {
+      const todoInput = todoWriteInputFromParsedValue(input);
+      if (todoInput) {
+        onEvent({
+          type: 'tool_use',
+          id: `${obj.tool_id}:todo-native`,
+          name: 'TodoWrite',
+          input: todoInput,
+        });
+        return true;
+      }
+    }
+    if (isFileWriteToolUse(obj.tool_name, input)) {
+      state.suppressNextArtifactText = true;
+    }
     onEvent({
       type: 'tool_use',
       id: obj.tool_id,
       name: obj.tool_name,
-      input: safeParseJson(obj.parameters) ?? obj.parameters ?? null,
+      input,
     });
     return true;
   }
@@ -308,6 +339,56 @@ function handleGeminiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
   return false;
 }
 
+function handleKimiEvent(obj: unknown, onEvent: StreamEventHandler): boolean {
+  if (!isRecord(obj)) return false;
+
+  if (obj.role === 'assistant' && Array.isArray(obj.tool_calls)) {
+    for (const rawCall of obj.tool_calls) {
+      const call = isRecord(rawCall) ? rawCall : null;
+      const fn = isRecord(call?.function) ? call.function : null;
+      const id = typeof call?.id === 'string' && call.id.trim()
+        ? call.id.trim()
+        : null;
+      const name = typeof fn?.name === 'string' && fn.name.trim()
+        ? fn.name.trim()
+        : null;
+      if (!id || !name) continue;
+      const input = safeParseJson(fn?.arguments) ?? fn?.arguments ?? null;
+      onEvent({ type: 'tool_use', id, name, input });
+    }
+    return true;
+  }
+
+  if (
+    obj.role === 'tool' &&
+    typeof obj.tool_call_id === 'string' &&
+    obj.tool_call_id.trim()
+  ) {
+    onEvent({
+      type: 'tool_result',
+      toolUseId: obj.tool_call_id.trim(),
+      content: stringifyContent(obj.content),
+      isError: false,
+    });
+    return true;
+  }
+
+  if (
+    obj.role === 'assistant' &&
+    typeof obj.content === 'string' &&
+    obj.content.length > 0
+  ) {
+    onEvent({ type: 'text_delta', delta: obj.content });
+    return true;
+  }
+
+  if (obj.role === 'meta' && obj.type === 'session.resume_hint') {
+    return true;
+  }
+
+  return false;
+}
+
 function extractCursorText(message: unknown): string {
   const content = isRecord(message) ? message.content : undefined;
   const blocks = Array.isArray(content) ? content : [];
@@ -317,23 +398,194 @@ function extractCursorText(message: unknown): string {
     .join('');
 }
 
+function normalizeTodoStatus(value: unknown): string {
+  const status = typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/[-\s]+/g, '_')
+    : '';
+  if (status === 'completed' || status === 'complete' || status === 'done' || status.startsWith('completed')) {
+    return 'completed';
+  }
+  if (status === 'in_progress' || status === 'doing' || status === 'active' || status.startsWith('in_progress')) {
+    return 'in_progress';
+  }
+  if (
+    status === 'stopped' ||
+    status === 'failed' ||
+    status === 'blocked' ||
+    status === 'canceled' ||
+    status === 'cancelled' ||
+    status.startsWith('stopped') ||
+    status.startsWith('failed') ||
+    status.startsWith('blocked') ||
+    status.startsWith('canceled') ||
+    status.startsWith('cancelled')
+  ) {
+    return 'stopped';
+  }
+  return 'pending';
+}
+
+function todoWriteInputFromItems(items: unknown): JsonObject | null {
+  if (!Array.isArray(items)) return null;
+  const todos = items
+    .map((raw): JsonObject | null => {
+      if (!isRecord(raw)) return null;
+      const content = typeof raw.content === 'string'
+        ? raw.content
+        : typeof raw.label === 'string'
+          ? raw.label
+          : typeof raw.description === 'string'
+            ? raw.description
+            : typeof raw.text === 'string'
+              ? raw.text
+              : '';
+      if (!content) return null;
+      return {
+        content,
+        status: raw.completed === true
+          ? 'completed'
+          : normalizeTodoStatus(raw.status),
+      };
+    })
+    .filter((todo): todo is JsonObject => todo !== null);
+  return todos.length > 0 ? { todos } : null;
+}
+
+function todoWriteInputFromParsedValue(value: unknown): JsonObject | null {
+  if (Array.isArray(value)) return todoWriteInputFromItems(value);
+  if (!isRecord(value)) return null;
+  if (Array.isArray(value.todos)) return todoWriteInputFromItems(value.todos);
+  if (Array.isArray(value.todo)) return todoWriteInputFromItems(value.todo);
+  return null;
+}
+
+function stripDuplicateArtifactText(text: string, state: ParserState): string {
+  if (
+    !state.suppressNextArtifactText &&
+    !state.suppressDuplicateArtifactText &&
+    state.artifactOpenCandidate.length === 0
+  ) {
+    return text;
+  }
+  const openTag = '<artifact';
+  const current = `${state.artifactOpenCandidate}${text}`;
+  state.artifactOpenCandidate = '';
+  if (state.suppressDuplicateArtifactText) {
+    const closeIndex = current.indexOf('</artifact>');
+    if (closeIndex === -1) return '';
+    state.suppressDuplicateArtifactText = false;
+    state.suppressNextArtifactText = false;
+    return stripDuplicateArtifactText(current.slice(closeIndex + '</artifact>'.length), state);
+  }
+  const openIndex = current.indexOf(openTag);
+  if (openIndex === -1) {
+    const candidateLength = artifactOpenCandidateLength(current, openTag);
+    if (state.suppressNextArtifactText && candidateLength > 0) {
+      state.artifactOpenCandidate = current.slice(-candidateLength);
+      return current.slice(0, -candidateLength);
+    }
+    if (state.suppressNextArtifactText) {
+      state.suppressNextArtifactText = false;
+      return current;
+    }
+    return current;
+  }
+  state.suppressDuplicateArtifactText = true;
+  state.suppressNextArtifactText = false;
+  const prefix = `${state.pendingArtifactText}${current.slice(0, openIndex)}`;
+  state.pendingArtifactText = '';
+  return `${prefix}${stripDuplicateArtifactText(current.slice(openIndex), state)}`;
+}
+
+function artifactOpenCandidateLength(text: string, openTag: string): number {
+  const max = Math.min(openTag.length - 1, text.length);
+  for (let len = max; len > 0; len -= 1) {
+    if (openTag.startsWith(text.slice(-len))) return len;
+  }
+  return 0;
+}
+
+function flushPendingArtifactText(state: ParserState, onEvent: StreamEventHandler): void {
+  const delta = `${state.pendingArtifactText}${state.artifactOpenCandidate}`;
+  if (!delta) return;
+  state.pendingArtifactText = '';
+  state.artifactOpenCandidate = '';
+  state.suppressNextArtifactText = false;
+  onEvent({ type: 'text_delta', delta });
+}
+
+function isFileWriteToolUse(toolName: string, input: unknown): boolean {
+  if (!isRecord(input)) return false;
+  const path = typeof input.file_path === 'string'
+    ? input.file_path
+    : typeof input.path === 'string'
+      ? input.path
+      : '';
+  const writesFile = toolName === 'write_file' ||
+    toolName === 'write' ||
+    toolName === 'replace' ||
+    toolName === 'edit';
+  if (!writesFile) return false;
+  if (/\.(html|htm|css|js|jsx|ts|tsx|md)$/iu.test(path)) return true;
+  return typeof input.content === 'string' || typeof input.new_string === 'string';
+}
+
+function codexTodoListInput(item: JsonObject): JsonObject | null {
+  if (item.type !== 'todo_list' || !Array.isArray(item.items)) return null;
+  return todoWriteInputFromItems(item.items);
+}
+
+function emitCodexTodoList(item: JsonObject, onEvent: StreamEventHandler): boolean {
+  if (typeof item.id !== 'string') return false;
+  const input = codexTodoListInput(item);
+  if (!input) return false;
+  onEvent({
+    type: 'tool_use',
+    id: item.id,
+    name: 'TodoWrite',
+    input,
+  });
+  return true;
+}
+
 function emitCursorTextDelta(text: string, onEvent: StreamEventHandler, state: ParserState): void {
-  if (!state.cursorTextSoFar) {
-    state.cursorTextSoFar = text;
-    onEvent({ type: 'text_delta', delta: text });
-    return;
-  }
-  if (text === state.cursorTextSoFar) {
-    return;
-  }
-  if (text.startsWith(state.cursorTextSoFar)) {
-    const delta = text.slice(state.cursorTextSoFar.length);
-    if (delta) onEvent({ type: 'text_delta', delta });
-    state.cursorTextSoFar = text;
-    return;
-  }
+  // Timestamped assistant events WITHOUT `model_call_id` are cursor-agent's
+  // real-time incremental deltas (`--stream-partial-output`): the final turn
+  // text is the in-order concatenation of every such delta. Emit each one
+  // verbatim — do NOT dedupe by content. Legitimately repeated deltas
+  // (`"ha"`, `"ha"` -> `"haha"`) or a delta that happens to be a prefix of
+  // earlier text are real content, not duplicates; content-based prefix or
+  // equality checks would silently drop them. Duplicate suppression and
+  // dropped-chunk recovery belong to the buffered terminal replay paths
+  // (`model_call_id` and no-timestamp events) via reconcileCursorTurnReplay.
+  if (!text) return;
   state.cursorTextSoFar += text;
   onEvent({ type: 'text_delta', delta: text });
+}
+
+/**
+ * Reconcile a Cursor terminal replay against the text already emitted for the
+ * CURRENT turn. A terminal replay (either a `model_call_id` message or a
+ * non-timestamped final assistant message) carries the full text for the
+ * current turn only, so it must be compared against
+ * `cursorTextSoFar.slice(cursorTurnStart)` — NOT the whole cross-turn buffer,
+ * which would miss the current-turn prefix on later turns and re-append the
+ * whole replay (duplicate output like "secondsecond turn").
+ *
+ * Only a verified prefix permits suffix recovery: if the emitted turn text is
+ * a prefix of the replay (including the empty case where no chunk arrived),
+ * emit the missing suffix. On divergence (a non-final chunk was dropped, so
+ * the emitted text is not a prefix) leave the append-only stream untouched
+ * rather than duplicate already-shown text. Always advances the turn boundary.
+ */
+function reconcileCursorTurnReplay(text: string, onEvent: StreamEventHandler, state: ParserState): void {
+  const emittedTurn = state.cursorTextSoFar.slice(state.cursorTurnStart);
+  if (text && text !== emittedTurn && text.startsWith(emittedTurn)) {
+    const suffix = text.slice(emittedTurn.length);
+    if (suffix) onEvent({ type: 'text_delta', delta: suffix });
+    state.cursorTextSoFar += suffix;
+  }
+  state.cursorTurnStart = state.cursorTextSoFar.length;
 }
 
 function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
@@ -349,13 +601,27 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
   }
 
   if (obj.type === 'assistant' && obj.message) {
+    // Cursor sends a final assistant message that replays the full text for
+    // the current turn — either tagged with `model_call_id`, or (fallback)
+    // as a non-timestamped terminal assistant message. Both are reconciled
+    // against the current turn's emitted text via reconcileCursorTurnReplay.
+    if (typeof obj.model_call_id === 'string') {
+      const text = extractCursorText(obj.message);
+      reconcileCursorTurnReplay(text, onEvent, state);
+      return true;
+    }
     const text = extractCursorText(obj.message);
     if (!text) return false;
     if (typeof obj.timestamp_ms === 'number') {
+      // Incremental streaming chunk within a turn — accumulate as usual.
       emitCursorTextDelta(text, onEvent, state);
       return true;
     }
-    emitCursorTextDelta(text, onEvent, state);
+    // Non-timestamped final assistant message: a terminal replay that marks a
+    // turn boundary. Reconcile against the current turn (not the whole
+    // cross-turn buffer) so later fallback-terminated turns do not duplicate
+    // output, then advance the turn boundary.
+    reconcileCursorTurnReplay(text, onEvent, state);
     return true;
   }
 
@@ -383,19 +649,19 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
 
-if (obj.type === 'error') {
-  const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
-  // Reconnecting events are recoverable — treat as status warning, not fatal
-  if (isRecoverableCodexReconnect(message)) {
-    onEvent({ type: 'status', label: message });
+  if (obj.type === 'error') {
+    const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
+    // Reconnecting events are recoverable — treat as status warning, not fatal
+    if (isRecoverableCodexReconnect(message)) {
+      onEvent({ type: 'status', label: message });
+      return true;
+    }
+    if (!state.codexErrorEmitted) {
+      state.codexErrorEmitted = true;
+      onEvent({ type: 'error', message });
+    }
     return true;
   }
-  if (!state.codexErrorEmitted) {
-    state.codexErrorEmitted = true;
-    onEvent({ type: 'error', message });
-  }
-  return true;
-}
 
   if (obj.type === 'turn.failed') {
     if (!state.codexErrorEmitted) {
@@ -422,6 +688,11 @@ if (obj.type === 'error') {
 
   if (obj.type === 'item.started' && isRecord(obj.item)) {
     const item = obj.item;
+    if (emitCodexTodoList(item, onEvent)) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      return true;
+    }
     if (item.type === 'command_execution' && typeof item.id === 'string') {
       state.codexPreviousEventWasAgentMessage = false;
       state.codexLastAgentMessageEndedWithNewline = false;
@@ -440,8 +711,22 @@ if (obj.type === 'error') {
     }
   }
 
+  if (obj.type === 'item.updated' && isRecord(obj.item)) {
+    const item = obj.item;
+    if (emitCodexTodoList(item, onEvent)) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      return true;
+    }
+  }
+
   if (obj.type === 'item.completed' && isRecord(obj.item)) {
     const item = obj.item;
+    if (emitCodexTodoList(item, onEvent)) {
+      state.codexPreviousEventWasAgentMessage = false;
+      state.codexLastAgentMessageEndedWithNewline = false;
+      return true;
+    }
     if (item.type === 'command_execution' && typeof item.id === 'string') {
       state.codexPreviousEventWasAgentMessage = false;
       state.codexLastAgentMessageEndedWithNewline = false;
@@ -509,11 +794,16 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
   let buffer = '';
   const state: ParserState = {
     cursorTextSoFar: '',
+    cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
     codexPreviousEventWasAgentMessage: false,
     codexLastAgentMessageEndedWithNewline: false,
+    suppressNextArtifactText: false,
+    suppressDuplicateArtifactText: false,
+    artifactOpenCandidate: '',
+    pendingArtifactText: '',
   };
 
   function handleLine(line: string): void {
@@ -526,7 +816,8 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     }
 
     if (kind === 'opencode' && handleOpenCodeEvent(obj, onEvent, state)) return;
-    if (kind === 'gemini' && handleGeminiEvent(obj, onEvent)) return;
+    if (kind === 'gemini' && handleGeminiEvent(obj, onEvent, state)) return;
+    if (kind === 'kimi' && handleKimiEvent(obj, onEvent)) return;
     if (kind === 'cursor-agent' && handleCursorEvent(obj, onEvent, state)) return;
     if (kind === 'codex' && handleCodexEvent(obj, onEvent, state)) return;
 
@@ -547,8 +838,8 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
   function flush(): void {
     const rem = buffer.trim();
     buffer = '';
-    if (!rem) return;
-    handleLine(rem);
+    if (rem) handleLine(rem);
+    flushPendingArtifactText(state, onEvent);
   }
 
   return { feed, flush };

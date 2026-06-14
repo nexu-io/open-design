@@ -68,6 +68,114 @@ describe('streamViaDaemon', () => {
     expect(body.currentPrompt).toBe('post-consent revision');
   });
 
+  it('does not surface an error when a still-running same-run retry later succeeds', async () => {
+    // The daemon emits the `error` frame for the failed first attempt BEFORE it
+    // decides to retry. At that moment the run status is still `running` (the
+    // retry is in flight — it may be slow). The consumer must NOT surface the
+    // transient error; it keeps consuming and the later `end` frame resolves the
+    // run as a success. Surfacing here (or on a poll timeout) would turn a
+    // recovered run into a visible failure and drop the successful stream.
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        // Retry still in flight when the error frame is observed.
+        return jsonResponse({ id: 'run-1', status: 'running' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers a structured daemon error over the lifecycle exit fallback when the run later fails', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          [
+            'event: error',
+            'data: {"code":"AGENT_EXECUTION_FAILED","message":"intentional fake codex failure","retryable":false}',
+            '',
+            'event: end',
+            'data: {"code":1,"status":"failed"}',
+            '',
+            '',
+          ].join('\n'),
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'running' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'intentional fake codex failure' }),
+    );
+    expect(handlers.onError).not.toHaveBeenCalledWith(new Error('agent exited with code 1'));
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a terminal failure with the finalized resumable flag', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed', resumable: true });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onDone).not.toHaveBeenCalled();
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { resumable?: boolean };
+    expect(err.resumable).toBe(true);
+  });
+
   it('sends run-scoped media execution policy to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -272,7 +380,7 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toBe(original);
   });
 
-  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
+  it('replaces a persisted prior-turn <artifact> with a one-line summary (the deliverable lives on disk)', () => {
     const original = [
       'Build summary below.',
       '',
@@ -281,11 +389,181 @@ describe('streamViaDaemon', () => {
       '<html><body>slide content</body></html>',
       '</artifact>',
     ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck.html', identifier: 'deck' },
+    ]);
 
+    // The HTML body is gone — no point re-sending it, the agent reads it from disk.
+    expect(sanitized).not.toContain('<!doctype html>');
+    expect(sanitized).not.toContain('slide content');
+    expect(sanitized).not.toContain('</artifact>');
+    // The summary keeps the metadata the agent needs to locate the file.
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('identifier="deck"');
+    expect(sanitized).toContain('title="Pitch deck"');
+    expect(sanitized).toContain('"deck.html"');
+    // Surrounding prose is preserved.
+    expect(sanitized).toContain('Build summary below.');
+  });
+
+  it('keeps an <artifact> body verbatim when its save is NOT confirmed (failed/refused persist path)', () => {
+    // persistArtifact has refusal (validateHtmlArtifact) and write-failure
+    // (writeProjectTextFile → null) branches. On those paths the transcript
+    // copy is the ONLY surviving artifact body — summarizing it would strand
+    // the next turn with no content to inspect or repair.
+    const original = [
+      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
+      '<html><body>only surviving copy</body></html>',
+      '</artifact>',
+    ].join('\n');
+    // No producedFiles recorded for this artifact → no confirmed persistence.
+    expect(sanitizePriorAssistantTurnForTranscript(original, [])).toBe(original);
+    // A produced file that does not match the artifact also must not trigger
+    // summarization for it.
+    expect(
+      sanitizePriorAssistantTurnForTranscript(original, [{ name: 'other.html', identifier: 'other' }]),
+    ).toBe(original);
+  });
+
+  it('matches persistence by manifest identifier even when collision-suffix renames changed the file name', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>v3</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck-3.html', identifier: 'deck' },
+    ]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('"deck-3.html"');
+    expect(sanitized).not.toContain('v3');
+  });
+
+  it('matches persistence by derived file name when the manifest carries no identifier (legacy files)', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>legacy</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [{ name: 'deck.html' }]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).not.toContain('legacy');
+  });
+
+  it('summarizes only the persisted <artifact> when a turn emits multiple and one save failed', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        '<artifact identifier="a" type="text/html" title="A"><html>aaa</html></artifact>',
+        'and',
+        '<artifact identifier="b" type="text/html" title="B"><html>bbb</html></artifact>',
+      ].join('\n'),
+      [{ name: 'a.html', identifier: 'a' }],
+    );
+    // `a` is confirmed on disk → summarized.
+    expect(sanitized).not.toContain('aaa');
+    expect(sanitized).toContain('identifier="a"');
+    // `b` never persisted → its body must survive in the transcript.
+    expect(sanitized).toContain('bbb');
+    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(1);
+  });
+
+  it('leaves a literal <artifact> recited inside a code fence intact (not a real protocol block)', () => {
+    const original = [
+      'Here is how the artifact protocol looks:',
+      '',
+      '```html',
+      '<artifact identifier="x" type="text/html" title="X">...</artifact>',
+      '```',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'x.html', identifier: 'x' },
+    ]);
+    // Inside a fenced code block → a literal recitation, must survive.
     expect(sanitized).toBe(original);
-    expect(sanitized).toContain('<artifact');
-    expect(sanitized).toContain('<!doctype html>');
+  });
+
+  it('summarizes via buildDaemonTranscript using the message producedFiles as persistence evidence', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content:
+          '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>slide content</html></artifact>',
+        producedFiles: [
+          {
+            name: 'deck.html',
+            size: 100,
+            mtime: 1,
+            kind: 'html',
+            mime: 'text/html',
+            artifactManifest: {
+              version: 1,
+              kind: 'html',
+              title: 'Pitch deck',
+              entry: 'deck.html',
+              renderer: 'html',
+              exports: [],
+              metadata: { identifier: 'deck' },
+            },
+          },
+        ],
+      },
+    ]);
+    expect(transcript).toContain('artifact emitted on a prior turn');
+    expect(transcript).not.toContain('slide content');
+  });
+
+  it('does NOT treat an unrelated same-named tool-written file as artifact persistence evidence', () => {
+    // Regression for the producedFiles-evidence review: producedFiles is the
+    // whole per-turn diff, not just persistArtifact outputs. When the
+    // artifact save fails but a tool wrote `deck.html` in the same turn
+    // (surfacing with no manifest, or a daemon-inferred one), the filename
+    // coincidence must NOT summarize the <artifact> block — its transcript
+    // body is still the only surviving copy.
+    const artifactTurn =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>only copy</html></artifact>';
+    const toolWrittenNoManifest = {
+      id: '1',
+      role: 'assistant' as const,
+      content: artifactTurn,
+      producedFiles: [
+        { name: 'deck.html', size: 10, mtime: 1, kind: 'html' as const, mime: 'text/html' },
+      ],
+    };
+    const toolWrittenInferredManifest = {
+      ...toolWrittenNoManifest,
+      id: '2',
+      producedFiles: [
+        {
+          name: 'deck.html',
+          size: 10,
+          mtime: 1,
+          kind: 'html' as const,
+          mime: 'text/html',
+          artifactManifest: {
+            version: 1 as const,
+            kind: 'html' as const,
+            title: 'deck.html',
+            entry: 'deck.html',
+            renderer: 'html' as const,
+            exports: ['html' as const],
+            metadata: { inferred: true },
+          },
+        },
+      ],
+    };
+    for (const message of [toolWrittenNoManifest, toolWrittenInferredManifest]) {
+      const transcript = buildDaemonTranscript([message]);
+      expect(transcript).toContain('only copy');
+      expect(transcript).not.toContain('artifact emitted on a prior turn');
+    }
+  });
+
+  it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'user',
+        content: 'Can you explain what <artifact identifier="z" type="text/html" title="Z">...</artifact> means?',
+      },
+    ]);
+    // User content is never sanitized — their artifact mention survives verbatim.
+    expect(transcript).toContain('<artifact identifier="z" type="text/html" title="Z">');
+    expect(transcript).not.toContain('artifact emitted on a prior turn');
   });
 
   it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {
@@ -313,6 +591,28 @@ describe('streamViaDaemon', () => {
     // Assistant's emission is replaced with the placeholder.
     expect(transcript).toContain('question-form was emitted here on a prior turn');
     expect(transcript).not.toContain('<question-form id="discovery" title="Brief">');
+  });
+
+  it('scrubs the <ask-question> alias from a prior assistant turn so it does not replay into the next send', () => {
+    // `<ask-question>` is an accepted alias for `<question-form>`. If the
+    // sanitizer only matched the canonical tag, an alias-form turn would
+    // replay verbatim on the follow-up send and re-trigger the form loop
+    // sanitizePriorAssistantTurnForTranscript() exists to break.
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content: [
+          '<ask-question id="discovery" title="Brief">',
+          '{ "questions": [] }',
+          '</ask-question>',
+        ].join('\n'),
+      },
+      { id: '2', role: 'user', content: 'react native' },
+    ]);
+
+    expect(transcript).toContain('question-form was emitted here on a prior turn');
+    expect(transcript).not.toContain('<ask-question id="discovery" title="Brief">');
   });
 
   it('escapes role delimiter lines in prior message content', () => {
@@ -589,6 +889,194 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('renders structured OpenCode session errors without JSON-RPC wrapper text', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message: 'json-rpc id 4: OpenCode session failed: Not Found',
+                error: {
+                  code: 'AGENT_EXECUTION_FAILED',
+                  message: 'json-rpc id 4: OpenCode session failed: Not Found',
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    message: 'Not Found',
+                    statusCode: 404,
+                    retryable: false,
+                    url: 'https://example.invalid/v1/chat/completions',
+                    suggestion: 'Check the configured AMR Link URL or model route.',
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('404 Not Found'),
+        code: 'AGENT_EXECUTION_FAILED',
+      }),
+    );
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('AMR Link URL or model route');
+    expect(message).not.toContain('json-rpc id 4');
+    expect(message).not.toContain('https://example.invalid');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('renders promoted OpenCode role-marker errors without OpenCode-session prefixing', async () => {
+    const handlers = createDaemonHandlers();
+    const message =
+      'Model emitted fabricated role marker ("## user"). Response was truncated to prevent unauthorized instruction injection.';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message,
+                error: {
+                  code: 'ROLE_MARKER_HALLUCINATION',
+                  message,
+                  retryable: true,
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    code: 'ROLE_MARKER_HALLUCINATION',
+                    upstream_name: 'RoleMarkerHallucinationError',
+                    message,
+                    marker: '## user',
+                    retryable: true,
+                    promoted_by: 'open_design_acp',
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message,
+        code: 'ROLE_MARKER_HALLUCINATION',
+        details: expect.objectContaining({
+          kind: 'opencode_session_error',
+          code: 'ROLE_MARKER_HALLUCINATION',
+          marker: '## user',
+        }),
+      }),
+    );
+    const renderedMessage = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(renderedMessage).not.toContain('OpenCode session failed');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('renders structured retry-exhausted provider errors from responseBodyPreview', async () => {
+    const handlers = createDaemonHandlers();
+    const responseBodyPreview = JSON.stringify({
+      error: {
+        message:
+          '[code=upstream_error] Provider returned error Retried the upstream request 5 times for retryable provider/network failures, but it still failed. Please try again later or switch to another model.',
+        type: 'upstream_error',
+        code: 'upstream_error',
+      },
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: error',
+              `data: ${JSON.stringify({
+                message: 'json-rpc id 4: OpenCode session failed: upstream provider error',
+                error: {
+                  code: 'AGENT_EXECUTION_FAILED',
+                  message: 'json-rpc id 4: OpenCode session failed: upstream provider error',
+                  details: {
+                    kind: 'opencode_session_error',
+                    source: 'opencode',
+                    sessionId: 'ses_xxx',
+                    errorName: 'APIError',
+                    message: 'Provider returned error',
+                    statusCode: 503,
+                    retryable: true,
+                    url: 'https://amr-link.open-design.ai/v1/chat/completions',
+                    suggestion: 'Retry later or switch to another model.',
+                    responseBodyPreview,
+                  },
+                },
+              })}`,
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'AGENT_EXECUTION_FAILED',
+        details: expect.objectContaining({
+          kind: 'opencode_session_error',
+          statusCode: 503,
+          retryable: true,
+        }),
+      }),
+    );
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('retried 5 times');
+    expect(message).toContain('still failed');
+    expect(message).toContain('retry later or switch to another model');
+    expect(message).not.toContain('opencode event stream');
+    expect(message).not.toContain('opencode session error');
+    expect(message).not.toContain('json-rpc id 4');
+    expect(message).not.toContain('https://amr-link.open-design.ai');
+  });
+
   it('treats an explicit succeeded status with a SIGTERM exit as a successful run', async () => {
     // ACP agents that don't shut down on stdin.end() (e.g. Devin for Terminal)
     // are SIGTERM'd by the daemon after a clean prompt completion. The end
@@ -762,6 +1250,175 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenCalledWith('failed');
     expect(handlers.onError).not.toHaveBeenCalled();
     expect(handlers.onDone).toHaveBeenCalledWith('');
+  });
+
+  it('cleans AMR/OpenCode bootstrap stderr from fallback errors', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"AMR run id: arun_7edd8e97efd5a5ffe5737280224ca8bd\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"Performing one time database migration, may take a few minutes...\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"sqlite-migration:done\\nDatabase migration complete.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"opencode server listening on http://127.0.0.1:51954\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('AMR/OpenCode started, but the run did not complete');
+    expect(message).not.toContain('sqlite-migration');
+    expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
+    expect(message).not.toContain('opencode server listening');
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
+  it('keeps real AMR/OpenCode stderr errors after removing bootstrap lines', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"sqlite-migration:done\\nopencode server listening on http://127.0.0.1:51954\\n"}',
+              '',
+              'event: stderr',
+              'data: {"chunk":"json-rpc id 4: opencode event stream: provider disconnected\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('provider disconnected');
+    expect(message).not.toContain('sqlite-migration');
+    expect(message).not.toContain('opencode server listening');
+  });
+
+  it('formats legacy raw OpenCode session errors in fallback stderr', async () => {
+    const handlers = createDaemonHandlers();
+    const legacyError = {
+      sessionID: 'ses_1',
+      error: {
+        name: 'APIError',
+        data: {
+          message: 'Provider returned error',
+          statusCode: 503,
+          isRetryable: true,
+          metadata: { url: 'https://example.invalid/v1/chat/completions' },
+        },
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              `data: ${JSON.stringify({ chunk: `json-rpc id 4: opencode event stream: opencode session error: ${JSON.stringify(legacyError)}\n` })}`,
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('upstream model provider returned a temporary error');
+    expect(message).toContain('retry');
+    expect(message).not.toContain('json-rpc id 4');
+  });
+
+  it('falls back gracefully for malformed legacy OpenCode session error JSON', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+        .mockResolvedValueOnce(
+          sseResponse(
+            [
+              'event: stderr',
+              'data: {"chunk":"opencode event stream: opencode session error: {bad json\\n"}',
+              '',
+              'event: end',
+              'data: {"code":1,"status":"failed"}',
+              '',
+              '',
+            ].join('\n'),
+          ),
+        ),
+    );
+
+    await streamViaDaemon({
+      agentId: 'amr',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
+    expect(message).toContain('opencode session error');
+    expect(message).toContain('{bad json');
   });
 
   it('still surfaces an error when the end event has a signal but no status field', async () => {
@@ -1232,6 +1889,38 @@ describe('streamViaDaemon', () => {
       label: 'researching',
       detail: 'tavily · shallow',
     });
+  });
+
+  it('maps transient ACP progress labels to hidden running status events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"status","label":"waiting_for_first_output","elapsedMs":12}\n\n' +
+            'event: agent\ndata: {"type":"status","label":"tool_call_update","elapsedMs":34}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'status',
+      label: 'running',
+    });
+    const statusLabels = handlers.onAgentEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.kind === 'status')
+      .map((event) => event.label);
+    expect(statusLabels).not.toContain('waiting_for_first_output');
+    expect(statusLabels).not.toContain('tool_call_update');
   });
 });
 

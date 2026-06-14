@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
 import { detectAgents, detectAgentsStream } from '../agents.js';
 import {
   SkillImportError,
@@ -27,7 +28,13 @@ import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
 import type { RouteDeps } from '../server-context.js';
 
-export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'paths' | 'resources'> {}
+export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'paths' | 'resources'> {
+  tokenContractRebuild?: {
+    maybeStartForImportedDesignSystem?: (
+      designSystemId: string,
+    ) => Promise<DesignSystemTokenContractRebuildJobResponse | undefined>;
+  };
+}
 
 export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticResourceRoutesDeps) {
   const {
@@ -55,6 +62,18 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     if (isLocalSameOrigin(req, resolvedPortRef.current)) return true;
     sendApiError(res, 403, 'FORBIDDEN', 'local origin required');
     return false;
+  };
+  const importedDesignSystemResponse = async <T extends { id: string }>(designSystem: T) => {
+    let tokenContractRebuild: DesignSystemTokenContractRebuildJobResponse | undefined;
+    try {
+      tokenContractRebuild = await ctx.tokenContractRebuild?.maybeStartForImportedDesignSystem?.(designSystem.id);
+    } catch (err) {
+      console.warn('[design-systems] import token-contract rebuild auto-queue failed', err);
+    }
+    return {
+      designSystem,
+      ...(tokenContractRebuild ? { tokenContractRebuild } : {}),
+    };
   };
 
   app.get('/api/agents', async (req, res) => {
@@ -694,7 +713,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json({ designSystem });
+      res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
@@ -738,7 +757,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported GitHub design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json({ designSystem });
+      res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
@@ -784,7 +803,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           `imported shadcn design system was not found in catalog: ${result.dir}`,
         );
       }
-      res.status(201).json({ designSystem });
+      res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);

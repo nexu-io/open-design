@@ -15,7 +15,6 @@ import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
 import {
@@ -23,6 +22,7 @@ import {
   localizeBlogPostText,
 } from '../../content-i18n';
 import {
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -81,7 +81,7 @@ const bottomCta =
       ? {
           title: ui.blog.cta.skillsTitle,
           body: ui.blog.cta.skillsBody,
-          href: '/plugins/skills/',
+          href: '/skills/',
           label: ui.blog.cta.skillsLabel,
           external: false,
         }
@@ -119,7 +119,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'blog',
     locale,
-    currentPath: Astro.url.pathname,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -150,7 +150,6 @@ const fmtDate = (d: Date) =>
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -231,7 +230,10 @@ const fmtDate = (d: Date) =>
         margin-top: 0;
       }
       .post {
-        padding: 88px 0 96px;
+        /* Clear the absolutely-positioned .site-chrome (~123px tall) so the
+         * back-link / title don't slide under the nav. Matches the 140px
+         * offset the other sub-pages use. */
+        padding: 140px 0 96px;
       }
       .post .container {
         max-width: 860px;
@@ -351,7 +353,7 @@ const fmtDate = (d: Date) =>
         font-size: 0.9em;
         background: var(--paper-warm);
         padding: 2px 6px;
-        border-radius: 3px;
+        border-radius: 4px;
         color: var(--ink);
       }
       .post-body :global(pre) {
@@ -467,7 +469,7 @@ const fmtDate = (d: Date) =>
       }
       @media (max-width: 760px) {
         .post {
-          padding: 56px 0 72px;
+          padding: 116px 0 72px;
         }
         .post-foot {
           align-items: flex-start;

@@ -241,6 +241,7 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
     acpCleanCompletion: false,
     artifactQuietShutdownRequested: false,
     turnCompletedCleanly: false,
+    artifactProducedThisRun: false,
   };
 
   it('returns canceled when cancelRequested wins regardless of other signals', () => {
@@ -271,6 +272,28 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
         acpCleanCompletion: true,
       }),
     ).toBe('succeeded');
+  });
+
+  it('returns succeeded on Vela ACP code 130 after clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on Vela ACP code 130 before clean ACP completion', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 130,
+        signal: null,
+        acpCleanCompletion: false,
+      }),
+    ).toBe('failed');
   });
 
   it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
@@ -407,13 +430,62 @@ describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () =
       }),
     ).toBe('canceled');
   });
+
+  it('returns succeeded on a non-zero NORMAL exit that produced an artifact this run', () => {
+    // Reproduction of the project-card bug (project c92897e1): the CLI
+    // exited 1 during teardown AFTER the HTML artifact was written with a
+    // successful tool_result. The deliverable exists on disk, so the run
+    // must report succeeded — not a red `failed` card — even though the
+    // turn-completed signal was not captured for that run.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed on a non-zero NORMAL exit with no artifact produced', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactProducedThisRun: false,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed on a signal kill even when an artifact was produced (no signal override)', () => {
+    // CRITICAL regression guard. The artifact carve-out is exit-code-only.
+    // An external kill / OOM / container shutdown after an artifact write
+    // (code === null, SIGKILL/SIGTERM, no daemon quiet-period flag) must
+    // stay failed — an artifact must NOT flip a signal kill to succeeded.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        artifactProducedThisRun: true,
+      }),
+    ).toBe('failed');
+  });
 });
 
 describe('applyClaudeStreamJsonRunBookkeeping', () => {
-  it('records clean completion when the host-answer path already closed stdin', () => {
+  it('records clean completion without re-ending an already-closed stdin', () => {
     const run = {
       stdinOpen: false,
-      pendingHostAnswers: new Set<string>(),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -432,10 +504,9 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.child.stdin.end).not.toHaveBeenCalled();
   });
 
-  it('keeps waiting when a terminal event arrives with host answers still pending', () => {
+  it('closes stdin and records clean completion on a non-tool_use terminal turn', () => {
     const run = {
       stdinOpen: true,
-      pendingHostAnswers: new Set(['toolu_1']),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -450,8 +521,84 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
       stopReason: 'end_turn',
     });
 
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
+  });
+
+  it('keeps stdin open when the turn ended on a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'tool_use',
+    });
+
     expect(run.turnCompletedCleanly).toBe(false);
     expect(run.stdinOpen).toBe(true);
     expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('keeps stdin open when usage reports a tool_use stop reason', () => {
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'usage',
+      usage: { input_tokens: 6, output_tokens: 40831 },
+      stopReason: 'tool_use',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(false);
+    expect(run.stdinOpen).toBe(true);
+    expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('closes stdin and records clean completion after an AskUserQuestion tool_use followed by end_turn (#4273)', () => {
+    // Regression test: the dead AskUserQuestion detection branch used to add
+    // the tool_use id to pendingHostAnswers and return early, preventing stdin
+    // from ever closing when the subsequent turn_end arrived.
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'tool_use',
+      name: 'AskUserQuestion',
+      id: 'auq_123',
+    });
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
   });
 });

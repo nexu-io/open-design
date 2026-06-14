@@ -174,11 +174,29 @@ function serializeMessage(level: LogLevel, message: string, meta?: Record<string
   }
 }
 
+type DesktopLogAppend = (path: string, data: string, encoding: BufferEncoding) => void;
+
+export function appendDesktopLogLine(
+  desktopLogPath: string,
+  line: string,
+  append: DesktopLogAppend = appendFileSync,
+): boolean {
+  try {
+    append(desktopLogPath, line, "utf8");
+    return true;
+  } catch {
+    // Logging must never be the thing that crashes the packaged app.
+    // Under offline retry storms the log file itself can hit EMFILE;
+    // swallowing the write breaks the fatal log -> append failure loop.
+    return false;
+  }
+}
+
 export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): PackagedDesktopLogger {
   const echo = process.env[DESKTOP_LOG_ECHO_ENV] !== "0";
 
   const write = (level: LogLevel, message: string, meta?: Record<string, unknown>) => {
-    appendFileSync(paths.desktopLogPath, serializeMessage(level, message, meta), "utf8");
+    appendDesktopLogLine(paths.desktopLogPath, serializeMessage(level, message, meta));
   };
 
   const logger: PackagedDesktopLogger = {
@@ -269,9 +287,9 @@ export function attachPackagedDesktopProcessLogging(options: {
   // hidden as a log line. See `createFatalUnhandledRejectionHandler`.
   process.on("unhandledRejection", createFatalUnhandledRejectionHandler(logger));
   process.on("beforeExit", (code) => {
-    logger.warn("packaged desktop beforeExit", { code });
+    logger.info("packaged desktop beforeExit", { code });
   });
   process.on("exit", (code) => {
-    logger.warn("packaged desktop exit", { code });
+    logger.info("packaged desktop exit", { code });
   });
 }

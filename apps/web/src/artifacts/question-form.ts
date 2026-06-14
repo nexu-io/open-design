@@ -370,7 +370,7 @@ function endsInsideJsonString(s: string): boolean {
 // Unlike a complete-objects-only pass, the repaired prefix (see
 // `parsePartialJson`) means a question shows the moment its `label` (prompt)
 // text exists and its options grow in one at a time — true token-by-token
-// streaming, matching the AskUserQuestion card. The trailing in-flight object
+// streaming, matching the question-form card. The trailing in-flight object
 // with no label yet is held back (no "q1" placeholder flicker); it appears
 // once its label lands.
 // Return a top-level (depth-1) string field's value ONLY if its string literal

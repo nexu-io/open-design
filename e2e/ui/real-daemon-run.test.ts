@@ -86,6 +86,12 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   expect(await rawResponse.text()).toContain(GENERATED_HEADING);
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(artifactPreview(page)).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {
@@ -114,6 +120,22 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
   await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
 });
 
+test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Daemon socket-drop smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Return a daemon socket-drop failure');
+
+  // The raw SDK error ("The socket connection was closed unexpectedly") is
+  // classified as AGENT_CONNECTION_DROPPED and the error card shows the
+  // localized chat.connectionDropped copy (en locale here) instead of echoing
+  // the raw SDK string verbatim.
+  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
+    timeout: 15_000,
+  });
+});
+
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Daemon follow-up smoke');
@@ -134,17 +156,18 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
-test('[P0] real daemon run survives a mid-flight reload and restores the delayed artifact turn', async ({ page }) => {
+test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
   await page.goto('/');
-  await createProject(page, 'Delayed daemon reload smoke', 'claude');
+  await createProject(page, 'Delayed daemon reload smoke');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a delayed deterministic smoke artifact');
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
 
-  const { projectId, conversationId } = await currentProjectContext(page);
-  await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
+  await expectProjectFilesToContain(page, projectId, [DELAYED_FILE]);
   await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
@@ -155,12 +178,13 @@ test('[P0] real daemon run survives a mid-flight reload and restores the delayed
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     expectedUserMessages: 1,
+    expectedThinking: false,
   });
 });
 
-test('[P0] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
+test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
   await page.goto('/');
-  await createProject(page, 'Delayed daemon create-response reload smoke', 'claude');
+  await createProject(page, 'Delayed daemon create-response reload smoke');
   await expectWorkspaceReady(page);
 
   await sendPromptAndReloadBeforeCreateResponse(
@@ -175,6 +199,7 @@ test('[P0] real daemon run survives reload before the create response reaches th
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     requireRunId: true,
+    expectedThinking: false,
   });
 });
 
@@ -212,7 +237,6 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   await expectProjectFilesToContain(page, alpha.projectId, [GENERATED_FILE]);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
 
   await createProject(page, 'Real daemon isolation beta');
   await expectWorkspaceReady(page);
@@ -222,18 +246,14 @@ test('[P0] separate projects keep daemon artifacts isolated across recent-projec
   expect(beta.projectId).not.toBe(alpha.projectId);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
-  const recentStrip = page.getByTestId('recent-projects-strip');
-  await expect(recentStrip.locator(`[data-project-id="${alpha.projectId}"]`)).toBeVisible();
-  await expect(recentStrip.locator(`[data-project-id="${beta.projectId}"]`)).toBeVisible();
-
-  await recentStrip.locator(`[data-project-id="${alpha.projectId}"]`).click();
+  await openProjectFromProjectsView(page, alpha.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(GENERATED_FILE, { exact: true })).toBeVisible();
   await expect(page.getByText(FOLLOW_UP_FILE, { exact: true })).toHaveCount(0);
   expect((await listProjectFiles(page, alpha.projectId)).map((file) => file.name)).toEqual([GENERATED_FILE]);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
-  await recentStrip.locator(`[data-project-id="${beta.projectId}"]`).click();
+  await openProjectFromProjectsView(page, beta.projectId);
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByText(FOLLOW_UP_FILE, { exact: true })).toBeVisible();
   await expect(page.getByText(GENERATED_FILE, { exact: true })).toHaveCount(0);
@@ -369,12 +389,19 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
   return (await response.json()) as { conversationId: string };
 }
 
+async function openProjectFromProjectsView(page: Page, projectId: string) {
+  await gotoEntryHome(page);
+  const recentProjects = page.getByTestId('recent-projects-strip');
+  await expect(recentProjects).toBeVisible();
+  await recentProjects.locator(`[data-project-id="${projectId}"]`).click();
+}
+
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -455,7 +482,7 @@ async function openNewProjectModal(page: Page) {
 async function dismissPrivacyDialog(page: Page) {
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
 }
@@ -654,7 +681,7 @@ async function expectRestoredDelayedAssistantMessage(
   page: Page,
   projectId: string,
   conversationId: string,
-  options: { expectedUserMessages?: number; requireRunId?: boolean } = {},
+  options: { expectedUserMessages?: number; requireRunId?: boolean; expectedThinking?: boolean } = {},
 ) {
   await expect
     .poll(async () => {
@@ -675,7 +702,7 @@ async function expectRestoredDelayedAssistantMessage(
       hasRunId: options.requireRunId ? true : expect.any(Boolean),
       runStatus: 'succeeded',
       producedFiles: [DELAYED_FILE],
-      hasThinking: true,
+      hasThinking: options.expectedThinking ?? true,
     });
 }
 

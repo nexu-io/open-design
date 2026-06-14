@@ -51,11 +51,16 @@ function eventErrorText(data: unknown): string[] {
   const nested = payload.error && typeof payload.error === 'object'
     ? payload.error as Record<string, unknown>
     : {};
+  const nestedData = nested.data && typeof nested.data === 'object'
+    ? nested.data as Record<string, unknown>
+    : {};
   return [
     readString(payload.message),
     readString(payload.code),
     readString(nested.message),
     readString(nested.code),
+    readString(nestedData.message),
+    typeof nestedData.statusCode === 'number' ? `statusCode:${nestedData.statusCode}` : undefined,
   ].filter((value): value is string => Boolean(value));
 }
 
@@ -81,7 +86,13 @@ function latestRetryable(
     const nested = payload.error && typeof payload.error === 'object'
       ? payload.error as Record<string, unknown>
       : {};
-    const retryable = readBool(payload.retryable) ?? readBool(nested.retryable);
+    const nestedData = nested.data && typeof nested.data === 'object'
+      ? nested.data as Record<string, unknown>
+      : {};
+    const retryable =
+      readBool(payload.retryable) ??
+      readBool(nested.retryable) ??
+      readBool(nestedData.isRetryable);
     if (retryable !== undefined) return retryable;
   }
   return undefined;
@@ -121,8 +132,23 @@ function isEmptyOutputText(text: string): boolean {
 }
 
 function isToolErrorText(text: string): boolean {
-  return /\b(tool|mcp|connector)\b/i.test(text) &&
+  if (isPluginArtifactMissingText(text)) return true;
+  return /\b(tool|mcp|connector|plugin)\b/i.test(text) &&
     /\b(error|failed|failure)\b/i.test(text);
+}
+
+function isPluginArtifactMissingText(text: string): boolean {
+  return /\bPlugin authoring ended before generating the required generated-plugin artifacts\b/i
+    .test(text);
+}
+
+function isAgentConfigInvalidText(text: string): boolean {
+  return /\bError loading config\.toml: unknown variant\b/i.test(text) ||
+    /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text);
+}
+
+function isFabricatedRoleMarkerText(text: string): boolean {
+  return /\bmodel emitted fabricated role marker\b/i.test(text);
 }
 
 function isPermissionRequestNotFoundText(text: string): boolean {
@@ -141,7 +167,12 @@ function isPromptTooLargeText(text: string): boolean {
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by peer|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|upstream_error|http2: response body closed)\b/i
+  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|upstream_error|http2: response body closed|AMR model catalog is unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
+    .test(text);
+}
+
+function isUpstreamClientErrorText(text: string): boolean {
+  return /\b(statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
     .test(text);
 }
 
@@ -179,7 +210,7 @@ function authDetail(text: string): TrackingRunFailureDetail {
 }
 
 function upstreamDetail(text: string): TrackingRunFailureDetail {
-  if (/\b(no endpoints found that support tool use|provider routing)\b/i.test(text)) {
+  if (/\b(AMR model catalog is unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors\b/i.test(text)) return 'provider_high_demand';
@@ -191,7 +222,71 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     .test(text)) {
     return 'upstream_5xx';
   }
+  if (isUpstreamClientErrorText(text)) return 'upstream_client_error';
   return 'network_error';
+}
+
+// Signals that mean the agent process aborted abnormally (segfault, abort,
+// illegal instruction, trap, bus error). Distinct from SIGKILL (OOM / forced
+// kill) and SIGTERM (graceful shutdown / cancel). None of these are timeouts.
+const PROCESS_CRASH_SIGNALS = new Set([
+  'SIGSEGV',
+  'SIGABRT',
+  'SIGILL',
+  'SIGTRAP',
+  'SIGBUS',
+]);
+
+// Classifies a run that died from an OS signal or an interrupt exit code
+// (130 = 128 + SIGINT). Returns null when the failure is not signal/interrupt
+// shaped so the caller can fall through to the generic exit-code bucket.
+//
+// Earlier classifier branches already claim the cases where the failure text
+// carries richer meaning than the bare signal: an inactivity-driven SIGTERM is
+// caught by the timeout branch above, and a SIGINT/exit-130 whose text names a
+// stream disconnect is caught by the upstream branch. By the time control
+// reaches here a signal is the strongest evidence we have, so map it to a
+// non-retryable process_exit instead of laundering it into a retryable timeout.
+function signalInterruptClassification(
+  errorCode: string,
+  text: string,
+  retryableHint: boolean | undefined,
+): RunFailureClassification | null {
+  const isInterruptExit = errorCode === 'AGENT_EXIT_130';
+  const signal = errorCode.startsWith('AGENT_SIGNAL_')
+    ? errorCode.slice('AGENT_SIGNAL_'.length)
+    : '';
+  if (!signal && !isInterruptExit) return null;
+
+  if (signal === 'SIGKILL') {
+    return classification('process_exit', 'signal_killed', 'child_close', false, 'none');
+  }
+  if (PROCESS_CRASH_SIGNALS.has(signal)) {
+    return classification('process_exit', 'process_crashed', 'child_close', false, 'none');
+  }
+  if (signal === 'SIGINT' || isInterruptExit) {
+    // Defensive: the upstream branch above already claims disconnect text, but
+    // re-check so a reordering can never silently bury a cancelled stream.
+    if (isUpstreamDetailText(text)) {
+      return classification(
+        'upstream_unavailable',
+        upstreamDetail(text),
+        'first_token_wait',
+        retryableHint ?? true,
+        'retry',
+      );
+    }
+    return classification('process_exit', 'interrupted', 'child_close', false, 'none');
+  }
+  // SIGTERM (graceful shutdown / cancel) and any other signal. Inactivity-driven
+  // SIGTERMs were already claimed by the timeout branch above, so reaching here
+  // means there is no timeout evidence: treat as a non-retryable termination.
+  return classification('process_exit', 'terminated_unknown', 'child_close', false, 'none');
+}
+
+function toolErrorDetail(text: string): TrackingRunFailureDetail {
+  if (isPluginArtifactMissingText(text)) return 'plugin_artifact_missing';
+  return 'tool_error';
 }
 
 function processExitDetail(
@@ -206,6 +301,8 @@ function processExitDetail(
   if (/\bspawn failed: spawn EPERM\b/i.test(text)) return 'spawn_eperm';
   if (/\bspawn failed: spawn\b/i.test(text)) return 'spawn_failed';
   if (/\bstdin: write EOF\b/i.test(text)) return 'stdin_write_eof';
+  if (isAgentConfigInvalidText(text)) return 'agent_config_invalid';
+  if (isFabricatedRoleMarkerText(text)) return 'fabricated_role_marker';
   if (/\bjson-rpc id \d+: Internal error\b/i.test(text)) {
     return 'agent_protocol_error';
   }
@@ -216,6 +313,30 @@ function processExitDetail(
   if (errorCode === 'AGENT_TERMINATED_UNKNOWN') return 'terminated_unknown';
   if (errorCode === 'AGENT_EXECUTION_FAILED') return 'execution_failed';
   return 'unknown';
+}
+
+/**
+ * Whether a terminal failure can be recovered by RESUMING the agent's existing
+ * CLI session (continue from where it left off) rather than restarting from
+ * scratch. True only for transient mid-stream interruptions — an upstream drop
+ * or an inactivity timeout — where any work already committed to the session is
+ * worth continuing. Deliberately excludes process crashes, OOM kills,
+ * auth/balance/prompt-size and any other non-transient cause: resuming those
+ * would just reproduce the failure. The caller additionally gates on the
+ * runtime actually supporting CLI session resume and on holding a session id.
+ */
+export function isResumableFailure(
+  failure: RunFailureClassification | undefined,
+): boolean {
+  if (!failure) return false;
+  if (failure.failure_category === 'upstream_unavailable') return true;
+  if (
+    failure.failure_category === 'timeout' &&
+    failure.failure_detail === 'inactivity_timeout'
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function classification(
@@ -308,6 +429,16 @@ export function classifyRunFailure(
     );
   }
 
+  if (isAgentConfigInvalidText(text)) {
+    return classification(
+      'process_exit',
+      'agent_config_invalid',
+      'session_init',
+      false,
+      'fix_config',
+    );
+  }
+
   const serviceFailure = classifyAgentServiceFailure(text);
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
@@ -335,12 +466,13 @@ export function classifyRunFailure(
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
     isUpstreamDetailText(text)
   ) {
+    const retryable = retryableHint ?? !isUpstreamClientErrorText(text);
     return classification(
       'upstream_unavailable',
       upstreamDetail(text),
       'first_token_wait',
-      retryableHint ?? true,
-      'retry',
+      retryable,
+      retryable ? 'retry' : 'none',
     );
   }
 
@@ -354,11 +486,7 @@ export function classifyRunFailure(
     );
   }
 
-  if (
-    isTimeoutText(text) ||
-    errorCode === 'TIMEOUT' ||
-    errorCode.startsWith('AGENT_SIGNAL_')
-  ) {
+  if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
     const retryable = retryableHint ?? true;
     return classification(
       'timeout',
@@ -372,12 +500,24 @@ export function classifyRunFailure(
   }
 
   if (isToolErrorText(text)) {
+    const retryable = retryableHint ?? !isPluginArtifactMissingText(text);
     return classification(
       'tool_error',
-      'tool_error',
-      'tool_execution',
-      retryableHint ?? false,
-      retryableHint ? 'retry' : 'none',
+      toolErrorDetail(text),
+      isPluginArtifactMissingText(text) ? 'artifact_write' : 'tool_execution',
+      retryable,
+      retryable ? 'retry' : 'none',
+    );
+  }
+
+  if (isFabricatedRoleMarkerText(text)) {
+    const retryable = retryableHint ?? true;
+    return classification(
+      'process_exit',
+      'fabricated_role_marker',
+      'child_close',
+      retryable,
+      retryable ? 'retry' : 'none',
     );
   }
 
@@ -391,6 +531,9 @@ export function classifyRunFailure(
       retryable ? 'retry' : 'none',
     );
   }
+
+  const signalInterrupt = signalInterruptClassification(errorCode, text, retryableHint);
+  if (signalInterrupt) return signalInterrupt;
 
   if (
     errorCode.startsWith('AGENT_EXIT_') ||

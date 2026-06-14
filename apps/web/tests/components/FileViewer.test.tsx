@@ -627,7 +627,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Shell />);
 
     const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(firstFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave project' }));
 
@@ -635,7 +635,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByTestId('home-view')).toBeTruthy();
     const parkedFrame = container.querySelector<HTMLIFrameElement>('.iframe-keep-alive-pool iframe');
     expect(parkedFrame).toBe(firstFrame);
-    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(parkedFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: 'Return project' }));
 
@@ -782,7 +782,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
-    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection"');
+    expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
@@ -812,13 +812,13 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(frame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
 
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
-    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
@@ -1168,7 +1168,7 @@ describe('FileViewer SVG artifacts', () => {
     const { container } = render(<Switcher />);
     const getFrame = () => container.querySelector<HTMLIFrameElement>('[data-testid="artifact-preview-frame"]');
     const initialFrame = getFrame();
-    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(initialFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/first.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
 
     const observationsBeforeSwitch = observedCommittedSrcs.length;
     fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
@@ -1176,9 +1176,9 @@ describe('FileViewer SVG artifacts', () => {
     const nextFrame = getFrame();
     expect(nextFrame).toBeTruthy();
     expect(observedCommittedSrcs[observationsBeforeSwitch]).toBe(
-      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection',
+      '/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot',
     );
-    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection');
+    expect(nextFrame?.getAttribute('src')).toBe('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
   });
 
   it('allows downloads in the in-tab HTML presentation iframe', async () => {
@@ -1196,19 +1196,48 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
+    const css = readExpandedIndexCss();
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    const workspaceShell = document.createElement('div');
+    workspaceShell.className = 'workspace-shell';
+    const chrome = document.createElement('div');
+    chrome.className = 'workspace-tabs-chrome app-chrome-header';
+    vi.spyOn(chrome, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 34));
+    const workspaceBody = document.createElement('div');
+    workspaceBody.className = 'workspace-shell__body';
+    workspaceShell.append(chrome, workspaceBody);
+    document.body.appendChild(workspaceShell);
 
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
+      { container: workspaceBody },
     );
 
     fireEvent.click(screen.getByRole('button', { name: /present/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
 
     await waitFor(() => {
-      const frame = container.querySelector('.present-overlay iframe');
+      const frame = document.body.querySelector('.present-overlay iframe');
       expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
       expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
     });
+    expect(container.querySelector('.html-viewer.is-tab-present')).toBeTruthy();
+    const overlay = document.body.querySelector<HTMLElement>('.present-overlay');
+    expect(overlay?.parentElement).toBe(document.body);
+    expect(document.body.style.getPropertyValue('--workspace-tabs-chrome-height')).toBe('34px');
+    expect(overlay?.style.getPropertyValue('--workspace-tabs-chrome-height')).toBe('');
+    const bodyChromeHeight = window
+      .getComputedStyle(document.body)
+      .getPropertyValue('--workspace-tabs-chrome-height')
+      .trim();
+    const resolvedTop = window
+      .getComputedStyle(overlay!)
+      .top.replace(/var\(--workspace-tabs-chrome-height,\s*38px\)/, bodyChromeHeight || '38px');
+    expect(resolvedTop).toBe('34px');
+    style.remove();
+    workspaceShell.remove();
   });
 
   it('allows downloads in React component preview iframes', async () => {
@@ -1426,7 +1455,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -1438,6 +1467,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     expect(await screen.findByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop.deploy-flow-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     expect(screen.getByText('Account ID')).toBeTruthy();
     expect(screen.getByText(/Select Pages Edit when creating the API token/i)).toBeTruthy();
     expect(screen.getByText(/Zone Read/i)).toBeTruthy();
@@ -2255,6 +2288,58 @@ describe('FileViewer SVG artifacts', () => {
     expect(downloadItems).not.toContain('Export as Markdown');
   });
 
+  it('does not show an export-started toast when desktop PDF export is canceled', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.pathname
+          : typeof (input as { url?: unknown })?.url === 'string'
+            ? (input as { url: string }).url
+            : '';
+      if (url === '/api/projects/project-1/export/pdf') {
+        return new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Export as PDF/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects/project-1/export/pdf',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('Export started')).toBeNull();
+  });
+
   it('disables share link actions while the artifact is still streaming', async () => {
     const file = baseFile({
       name: 'index.html',
@@ -2637,7 +2722,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    render(
+    const view = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
@@ -2647,6 +2732,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
+    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
+    expect(backdrop).toBeTruthy();
+    expect(backdrop?.parentElement).toBe(document.body);
+    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
     const nameInput = screen.getByLabelText(/template name/i) as HTMLInputElement;
     expect(nameInput.value).toBe('landing-page');
     fireEvent.change(nameInput, { target: { value: 'Landing Page' } });
@@ -5104,6 +5193,17 @@ describe('LiveArtifactViewer', () => {
     expect(rule).toContain('right: calc(env(safe-area-inset-right, 0px) + 20px);');
     expect(rule).toContain('display: inline-flex;');
     expect(rule).toContain('align-items: center;');
+  });
+
+  it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {
+    const css = readExpandedIndexCss();
+    const overlayRule = css.match(/\.present-overlay\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(overlayRule).toContain('position: fixed;');
+    expect(overlayRule).toContain('top: var(--workspace-tabs-chrome-height, 38px);');
+    expect(overlayRule).toContain('right: 0;');
+    expect(overlayRule).toContain('bottom: 0;');
+    expect(overlayRule).toContain('left: 0;');
   });
 
   it('uses the shared zoom dropdown for live artifact previews', async () => {

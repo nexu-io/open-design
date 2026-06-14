@@ -10,6 +10,7 @@ import {
   exportAsImage,
   exportAsMd,
   exportAsPdf,
+  exportProjectAsHtml,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
@@ -219,6 +220,22 @@ describe('exportProjectAsPdf', () => {
     });
   });
 
+  it('treats a canceled desktop PDF save dialog as a silent no-op', async () => {
+    const fallback = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, canceled: true }), { status: 200 })));
+
+    const result = await exportProjectAsPdf({
+      deck: true,
+      fallbackPdf: fallback,
+      filePath: 'deck/index.html',
+      projectId: 'proj-1',
+      title: 'Seed Deck',
+    });
+
+    expect(result).toBe('cancelled');
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
   it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
     const fallback = vi.fn();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -234,6 +251,76 @@ describe('exportProjectAsPdf', () => {
 
     expect(result).toBe('fallback');
     expect(fallback).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('exportProjectAsHtml', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('downloads daemon-inlined project HTML instead of the raw source body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>inlined</p>', {
+      headers: { 'content-type': 'text/html' },
+      status: 200,
+    })));
+
+    await exportProjectAsHtml({
+      projectId: 'proj 1',
+      filePath: 'screens/main page.html',
+      fallbackHtml: '<script type="module" src="/src/main.tsx"></script>',
+      fallbackTitle: 'Main Page',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1');
+    expect(capturedFilename).toBe('Main-Page.html');
+    expect(await capturedBlob!.text()).toBe('<!doctype html><p>inlined</p>');
+  });
+
+  it('falls back to the source HTML export when the daemon inline endpoint fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+
+    await exportProjectAsHtml({
+      projectId: 'proj-1',
+      filePath: 'index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback',
+    });
+
+    expect(capturedFilename).toBe('Fallback.html');
+    expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
   });
 });
 
@@ -326,6 +413,10 @@ describe('sandboxed preview Blob exports', () => {
       revokeObjectURL: vi.fn(),
     });
     vi.stubGlobal('window', {
+      location: {
+        href: 'https://open-design.test/plugins/example',
+        origin: 'https://open-design.test',
+      },
       open: (_url: string, _target: string, features?: string) => {
         openCalls.push([_url, _target]);
         openedFeatures = features;
@@ -350,6 +441,14 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
     expect(wrapper).toContain('&lt;script&gt;window.parent.localStorage.clear()&lt;/script&gt;');
     expect(wrapper).not.toContain('<script>window.parent.localStorage.clear()</script>');
+  });
+
+  it('anchors new-tab srcdoc previews to the current origin when no explicit base is provided', async () => {
+    openSandboxedPreviewInNewTab('<img src="/api/plugins/example/assets/hero.png"><img src="assets/card.png">', 'Plugin preview');
+
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('&lt;base href=&quot;https://open-design.test/&quot;&gt;');
   });
 
   it('passes srcdoc options through the sandboxed new-tab wrapper', async () => {
@@ -526,6 +625,39 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('__odPrintReady');
     // No window.print() since the desktop bridge handles printing natively.
     expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('reports the artifact content size through the handshake so the desktop page is sized to the content, not the wrapper viewport (issue #4067)', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
+    });
+
+    try {
+      await exportAsPdf('<div style="height:4000px">tall artifact</div>', 'Tall PDF');
+    } finally {
+      restoreHost();
+    }
+
+    const htmlArg = printPdfMock.mock.calls[0]![0];
+    // The in-iframe handshake measures the artifact's own document dimensions.
+    // The parent wrapper cannot do this itself: the sandboxed preview iframe is
+    // `allow-scripts` with no `allow-same-origin`, so iframe.contentDocument is
+    // null. Measuring from inside is the only way to learn the real size.
+    expect(htmlArg).toContain('document.documentElement');
+    expect(htmlArg).toContain('scrollHeight');
+    expect(htmlArg).toContain('offsetHeight');
+    // ...and it ships the size alongside the readiness signal.
+    expect(htmlArg).toContain('width:w');
+    expect(htmlArg).toContain('height:h');
+    // The parent wrapper caches the reported size for inferPageSize() to read,
+    // validating it as a positive finite number so a malformed/oversized message
+    // cannot poison the page size. The finite check matters: `Infinity > 0` is
+    // true, so a bare `typeof === 'number'` guard would cache a non-finite
+    // dimension and let it leak into the page size.
+    expect(htmlArg).toContain('window.__odPrintSize');
+    expect(htmlArg).toContain('Number.isFinite(e.data.width)');
+    expect(htmlArg).toContain('Number.isFinite(e.data.height)');
   });
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {

@@ -99,13 +99,13 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
 
-    await waitFor(() => expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html'));
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html'));
 
     fireEvent.change(screen.getByTestId('chat-file-input'), {
       target: { files: [new File(['pasted'], 'pasted.png', { type: 'image/png' })] },
     });
 
-    await waitFor(() => expect(screen.getByTestId('staged-attachments').textContent).toContain('pasted.png'));
+    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('pasted.png'));
     fireEvent.click(screen.getByTestId('chat-send'));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
@@ -451,7 +451,7 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(screen.getByText(`uploads/${longName}`)).toBeTruthy());
     fireEvent.click(screen.getByText(`uploads/${longName}`));
 
-    const chip = screen.getByTestId('staged-attachments').querySelector('.staged-chip.staged-image');
+    const chip = screen.getByTestId('staged-contexts').querySelector('.staged-chip.staged-image');
     const previewTrigger = screen.getByRole('button', { name: `Preview ${longName}` });
     expect(chip?.contains(previewTrigger)).toBe(true);
     expect(chip?.contains(screen.getByRole('button', { name: `Remove ${longName}` }))).toBe(true);

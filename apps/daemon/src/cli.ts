@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // @ts-nocheck
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
@@ -266,7 +268,6 @@ const SUBCOMMAND_MAP = {
   memory: runMemory,
   run: runRun,
   files: runFiles,
-  shell: runShell,
   templates: runTemplates,
   conversation: runConversation,
   chat: runChat,
@@ -4731,10 +4732,8 @@ function normalizeChatSessionModeFlag(value) {
 
 function safeReadJsonFile(p) {
   try {
-    const fs = (require ? require('node:fs') : null);
-    if (!fs) return null;
-    if (p === '-') return JSON.parse(fs.readFileSync(0, 'utf8'));
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
+    return JSON.parse(readFileSync(p, 'utf8'));
   } catch {
     return null;
   }
@@ -5449,12 +5448,10 @@ Common options:
         console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
         process.exit(2);
       }
-      const fs = require('node:fs');
-      const path = require('node:path');
-      const buf = fs.readFileSync(localPath);
+      const buf = readFileSync(localPath);
       const desiredName = typeof flags.as === 'string' && flags.as.length > 0
         ? flags.as
-        : path.basename(localPath);
+        : basename(localPath);
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -5478,10 +5475,9 @@ Common options:
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
-      const fs = require('node:fs');
       let chunks = [];
       try {
-        const stdin = fs.readFileSync(0);
+        const stdin = readFileSync(0);
         chunks = [stdin];
       } catch (err) {
         console.error(`stdin read failed: ${err.message ?? err}`);
@@ -6165,7 +6161,7 @@ function formatBytes(n) {
 
 async function runDaemonStart(flags) {
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
+  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,
@@ -6365,12 +6361,156 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
+  if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
+  if (args[0] === 'import-github') return runDesignSystemImportGithub(args.slice(1));
   if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
+  if (args[0] === 'rebuild-token-contract') return runDesignSystemTokenContractRebuild(args.slice(1));
   if (!args[0] || isDesignSystemsHelpArg(args[0])) {
     console.log(DESIGN_SYSTEMS_USAGE);
     process.exit(isDesignSystemsHelpArg(args[0]) ? 0 : 2);
   }
   return runLibraryList('design-systems', args);
+}
+
+// od design-systems import-local <path> [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+//
+// Imports a local app/design-system project through the same daemon endpoint as
+// the Settings UI. The CLI resolves relative paths before sending the request
+// because the daemon intentionally accepts only absolute host paths.
+async function runDesignSystemImportLocal(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  od design-systems import-local --path <path> [--name <name>] [--json]
+
+Imports a local project directory as an editable Open Design design system.
+
+  <path>                 Local project directory to scan.
+  --path <path>          Path alternative for scripts that prefer named flags.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'path', 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const localPath = typeof flags.path === 'string' ? flags.path : positionalArgs(args, stringFlags)[0];
+  if (!localPath) {
+    console.error('Usage: od design-systems import-local <path>');
+    process.exit(2);
+  }
+  const pathModule = await import('node:path');
+  const body = designSystemImportRequestBody(flags, {
+    baseDir: pathModule.resolve(localPath),
+  });
+  return postDesignSystemImport(flags, '/api/design-systems/import/local', body);
+}
+
+// od design-systems import-github <url> [--branch <branch>] [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+async function runDesignSystemImportGithub(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  od design-systems import-github --url <url> [--branch <branch>] [--json]
+
+Imports a public GitHub repository as an editable Open Design design system.
+
+  <url>                  Repository root URL, e.g. https://github.com/acme/design-kit.
+  --url <url>            URL alternative for scripts that prefer named flags.
+  --branch <branch>      Branch, tag, or ref to clone.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'url', 'branch', 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const url = typeof flags.url === 'string' ? flags.url : positionalArgs(args, stringFlags)[0];
+  if (!url) {
+    console.error('Usage: od design-systems import-github <url>');
+    process.exit(2);
+  }
+  const body = designSystemImportRequestBody(flags, {
+    url,
+    ...(typeof flags.branch === 'string' ? { branch: flags.branch } : {}),
+  });
+  return postDesignSystemImport(flags, '/api/design-systems/import/github', body);
+}
+
+function designSystemImportRequestBody(flags, baseBody) {
+  const craftApplies =
+    typeof flags.craft === 'string'
+      ? flags.craft.split(',').map((slug) => slug.trim().toLowerCase()).filter(Boolean)
+      : undefined;
+  return {
+    ...baseBody,
+    ...(typeof flags.name === 'string' ? { name: flags.name } : {}),
+    ...(typeof flags['import-mode'] === 'string' ? { importMode: flags['import-mode'] } : {}),
+    ...(craftApplies && craftApplies.length > 0 ? { craftApplies } : {}),
+  };
+}
+
+async function postDesignSystemImport(flags, endpoint, body) {
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const imported = data.designSystem ?? data;
+  console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
+  if (data.tokenContractRebuild?.job) {
+    console.log(`Token contract rebuild queued: ${data.tokenContractRebuild.job.id}`);
+  } else if (data.tokenContractRebuild?.decision?.reason) {
+    console.log(`Token contract rebuild: ${data.tokenContractRebuild.decision.reason}`);
+  }
+}
+
+// od design-systems rebuild-token-contract <id> [--force] [--json]
+//
+// Starts the same review-gated token contract rebuild job exposed in the web
+// design-system detail view. Without --force the daemon only queues a job when
+// source/token-contract.report.json recommends it.
+async function runDesignSystemTokenContractRebuild(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems rebuild-token-contract <id> [--force] [--json] [--daemon-url <url>]
+
+Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable imported design system.
+
+  <id>       Editable design-system id, e.g. user:acme-product.
+  --force    Queue the review even when the quality report is already usable.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const flags = parseFlags(args, {
+    string: LIBRARY_STRING_FLAGS,
+    boolean: new Set([...LIBRARY_BOOLEAN_FLAGS, 'force']),
+  });
+  const id = positionalArgs(args, LIBRARY_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od design-systems rebuild-token-contract <id>');
+    process.exit(2);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}/api/design-systems/${encodeURIComponent(id)}/token-contract/rebuild-jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: flags.force === true }),
+  });
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  if (data.job) {
+    console.log(`Token contract rebuild queued for ${id}: ${data.job.id}`);
+    return;
+  }
+  const decision = data.decision;
+  console.log(`Token contract rebuild not queued for ${id}: ${decision?.reason ?? 'no rebuild needed'}`);
 }
 
 // od design-systems import-shadcn <reference> [--name <name>]
@@ -6402,27 +6542,8 @@ Imports a shadcn registry item as an Open Design design system.
     console.error('Usage: od design-systems import-shadcn <reference>');
     process.exit(2);
   }
-  const craftApplies =
-    typeof flags.craft === 'string'
-      ? flags.craft.split(',').map((slug) => slug.trim().toLowerCase()).filter(Boolean)
-      : undefined;
-  const body = {
-    reference,
-    ...(typeof flags.name === 'string' ? { name: flags.name } : {}),
-    ...(typeof flags['import-mode'] === 'string' ? { importMode: flags['import-mode'] } : {}),
-    ...(craftApplies && craftApplies.length > 0 ? { craftApplies } : {}),
-  };
-  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
-  const resp = await fetch(`${base}/api/design-systems/import/shadcn`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) return structuredHttpFailure(resp);
-  const data = await resp.json();
-  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-  const imported = data.designSystem ?? data;
-  console.log(`Imported ${imported.id ?? '(unknown id)'}${imported.title ? ` -> ${imported.title}` : ''}`);
+  const body = designSystemImportRequestBody(flags, { reference });
+  return postDesignSystemImport(flags, '/api/design-systems/import/shadcn', body);
 }
 
 // od design-systems rename <id> --title <new-title> [--json]

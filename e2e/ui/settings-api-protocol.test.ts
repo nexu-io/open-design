@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const MODEL_POPOVER_SELECTOR = '.model-select-searchable__popover';
 
@@ -18,21 +19,13 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
-  await waitForLoadingToClear(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  return dialog;
+  return openSettingsDialog(page);
 }
 
 async function openExecutionSettings(
@@ -65,6 +58,22 @@ function modelCombobox(scope: Page | Locator) {
   return scope.getByRole('combobox', { name: 'Model', exact: true });
 }
 
+function providerPresetCombobox(scope: Page | Locator) {
+  return scope.getByLabel(/Gateway preset|Quick fill provider/i);
+}
+
+async function selectComboboxOption(
+  page: Page,
+  combobox: Locator,
+  optionName: RegExp | string,
+  popoverSelector: string,
+) {
+  await combobox.click();
+  const popover = page.locator(popoverSelector).last();
+  await expect(popover).toBeVisible();
+  await popover.getByRole('option', { name: optionName }).click();
+}
+
 async function expectModelComboboxText(
   scope: Page | Locator,
   pattern: RegExp | string,
@@ -94,9 +103,7 @@ async function openExecutionSettingsWithAgents(
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({ json: { agents } });
-  });
+  await routeAgents(page, agents);
 
   await gotoEntryHome(page);
   await openSettingsDialogFromEntry(page);
@@ -172,7 +179,7 @@ test('[P1] legacy custom provider preserves custom baseUrl and model when switch
   await expect(customModelInput).toHaveValue('my-custom-model');
 });
 
-test('[P0] BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
+test('[P0] @critical BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
@@ -193,13 +200,8 @@ test('[P0] BYOK quick fill provider updates fields and saved settings persist af
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
-  const providerPicker = dialog.getByLabel('Quick fill provider');
-  const deepSeekValue = await providerPicker.locator('option').evaluateAll((options) => {
-    const match = options.find((option) => /deepseek/i.test((option as HTMLOptionElement).label));
-    return match ? (match as HTMLOptionElement).value : null;
-  });
-  expect(deepSeekValue).toBeTruthy();
-  await providerPicker.selectOption(deepSeekValue!);
+  const providerPicker = providerPresetCombobox(dialog);
+  await selectComboboxOption(page, providerPicker, /DeepSeek — OpenAI/i, '[data-testid="settings-byok-provider-preset-popover"]');
   await expectModelComboboxText(dialog, /deepseek-chat/i);
   await expect(dialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
 
@@ -235,7 +237,7 @@ test('[P0] BYOK quick fill provider updates fields and saved settings persist af
   await openSettingsDialogFromEntry(page);
   const reopenedDialog = page.getByRole('dialog');
   await expect(reopenedDialog.getByRole('tab', { name: 'OpenAI', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(reopenedDialog.getByLabel('Quick fill provider')).toHaveValue(deepSeekValue!);
+  await expect(providerPresetCombobox(reopenedDialog)).toContainText(/DeepSeek — OpenAI/i);
   await expectModelComboboxText(reopenedDialog, /deepseek-chat/i);
   await expect(reopenedDialog.getByLabel('Base URL')).toHaveValue('https://api.deepseek.com');
   await expect(reopenedDialog.getByLabel('API key')).toHaveValue('sk-openai-test');
@@ -268,7 +270,7 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
 
   const baseUrlInput = dialog.getByLabel('Base URL');
   await baseUrlInput.fill('http://10.0.0.5:11434/v1');
-  await expect(dialog.locator('#settings-base-url-error')).toContainText('valid public');
+  await expect(dialog.locator('#settings-base-url-error')).toContainText(/public http:\/\/ or https:\/\//i);
 
   await baseUrlInput.fill('http://localhost:11434/v1');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
@@ -357,7 +359,7 @@ test('[P0] BYOK auto-loads provider models and reuses cached results for the sam
 });
 
 
-test('[P0] BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
+test('[P0] @critical BYOK fetched models are searchable inside the Settings model dropdown', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -415,10 +417,212 @@ test('[P0] BYOK fetched models are searchable inside the Settings model dropdown
   await expect(search).toBeVisible();
   await search.fill('mm-nightly');
   await expect(popover.getByRole('option', { name: 'MM Nightly Model (mm-nightly-model)' })).toBeVisible();
-  await expect(popover.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
+  await expect(popover.getByRole('option', { name: 'BB Nightly Model (bb-nightly-model)' })).toHaveCount(0);
 });
 
-test('[P0] saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+test('[P1] BYOK model fetch failure keeps the current model and recovers after key update', async ({ page }) => {
+  const providerModelRequests: Array<Record<string, unknown>> = [];
+  await page.route('**/api/provider/models', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    providerModelRequests.push(payload);
+    if (providerModelRequests.length === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'provider temporarily unavailable' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 12,
+        models: [
+          { id: 'retry-nightly-model', label: 'Retry Nightly Model' },
+          { id: 'stable-nightly-model', label: 'Stable Nightly Model' },
+        ],
+      }),
+    });
+  });
+
+  await openExecutionSettings(page, {
+    mode: 'api',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  });
+
+  const dialog = page.getByRole('dialog');
+  const modelSelect = modelCombobox(dialog);
+  await dialog.getByLabel('API key').fill('sk-openai-test');
+  await dialog.getByLabel('API key').blur();
+
+  await expect(dialog.getByText(/Could not fetch models: provider temporarily unavailable/i)).toBeVisible();
+  await expectModelComboboxText(dialog, /gpt-4o/i);
+  await expect.poll(() => providerModelRequests.length).toBe(1);
+
+  await dialog.getByLabel('API key').fill('sk-openai-retry');
+  await dialog.getByLabel('API key').blur();
+  await expect(dialog.getByText('Loaded 2 models from your account.')).toBeVisible();
+  await expect.poll(() => providerModelRequests.length).toBe(2);
+
+  await modelSelect.click();
+  await page.locator(MODEL_POPOVER_SELECTOR).last().getByRole('option', { name: 'Retry Nightly Model (retry-nightly-model)' }).click();
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({
+    model: 'retry-nightly-model',
+  });
+});
+
+test('[P1] Settings autosave failure surfaces an error instead of reporting saved changes', async ({ page }) => {
+  const config = {
+    mode: 'api',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  const putBodies: Array<Record<string, unknown>> = [];
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config } });
+      return;
+    }
+    if (route.request().method() === 'PUT') {
+      putBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'daemon unavailable' }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Base URL').fill('https://proxy.example.com/v1');
+  await dialog.getByLabel('Base URL').blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(0);
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toBeVisible();
+  await expect(dialog.getByText('All changes saved')).toHaveCount(0);
+});
+
+test('[P1] Settings autosave recovers after a later successful daemon sync', async ({ page }) => {
+  const config = {
+    mode: 'api',
+    apiKey: 'sk-openai-test',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: null,
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+  };
+  const putBodies: Array<Record<string, unknown>> = [];
+  let daemonSyncRecovered = false;
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: config },
+  );
+
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config } });
+      return;
+    }
+    if (route.request().method() === 'PUT') {
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      putBodies.push(payload);
+      if (!daemonSyncRecovered) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'daemon unavailable' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: payload }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+  await openSettingsDialogFromEntry(page);
+
+  const dialog = page.getByRole('dialog');
+  const baseUrl = dialog.getByLabel('Base URL');
+  await baseUrl.fill('https://proxy.example.com/v1');
+  await baseUrl.blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(0);
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toBeVisible();
+  const failureRequestCount = putBodies.length;
+
+  daemonSyncRecovered = true;
+  await baseUrl.fill('https://proxy-recovered.example.com/v1');
+  await baseUrl.blur();
+
+  await expect.poll(() => putBodies.length).toBeGreaterThan(failureRequestCount);
+  await expect(dialog.getByText('All changes saved')).toBeVisible();
+  await expect(dialog.getByText("Couldn’t save changes. The local daemon may be offline.")).toHaveCount(0);
+});
+
+test('[P0] @critical saving Local CLI updates the entry status pill with the selected agent', async ({ page }) => {
+  test.setTimeout(60_000);
   await openExecutionSettingsWithAgents(
     page,
     {
@@ -460,7 +664,9 @@ test('[P0] saving Local CLI updates the entry status pill with the selected agen
   const dialog = page.getByRole('dialog');
 
   await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
-  await dialog.getByRole('button', { name: /Codex CLI/i }).click();
+  const codexAgent = dialog.getByTestId('settings-agent-select-codex');
+  await expect(codexAgent).toBeVisible();
+  await codexAgent.click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
     agentId: 'codex',

@@ -1,0 +1,37 @@
+{
+  "id": "frame-light-leak-cinema",
+  "surface": "hyperframes",
+  "title": "Light-Leak Cinematic Frame",
+  "summary": "Film light leaks, grain, 16:9 letterbox, and large serif type for cinematic openings or chapter cards.",
+  "category": "Ambient",
+  "tags": [
+    "cinema",
+    "light-leak",
+    "film",
+    "35mm",
+    "grain",
+    "lens-flare"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Cinematic intro",
+    "Documentary cold open",
+    "Mood / b-roll"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-light-leak-cinema",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

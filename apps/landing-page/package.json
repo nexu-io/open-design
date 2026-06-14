@@ -1,6 +1,6 @@
 {
   "name": "@open-design/landing-page",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "build:static": "astro build && tsx scripts/copy-example-html.ts",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "astro check"
   },
   "dependencies": {
@@ -19,11 +20,14 @@
     "@fontsource-variable/jetbrains-mono": "5.2.8",
     "@fontsource-variable/playfair-display": "5.2.8",
     "astro": "6.3.5",
+    "cobe": "2.0.1",
+    "matter-js": "0.20.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.9",
+    "@types/matter-js": "0.19.8",
     "@types/node": "20.19.39",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",

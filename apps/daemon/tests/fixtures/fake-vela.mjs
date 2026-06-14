@@ -289,6 +289,9 @@ function loginAndExit() {
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL}\n`);
     exit(1);
   }
+  if (env.FAKE_VELA_ENV_DUMP_PATH) {
+    writeFileSync(env.FAKE_VELA_ENV_DUMP_PATH, JSON.stringify(env, null, 2), 'utf8');
+  }
   const profile = (env.VELA_PROFILE || 'prod').trim() || 'prod';
   const allowed = new Set(['prod', 'test', 'local']);
   if (!allowed.has(profile)) {

@@ -410,4 +410,47 @@ describe('chat assistant feedback', () => {
 
     expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
   });
+
+  it('collects feedback on a failed assistant turn', () => {
+    renderChatPane({
+      messages: [
+        completedAssistant({
+          content: '',
+          runStatus: 'failed',
+          events: [{ kind: 'status', label: 'error', detail: 'boom-401' }],
+        }),
+      ],
+    });
+
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+  });
+
+  it('collects feedback on a canceled assistant turn', () => {
+    renderChatPane({
+      messages: [
+        completedAssistant({
+          content: 'Partial answer',
+          runStatus: 'canceled',
+        }),
+      ],
+    });
+
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
+  });
+
+  it('does not ask for feedback on a queued turn that has not started', () => {
+    renderChatPane({
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          createdAt: 1_700_000_000_000,
+          runStatus: 'queued',
+        },
+      ],
+    });
+
+    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+  });
 });

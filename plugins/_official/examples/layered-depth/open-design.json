@@ -1,0 +1,122 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-layered-depth",
+  "title": "Layered Depth — Qelora Architecture Studio",
+  "title_i18n": {
+    "zh-CN": "层叠深度 — Qelora 建筑事务所落地页",
+    "zh-TW": "層疊深度 — Qelora 建築事務所落地頁",
+    "ja": "Layered Depth — Qelora 建築スタジオ",
+    "ko": "Layered Depth — Qelora 건축 스튜디오",
+    "de": "Layered Depth — Qelora Architekturstudio",
+    "fr": "Layered Depth — Studio d'architecture Qelora",
+    "ru": "Layered Depth — архитектурная студия Qelora",
+    "es": "Layered Depth — Estudio de arquitectura Qelora",
+    "pt-BR": "Layered Depth — Estúdio de arquitetura Qelora",
+    "it": "Layered Depth — Studio di architettura Qelora",
+    "vi": "Layered Depth — Studio kiến trúc Qelora",
+    "pl": "Layered Depth — Studio architektoniczne Qelora",
+    "id": "Layered Depth — Studio Arsitektur Qelora",
+    "nl": "Layered Depth — Architectuurstudio Qelora",
+    "ar": "Layered Depth — استوديو Qelora المعماري",
+    "tr": "Layered Depth — Qelora Mimarlık Stüdyosu",
+    "uk": "Layered Depth — архітектурна студія Qelora",
+    "en": "Layered Depth — Qelora Architecture Studio"
+  },
+  "version": "0.1.0",
+  "description": "Cinematic layered-parallax landing page for an architecture studio: fullscreen background video, a giant center brand wordmark behind a parallax sculpture slab, an animated bird-video state machine, frosted-glass nav pills and info panels, and a second full-viewport video section with a centered editorial headline.",
+  "description_i18n": {
+    "zh-CN": "电影感层叠视差建筑事务所落地页：全屏背景视频、视差雕塑石板后的巨型品牌字标、飞鸟视频状态机、磨砂玻璃导航胶囊与信息面板，以及带居中编排标题的第二屏全屏视频区。",
+    "zh-TW": "電影感層疊視差建築事務所落地頁：全螢幕背景影片、視差雕塑石板後的巨型品牌字標、飛鳥影片狀態機、磨砂玻璃導覽膠囊與資訊面板，以及帶置中編排標題的第二屏全螢幕影片區。",
+    "ja": "建築スタジオ向けの映画的なレイヤード・パララックス・ランディングページ。全画面の背景動画、パララックスする彫刻のスラブの後ろに置かれた巨大なブランドのワードマーク、鳥のアニメーション動画のステートマシン、すりガラス調のナビピルと情報パネル、そして中央寄せのエディトリアル見出しを備えた2つ目のフルビューポート動画セクションで構成されます。",
+    "ko": "건축 스튜디오를 위한 영화적인 레이어드 패럴랙스 랜딩 페이지: 전체 화면 배경 영상, 패럴랙스 조각 석판 뒤의 거대한 브랜드 워드마크, 새 영상 애니메이션 상태 기계, 서리 유리 느낌의 내비게이션 알약과 정보 패널, 그리고 가운데 정렬된 에디토리얼 헤드라인을 갖춘 두 번째 전체 화면 영상 섹션으로 구성됩니다.",
+    "de": "Cineastische, geschichtete Parallax-Landingpage für ein Architekturstudio: Vollbild-Hintergrundvideo, eine riesige zentrale Marken-Wortmarke hinter einer Parallax-Skulpturplatte, eine animierte Vogel-Video-Zustandsmaschine, Milchglas-Nav-Pills und Info-Panels sowie ein zweiter Vollbild-Videoabschnitt mit zentrierter Editorial-Überschrift.",
+    "fr": "Landing parallaxe en couches et cinématique pour un studio d'architecture : vidéo de fond plein écran, un immense logotype de marque centré derrière une dalle de sculpture en parallaxe, une machine à états de vidéos d'oiseaux animées, des pilules de navigation et des panneaux d'infos en verre dépoli, et une seconde section vidéo plein écran avec un titre éditorial centré.",
+    "ru": "Кинематографичный многослойный параллакс-лендинг для архитектурной студии: полноэкранное фоновое видео, гигантский центральный логотип-надпись бренда позади параллакс-плиты со скульптурой, конечный автомат анимированных видео с птицей, навигационные «таблетки» и информационные панели из матового стекла, а также второй полноэкранный видеоблок с центрированным редакционным заголовком.",
+    "es": "Landing parallax por capas y cinematográfica para un estudio de arquitectura: vídeo de fondo a pantalla completa, un enorme logotipo de marca centrado detrás de una losa escultórica en parallax, una máquina de estados de vídeos de pájaros animados, píldoras de navegación y paneles de información en vidrio esmerilado, y una segunda sección de vídeo a pantalla completa con un titular editorial centrado.",
+    "pt-BR": "Landing parallax em camadas e cinematográfica para um estúdio de arquitetura: vídeo de fundo em tela cheia, um enorme logotipo de marca centralizado atrás de uma laje escultórica em parallax, uma máquina de estados de vídeos de pássaros animados, pílulas de navegação e painéis de informação em vidro fosco, e uma segunda seção de vídeo em tela cheia com um título editorial centralizado.",
+    "it": "Landing parallax a livelli e cinematografica per uno studio di architettura: video di sfondo a schermo intero, un enorme wordmark del brand centrato dietro una lastra scultorea in parallax, una macchina a stati di video di uccelli animati, pillole di navigazione e pannelli informativi in vetro smerigliato e una seconda sezione video a schermo intero con un titolo editoriale centrato.",
+    "vi": "Trang đích parallax nhiều lớp đậm chất điện ảnh cho một studio kiến trúc: video nền toàn màn hình, một wordmark thương hiệu khổng lồ ở giữa phía sau một phiến điêu khắc chuyển động parallax, một máy trạng thái video chim hoạt họa, các viên điều hướng và bảng thông tin bằng kính mờ, cùng một phần video toàn màn hình thứ hai với tiêu đề editorial căn giữa.",
+    "pl": "Filmowy, warstwowy landing z efektem parallax dla studia architektonicznego: pełnoekranowe wideo w tle, gigantyczny, wyśrodkowany logotyp marki za parallaksową rzeźbiarską płytą, maszyna stanów animowanych wideo z ptakiem, nawigacyjne pigułki i panele informacyjne z mlecznego szkła oraz druga pełnoekranowa sekcja wideo z wyśrodkowanym editorialowym nagłówkiem.",
+    "id": "Landing parallax berlapis bernuansa sinematik untuk studio arsitektur: video latar layar penuh, wordmark merek raksasa di tengah di belakang lempeng pahatan parallax, mesin status video burung beranimasi, pil navigasi dan panel info kaca buram, serta bagian video layar penuh kedua dengan judul editorial di tengah.",
+    "nl": "Cinematische, gelaagde parallax-landingpagina voor een architectuurstudio: fullscreen achtergrondvideo, een gigantisch gecentreerd merk-woordmerk achter een parallax-sculptuurplaat, een geanimeerde vogelvideo-toestandsmachine, matglazen navigatiepills en infopanelen, en een tweede fullscreen videosectie met een gecentreerde editorial-kop.",
+    "ar": "صفحة هبوط سينمائية متعددة الطبقات بتأثير parallax لاستوديو معماري: فيديو خلفية بملء الشاشة، وعلامة لفظية ضخمة للعلامة التجارية في المنتصف خلف لوح نحت بتأثير parallax، وآلة حالات لمقاطع فيديو طيور متحركة، وكبسولات تنقّل ولوحات معلومات بزجاج مصنفر، وقسم فيديو ثانٍ بملء الشاشة مع عنوان تحريري في المنتصف.",
+    "tr": "Bir mimarlık stüdyosu için sinematik, katmanlı parallax açılış sayfası: tam ekran arka plan videosu, parallax bir heykel levhasının arkasında devasa merkezi bir marka kelime işareti, animasyonlu kuş videosu durum makinesi, buzlu cam gezinme hapları ve bilgi panelleri ve ortalanmış editoryal başlıklı ikinci bir tam ekran video bölümü.",
+    "uk": "Кінематографічний багатошаровий параллакс-лендинг для архітектурної студії: повноекранне фонове відео, гігантський центральний логотип-напис бренду позаду параллакс-плити зі скульптурою, скінченний автомат анімованих відео з птахом, навігаційні «пігулки» та інформаційні панелі з матового скла, а також друга повноекранна відеосекція з центрованим редакційним заголовком.",
+    "en": "Cinematic layered-parallax landing page for an architecture studio: fullscreen background video, a giant center brand wordmark behind a parallax sculpture slab, an animated bird-video state machine, frosted-glass nav pills and info panels, and a second full-viewport video section with a centered editorial headline."
+  },
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Eli"
+  },
+  "homepage": "https://motionsites.ai/sections",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "architecture",
+    "parallax",
+    "landing-page",
+    "video"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a React + Vite + TypeScript + Tailwind CSS landing page for an architecture studio called \"Qelora\". The page has exactly two sections: a Hero and a Section 2. The entire site uses inline styles (no Tailwind utility classes in JSX -- Tailwind is only used for base reset). Use only `react`, `react-dom`, and `lucide-react` as dependencies (icons are all inline SVGs here, lucide is not actually used in this page).\n\n---\n\nFONTS\n\nLoad these three custom fonts in `index.html` `<head>`:\n`<link href=\"https://db.onlinewebfonts.com/c/076f8c5b3b67616658dd1e4e9bac62ec?family=Zimula+Trial+Med\" rel=\"stylesheet\"><link href=\"https://db.onlinewebfonts.com/c/08d8ca53f66ab5b48659912fa0136b78?family=Zimula+Trial+Bd\" rel=\"stylesheet\">`\n\nAlso import in `index.css`:`@import url('https://db.onlinewebfonts.com/c/46024824a3dd3309c3a7f46f4f1283ba?family=Zimula+Trial+Reg');`\n\nFont usage:\n- Body / default: `'Zimula Trial Med', sans-serif`\n- Bold / logo / hero text: `'Zimula Trial Bd', sans-serif`\n- The `Reg` import is available but Med is the primary weight used everywhere\n\n---\n\nGLOBAL CSS (`index.css`)\n`@import url('https://db.onlinewebfonts.com/c/46024824a3dd3309c3a7f46f4f1283ba?family=Zimula+Trial+Reg');@tailwind base;@tailwind components;@tailwind utilities;*, *::before, *::after {  box-sizing: border-box;  margin: 0;  padding: 0;}html {  scroll-behavior: smooth;}body {  font-family: 'Zimula Trial Med', sans-serif;  background: #0e0c0a;  overflow-x: hidden;}::-webkit-scrollbar { width: 6px; }::-webkit-scrollbar-track { background: #0e0c0a; }::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }`\n\n---\n\nCOLOR PALETTE\n\n- Dark background: `#0e0c0a`\n- Primary text: `#241f21`, `#282425`, `#2a2420`\n- White: `#fff`\n- Dark accent: `#100e0c`\n- Warm transparent overlays: `rgba(235, 230, 218, 0.12)`, `rgba(242, 238, 230, 0.38)`\n- Frosted glass backgrounds: `rgba(248,245,240,0.72)`, `rgba(248,245,240,0.88)`, `rgba(248,245,240,0.92)`, `rgba(248,245,240,0.96)`\n\n---\n\nASSET URLs (Cloudinary, not CloudFront)\n\nVideos:\n- Background video (Hero): `https://plugin-assets.open-design.ai/plugins/layered-depth/bg-video_xsmysw-f9ba1c.mp4`\n- Bird enter animation: `https://plugin-assets.open-design.ai/plugins/layered-depth/bird-entrada_e72qt7-102269.webm`\n- Bird idle 1: `https://plugin-assets.open-design.ai/plugins/layered-depth/bird-idle_fzjami-a7d50b.webm`\n- Bird idle 2: `https://plugin-assets.open-design.ai/plugins/layered-depth/bird-idle2_rajmgo-a2bfbb.webm`\n- Bird leave animation: `https://plugin-assets.open-design.ai/plugins/layered-depth/bird-saida_ifroz1-4ad3cb.webm`\n- Background video (Section 2): `https://plugin-assets.open-design.ai/plugins/layered-depth/bg-2-video_sgbpqt-cdc7da.mp4`\n\nImages:\n- Q logo (unused but declared): `https://plugin-assets.open-design.ai/plugins/layered-depth/q-logo_isvugc-be3611.webp`\n- Center sculpture/slab: `https://plugin-assets.open-design.ai/plugins/layered-depth/slab_v1_kb4vqk-eb36b8.webp`\n- CTA card photo (Pexels): `https://plugin-assets.open-design.ai/plugins/layered-depth/pexels-photo-3184465-a44809.webp`\n\n---\n\nAPP STRUCTURE\n`src/  main.tsx      -> StrictMode, renders   App.tsx       ->  then , no routing  Hero.tsx      -> Hero section component  Section2.tsx  -> Second section component  index.css     -> Global styles`\n\n---\n\nSECTION 1: HERO (`Hero.tsx`)\n\nContainer: `position: relative`, `width: 100%`, `minHeight: 100vh`, `overflow: visible`, `fontFamily: 'Zimula Trial Med', sans-serif`.\n\nResponsive breakpoint: `isMobile = window.innerWidth < 768`, checked on mount and resize.\n\nLayer 1 -- Background Video (z-index: 0)\n- `` with `autoPlay muted loop playsInline`\n- `position: absolute`, `inset: 0`, `width: 100%`, `height: 100vh`, `objectFit: cover`\n- Source: `BG_VIDEO` URL\n\n## Layer 2 -- Warm Overlay (z-index: 1)\n\n- A div covering the hero with `background: rgba(235, 230, 218, 0.12)`, `height: 100vh`, `pointerEvents: none`\n\n## Layer 3 -- Bird Animation System (z-index: 8)\n\n- Container: `position: absolute`, `top: 0`, `left: 0`, `width: 100%`, `height: 100vh`, `pointerEvents: none`, `aria-hidden`\n- Contains 4 `` elements (enter, idle1, idle2, leave), each toggled visible/hidden via `display` property\n- Desktop: Each video is `position: absolute`, `inset: 0`, `width: 100%`, `height: 100%`, `objectFit: cover`\n- Mobile: Each video is `position: absolute`, `top: 50%`, `left: 0`, `transform: translateY(-50%)`, `width: 100%`, `height: auto` (full width, auto height, vertically centered)\n- State machine: Type `'enter' | 'idle1' | 'idle2' | 'leave' | 'hidden'`\n- On page load: play `enter` video\n- When `enter` ends: transition to `idle1`\n- When `idle1` ends: transition to `idle2`\n- When `idle2` ends: transition back to `idle1` (infinite loop)\n- On scroll down (past 10px threshold): pause all idle/enter videos, reset their `currentTime` to 0, play `leave` video\n- On scroll back to top (below 10px): pause leave video, reset, play `enter` video again\n- Uses both React state and refs (`birdStateRef`) to avoid stale closures in scroll handlers\n- All videos are preloaded with `.load()` on mount\n- The `playVideo` helper sets `currentTime = 0`, checks `readyState >= 2`, then plays (or waits for `canplay` event)\n\n## Layer 4 -- Center Brand Text \"Qelora\" (z-index: 5)\n\n- Absolutely positioned container filling `100vh`, `display: flex`, `alignItems: center`, `justifyContent: center`, `pointerEvents: none`\n- Text: `\"Qelora\"` in `'Zimula Trial Bd', sans-serif`\n- Font size: mobile `26vw`, desktop `22vw`\n- `letterSpacing: -0.05em`, `color: #241f21`, `lineHeight: 1`\n- `marginBottom`: mobile `8vh`, desktop `12vh`\n\n## Layer 5 -- Sculpture Image (z-index: 5)\n\n- `` with `position: absolute`, `top: 50%`, `left: 50%`\n- `transform: translateX(-50%) translateY(${-heroScroll  0.3}px)` -- parallax that moves UP as user scrolls down\n- Width: mobile `220vw`, desktop `160vw`; `height: auto`\n- `pointerEvents: none`, `willChange: transform`\n\n## Layer 6 -- Fixed Navbar (z-index: 100)\n\n- `position: fixed`, `top: 0`, full width\n- Padding: mobile `16px 20px`, desktop `20px 36px`\n- Left: Brand name \"Qelora\" with registered trademark superscript. Font: `'Zimula Trial Bd'`, size: mobile `20px`, desktop `24px`, `letterSpacing: -0.03em`, `color: #241f21`. The `(R)` sup has `fontSize: 0.4em`, `verticalAlign: super`\n- Right (desktop): `NavPills` component -- a row of pill buttons for `['Projects', 'Studio', 'Responsibility', 'Archive']` plus an `EN` language selector\n- Each pill: `background: rgba(248,245,240,0.92)`, `borderRadius: 12px`, `padding: 13px 22px 8px`, `height: 40px`, `fontSize: 13px`, `textTransform: uppercase`, `letterSpacing: 0.07em`, `color: #241f21`\n- Active pill has `fontWeight: 700` and a 3px round dot at `bottom: 3px`, centered\n- Non-active: `fontWeight: 500`\n- Language pill: separate rounded capsule (`borderRadius: 100px`), `padding: 8px 14px`, `background: rgba(248,245,240,0.88)`, `backdropFilter: blur(12px)`, `boxShadow: 0 2px 20px rgba(0,0,0,0.1)`, contains \"EN\" text and a chevron-down SVG\n- Right (mobile): Hamburger button, `42x42px`, `borderRadius: 100px`, same frosted glass style. Shows X icon when open, 3-line hamburger when closed\n\n## Layer 7 -- Mobile Dropdown Menu (z-index: 99)\n\n- `position: fixed`, `top: 70px`, `left: 16px`, `right: 16px`\n- `background: rgba(248,245,240,0.96)`, `backdropFilter: blur(16px)`, `borderRadius: 18px`, `padding: 8px`, `boxShadow: 0 8px 40px rgba(0,0,0,0.14)`\n- Each menu item: full-width button, `padding: 14px 20px`, `fontSize: 13px`, uppercase, `letterSpacing: 0.07em`, `borderBottom: 1px solid rgba(40,36,37,0.08)`\n- Bottom: EN language selector row\n\n## Layer 8 -- Bottom Panels (z-index: 20)\n\n- `bottom` is calculated as: `bottomOffset + heroScroll  0.5` where `bottomOffset` is 24px on mobile, 36px on desktop. This creates a parallax push-down effect as user scrolls.\n\nDesktop layout (side-by-side):\n\n- Bottom-left panel: `position: absolute`, `left: 36px`, `borderRadius: 18px`, `padding: 22px 28px`, `maxWidth: 270px`\n- Headline: `\"Designing places\\nbeyond\\nwhat's expected\"` -- `fontSize: clamp(17px, 2vw, 24px)`, `lineHeight: 1.28`, `color: #282425`, `letterSpacing: -0.01em`\n- Below: 1px border-top divider (`rgba(40,36,37,0.2)`), then \"EXPLORE OUR APPROACH\" link with down-arrow SVG. `fontSize: 11px`, uppercase, `letterSpacing: 0.1em`\n\n- Bottom-right panel: `position: absolute`, `right: 36px`, `borderRadius: 18px`, `width: clamp(210px, 21vw, 290px)`, `height: 180px`, `overflow: hidden`\n- Background: Pexels photo covering the entire card\n- Dark gradient overlay: `linear-gradient(to bottom, rgba(16,14,12,0.55) 0%, transparent 60%)`\n- Top text: `\"Every lasting space begins\\nwith a quiet dialogue.\"` -- `color: #fff`, `fontSize: 13px`, `lineHeight: 1.35`\n- Bottom: inline flex with a white circle (envelope SVG icon, 36x36px, `borderRadius: 12px`) and a white \"START A PROJECT\" button (`fontSize: 11px`, uppercase, `letterSpacing: 0.07em`, `fontWeight: 700`, `borderRadius: 12px`, `height: 36px`)\n\nMobile layout (stacked):\n- Single flex column container, `left: 20px`, `right: 20px`, `gap: 12px`\n- Top card: Tagline panel with `background: rgba(248,245,240,0.72)`, `backdropFilter: blur(8px)`, `borderRadius: 16px`, `padding: 18px 20px`. Same text as desktop but single line: \"Designing places beyond what's expected\", `fontSize: 17px`. Same divider + \"Explore our approach\" link below.\n- Bottom card: CTA card, `borderRadius: 16px`, `height: 120px`. Same structure as desktop right panel but adapted for mobile (text `fontSize: 12px`, same button row).\n\n---\n\n## SECTION 2 (`Section2.tsx`)\n\nContainer: `position: relative`, `width: 100%`, `minHeight: 100vh`, `display: flex`, `flexDirection: column`, `alignItems: center`, `justifyContent: center`, `overflow: hidden`, `fontFamily: 'Zimula Trial Med', sans-serif`\n\n## Layer 1 -- Background Video (z-index: 0)\n\n- `` with `autoPlay muted loop playsInline`, `position: absolute`, `inset: 0`, `width: 100%`, `height: 100%`, `objectFit: cover`\n- Source: `BG_VIDEO_2` URL\n\n## Layer 2 -- Warm Overlay (z-index: 1)\n\n- `background: rgba(242, 238, 230, 0.38)`, `position: absolute`, `inset: 0`, `pointerEvents: none`\n\n## Layer 3 -- Center Headline (z-index: 2)\n\n- Absolutely positioned, `inset: 0`, flex centered, `pointerEvents: none`, `textAlign: center`, `padding: 0 24px`\n- Text: `\"What stands the\\ntest of time is all\\nthat guides the\\nwork.\"` using `\n` tags\n- `fontSize: clamp(32px, 5.5vw, 80px)`, `lineHeight: 1.18`, `color: #2a2420`, `maxWidth: 780px`, `letterSpacing: -0.025em`, `fontWeight: 400`\n\n## Layer 4 -- Bottom Element (z-index: 2)\n\n- `position: absolute`, `bottom: clamp(24px, 4vh, 48px)`, full width, flex column centered, `padding: 0 24px`\n- Vertical line: `width: 1px`, `height: 56px`, `background: rgba(42,36,32,0.25)`\n- Below (margin-top: 22px): flex column centered, `gap: 14px`\n- Map pin SVG: 24x28px outline pin icon, `stroke: #2a2420`, `strokeWidth: 1.4`\n- Subtext: `\"Civic bodies and private clients trust us to shape resilient communities and purposeful places.\"` -- `fontSize: clamp(11px, 1.4vw, 13px)`, `color: #2a2420`, `letterSpacing: 0.04em`, `lineHeight: 1.6`, `maxWidth: 340px`, `opacity: 0.75`\n\n---\n\n## KEY BEHAVIORS SUMMARY\n\n- Bird animation state machine: enter -> idle1 <-> idle2 loop; scroll triggers leave; scroll back triggers re-enter\n- Parallax effects: Sculpture image moves up with `translateY(-scrollY  0.3)`. Bottom panels push down with `bottom = offset + scrollY  0.5`\n- Responsive at 768px breakpoint: Nav collapses to hamburger, panels stack vertically, bird videos switch from cover-fill to width-100%/height-auto/vertically-centered, sculpture grows from 160vw to 220vw, brand text grows from 22vw to 26vw\n- All styling is inline -- no CSS classes in JSX, no Tailwind utility classes on elements\n- No third-party animation libraries -- all animations are native video playback + scroll-driven inline style changes via React state\n",
+        "zh-CN": "构建“层叠深度”建筑事务所（Qelora）落地页：全屏视频、视差雕塑石板、巨型品牌字标、飞鸟视频状态机、磨砂玻璃导航与信息面板，第二屏全屏视频与居中标题。完整规范以英文 query 为准（逐字执行），并以同目录 example.html 为保真锚点。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Layered Depth — Qelora Architecture Studio"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "network"
+    ]
+  }
+}
