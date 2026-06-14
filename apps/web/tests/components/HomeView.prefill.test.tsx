@@ -425,6 +425,11 @@ describe('HomeView prompt handoff', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     cleanup();
+    // The Home hero persists the typed prompt draft across unmount/remount
+    // (see #4270) so a test that types "X" in one case would otherwise
+    // rehydrate "X" on the next case's fresh mount. Clear localStorage
+    // between cases to keep each test anchored to a clean composer.
+    window.localStorage.clear();
   });
 
   it('consumes a plugin authoring handoff once and focuses the textarea', async () => {
