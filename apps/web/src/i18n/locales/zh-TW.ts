@@ -1281,6 +1281,7 @@ export const zhTW: Dict = {
   'designs.subYours': '我的設計',
   'designs.filterAria': '篩選專案',
   'designs.searchPlaceholder': '搜尋…',
+  'designs.refresh': '刷新',
   'designs.emptyNoProjects': '還沒有專案。',
   'designs.emptyNoMatch': '沒有符合的專案。',
   'designs.deleteTitle': '刪除專案',

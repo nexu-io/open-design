@@ -351,6 +351,7 @@ interface Props {
   // Design Systems tab; do not re-thread an onboarding renderer here.
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+	onProjectsRefresh?: () => void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => void;
@@ -443,6 +444,7 @@ export function EntryShell({
   onCreateDesignSystem,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
+  onProjectsRefresh,
   onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
@@ -820,6 +822,7 @@ export function EntryShell({
                     onDelete={onDeleteProject}
                     onRename={onRenameProject}
                     onNewProject={() => openNewProject()}
+                    onProjectsRefresh={onProjectsRefresh}
                   />
                 </div>
               )}

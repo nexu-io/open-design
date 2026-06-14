@@ -70,6 +70,7 @@ interface Props {
 	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
 	onNewProject?: () => void;
+	onProjectsRefresh?: () => void;
 }
 
 export function DesignsTab({
@@ -81,6 +82,7 @@ export function DesignsTab({
 	onDelete,
 	onRename,
 	onNewProject,
+	onProjectsRefresh,
 }: Props) {
 	const t = useT();
 	const analytics = useAnalytics();
@@ -451,6 +453,16 @@ export function DesignsTab({
 					</div>
 				</div>
 				<div className="toolbar-right">
+					{onProjectsRefresh ? (
+						<button
+							type="button"
+							className="icon-btn toolbar-refresh-btn"
+							title={t("designs.refresh")}
+							onClick={() => onProjectsRefresh()}
+						>
+							<Icon name="refresh" size={15} />
+						</button>
+					) : null}
 					<div className="toolbar-search">
 						<span className="search-icon" aria-hidden>
 							<Icon name="search" size={13} />

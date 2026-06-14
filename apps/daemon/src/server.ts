@@ -1596,6 +1596,29 @@ const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
 });
 const SANDBOX_RUNTIME = resolveSandboxRuntimeConfig(SANDBOX_MODE_ENABLED, RUNTIME_DATA_DIR);
 ensureSandboxRuntimeDirs(SANDBOX_RUNTIME);
+/**
+ * Write the daemon's HTTP URL to a known file so the od-mcp server and
+ * other tooling can auto-discover the daemon without env-var plumbing.
+ * The file is written synchronously before the server enters its event
+ * loop, guaranteeing it exists when any IPC-based launcher reads it.
+ */
+function writeDaemonUrlFile(dataDir: string, url: string): void {
+  try {
+    const dir = path.join(dataDir, 'tmp');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'daemon-url.json'),
+      JSON.stringify({ url }) + '\n',
+      'utf-8',
+    );
+  } catch (err) {
+    // Non-fatal: discovery falls back to env var and default port.
+    console.warn(
+      "[od] could not write daemon-url.json:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 const PLUGIN_LOCKFILE_PATH = path.join(RUNTIME_DATA_DIR, 'od-plugin-lock.json');
 // Canonical (realpath-resolved) form of RUNTIME_DATA_DIR for the few callers
 // that compare it against a user-supplied realpath() result. On macOS, /var
@@ -15650,6 +15673,9 @@ export async function startServer({
           console.log(`[od] daemon listening on ${url}`);
         }
         daemonUrl = url;
+        // Write the daemon URL to a known file so the od-mcp server and
+        // other tooling can discover the daemon without env-var plumbing.
+        writeDaemonUrlFile(RUNTIME_DATA_DIR, url);
         resolve(returnServer ? { url, server, shutdown: shutdownDaemonRuns } : url);
       });
     } catch (error) {
