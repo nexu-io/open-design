@@ -111,7 +111,7 @@ export const hu: Dict = {
   'settings.onboardingStepNewsletter': 'Stay updated',
   'settings.onboardingNewsletterTitle': 'Stay in the loop',
   'settings.onboardingNewsletterBody': 'Get product updates, new templates, design-system drops, and ambassador work in your inbox. Optional — you can skip this.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Hivatalos',

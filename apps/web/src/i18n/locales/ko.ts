@@ -111,7 +111,7 @@ export const ko: Dict = {
   'settings.onboardingStepNewsletter': '업데이트 받기',
   'settings.onboardingNewsletterTitle': '소식 받아보기',
   'settings.onboardingNewsletterBody': '제품 업데이트, 새 템플릿, 디자인 시스템, 앰배서더 활동을 메일로 받아보세요. 선택 사항이며 건너뛸 수 있습니다.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': '공식',

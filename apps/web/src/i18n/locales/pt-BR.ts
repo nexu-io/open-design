@@ -111,7 +111,7 @@ export const ptBR: Dict = {
   'settings.onboardingStepNewsletter': 'Fique por dentro',
   'settings.onboardingNewsletterTitle': 'Fique por dentro',
   'settings.onboardingNewsletterBody': 'Receba novidades do produto, novos templates, design systems e trabalho de embaixadores no seu e-mail. Opcional — você pode pular.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Oficial',

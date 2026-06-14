@@ -111,7 +111,7 @@ export const it: Dict = {
   'settings.onboardingStepNewsletter': 'Resta aggiornato',
   'settings.onboardingNewsletterTitle': 'Resta aggiornato',
   'settings.onboardingNewsletterBody': 'Ricevi novità di prodotto, nuovi template, design system e attività degli ambassador nella tua casella. Opzionale — puoi saltare.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Ufficiale',

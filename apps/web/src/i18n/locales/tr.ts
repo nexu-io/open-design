@@ -111,7 +111,7 @@ export const tr: Dict = {
   'settings.onboardingStepNewsletter': 'Güncel kalın',
   'settings.onboardingNewsletterTitle': 'Gelişmeleri kaçırmayın',
   'settings.onboardingNewsletterBody': 'Ürün güncellemelerini, yeni şablonları, tasarım sistemlerini ve elçi çalışmalarını gelen kutunuzda alın. İsteğe bağlı — atlayabilirsiniz.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Resmi',

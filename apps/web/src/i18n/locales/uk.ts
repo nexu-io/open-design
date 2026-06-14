@@ -111,7 +111,7 @@ export const uk: Dict = {
   'settings.onboardingStepNewsletter': 'Будьте в курсі',
   'settings.onboardingNewsletterTitle': 'Будьте в курсі',
   'settings.onboardingNewsletterBody': 'Отримуйте новини продукту, нові шаблони, дизайн-системи та роботу амбасадорів на пошту. Необов’язково — можна пропустити.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Офіційний',

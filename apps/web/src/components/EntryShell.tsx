@@ -95,7 +95,7 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import type { PluginUseAction } from './plugins-home/useActions';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
@@ -180,20 +180,41 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 // and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-// Newsletter signup endpoint. Lives on the marketing site (Cloudflare Pages
-// Function backed by KV), so this is a cross-origin POST from the desktop
-// client. Overridable at build time via NEXT_PUBLIC_NEWSLETTER_URL — e.g. point
-// it at a local `wrangler pages dev` instance during development.
-const NEWSLETTER_SUBSCRIBE_URL =
-  process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
-const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
   { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
   { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { id: 'glm-5.1', label: 'GLM 5.1' },
 ];
+
+type OnboardingGoalId =
+  | 'deck'
+  | 'landing'
+  | 'prototype'
+  | 'dashboard'
+  | 'marketing'
+  | 'design-system';
+
+type OnboardingMaterialKind = 'url' | 'upload' | 'prompt';
+
+type OnboardingGoal = {
+  id: OnboardingGoalId;
+  icon: IconName;
+  title: string;
+  body: string;
+  artifact: string;
+  starterScope: string;
+  styleHint: string;
+  delivery: string;
+  metadata: ProjectMetadata;
+};
+
+type OnboardingMaterialOption = {
+  id: OnboardingMaterialKind;
+  icon: IconName;
+  title: string;
+  body: string;
+};
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
@@ -273,6 +294,75 @@ function defaultPluginInputsForCreate(
   };
 }
 
+function goalProjectName(goal: OnboardingGoal, need: string, sourceUrl: string): string {
+  const sourceHost = (() => {
+    try {
+      return new URL(sourceUrl.trim()).hostname.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  })();
+  const words = need.trim().split(/\s+/).filter(Boolean).slice(0, 7).join(' ');
+  if (sourceHost) return `${goal.artifact} for ${sourceHost}`;
+  if (words) return words;
+  return goal.artifact;
+}
+
+function onboardingMaterialSummary(args: {
+  materialKind: OnboardingMaterialKind;
+  sourceUrl: string;
+  need: string;
+  stagedFiles: File[];
+}): string {
+  if (args.materialKind === 'url') {
+    return args.sourceUrl.trim() || 'Website URL to be added';
+  }
+  if (args.materialKind === 'upload') {
+    return args.stagedFiles.length > 0
+      ? args.stagedFiles.map((file) => file.name).join(', ')
+      : 'Files, screenshots, PPT, or PDF to be added';
+  }
+  return args.need.trim() || 'One sentence brief to be added';
+}
+
+function buildOnboardingPrompt(args: {
+  goal: OnboardingGoal;
+  materialKind: OnboardingMaterialKind;
+  sourceUrl: string;
+  need: string;
+  stagedFiles: File[];
+}): string {
+  const material =
+    args.materialKind === 'url'
+      ? `Website URL: ${args.sourceUrl.trim() || 'not provided'}`
+      : args.materialKind === 'upload'
+        ? `Uploaded files: ${
+            args.stagedFiles.length > 0
+              ? args.stagedFiles.map((file) => file.name).join(', ')
+              : 'not provided'
+          }`
+        : `Written request: ${args.need.trim() || 'not provided'}`;
+  const userNeed = args.need.trim();
+  return [
+    `Create a starter result for: ${args.goal.title}.`,
+    '',
+    'Use this onboarding brief:',
+    `- Target artifact: ${args.goal.artifact}`,
+    `- Starter scope: ${args.goal.starterScope}`,
+    `- Style direction: ${args.goal.styleHint}`,
+    `- Content source: ${material}`,
+    `- Delivery format: ${args.goal.delivery}`,
+    `- Design system or memory: ${
+      args.goal.id === 'design-system'
+        ? 'Create reusable brand/design-system foundations.'
+        : 'Use existing project memory or design-system context only if available; do not block on it.'
+    }`,
+    userNeed ? `- User request: ${userNeed}` : '',
+    '',
+    'Important: produce a concrete first version inside the starter scope instead of trying to complete an unlimited full project. Make it useful enough to inspect, edit, export, or extend.',
+  ].filter(Boolean).join('\n');
+}
+
 interface Props {
   skills: SkillSummary[];
   designTemplates: SkillSummary[];
@@ -344,11 +434,11 @@ interface Props {
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
   // NOTE: first-run onboarding intentionally no longer hosts guided
-  // design-system creation. The previous step-3 design-system surface was
-  // replaced by the newsletter step, so EntryShell deliberately does not
-  // accept a `renderDesignSystemCreation` renderer. Guided creation stays
-  // reachable from the standalone `design-system-create` route and the
-  // Design Systems tab; do not re-thread an onboarding renderer here.
+  // design-system creation as a separate embedded flow. The current path
+  // turns "Design system / brand guideline" into a normal starter brief,
+  // then generates the first result through AMR/CLI/BYOK like every other
+  // goal. Guided creation stays reachable from the standalone
+  // `design-system-create` route and the Design Systems tab.
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
@@ -672,6 +762,7 @@ export function EntryShell({
             providerModelsCache={activeProviderModelsCache}
             onProviderModelsCacheChange={activeSetProviderModelsCache}
             daemonLive={daemonLive}
+            defaultDesignSystemId={defaultDesignSystemId}
             onModeChange={onModeChange}
             onAgentChange={onAgentChange}
             onAgentModelChange={onAgentModelChange}
@@ -679,6 +770,8 @@ export function EntryShell({
             onApiModelChange={onApiModelChange}
             onConfigPersist={onConfigPersist}
             onRefreshAgents={onRefreshAgents}
+            onCreateProject={onCreateProject}
+            onComplete={onCompleteOnboarding}
             onFinish={finishOnboarding}
           />
         </main>
@@ -913,6 +1006,7 @@ function OnboardingView({
   agents,
   agentsLoading = false,
   daemonLive,
+  defaultDesignSystemId,
   onModeChange,
   onAgentChange,
   onAgentModelChange,
@@ -920,6 +1014,8 @@ function OnboardingView({
   onApiModelChange,
   onConfigPersist,
   onRefreshAgents,
+  onCreateProject,
+  onComplete,
   onFinish,
 }: {
   config: AppConfig;
@@ -928,6 +1024,7 @@ function OnboardingView({
   agents: AgentInfo[];
   agentsLoading?: boolean;
   daemonLive: boolean;
+  defaultDesignSystemId: string | null;
   onModeChange: (mode: ExecMode) => void;
   onAgentChange: (id: string) => void;
   onAgentModelChange: (
@@ -938,6 +1035,18 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
+  onCreateProject: (
+    input: CreateInput & {
+      pendingPrompt?: string;
+      pluginId?: string;
+      appliedPluginSnapshotId?: string;
+      pluginInputs?: Record<string, unknown>;
+      conversationMode?: ChatSessionMode;
+      autoSendFirstMessage?: boolean;
+      pendingFiles?: File[];
+    },
+  ) => Promise<boolean> | boolean | void;
+  onComplete: () => void;
   onFinish: () => void;
 }) {
   const t = useT();
@@ -954,9 +1063,16 @@ function OnboardingView({
   const [amrRefreshPending, setAmrRefreshPending] = useState(false);
   const [amrLoginPending, setAmrLoginPending] = useState(false);
   const [amrLoginCancelPending, setAmrLoginCancelPending] = useState(false);
-  const [newsletterSubmitting, setNewsletterSubmitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [amrLoginError, setAmrLoginError] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
+  const [goal, setGoal] = useState<OnboardingGoalId>('prototype');
+  const [materialKind, setMaterialKind] = useState<OnboardingMaterialKind>('prompt');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [need, setNeed] = useState('');
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [providerTestState, setProviderTestState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -979,25 +1095,6 @@ function OnboardingView({
     hasSharedProviderModelsCache
       ? onProviderModelsCacheChange!
       : setLocalProviderModelsCache;
-  const [profile, setProfile] = useState({
-    role: '',
-    orgSize: '',
-    useCase: [] as string[],
-    source: '',
-    email: '',
-  });
-  // Live mirror of `profile` so closures that fire faster than React
-  // commits (rapid dropdown picks, the Finish-setup click after the
-  // last onChange) read the latest selection instead of the value the
-  // closure captured at render-time. Multi-select use_case in
-  // particular needed this: two quick adds within one commit cycle
-  // both read `previous = new Set(profile.useCase = stale [])` and
-  // emitted on both — fine — but reading any cumulative summary off
-  // `profile` directly missed the second pick until the next commit.
-  const profileRef = useRef(profile);
-  useEffect(() => {
-    profileRef.current = profile;
-  }, [profile]);
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
   const amrLoginPollCancelledRef = useRef(false);
@@ -1120,14 +1217,10 @@ function OnboardingView({
     setAmrLoginCancelPending(false);
   }, [runtime]);
 
-  // Onboarding step exposure. Design-system intake used to live here
-  // as step 3, but it is temporarily removed from first-run
-  // onboarding and remains available from the app surfaces.
-  //
-  // We do NOT clear on unmount: route changes can remount the shell
-  // during first-run setup. Skip / Back / last-step Continue clear
-  // inline in their respective handlers below; abandoned sessions clear
-  // on sessionStorage tab close.
+  // Onboarding step exposure. First-run now optimizes for completing a
+  // starter artifact: goal -> material -> brief -> generation. About-you
+  // and newsletter prompts are intentionally deferred until after the
+  // first result, so no survey step blocks generation.
   const onboardingSessionIdRef = useRef<string>('');
   if (!onboardingSessionIdRef.current) {
     onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
@@ -1135,22 +1228,7 @@ function OnboardingView({
   useEffect(() => {
     const onboardingSessionId = onboardingSessionIdRef.current;
     if (!onboardingSessionId) return;
-    let area: TrackingOnboardingArea;
-    let stepIndex: TrackingOnboardingStepIndex;
-    let stepName: TrackingOnboardingStepName;
-    if (step === 0) {
-      area = 'runtime';
-      stepIndex = '1';
-      stepName = 'connect';
-    } else if (step === 1) {
-      area = 'about_you';
-      stepIndex = '2';
-      stepName = 'about_you';
-    } else {
-      area = 'newsletter';
-      stepIndex = '3';
-      stepName = 'newsletter';
-    }
+    const { area, stepIndex, stepName } = stepInfo(step);
     trackPageView(analytics.track, {
       page_name: 'onboarding',
       area,
@@ -1169,10 +1247,6 @@ function OnboardingView({
   // PR #2453 follow-up).
   const onboardingStartedAtRef = useRef<number>(Date.now());
   const lifecycleReportedRef = useRef(false);
-  // Guards `about_you_submit` to exactly one emit per onboarding session,
-  // independent of how many times the user crosses the About-you step via
-  // the clickable stepper or Back/Continue.
-  const aboutYouReportedRef = useRef(false);
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
@@ -1184,9 +1258,11 @@ function OnboardingView({
     stepIndex: TrackingOnboardingStepIndex;
     stepName: TrackingOnboardingStepName;
   } {
-    if (stepIdx === 0) return { area: 'runtime', stepIndex: '1', stepName: 'connect' };
-    if (stepIdx === 1) return { area: 'about_you', stepIndex: '2', stepName: 'about_you' };
-    return { area: 'newsletter', stepIndex: '3', stepName: 'newsletter' };
+    if (stepIdx === 0) return { area: 'goal', stepIndex: '1', stepName: 'goal' };
+    if (stepIdx === 1) return { area: 'source', stepIndex: '2', stepName: 'source' };
+    if (stepIdx === 2) return { area: 'brief', stepIndex: '3', stepName: 'brief' };
+    if (stepIdx === 3) return { area: 'runtime', stepIndex: '4', stepName: 'connect' };
+    return { area: 'generation_progress', stepIndex: 'progress', stepName: 'generation' };
   }
   function emitOnboardingClick(
     element: TrackingOnboardingClickElement,
@@ -1237,19 +1313,10 @@ function OnboardingView({
     // snapshot (none do today).
     const hasRequest = snapshot
       ? snapshot.sourceCount > 0 || snapshot.hasBrandDescription
-      : false;
-    const sourceCount = snapshot ? snapshot.sourceCount : 0;
-    // Read from `profileRef` for the same reason `emitAboutYouSubmit`
-    // does: a Finish-setup click may fire before React commits the
-    // latest dropdown pick, leaving `profile` (closure-captured at
-    // render time) one tick behind.
-    const liveProfile = profileRef.current;
-    const hasAboutYou = Boolean(
-      liveProfile.role
-        || liveProfile.orgSize
-        || liveProfile.useCase.length > 0
-        || liveProfile.source,
-    );
+      : selectedGoal.id === 'design-system';
+    const starterSourceCount =
+      stagedFiles.length > 0 ? stagedFiles.length : (sourceUrl.trim() || need.trim()) ? 1 : 0;
+    const sourceCount = snapshot ? snapshot.sourceCount : starterSourceCount;
     trackOnboardingCompleteResult(analytics.track, {
       page_name: 'onboarding',
       area: 'onboarding',
@@ -1257,23 +1324,12 @@ function OnboardingView({
       exit_step_name: info.stepName,
       completion_type: completionType,
       runtime_type: currentRuntimeType(),
-      has_about_you: hasAboutYou,
+      has_about_you: false,
       has_design_system_request: hasRequest,
       source_count: sourceCount,
       ...(extra.errorCode ? { error_code: extra.errorCode } : {}),
       duration_ms: Math.max(0, Date.now() - onboardingStartedAtRef.current),
       onboarding_session_id: onboardingSessionId,
-      // Survey-snapshot mirror of `about_you_submit` so the funnel has
-      // a second carrier for the user's picks. Only attached when the
-      // user actually touched the About-you step.
-      ...(hasAboutYou ? {
-        role: liveProfile.role || 'unknown',
-        organization_size: liveProfile.orgSize || 'unknown',
-        use_cases: liveProfile.useCase.length > 0
-          ? liveProfile.useCase
-          : ['unknown'],
-        discovery_source: liveProfile.source || 'unknown',
-      } : {}),
     });
   }
 
@@ -1281,8 +1337,131 @@ function OnboardingView({
     t('settings.onboardingStepConnect'),
     t('settings.onboardingStepProfile'),
     t('settings.onboardingStepNewsletter'),
+    t('settings.onboardingConnectTitle'),
+    t('settings.onboardingStepDesignSystem'),
   ];
   const isLastStep = step === steps.length - 1;
+  const isAmrConnectStep = step === 3;
+  const isGenerateStep = isLastStep;
+  const onboardingGoals: OnboardingGoal[] = [
+    {
+      id: 'deck',
+      icon: 'present',
+      title: t('settings.onboardingUseDeck'),
+      body: 'Starter deck: outline plus 3-5 designed sample slides.',
+      artifact: 'PPT / report / course deck',
+      starterScope: '3-5 representative slides plus a clear deck structure',
+      styleHint: 'presentation-ready, editorial, easy to export',
+      delivery: 'Editable slide/deck project',
+      metadata: { kind: 'deck', speakerNotes: false },
+    },
+    {
+      id: 'landing',
+      icon: 'globe',
+      title: t('settings.onboardingUseLanding'),
+      body: 'Starter landing page with first screen and one supporting section.',
+      artifact: 'Landing page / official website',
+      starterScope: 'hero section plus one content section',
+      styleHint: 'brand-forward, responsive, conversion-aware',
+      delivery: 'Editable web prototype',
+      metadata: {
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+        includeLandingPage: true,
+        platform: 'responsive',
+        platformTargets: ['responsive'],
+      },
+    },
+    {
+      id: 'prototype',
+      icon: 'layers-filled',
+      title: t('settings.onboardingUsePrototype'),
+      body: 'Starter app prototype with the core flow and 3 key screens.',
+      artifact: 'App / product prototype',
+      starterScope: 'core user flow plus 3 key screens',
+      styleHint: 'product-grade, coherent IA, ready to iterate',
+      delivery: 'Editable app prototype',
+      metadata: {
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+        platform: 'responsive',
+        platformTargets: ['responsive'],
+      },
+    },
+    {
+      id: 'dashboard',
+      icon: 'kanban',
+      title: t('settings.onboardingUseDashboard'),
+      body: 'Starter internal tool with the main view and one detail state.',
+      artifact: 'Dashboard / internal tool',
+      starterScope: 'main dashboard plus one detail or empty state',
+      styleHint: 'dense, operational, built for scanning',
+      delivery: 'Editable dashboard prototype',
+      metadata: {
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+        platform: 'web-desktop',
+        platformTargets: ['web-desktop'],
+      },
+    },
+    {
+      id: 'marketing',
+      icon: 'image',
+      title: t('settings.onboardingUseAds'),
+      body: 'Starter social or marketing visual direction.',
+      artifact: 'Social media / marketing asset',
+      starterScope: 'one polished marketing visual direction',
+      styleHint: 'campaign-ready, on-brand, high-impact',
+      delivery: 'Editable image generation project',
+      metadata: { kind: 'image', imageAspect: '16:9' },
+    },
+    {
+      id: 'design-system',
+      icon: 'palette',
+      title: t('settings.onboardingUseDesignSystem'),
+      body: 'Starter brand foundation with tokens and component direction.',
+      artifact: 'Design system / brand guideline',
+      starterScope: 'brand foundation, color/type tokens, component direction',
+      styleHint: 'systematic, reusable, implementation-aware',
+      delivery: 'Editable brand/design-system brief',
+      metadata: { kind: 'other' },
+    },
+  ];
+  const selectedGoal =
+    onboardingGoals.find((item) => item.id === goal) ?? onboardingGoals[0]!;
+  const materialOptions: OnboardingMaterialOption[] = [
+    {
+      id: 'url',
+      icon: 'link',
+      title: t('settings.onboardingGithubTitle'),
+      body: 'Paste a product, docs, or brand website.',
+    },
+    {
+      id: 'upload',
+      icon: 'upload',
+      title: t('settings.onboardingUploadTitle'),
+      body: 'Add screenshots, PPT, PDF, docs, or reference images.',
+    },
+    {
+      id: 'prompt',
+      icon: 'sparkles',
+      title: t('settings.onboardingPromptTitle'),
+      body: 'Write one sentence and Open Design will structure the brief.',
+    },
+  ];
+  const sourceSummary = onboardingMaterialSummary({
+    materialKind,
+    sourceUrl,
+    need,
+    stagedFiles,
+  });
+  const starterPrompt = buildOnboardingPrompt({
+    goal: selectedGoal,
+    materialKind,
+    sourceUrl,
+    need,
+    stagedFiles,
+  });
 
   const runtimeItems: Array<{
     id: 'local' | 'byok';
@@ -1316,49 +1495,6 @@ function OnboardingView({
     },
   ];
 
-  const roleOptions = [
-    { value: 'pm', label: t('settings.onboardingRolePm') },
-    { value: 'designer', label: t('settings.onboardingRoleDesigner') },
-    { value: 'engineer', label: t('settings.onboardingRoleEngineer') },
-    { value: 'marketing', label: t('settings.onboardingRoleMarketing') },
-    { value: 'growth', label: t('settings.onboardingRoleGrowth') },
-    { value: 'ops', label: t('settings.onboardingRoleOps') },
-    { value: 'founder', label: t('settings.onboardingRoleFounder') },
-    { value: 'student', label: t('settings.onboardingRoleStudent') },
-    { value: 'other', label: t('settings.onboardingRoleOther') },
-  ];
-  const orgSizeOptions = [
-    { value: 'solo', label: t('settings.onboardingOrgSolo') },
-    { value: 'team', label: t('settings.onboardingOrgTeam') },
-    { value: 'startup', label: t('settings.onboardingOrgStartup') },
-    { value: 'growth', label: t('settings.onboardingOrgGrowth') },
-    { value: 'midmarket', label: t('settings.onboardingOrgMidMarket') },
-    { value: 'enterprise', label: t('settings.onboardingOrgEnterprise') },
-  ];
-  const useCaseOptions = [
-    { value: 'product', label: t('settings.onboardingUseProduct') },
-    { value: 'design-system', label: t('settings.onboardingUseDesignSystem') },
-    { value: 'prototype', label: t('settings.onboardingUsePrototype') },
-    { value: 'landing', label: t('settings.onboardingUseLanding') },
-    { value: 'marketing', label: t('settings.onboardingUseMarketing') },
-    { value: 'ads', label: t('settings.onboardingUseAds') },
-    { value: 'dashboard', label: t('settings.onboardingUseDashboard') },
-    { value: 'deck', label: t('settings.onboardingUseDeck') },
-    { value: 'engineering', label: t('settings.onboardingUseEngineering') },
-    { value: 'agency', label: t('settings.onboardingUseAgency') },
-  ];
-  const sourceOptions = [
-    { value: 'github', label: t('settings.onboardingSourceGithub') },
-    { value: 'friend', label: t('settings.onboardingSourceFriend') },
-    { value: 'social', label: t('settings.onboardingSourceSocial') },
-    { value: 'product-hunt', label: t('settings.onboardingSourceProductHunt') },
-    { value: 'community', label: t('settings.onboardingSourceCommunity') },
-    { value: 'youtube', label: t('settings.onboardingSourceYoutube') },
-    { value: 'blog', label: t('settings.onboardingSourceBlog') },
-    { value: 'ai-tool', label: t('settings.onboardingSourceAiTool') },
-    { value: 'search', label: t('settings.onboardingSourceSearch') },
-    { value: 'event', label: t('settings.onboardingSourceEvent') },
-  ];
   const byokProviderOptions = [
     { value: '', label: t('settings.customProvider') },
     ...KNOWN_PROVIDERS.filter((provider) => provider.protocol === apiProtocol).map((provider) => ({
@@ -1424,7 +1560,7 @@ function OnboardingView({
     onFinish();
   }
   function handleBackWithTracking(): void {
-    if (newsletterSubmitting) return;
+    if (generating) return;
     if (step === 0) {
       // Step 0 "Back" semantically maps to Skip — there's nowhere
       // earlier to go. Match the Skip telemetry shape rather than
@@ -1436,49 +1572,107 @@ function OnboardingView({
     setStep((current) => current - 1);
   }
   async function handlePrimaryAction() {
-    if (newsletterSubmitting) return;
-    if (step === 0 && amrSelectedAndSignedOut) {
-      const attribution = recordAmrEntry(
-        analytics.track,
-        'onboarding_amr_sign_in_continue',
-        new Date(),
-        { reuseExistingFrom: ['onboarding_amr_card'] },
-      );
-      void handleAmrSignInToContinue(attribution);
-      return;
-    }
-    if (isLastStep) {
-      // Emit the About-you survey snapshot on the completion path, before
-      // the continue/complete pair. Reading `profileRef` captures the
-      // user's final role / org size / use case / discovery source picks
-      // even on a fast Finish. Gating it here — rather than when the user
-      // leaves the About-you step — keeps it exactly-once no matter how the
-      // final step was reached: primary CTA, Back-then-Continue, or a
-      // forward jump via the clickable stepper. `emitAboutYouSubmit` is
-      // additionally idempotent per session (see its `aboutYouReportedRef`
-      // guard). The snapshot click + the survey fields on
-      // `onboarding_complete_result` give the funnel two independent
-      // carriers for the same data.
-      emitAboutYouSubmit();
-      const newsletterEmail = profileRef.current.email;
-      const shouldSubmitNewsletter =
-        NEWSLETTER_EMAIL_RE.test(newsletterEmail.trim().toLowerCase());
-      if (shouldSubmitNewsletter) {
-        setNewsletterSubmitting(true);
-        await submitNewsletterEmail(newsletterEmail);
+    if (generating) return;
+    setGenerateError(null);
+    setAmrLoginError(null);
+    if (!isLastStep) {
+      if (isAmrConnectStep && runtime === 'amr' && amrSelectedAndSignedOut) {
+        const attribution = recordAmrEntry(
+          analytics.track,
+          'onboarding_amr_sign_in_continue',
+          new Date(),
+          { reuseExistingFrom: ['onboarding_amr_card'] },
+        );
+        void handleAmrSignInToContinue(attribution);
+        return;
       }
       emitOnboardingClick('continue', 'continue');
-      // Last-step Continue without a DS generation = "completed
-      // without design system". The Generate path inside the
-      // embedded DesignSystemCreationFlow takes a different route
-      // (navigation to project) and emits its own completion.
-      emitOnboardingComplete('completed', 'completed_without_design_system');
-      clearOnboardingSessionId();
-      onFinish();
+      setStep((current) => current + 1);
       return;
     }
-    emitOnboardingClick('continue', 'continue');
+    if (runtime === 'amr' && amrSelectedAndSignedOut) {
+      setStep(3);
+      setGenerateError('Log in to AMR and check starter credit before generating.');
+      return;
+    }
+    await createStarterProject();
+  }
+
+  async function continueAfterAmrReady() {
+    if (isGenerateStep) {
+      await createStarterProject();
+      return;
+    }
     setStep((current) => current + 1);
+  }
+
+  async function createStarterProject() {
+    if (generating) return;
+    if (runtime === null) {
+      setGenerateError('Starter AMR is still loading. Rescan, choose Local CLI/BYOK, or try again in a moment.');
+      return;
+    }
+    if (runtime === 'local' && !selectedAgent) {
+      setGenerateError('Pick a local CLI, rescan, or switch back to the starter AMR path.');
+      return;
+    }
+    if (runtime === 'byok' && !canTestProvider) {
+      setGenerateError('Fill API key, base URL, and model, or switch back to the starter AMR path.');
+      return;
+    }
+    const completionType: TrackingOnboardingCompletionType =
+      selectedGoal.id === 'design-system'
+        ? 'completed_with_design_system'
+        : 'completed_without_design_system';
+    setGenerating(true);
+    try {
+      if (runtime === 'amr') {
+        onModeChange('daemon');
+        onAgentChange('amr');
+      }
+      const metadata: ProjectMetadata = {
+        ...selectedGoal.metadata,
+        nameSource: 'generated',
+      };
+      const name = goalProjectName(selectedGoal, need, sourceUrl);
+      const createInput: CreateInput = {
+        name,
+        skillId: null,
+        designSystemId:
+          selectedGoal.id === 'design-system' ? null : defaultDesignSystemId,
+        metadata,
+      };
+      const pluginId = defaultPluginIdForMetadata(metadata);
+      const pluginInputs = defaultPluginInputsForCreate(createInput, pluginId);
+      emitOnboardingClick('generate', 'generate');
+      const created = await onCreateProject({
+        ...createInput,
+        pendingPrompt: starterPrompt,
+        ...(pluginId ? { pluginId } : {}),
+        ...(pluginInputs ? { pluginInputs } : {}),
+        ...(stagedFiles.length > 0 ? { pendingFiles: stagedFiles } : {}),
+        conversationMode: 'design',
+        autoSendFirstMessage: true,
+      });
+      if (created === false) {
+        setGenerateError('Could not create the starter project. Your brief is still here.');
+        emitOnboardingComplete('failed', completionType, {
+          errorCode: 'CREATE_PROJECT_FAILED',
+        });
+        return;
+      }
+      emitOnboardingComplete('completed', completionType);
+      clearOnboardingSessionId();
+      onComplete();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown create error';
+      setGenerateError(message || 'Could not create the starter project. Your brief is still here.');
+      emitOnboardingComplete('failed', completionType, {
+        errorCode: message || 'CREATE_PROJECT_THREW',
+      });
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function handleAmrSignInToContinue(
@@ -1493,7 +1687,7 @@ function OnboardingView({
       if (amrLoginPollCancelledRef.current) return;
       if (currentStatus) setAmrStatus(currentStatus);
       if (currentStatus?.loggedIn) {
-        setStep((current) => current + 1);
+        await continueAfterAmrReady();
         return;
       }
       if (amrLoginPollCancelledRef.current) return;
@@ -1518,7 +1712,7 @@ function OnboardingView({
         return;
       }
       if (await pollAmrLoginCompletion()) {
-        setStep((current) => current + 1);
+        await continueAfterAmrReady();
       }
     } finally {
       setAmrLoginPending(false);
@@ -1576,64 +1770,6 @@ function OnboardingView({
       }
     }
     return false;
-  }
-
-  // Survey snapshot. Reads `profileRef.current` rather than `profile`
-  // because Finish-setup may fire within the same render commit as the
-  // user's last dropdown pick, before React has rebound the closure to
-  // the latest state. `'unknown'` covers an untouched field on the
-  // About-you step (the spec keeps the wire type open-string so a new
-  // role / use-case option doesn't force a contract bump).
-  //
-  // This now fires from the completion path (the final Newsletter step),
-  // so it stamps the About-you step coordinates explicitly instead of
-  // reading the live `step` via `emitOnboardingClick`: the event describes
-  // the About-you submission, not whatever step the user finished on. The
-  // `aboutYouReportedRef` guard keeps it exactly-once per session.
-  function emitAboutYouSubmit(): void {
-    if (aboutYouReportedRef.current) return;
-    const onboardingSessionId = onboardingSessionIdRef.current;
-    if (!onboardingSessionId) return;
-    aboutYouReportedRef.current = true;
-    const snapshot = profileRef.current;
-    trackOnboardingClick(analytics.track, {
-      page_name: 'onboarding',
-      area: 'about_you',
-      element: 'about_you_submit',
-      action: 'continue',
-      step_index: '2',
-      step_name: 'about_you',
-      onboarding_session_id: onboardingSessionId,
-      role: snapshot.role || 'unknown',
-      organization_size: snapshot.orgSize || 'unknown',
-      use_cases: snapshot.useCase.length > 0 ? snapshot.useCase : ['unknown'],
-      discovery_source: snapshot.source || 'unknown',
-    });
-  }
-
-  // Optional newsletter signup captured on the Newsletter step. The last-step
-  // button shows loading while this settles; failures are swallowed so
-  // onboarding completion never depends on the marketing site. A blank or
-  // malformed email is simply skipped. Only a boolean opt-in is tracked — the
-  // address itself is never sent to analytics.
-  async function submitNewsletterEmail(rawEmail: string): Promise<void> {
-    const email = rawEmail.trim().toLowerCase();
-    if (!email || !NEWSLETTER_EMAIL_RE.test(email)) return;
-    emitOnboardingClick('newsletter_email', 'subscribe', { newsletter_opt_in: true });
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
-    try {
-      await fetch(NEWSLETTER_SUBSCRIBE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'client' }),
-        signal: controller.signal,
-      });
-    } catch {
-      // Swallow — onboarding completion must not depend on the marketing site.
-    } finally {
-      window.clearTimeout(timeout);
-    }
   }
 
   async function scanCliAgents() {
@@ -1806,16 +1942,26 @@ function OnboardingView({
     }
   }
 
-  const onboardingNavigationLocked = newsletterSubmitting;
-  const primaryActionLabel = isLastStep && newsletterSubmitting
+  const onboardingNavigationLocked = generating || amrLoginPending || amrLoginCancelPending;
+  const primaryActionLabel = isGenerateStep && generating
     ? t('common.loading')
-    : step === 0 && amrLoginPending
+    : isAmrConnectStep && amrLoginPending
     ? t('settings.amrSigningIn')
-    : step === 0 && amrSelectedAndSignedOut
-      ? t('settings.amrSignInToContinue')
-    : isLastStep
-      ? t('settings.onboardingFinish')
+    : isAmrConnectStep && runtime === null
+      ? 'Choose AMR, Local CLI, or BYOK'
+    : isAmrConnectStep && runtime === 'amr' && amrSelectedAndSignedOut
+      ? 'Log in to AMR and check credit'
+    : isAmrConnectStep
+      ? 'Continue to generation'
+    : isGenerateStep && runtime === null
+      ? 'Choose AMR, Local CLI, or BYOK'
+    : isGenerateStep && runtime === 'amr' && amrSelectedAndSignedOut
+      ? 'Log in to AMR first'
+    : isGenerateStep
+      ? 'Start generating'
       : t('settings.onboardingContinue');
+  const primaryDisabled =
+    onboardingNavigationLocked || ((isAmrConnectStep || isGenerateStep) && runtime === null);
 
   return (
     <section className="onboarding-view" aria-labelledby="onboarding-title">
@@ -1845,8 +1991,149 @@ function OnboardingView({
           {step === 0 ? (
             <div className="onboarding-view__panel">
               <OnboardingPanelHeader
+                title="What do you want to make?"
+                body="Pick the first concrete outcome. Open Design will generate a starter version first, then you can expand it."
+              />
+              <div className="onboarding-view__goal-grid">
+                {onboardingGoals.map((item) => (
+                  <OnboardingChoiceCard
+                    key={item.id}
+                    icon={item.icon}
+                    title={item.title}
+                    body={item.body}
+                    selected={goal === item.id}
+                    onClick={() => {
+                      setGoal(item.id);
+                      emitOnboardingClick('use_case', 'select_option', { use_case: item.id });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {step === 1 ? (
+            <div className="onboarding-view__panel">
+              <OnboardingPanelHeader
+                title="Give Open Design a little material"
+                body="A URL, a file, or one sentence is enough. You can keep it rough; the brief is editable on the next screen."
+              />
+              <div className="onboarding-view__source-grid">
+                {materialOptions.map((item) => (
+                  <OnboardingChoiceCard
+                    key={item.id}
+                    icon={item.icon}
+                    title={item.title}
+                    body={item.body}
+                    selected={materialKind === item.id}
+                    onClick={() => {
+                      setMaterialKind(item.id);
+                      emitOnboardingClick(
+                        item.id === 'url'
+                          ? 'github_repo'
+                          : item.id === 'upload'
+                            ? 'assets_upload'
+                            : 'source_prompt',
+                        'select_option',
+                        {
+                          source_type: item.id === 'url'
+                            ? 'github_repo'
+                            : item.id === 'upload'
+                              ? 'assets'
+                              : 'text',
+                        },
+                      );
+                    }}
+                  />
+                ))}
+              </div>
+              {materialKind === 'url' ? (
+                <label className="onboarding-view__inline-field">
+                  <span>Website URL</span>
+                  <input
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://example.com"
+                    value={sourceUrl}
+                    onChange={(event) => setSourceUrl(event.target.value)}
+                  />
+                </label>
+              ) : null}
+              {materialKind === 'upload' ? (
+                <label className="onboarding-view__upload-field">
+                  <span>Upload file, screenshot, PPT, or PDF</span>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(event) => {
+                      setStagedFiles(Array.from(event.currentTarget.files ?? []));
+                    }}
+                  />
+                  {stagedFiles.length > 0 ? (
+                    <small>{stagedFiles.map((file) => file.name).join(', ')}</small>
+                  ) : (
+                    <small>No files selected yet.</small>
+                  )}
+                </label>
+              ) : null}
+              <label className="onboarding-view__inline-field">
+                <span>
+                  {materialKind === 'prompt' ? 'Write one sentence' : 'Anything else to include?'}
+                </span>
+                <textarea
+                  className="onboarding-view__textarea"
+                  value={need}
+                  onChange={(event) => setNeed(event.target.value)}
+                  placeholder="Example: Create a modern dashboard for a small sales team."
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="onboarding-view__panel">
+              <OnboardingPanelHeader
+                title="Confirm the starter brief"
+                body="This is the saved brief. CLI or BYOK can fail later without losing it; you can switch back to AMR and continue."
+              />
+              <div className="onboarding-view__brief-grid">
+                <div>
+                  <span>Target artifact</span>
+                  <strong>{selectedGoal.artifact}</strong>
+                </div>
+                <div>
+                  <span>Starter scope</span>
+                  <strong>{selectedGoal.starterScope}</strong>
+                </div>
+                <div>
+                  <span>Brand / style</span>
+                  <strong>{selectedGoal.styleHint}</strong>
+                </div>
+                <div>
+                  <span>Content source</span>
+                  <strong>{sourceSummary}</strong>
+                </div>
+                <div>
+                  <span>Delivery format</span>
+                  <strong>{selectedGoal.delivery}</strong>
+                </div>
+                <div>
+                  <span>Design system / memory</span>
+                  <strong>
+                    {selectedGoal.id === 'design-system'
+                      ? 'Create a reusable foundation'
+                      : 'Use if available; do not block'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="onboarding-view__panel">
+              <OnboardingPanelHeader
                 title={t('settings.onboardingConnectTitle')}
-                body={t('settings.onboardingConnectBody')}
+                body="Connect AMR before generation so Open Design can claim or check starter credit for this brief. Local CLI and BYOK stay available as advanced options."
               />
               <div className="onboarding-view__runtime-stack">
                 {showAmrCloudOption ? (
@@ -1854,22 +2141,17 @@ function OnboardingView({
                     <OnboardingChoiceCard
                       icon="orbit"
                       agentIconId="amr"
-                      title={t('settings.amrCloud')}
-                      body={t('settings.onboardingExecutionBody')}
+                      title={amrSignedIn ? 'AMR is connected' : 'Log in to AMR'}
+                      body="No Open Design account needed. AMR login unlocks the built-in model and lets us check starter credit before the first run."
                       benefits={[
-                        t('settings.onboardingAmrCloudBenefitOfficial'),
-                        t('settings.onboardingAmrCloudBenefitReady'),
-                        t('settings.onboardingAmrCloudBenefitModels'),
-                        t('settings.onboardingAmrCloudBenefitPricing'),
-                      ]}
-                      upcomingLabel={t('settings.onboardingAmrCloudUpcomingLabel')}
-                      upcomingBenefits={[
-                        t('settings.onboardingAmrCloudUpcomingImageVideo'),
-                        t('settings.onboardingAmrCloudUpcomingSkills'),
-                        t('settings.onboardingAmrCloudUpcomingRouting'),
+                        'No Open Design signup',
+                        'No API key setup',
+                        'Built-in model',
+                        'Starter credit check',
+                        'Recharge or switch if needed',
                       ]}
                       benefitPlacement="aside"
-                      metaLabel="AMR v0.1.0"
+                      metaLabel={amrSignedIn ? 'Signed in' : 'Sign in required'}
                       modelSlot={
                         amrModels.length > 0 ? (
                           <OnboardingAmrModelSelect
@@ -1893,191 +2175,187 @@ function OnboardingView({
                   </div>
                 ) : amrDetecting ? (
                   <OnboardingAmrCloudSkeleton />
-                ) : null}
-                <div className="onboarding-view__alternatives">
-                  {runtimeItems.map((item) => (
-                    <OnboardingChoiceCard
-                      key={item.id}
-                      icon={item.icon}
-                      title={item.title}
-                      body={item.body}
-                      selected={runtime === item.id}
-                      onClick={item.onSelect}
-                    />
-                  ))}
-                </div>
-                {runtime === 'local' ? (
-                  <OnboardingCliSetupPanel
-                    agents={visibleAgents}
-                    daemonLive={daemonLive}
-                    selectedAgentId={config.agentId}
-                    selectedAgent={selectedAgent}
-                    selectedModel={selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? ''}
-                    modelOptions={agentModelOptions}
-                    scanStatus={cliScanStatus}
-                    onRefresh={() => void scanCliAgents()}
-                    onSelectAgent={(agentId) => {
-                      onModeChange('daemon');
-                      onAgentChange(agentId);
-                    }}
-                    onSelectModel={(model) => {
-                      if (!selectedAgent) return;
-                      onAgentModelChange(selectedAgent.id, { model });
-                    }}
-                  />
-                ) : null}
-                {runtime === 'byok' ? (
-                  <OnboardingByokSetupPanel
-                    apiProtocol={apiProtocol}
-                    apiKey={config.apiKey}
-                    baseUrl={config.baseUrl}
-                    model={config.model}
-                    selectedProvider={selectedProvider}
-                    providerOptions={byokProviderOptions}
-                    apiKeyVisible={apiKeyVisible}
-                    onToggleApiKey={() => setApiKeyVisible((current) => !current)}
-                    onProtocolChange={(protocol) => {
-                      onApiProtocolChange(protocol);
-                    }}
-                    onProviderChange={(baseUrl) => {
-                      const provider = KNOWN_PROVIDERS.find(
-                        (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
-                      );
-                      updateApiConfig({
-                        baseUrl: provider?.baseUrl ?? '',
-                        model: provider?.model ?? '',
-                        apiProviderBaseUrl: provider?.baseUrl ?? null,
-                      });
-                    }}
-                    onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
-                    onModelChange={(model) => {
-                      onApiModelChange(model);
-                      updateApiConfig({ model });
-                    }}
-                    onBaseUrlChange={(baseUrl) =>
-                      updateApiConfig({ baseUrl, apiProviderBaseUrl: null })
-                    }
-                    modelOptions={byokModelOptions}
-                    testState={visibleProviderTestState}
-                    canTest={canTestProvider}
-                    onTest={() => void testProviderInline()}
-                    modelsState={visibleProviderModelsState}
-                    canFetchModels={canFetchProviderModels}
-                    onFetchModels={() => void fetchProviderModelsInline()}
-                  />
+                ) : (
+                  <div className="onboarding-view__setup-panel">
+                    <div className="onboarding-view__setup-head">
+                      <div>
+                        <strong>Starter AMR is not detected yet</strong>
+                        <p>Use a local CLI or BYOK below, or rescan agents and return to starter AMR.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="onboarding-view__mini-button"
+                        onClick={() => void onRefreshAgents()}
+                      >
+                        {t('settings.rescan')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="onboarding-view__advanced-toggle"
+                  onClick={() => setAdvancedOpen((current) => !current)}
+                >
+                  <span>Local CLI / BYOK backup options</span>
+                  <Icon name={advancedOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+                </button>
+                {advancedOpen ? (
+                  <>
+                    <div className="onboarding-view__alternatives">
+                      {runtimeItems.map((item) => (
+                        <OnboardingChoiceCard
+                          key={item.id}
+                          icon={item.icon}
+                          title={item.title}
+                          body={item.body}
+                          selected={runtime === item.id}
+                          onClick={item.onSelect}
+                        />
+                      ))}
+                    </div>
+                    {runtime === 'local' ? (
+                      <OnboardingCliSetupPanel
+                        agents={visibleAgents}
+                        daemonLive={daemonLive}
+                        selectedAgentId={config.agentId}
+                        selectedAgent={selectedAgent}
+                        selectedModel={selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? ''}
+                        modelOptions={agentModelOptions}
+                        scanStatus={cliScanStatus}
+                        onRefresh={() => void scanCliAgents()}
+                        onSelectAgent={(agentId) => {
+                          onModeChange('daemon');
+                          onAgentChange(agentId);
+                        }}
+                        onSelectModel={(model) => {
+                          if (!selectedAgent) return;
+                          onAgentModelChange(selectedAgent.id, { model });
+                        }}
+                      />
+                    ) : null}
+                    {runtime === 'byok' ? (
+                      <OnboardingByokSetupPanel
+                        apiProtocol={apiProtocol}
+                        apiKey={config.apiKey}
+                        baseUrl={config.baseUrl}
+                        model={config.model}
+                        selectedProvider={selectedProvider}
+                        providerOptions={byokProviderOptions}
+                        apiKeyVisible={apiKeyVisible}
+                        onToggleApiKey={() => setApiKeyVisible((current) => !current)}
+                        onProtocolChange={(protocol) => {
+                          onApiProtocolChange(protocol);
+                        }}
+                        onProviderChange={(baseUrl) => {
+                          const provider = KNOWN_PROVIDERS.find(
+                            (item) => item.protocol === apiProtocol && item.baseUrl === baseUrl,
+                          );
+                          updateApiConfig({
+                            baseUrl: provider?.baseUrl ?? '',
+                            model: provider?.model ?? '',
+                            apiProviderBaseUrl: provider?.baseUrl ?? null,
+                          });
+                        }}
+                        onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
+                        onModelChange={(model) => {
+                          onApiModelChange(model);
+                          updateApiConfig({ model });
+                        }}
+                        onBaseUrlChange={(baseUrl) =>
+                          updateApiConfig({ baseUrl, apiProviderBaseUrl: null })
+                        }
+                        modelOptions={byokModelOptions}
+                        testState={visibleProviderTestState}
+                        canTest={canTestProvider}
+                        onTest={() => void testProviderInline()}
+                        modelsState={visibleProviderModelsState}
+                        canFetchModels={canFetchProviderModels}
+                        onFetchModels={() => void fetchProviderModelsInline()}
+                      />
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </div>
           ) : null}
 
-          {step === 1 ? (
+          {step === 4 ? (
             <div className="onboarding-view__panel">
               <OnboardingPanelHeader
-                title={t('settings.onboardingProfileTitle')}
-                body={t('settings.onboardingProfileBody')}
+                title="Start generating"
+                body="Your brief is saved. Open Design will create a first version in the starter scope, then you can edit, export, regenerate, or save it as a template."
               />
-              <div className="onboarding-view__form-grid">
-                <OnboardingDropdown
-                  label={t('settings.onboardingRoleLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
-                  value={profile.role}
-                  options={roleOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('role', 'select_option', {
-                        role: value,
-                      });
-                    }
-                    setProfile((current) => ({ ...current, role: value }));
-                  }}
-                />
-                <OnboardingDropdown
-                  label={t('settings.onboardingOrgSizeLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
-                  value={profile.orgSize}
-                  options={orgSizeOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('organization_size', 'select_option', {
-                        organization_size: value,
-                      });
-                    }
-                    setProfile((current) => ({ ...current, orgSize: value }));
-                  }}
-                />
-                <OnboardingDropdown
-                  label={t('settings.onboardingUseCaseLabel')}
-                  placeholder={t('settings.onboardingSelectMultiplePlaceholder')}
-                  value={profile.useCase}
-                  options={useCaseOptions}
-                  multiple
-                  onChange={(value) => {
-                    if (!Array.isArray(value)) return;
-                    // Multi-select: emit one click per newly added
-                    // value (delta), not per render of the whole
-                    // selection. The dashboard then sees one row per
-                    // use_case chosen. Compare against `profileRef`
-                    // not `profile` — rapid picks can fire onChange
-                    // before React commits the previous pick, so a
-                    // closure-captured `profile.useCase` is one tick
-                    // behind and re-emits the prior pick on every
-                    // subsequent change.
-                    const previousSet = new Set(profileRef.current.useCase);
-                    for (const v of value) {
-                      if (!previousSet.has(v)) {
-                        emitOnboardingClick('use_case', 'select_option', { use_case: v });
-                      }
-                    }
-                    setProfile((current) => ({ ...current, useCase: value }));
-                  }}
-                />
-                <OnboardingDropdown
-                  label={t('settings.onboardingSourceLabel')}
-                  placeholder={t('settings.onboardingSelectPlaceholder')}
-                  value={profile.source}
-                  options={sourceOptions}
-                  onChange={(value) => {
-                    if (typeof value === 'string' && value) {
-                      emitOnboardingClick('hear_about_us', 'select_option', {
-                        discovery_source: value,
-                      });
-                    }
-                    setProfile((current) => ({ ...current, source: value }));
-                  }}
-                />
+              <div className="onboarding-view__brief-grid">
+                <div>
+                  <span>Target artifact</span>
+                  <strong>{selectedGoal.artifact}</strong>
+                </div>
+                <div>
+                  <span>Starter scope</span>
+                  <strong>{selectedGoal.starterScope}</strong>
+                </div>
+                <div>
+                  <span>Content source</span>
+                  <strong>{sourceSummary}</strong>
+                </div>
+                <div>
+                  <span>Generation path</span>
+                  <strong>
+                    {runtime === 'amr'
+                      ? 'AMR built-in model'
+                      : runtime === 'local'
+                        ? selectedAgent?.name ?? 'Local CLI'
+                        : runtime === 'byok'
+                          ? 'BYOK model provider'
+                          : 'Not selected yet'}
+                  </strong>
+                </div>
+                <div>
+                  <span>AMR credit</span>
+                  <strong>
+                    {runtime === 'amr'
+                      ? amrSignedIn
+                        ? 'Ready to check on run start'
+                        : 'Login required before run'
+                      : runtime === null
+                        ? 'Choose AMR, Local CLI, or BYOK first'
+                        : 'Not used for this run'}
+                  </strong>
+                </div>
+                <div>
+                  <span>Fallback</span>
+                  <strong>Brief stays saved if balance or setup blocks generation</strong>
+                </div>
               </div>
-            </div>
-          ) : null}
-
-          {step === 2 ? (
-            <div className="onboarding-view__panel onboarding-view__panel--newsletter">
-              <OnboardingPanelHeader
-                title={t('settings.onboardingNewsletterTitle')}
-                body={t('settings.onboardingNewsletterBody')}
-              />
-              <label className="onboarding-view__email-field">
-                <span className="onboarding-view__email-label">
-                  {t('newsletter.label')}
-                </span>
-                <input
-                  className="onboarding-view__email-input"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={t('newsletter.placeholder')}
-                  value={profile.email}
-                  onChange={(event) =>
-                    setProfile((current) => ({ ...current, email: event.target.value }))
-                  }
-                />
-              </label>
+              {runtime === 'amr' ? (
+                <div className="onboarding-view__setup-panel">
+                  <div className="onboarding-view__setup-head">
+                    <div>
+                      <strong>
+                        {amrSignedIn ? 'AMR is ready for this brief' : 'AMR login is still needed'}
+                      </strong>
+                      <p>
+                        {amrSignedIn
+                          ? 'If this task needs more than the starter credit, Open Design will keep the brief and let you recharge or switch to CLI/BYOK.'
+                          : 'Go back one step to log in to AMR, then return here to start generating.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           <div className="onboarding-view__actions">
-            {step === 0 && amrLoginError ? (
+            {amrLoginError ? (
               <span className="onboarding-view__action-status is-error" role="alert">
                 {amrLoginError}
+              </span>
+            ) : null}
+            {generateError ? (
+              <span className="onboarding-view__action-status is-error" role="alert">
+                {generateError}
               </span>
             ) : null}
             <button
@@ -2088,7 +2366,7 @@ function OnboardingView({
             >
               {step === 0 ? t('settings.onboardingSkip') : t('settings.onboardingBack')}
             </button>
-            {step === 0 && amrLoginPending ? (
+            {isLastStep && amrLoginPending ? (
               <button
                 type="button"
                 className="onboarding-view__secondary"
@@ -2102,8 +2380,8 @@ function OnboardingView({
               type="button"
               className="onboarding-view__primary"
               onClick={handlePrimaryAction}
-              disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
-              aria-busy={newsletterSubmitting ? true : undefined}
+              disabled={primaryDisabled}
+              aria-busy={generating || amrLoginPending ? true : undefined}
             >
               <span>{primaryActionLabel}</span>
             </button>
@@ -2903,7 +3181,7 @@ function OnboardingChoiceCard({
   variant,
   onClick,
 }: {
-  icon: 'orbit' | 'hammer' | 'sliders' | 'github' | 'upload' | 'sparkles';
+  icon: IconName;
   agentIconId?: string;
   title: string;
   body: string;

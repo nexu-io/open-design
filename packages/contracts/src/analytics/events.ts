@@ -436,23 +436,28 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you →
-// Newsletter; the design-system and generation literals remain in the
-// contract for historical rows and a future reintroduction. Each step's `step_index` / `step_name`
-// must match the enum pairs below. `onboarding_session_id` is generated once
-// per session so dashboards can stitch the funnel.
+// welcome flow. The current first-run flow is Goal → Source → Brief →
+// Connect AMR → Generation; the older about-you/newsletter/design-system
+// literals remain in the contract for historical rows and post-result
+// follow-ups.
 export type TrackingOnboardingArea =
+  | 'goal'
+  | 'source'
+  | 'brief'
   | 'runtime'
   | 'about_you'
   | 'newsletter'
   | 'design_system'
   | 'generation_progress';
 
-// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3'`
+// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3' | '4'`
 // and the generation phase as `'progress'`. Mirrors the v2 doc literally.
-export type TrackingOnboardingStepIndex = '1' | '2' | '3' | 'progress';
+export type TrackingOnboardingStepIndex = '1' | '2' | '3' | '4' | 'progress';
 
 export type TrackingOnboardingStepName =
+  | 'goal'
+  | 'source'
+  | 'brief'
   | 'connect'
   | 'about_you'
   | 'newsletter'
@@ -503,9 +508,10 @@ export type TrackingOnboardingCompletionType =
 // without a contract change.
 export type TrackingOnboardingScanResult = 'success' | 'failed' | 'timeout';
 
-// About-you step values. Surfaces from `onboardingRole*` /
-// `onboardingOrg*` / `onboardingUse*` / `onboardingSource*` i18n
-// keys; this enum is the wire-format shape the dashboard groups on.
+// About-you values. First-run no longer asks these before generation, but
+// historical rows and post-result follow-ups still use the same wire shape
+// from `onboardingRole*` / `onboardingOrg*` / `onboardingUse*` /
+// `onboardingSource*` i18n keys.
 // Kept as `string` rather than literal union because the product
 // catalogue extends (e.g. add a new role) more often than the wire
 // shape: a stricter union would force a contract bump for every new
@@ -552,7 +558,7 @@ export type TrackingOnboardingClickElement =
   | 'organization_size'
   | 'use_case'
   | 'hear_about_us'
-  // Optional newsletter email captured on the About-you step
+  // Optional newsletter email captured by a deferred/post-result follow-up
   | 'newsletter_email'
   // Fires once on Finish-setup, carrying the full survey snapshot
   // (role + organization_size + use_case + discovery_source) so the
@@ -564,6 +570,7 @@ export type TrackingOnboardingClickElement =
   | 'local_code'
   | 'fig_upload'
   | 'assets_upload'
+  | 'source_prompt'
   | 'show_access_methods';
 
 export type TrackingOnboardingClickAction =
@@ -607,8 +614,8 @@ export interface OnboardingClickProps {
   source_type?: TrackingOnboardingSourceType;
   has_brand_description?: boolean;
   source_count?: number;
-  // True when the user left a (valid) newsletter email on the About-you
-  // step. Boolean only — the email address itself is never sent here.
+  // True when the user left a (valid) newsletter email in the deferred
+  // follow-up. Boolean only — the email address itself is never sent here.
   newsletter_opt_in?: boolean;
 }
 
@@ -640,12 +647,11 @@ export interface OnboardingCompleteResultProps {
   error_code?: string;
   duration_ms: number;
   onboarding_session_id: string;
-  // Survey-snapshot fields. Mirror the values from
-  // `about_you_submit` ui_click so dashboards can read the user's
-  // picks even if the individual dropdown clicks were dropped on
-  // navigate. `'unknown'` is the wire value for a field the user
-  // never touched on the About-you step; missing field means the user
-  // skipped the entire step.
+  // Survey-snapshot fields. Mirror the values from `about_you_submit`
+  // ui_click so dashboards can read the user's picks even if individual
+  // dropdown clicks were dropped on navigate. `'unknown'` is the wire value
+  // for a field the user never touched; missing field means the user skipped
+  // the deferred follow-up entirely.
   role?: TrackingOnboardingRole;
   organization_size?: TrackingOnboardingOrganizationSize;
   use_cases?: TrackingOnboardingUseCase[];

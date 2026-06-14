@@ -111,7 +111,7 @@ export const ja: Dict = {
   'settings.onboardingStepNewsletter': '最新情報を受け取る',
   'settings.onboardingNewsletterTitle': '最新情報をお届け',
   'settings.onboardingNewsletterBody': '製品アップデート、新しいテンプレート、デザインシステム、アンバサダーの活動をメールでお届けします。任意 — スキップできます。',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': '公式',

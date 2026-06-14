@@ -57,7 +57,7 @@ const VISUAL_AMR_AGENT = {
   ],
 } as const;
 
-test('[P2] captures the onboarding runtime selection surface', async ({ page }) => {
+test('[P2] captures the onboarding goal selection surface', async ({ page }) => {
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
@@ -69,18 +69,14 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
-  await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
-  await expect(
-    page
-      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
-      .getByRole('button'),
-  ).toContainText(
-    'DeepSeek V4 Flash',
-  );
+  await expect(page.getByRole('heading', { name: /Start with a result|欢迎/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /What do you want to make/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Presentation \/ deck/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Design system/i })).toBeVisible();
+  await expect(page.getByText(/Open Design AMR/i)).toBeHidden();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-onboarding-runtime');
+  await captureVisual(page, 'visual-onboarding-goal');
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {

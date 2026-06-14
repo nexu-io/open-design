@@ -111,7 +111,7 @@ export const esES: Dict = {
   'settings.onboardingStepNewsletter': 'Mantente al día',
   'settings.onboardingNewsletterTitle': 'No te pierdas nada',
   'settings.onboardingNewsletterBody': 'Recibe novedades de producto, nuevas plantillas, design systems y trabajo de embajadores en tu bandeja. Opcional: puedes omitirlo.',
-  'settings.onboardingConnectTitle': 'Choose a runtime',
+  'settings.onboardingConnectTitle': 'Log in to AMR',
   'settings.onboardingConnectBody': '',
   'settings.onboardingRecommended': 'Recommended',
   'settings.onboardingAmrCloudOfficialBadge': 'Oficial',

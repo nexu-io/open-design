@@ -52,6 +52,9 @@ vi.mock('../../src/components/pet/PetOverlay', () => ({
 vi.mock('../../src/components/pet/pets', () => ({
   migrateCustomPetAtlas: vi.fn().mockResolvedValue(null),
 }));
+vi.mock('../../src/components/HandoffButton', () => ({
+  HandoffButton: () => null,
+}));
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -211,16 +214,44 @@ beforeEach(() => {
   // signed-in account so the AMR runtime is fully selectable.
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      const json = url.includes('/api/integrations/vela/status')
-        ? {
-            loggedIn: true,
-            profile: 'prod',
-            user: { id: 'u', email: 'user@example.com' },
-            configPath: '/x',
-          }
-        : {};
+      let json: unknown = {};
+      if (url.includes('/api/integrations/vela/status')) {
+        json = {
+          loggedIn: true,
+          profile: 'prod',
+          user: { id: 'u', email: 'user@example.com' },
+          configPath: '/x',
+        };
+      } else if (url.endsWith('/api/projects') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as {
+          id?: string;
+          name?: string;
+          skillId?: string | null;
+          designSystemId?: string | null;
+          pendingPrompt?: string;
+          metadata?: Record<string, unknown>;
+        };
+        const now = Date.now();
+        json = {
+          project: {
+            id: body.id ?? 'project-1',
+            name: body.name ?? 'Starter project',
+            skillId: body.skillId ?? null,
+            designSystemId: body.designSystemId ?? null,
+            pendingPrompt: body.pendingPrompt,
+            metadata: body.metadata,
+            createdAt: now,
+            updatedAt: now,
+          },
+          conversationId: 'conversation-1',
+        };
+      } else if (/\/api\/projects\/[^/]+\/conversations$/u.test(url)) {
+        json = { conversations: [] };
+      } else if (/\/api\/projects\/[^/]+\/files/u.test(url)) {
+        json = { files: [], folders: [] };
+      }
       return new Response(JSON.stringify(json), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -240,8 +271,9 @@ describe('onboarding -> home AMR selection (end to end)', () => {
   it('lands on the home agent picker with AMR selected after accepting the AMR default', async () => {
     render(<App />);
 
-    // Bootstrap routes a first-run user into onboarding; the AMR runtime is
-    // the recommended default and the mocked status reports it signed in.
+    // Bootstrap routes a first-run user into onboarding. The user states the
+    // target first; AMR login/credit check happens before the final Generate
+    // screen.
     const continueButton = await screen.findByRole(
       'button',
       { name: /^Continue$/i },
@@ -249,18 +281,26 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     );
     fireEvent.click(continueButton);
 
-    // About-you step is no longer the final step: advance past it to the
-    // newsletter step, which now hosts Finish setup.
-    const aboutYouContinue = await screen.findByRole('button', { name: /^Continue$/i });
-    fireEvent.click(aboutYouContinue);
+    const materialContinue = await screen.findByRole('button', { name: /^Continue$/i });
+    fireEvent.click(materialContinue);
 
-    // Newsletter step -> finish.
-    const finish = await screen.findByRole('button', { name: /Finish setup/i });
-    fireEvent.click(finish);
+    const briefContinue = await screen.findByRole('button', { name: /^Continue$/i });
+    fireEvent.click(briefContinue);
 
-    // Now on home: the inline model switcher chip must reflect AMR, not the
-    // Claude default the App-level auto-select used to snap to while AMR was
-    // still being detected.
+    const amrContinue = await screen.findByRole('button', { name: /Continue to generation/i });
+    fireEvent.click(amrContinue);
+
+    const generate = await screen.findByRole('button', { name: /Start generating/i });
+    fireEvent.click(generate);
+
+    // The starter result opens as a project. Return to Home and verify the
+    // inline model switcher reflects AMR, not the Claude default the App-level
+    // auto-select used to snap to while AMR was still being detected.
+    const homeTab = await screen.findByRole('tab', { name: /Home/i });
+    const homeButton = homeTab.querySelector('button');
+    expect(homeButton).toBeInstanceOf(HTMLButtonElement);
+    fireEvent.click(homeButton as HTMLButtonElement);
+
     const chip = await screen.findByTestId('inline-model-switcher-chip');
     await waitFor(() => {
       expect(chip.getAttribute('aria-label') ?? '').toContain('AMR');
