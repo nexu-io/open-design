@@ -41,6 +41,12 @@ od:
 Allowed values match the file names in this directory minus the `.md`
 extension. Unknown values are silently ignored (forward-compatible).
 
+Run `pnpm lint:craft` after adding or changing `od.craft.requires`. The
+repository guard reports unresolved slugs with their manifest paths, so typos
+cannot silently drop a craft section from the runtime prompt. If a slug is an
+intentional forward reference, list it in `craft/FUTURE_SECTIONS.md` until the
+matching `craft/<slug>.md` file ships.
+
 ### Why silent fallback instead of fail-fast?
 
 A skeptical reader will ask: "If a skill requests a planned-but-not-yet-vendored

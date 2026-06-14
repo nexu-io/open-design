@@ -724,6 +724,7 @@ describe("wellKnownUserToolchainBins", () => {
     try {
       const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
       expect(dirs).toContain(join(home, ".local", "bin"));
+      expect(dirs).toContain(join(home, ".kimi-code", "bin"));
       expect(dirs).toContain(join(home, ".opencode", "bin"));
       expect(dirs).toContain(join(home, ".bun", "bin"));
       expect(dirs).toContain(join(home, ".volta", "bin"));

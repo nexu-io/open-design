@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, checkPromptArgvBudget, checkWindowsCmdShimCommandLineBudget, checkWindowsDirectExeCommandLineBudget, claude, deepseek, deepseekMaxPromptArgBytes, grokBuild, vibe,
+  assert, checkPromptArgvBudget, checkWindowsCmdShimCommandLineBudget, checkWindowsDirectExeCommandLineBudget, claude, deepseek, deepseekMaxPromptArgBytes, grokBuild, kimi, vibe,
 } from './helpers/test-helpers.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -105,6 +105,22 @@ test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts'
   assert.match(flagged.message, /currently accepts prompts only as a command-line argument/);
   assert.match(flagged.message, /API\/provider model connection/);
   assert.match(flagged.message, /stdin-capable adapter/);
+});
+
+test('Kimi prompt mode declares and enforces an argv-byte budget', () => {
+  assert.equal(kimi.maxPromptArgBytes, 30_000);
+
+  const oversized = 'x'.repeat(kimi.maxPromptArgBytes + 1);
+  const flagged = checkPromptArgvBudget(kimi, oversized);
+  assert.ok(flagged, 'oversized Kimi prompts must trip the argv-byte guard');
+  assert.equal(flagged.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.equal(flagged.limit, kimi.maxPromptArgBytes);
+  assert.equal(flagged.bytes, kimi.maxPromptArgBytes + 1);
+  assert.match(flagged.message, /Kimi CLI/);
+  assert.match(flagged.message, /command-line argument/);
+  assert.match(flagged.message, /stdin support/);
+
+  assert.equal(checkPromptArgvBudget(kimi, 'hello'), null);
 });
 
 test('checkPromptArgvBudget is a no-op for Grok Build because it uses prompt files', () => {

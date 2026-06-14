@@ -5,6 +5,8 @@ import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import dns from 'node:dns';
+import https from 'node:https';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -6695,6 +6697,82 @@ export async function startServer({
     res.json({ ok: true });
   });
 
+  const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
+  const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
+
+  function velaApiProxyBaseUrl(req) {
+    return `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
+  }
+
+  function velaProxyRequestBody(req) {
+    if (req.method === 'GET' || req.method === 'HEAD') return null;
+    if (Buffer.isBuffer(req.body)) return req.body;
+    if (typeof req.body === 'string') return Buffer.from(req.body);
+    if (req.body == null) return null;
+    return Buffer.from(JSON.stringify(req.body));
+  }
+
+  function shouldStreamVelaProxyRequest(req, body) {
+    return req.method !== 'GET' && req.method !== 'HEAD' && body == null;
+  }
+
+  function proxyAmrApiRequest(req, res) {
+    const suffix = req.originalUrl.slice(AMR_API_PROXY_PREFIX.length);
+    if (!suffix.startsWith('/api/v1/')) {
+      res.status(404).json({ error: 'unknown_amr_api_proxy_path' });
+      return;
+    }
+    const target = new URL(suffix, AMR_API_UPSTREAM_ORIGIN);
+    const body = velaProxyRequestBody(req);
+    const streamBody = shouldStreamVelaProxyRequest(req, body);
+    const headers = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      if (
+        lower === 'host' ||
+        lower === 'connection' ||
+        lower === 'transfer-encoding'
+      ) {
+        continue;
+      }
+      if (lower === 'content-length' && body) continue;
+      headers[key] = value;
+    }
+    if (body) headers['content-length'] = String(body.length);
+
+    const upstream = https.request(
+      target,
+      {
+        method: req.method,
+        headers,
+        lookup: (hostname, options, callback) => {
+          dns.lookup(hostname, { ...options, family: 4, all: false }, callback);
+        },
+      },
+      (upstreamRes) => {
+        res.status(upstreamRes.statusCode ?? 502);
+        for (const [key, value] of Object.entries(upstreamRes.headers)) {
+          if (value !== undefined) res.setHeader(key, value);
+        }
+        upstreamRes.pipe(res);
+      },
+    );
+    upstream.setTimeout(30_000, () => upstream.destroy(new Error('AMR API proxy timed out')));
+    upstream.on('error', (err) => {
+      if (!res.headersSent) {
+        res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+      } else {
+        res.end();
+      }
+    });
+    if (body) upstream.write(body);
+    if (streamBody) {
+      req.pipe(upstream);
+    } else {
+      upstream.end();
+    }
+  }
+
   // AMR (vela) login integration — see `apps/daemon/src/integrations/vela.ts`.
   // The vela CLI owns the device-authorization UX (URL + code + browser open);
   // these routes only surface enough state for Open Design's Settings card to
@@ -6766,12 +6844,18 @@ export async function startServer({
     }
   });
 
+  app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
+
   app.post('/api/integrations/vela/login', async (req, res) => {
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const attribution = parseVelaLoginAttribution(req.body);
-      const spawned = await spawnVelaLogin({ configuredEnv, attribution });
+      const spawned = await spawnVelaLogin({
+        configuredEnv,
+        attribution,
+        defaultApiUrl: velaApiProxyBaseUrl(req),
+      });
       res.status(202).json(spawned);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
