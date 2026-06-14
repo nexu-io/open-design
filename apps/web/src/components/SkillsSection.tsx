@@ -580,6 +580,10 @@ function SkillRow({
   const summaryName = localizeSkillName(locale, skill) || skill.id;
   const summaryDescription = localizeSkillDescription(locale, skill);
   const canDelete = skill.source === 'user';
+  // Editing a built-in skill does not modify it in place — it writes a
+  // user-owned shadow copy. Frame the affordance as creating a user override
+  // so the built-in → user transition is not a surprise.
+  const isBuiltIn = skill.source !== 'user';
   return (
     <div
       className={`skills-row${enabled ? '' : ' skills-row-disabled'}${
@@ -651,7 +655,11 @@ function SkillRow({
               <Button
                 size="icon"
                 onClick={onStartEdit}
-                title={t('settings.skillsEdit')}
+                title={
+                  isBuiltIn
+                    ? t('settings.skillsOverrideCreate')
+                    : t('settings.skillsEdit')
+                }
                 data-testid="skills-edit"
               >
                 <Icon name="edit" size={13} />
@@ -705,7 +713,7 @@ function SkillRow({
               onClick={onConfirmBuiltInEdit}
               data-testid="skills-edit-builtin-confirm"
             >
-              {t('settings.skillsEdit')}
+              {t('settings.skillsOverrideCreate')}
             </button>
           </div>
         </div>
@@ -755,13 +763,18 @@ function SkillRow({
 
       {editing && draft ? (
         <SkillDraftForm
-          heading={t('settings.skillsEdit')}
+          heading={
+            isBuiltIn
+              ? t('settings.skillsOverrideCreate')
+              : t('settings.skillsEdit')
+          }
           subheading={skill.id}
           draft={draft}
           setDraft={setDraft}
           error={draftError}
           saving={draftSaving}
           isEdit
+          isBuiltInOverride={isBuiltIn}
           onCancel={onCancelEdit}
           onSubmit={onSubmitEdit}
         />
@@ -778,6 +791,8 @@ interface SkillDraftFormProps {
   error: string | null;
   saving: boolean;
   isEdit: boolean;
+  /** Editing a built-in skill: the submit reads "Save as user override". */
+  isBuiltInOverride?: boolean;
   onCancel: () => void;
   onSubmit: () => void;
 }
@@ -790,6 +805,7 @@ function SkillDraftForm({
   error,
   saving,
   isEdit,
+  isBuiltInOverride = false,
   onCancel,
   onSubmit,
 }: SkillDraftFormProps) {
@@ -872,7 +888,9 @@ function SkillDraftForm({
           {saving
             ? t('settings.skillsSaving')
             : isEdit
-              ? t('settings.skillsSave')
+              ? isBuiltInOverride
+                ? t('settings.skillsOverrideSave')
+                : t('settings.skillsSave')
               : t('settings.skillsCreate')}
         </button>
       </div>
