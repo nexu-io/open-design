@@ -117,7 +117,7 @@ it stays Claude-first and opt-out-able:
    next user message (`POST /api/chat`). The `AskUserQuestion` tool wiring and
    `POST /api/runs/:id/tool-result` endpoint were removed (PR #4114); the
    `stream-json` stdin skeleton is retained only as generic mid-turn input
-   infrastructure, with stdin closing on a `tool_use` stop reason. multica
+   infrastructure, with stdin staying open across `tool_use` pauses and closing only after a terminal non-`tool_use` turn/end result. multica
    disables `AskUserQuestion` entirely (`--disallowedTools AskUserQuestion`).
    Resume must not disturb the `<question-form>` clarification path.
 2. **Per-turn prompt rewriting.** OD recomposes the system prompt + skills +
