@@ -302,6 +302,7 @@ export interface McpRunCreateRequest {
   skillId?: string;
   pluginId?: string;
   model?: string;
+  serviceTier?: string;
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;
   toolBundle?: RunScopedToolBundle;
