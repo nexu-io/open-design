@@ -34,8 +34,10 @@ Constraints:
 - Do not regress any existing behavior. Resume is best-effort: when a guard
   fails, the capability is absent, or `--resume` is rejected at runtime, the
   daemon falls back to today's full-transcript spawn for that turn.
-- Do not break the interactive `stream-json` / `AskUserQuestion` machinery
-  (`pendingHostAnswers`, `POST /api/runs/:id/tool-result`).
+- Do not break the `stream-json` input skeleton (generic mid-turn stdin
+  infrastructure). Note: the `AskUserQuestion` tool wiring and
+  `POST /api/runs/:id/tool-result` endpoint were removed in PR #4114; the
+  `pendingHostAnswers` dead branch was cleaned up in PR #4273.
 - Keep the daemon the source of truth: the stored session pointer is a cache
   keyed on daemon-owned conversation state, never the authoritative history.
 - Claude-only in v1. Other adapters keep `resumesSessionViaCli` unset and the
