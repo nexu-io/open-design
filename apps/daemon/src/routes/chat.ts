@@ -60,7 +60,7 @@ export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'htt
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
+  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
     handleCritiqueInterrupt,
@@ -341,10 +341,17 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             Array.isArray(def.reasoningOptions)
               ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
               : undefined;
+          const safeServiceTier =
+            def &&
+            typeof body.serviceTier === 'string' &&
+            isKnownServiceTier(def, safeModel, body.serviceTier)
+              ? body.serviceTier
+              : undefined;
           const result = await testAgentConnection({
             agentId: body.agentId,
             model: safeModel ?? undefined,
             reasoning: safeReasoning,
+            serviceTier: safeServiceTier,
             agentCliEnv:
               body.agentCliEnv && typeof body.agentCliEnv === 'object'
                 ? body.agentCliEnv

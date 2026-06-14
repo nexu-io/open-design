@@ -1386,7 +1386,7 @@ function AppInner() {
   );
 
   const handleAgentModelChange = useCallback(
-    (agentId: string, choice: { model?: string; reasoning?: string }) => {
+    (agentId: string, choice: { model?: string; reasoning?: string; serviceTier?: string }) => {
       const current = latestPersistedConfigRef.current;
       const prev = current.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };

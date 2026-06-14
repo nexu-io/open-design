@@ -85,6 +85,7 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
   /**
    * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
    * adapter. The daemon must not persist this object; it is translated into

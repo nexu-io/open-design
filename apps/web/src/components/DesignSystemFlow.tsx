@@ -2304,6 +2304,7 @@ export function DesignSystemDetailView({
         commentAttachments,
         model: selectedModel?.model ?? null,
         reasoning: selectedModel?.reasoning ?? null,
+        serviceTier: selectedModel?.serviceTier ?? null,
         locale,
         analyticsHints: {
           entryFrom: wasOnboardingHandoff

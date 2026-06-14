@@ -523,6 +523,7 @@ export const zhTW: Dict = {
   "settings.modelSourceLive": "來自 CLI 的即時列表",
   "settings.modelSourceFallback": "內建列表",
   "settings.reasoningPicker": "推理強度",
+  "settings.serviceTierPicker": "服務層級",
   "settings.modelPickerHint":
     "當 CLI 提供 `models` 命令時會自動拉取。選擇「預設」則沿用 CLI 自身的設定；選擇「自訂」可手動輸入任何 CLI 支援的模型 id。",
   "settings.modelPickerLiveHint":
@@ -1824,6 +1825,7 @@ export const zhTW: Dict = {
   "avatar.modelSection": "模型",
   "avatar.modelLabel": "模型",
   "avatar.reasoningLabel": "推理",
+  "avatar.serviceTierLabel": "服務層級",
   "avatar.customSuffix": "（自訂）",
   "socialShare.openDesignSection": "分享 Open Design",
   "socialShare.openDesignTitle": "GitHub 上的 Open Design",

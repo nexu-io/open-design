@@ -1492,7 +1492,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   });
 
   it('auto-tests a saved complete BYOK config when Settings opens', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
       if (url === '/api/memory') {
         return new Response(
@@ -2557,6 +2557,94 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(
       screen.getByText(/Showing built-in defaults/i),
     ).toBeTruthy();
+  });
+
+  it('persists Codex service tier selection and sends it to the agent test', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 12,
+            model: 'gpt-5.5',
+            sample: 'ok',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        agentModels: {
+          codex: { model: 'gpt-5.5', reasoning: 'default' },
+        },
+      },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              {
+                id: 'gpt-5.5',
+                label: 'gpt-5.5',
+                serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    const serviceTierPicker = screen.getByRole('combobox', {
+      name: en['settings.serviceTierPicker'],
+    }) as HTMLSelectElement;
+    expect(
+      Array.from(serviceTierPicker.options).map((option) => option.textContent),
+    ).toEqual(['Default', 'Fast']);
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'priority' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'default',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: en['settings.test'] }));
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
+      const testCall = calls.find(
+        ([input]) => input.toString() === '/api/test/connection',
+      );
+      expect(testCall).toBeDefined();
+      const init = testCall?.[1] as RequestInit | undefined;
+      const body = JSON.parse(String(init?.body));
+      expect(body).toEqual(expect.objectContaining({
+        mode: 'agent',
+        agentId: 'codex',
+        model: 'gpt-5.5',
+        reasoning: 'default',
+        serviceTier: 'priority',
+      }));
+    });
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {

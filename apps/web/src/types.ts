@@ -539,6 +539,8 @@ export interface AgentModelOption {
   inputPriceUsdPerMillion?: number;
   outputPriceUsdPerMillion?: number;
   metadata?: ModelMetadata;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: AgentModelOption[];
 }
 
 export type Surface = 'web' | 'image' | 'video' | 'audio';
