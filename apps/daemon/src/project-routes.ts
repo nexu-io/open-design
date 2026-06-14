@@ -846,8 +846,10 @@ function daemonFindRealTitleOffset(html: string, searchLimit: number): number {
  * Rewrite the `<title>` in html so the resulting PDF filename is Teams-safe.
  * Only the real `<head>` title is changed; `<title>` inside comments or script
  * blocks is left untouched. Mirrors sanitizeTitleInDoc in srcdoc.ts.
+ *
+ * Exported for unit testing; not part of the public API surface.
  */
-function daemonSanitizeTitleInDoc(html: string): string {
+export function daemonSanitizeTitleInDoc(html: string): string {
   const lower = html.toLowerCase();
   const bodyStart = lower.indexOf('<body');
   const headEnd = lower.lastIndexOf('</head>', bodyStart >= 0 ? bodyStart - 1 : lower.length - 1);
