@@ -689,11 +689,7 @@ function SkillRow({
           role="alert"
           data-testid="skills-edit-builtin-warning"
         >
-          <p>
-            Editing this built-in skill creates a user override. The built-in
-            entry will be hidden from the list until you delete the override.
-            Continue?
-          </p>
+          <p>{t('settings.skillsBuiltInOverrideWarning')}</p>
           <div className="skills-edit-builtin-actions">
             <button
               type="button"
