@@ -119,6 +119,7 @@ import {
 } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { saveOnboardingProfile } from '../state/onboarding-profile';
 import { testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
@@ -1596,6 +1597,9 @@ function OnboardingView({
     if (!onboardingSessionId) return;
     aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
+    // Persist role/orgSize so later AMR entries (outside onboarding) can forward
+    // the visitor's profile to AMR for paid-conversion segmentation.
+    saveOnboardingProfile({ role: snapshot.role, orgSize: snapshot.orgSize });
     trackOnboardingClick(analytics.track, {
       page_name: 'onboarding',
       area: 'about_you',

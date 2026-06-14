@@ -141,6 +141,12 @@ export interface AmrEntryAttribution {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   occurredAt: string;
+  // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
+  // AMR can segment paid conversion by who the visitor is. Open strings, not a
+  // union: onboarding keeps role/orgSize open so a new option never forces a
+  // contract bump. Absent when the visitor skipped or never reached onboarding.
+  odRole?: string;
+  odOrgSize?: string;
 }
 
 // The six tabs inside the New project modal (CSV row 7 tab_name).

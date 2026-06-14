@@ -83,6 +83,11 @@ export interface AmrEntryAnalyticsPayload {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   entryOccurredAt: string;
+  // Optional self-reported onboarding profile, forwarded to AMR for paid-
+  // conversion segmentation. Open strings (not a union) so a new onboarding
+  // option never forces a contract bump on either side.
+  odRole?: string;
+  odOrgSize?: string;
 }
 
 export interface AmrEntryAnalyticsContext {
@@ -459,6 +464,8 @@ export function parseAmrEntryAnalyticsPayload(
   const sourceProduct = raw.sourceProduct;
   const sourceDetail = raw.sourceDetail;
   const entryOccurredAt = raw.entryOccurredAt;
+  const odRole = sanitizeOptionalProfileValue(raw.odRole);
+  const odOrgSize = sanitizeOptionalProfileValue(raw.odOrgSize);
   if (
     pageName !== 'open_design'
     || typeof sourcePageName !== 'string'
@@ -477,6 +484,8 @@ export function parseAmrEntryAnalyticsPayload(
       !== AMR_ENTRY_SOURCE_PAGE_BY_SOURCE[sourceDetail as TrackingAmrEntrySource]
     || typeof entryOccurredAt !== 'string'
     || !Number.isFinite(Date.parse(entryOccurredAt))
+    || odRole === INVALID_PROFILE_VALUE
+    || odOrgSize === INVALID_PROFILE_VALUE
   ) {
     return null;
   }
@@ -490,7 +499,24 @@ export function parseAmrEntryAnalyticsPayload(
     sourceProduct,
     sourceDetail: sourceDetail as TrackingAmrEntrySource,
     entryOccurredAt,
+    ...(odRole ? { odRole } : {}),
+    ...(odOrgSize ? { odOrgSize } : {}),
   };
+}
+
+// Optional profile values are open strings; we accept absent/undefined, reject
+// a present-but-wrong type or an over-long value (matches AMR's 64-char cap),
+// and otherwise pass the trimmed string through.
+const INVALID_PROFILE_VALUE = Symbol('invalid_profile_value');
+
+function sanitizeOptionalProfileValue(
+  value: unknown,
+): string | undefined | typeof INVALID_PROFILE_VALUE {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') return INVALID_PROFILE_VALUE;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 64) return INVALID_PROFILE_VALUE;
+  return trimmed;
 }
 
 export async function mirrorAmrEntryAnalytics(
