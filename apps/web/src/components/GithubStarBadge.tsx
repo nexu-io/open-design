@@ -22,12 +22,13 @@ export function GithubStarBadge() {
 
   return (
     <a
-      className="entry-star-badge"
+      className="entry-star-badge od-tooltip"
       href={GITHUB_REPO_URL}
       target="_blank"
       rel="noreferrer noopener"
       aria-label={t('entry.githubStarAria')}
-      title={t('entry.githubStarTitle')}
+      data-tooltip={t('entry.githubStarTitle')}
+      data-tooltip-placement="bottom"
       data-testid="entry-star-badge"
     >
       <Icon name="github-filled" size={16} className="entry-star-badge__icon" />

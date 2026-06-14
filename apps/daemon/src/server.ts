@@ -5,6 +5,8 @@ import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import dns from 'node:dns';
+import https from 'node:https';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -34,6 +36,12 @@ import {
   PLUGIN_PREVIEWS_ROUTE,
 } from './plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
+import {
+  buildBrowserUseRunState,
+  collectBrowserUseDiscoveryFacts,
+  isBrowserUseRequested,
+  renderBrowserUseUnavailablePrompt,
+} from './browser-use-diagnostics.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -93,6 +101,7 @@ import {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
+import { normalizeDaemonBindHost } from './daemon-startup.js';
 export {
   isDesktopAuthGateActive,
   isDesktopAuthRegistered,
@@ -4419,16 +4428,58 @@ const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // always means the agent is winding down or hanging. See #1451.
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
-function resolveChatRunInactivityTimeoutMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
-  // filesystem progress. Keep the default long enough for agents that spend
-  // several minutes silently writing large artifacts.
-  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
-  // makes an oversized override fail almost immediately while reporting a huge
-  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+// Resolve the chat-run inactivity watchdog ceiling. Priority order:
+//   1. `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
+//   2. The agent runtime def's `inactivityTimeoutMs` recommendation —
+//      lets agents whose CLIs go silent for long stretches during
+//      legitimate work (e.g. Copilot from #2467) raise the ceiling
+//      without every operator having to set an env var.
+//   3. The 10-minute global default.
+//
+// The env path is lenient (silently normalizes / falls back) because it
+// comes from a runtime knob an operator can mis-type at any time. The
+// def path is strict (throws on non-finite or negative) because the
+// value lives in checked-in source — a typo like `inactivityTimeoutMs: -1`
+// should crash loudly at chat-run time rather than silently disable the
+// watchdog for that agent. Both paths still pass through the 24-hour
+// clamp because Node silently downgrades signed-32-bit-overflowing
+// setTimeout delays to 1ms.
+//
+// Order matters: validate the def hint *before* checking the env
+// override. Otherwise a finite env value would hide a bad checked-in
+// value (e.g. `inactivityTimeoutMs: -1`) from ever tripping the
+// fast-fail — the typo could sit unnoticed in source until someone
+// removed the override. Validation now runs on every call regardless
+// of which branch ultimately wins.
+export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number): void {
+  // Strict checked-in-config guard for `RuntimeAgentDef.inactivityTimeoutMs`.
+  // Exported (and called by `resolveChatRunInactivityTimeoutMs` below)
+  // so that chat-run startup can invoke this immediately after the
+  // runtime def is selected — before any filesystem or
+  // prompt-building work happens — and abort with a loud RangeError
+  // when a checked-in def carries an invalid value. That keeps a
+  // typo from leaving partial setup state (e.g. a `.mcp.json` write
+  // / unlink, a freshly-composed system prompt) on disk when the
+  // run then aborts later at watchdog-arm time.
+  if (agentDefault === undefined) return;
+  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+    throw new RangeError(
+      `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+        'Fix the runtime def — invalid values used to silently disable the watchdog.',
+    );
+  }
+}
+
+export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
+  assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
+  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (agentDefault !== undefined) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
+  }
+  return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
 }
 
 // Resolve the post-artifact quiet-period window. Same clamp as the outer
@@ -4538,7 +4589,6 @@ export function classifyChatRunCloseStatus(params: {
 
 type ClaudeStreamJsonBookkeepingRun = {
   stdinOpen?: boolean;
-  pendingHostAnswers?: Set<string>;
   turnCompletedCleanly?: boolean;
   child?: {
     stdin?: {
@@ -4565,30 +4615,18 @@ export function applyClaudeStreamJsonRunBookkeeping(
     stopReason?: unknown;
   };
 
-  if (
-    run.stdinOpen &&
-    event.type === 'tool_use' &&
-    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
-    typeof event.id === 'string'
-  ) {
-    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-    run.pendingHostAnswers.add(event.id);
-    return;
-  }
-
   const cleanTerminalTurn =
-    ((event.type === 'turn_end' &&
+    (event.type === 'turn_end' &&
       // `stop_reason: tool_use` means the model paused to wait for tool
-      // execution (claude-code is about to run an internal tool, or we owe a
-      // host tool_result). Either way the conversation is still in flight.
+      // execution (claude-code is about to run an internal tool). The
+      // conversation is still in flight.
       event.stopReason !== 'tool_use') ||
-      (event.type === 'usage' && event.stopReason !== 'tool_use')) &&
-    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+    (event.type === 'usage' && event.stopReason !== 'tool_use');
   if (!cleanTerminalTurn) return;
 
-  // Record clean completion even if stdin was already closed by the
-  // host-answer path. The close-status classifier reads this to ignore late
-  // SessionEnd hook failures after the final assistant turn completed.
+  // Record clean completion even if stdin was already closed. The
+  // close-status classifier reads this to ignore late SessionEnd hook
+  // failures after the final assistant turn completed.
   run.turnCompletedCleanly = true;
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
@@ -4617,11 +4655,12 @@ function resolveAcpStageTimeoutMs(): number | undefined {
 
 export async function startServer({
   port = 7456,
-  host = process.env.OD_BIND_HOST || '127.0.0.1',
+  host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
+  host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
@@ -6660,6 +6699,82 @@ export async function startServer({
     res.json({ ok: true });
   });
 
+  const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
+  const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
+
+  function velaApiProxyBaseUrl(req) {
+    return `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
+  }
+
+  function velaProxyRequestBody(req) {
+    if (req.method === 'GET' || req.method === 'HEAD') return null;
+    if (Buffer.isBuffer(req.body)) return req.body;
+    if (typeof req.body === 'string') return Buffer.from(req.body);
+    if (req.body == null) return null;
+    return Buffer.from(JSON.stringify(req.body));
+  }
+
+  function shouldStreamVelaProxyRequest(req, body) {
+    return req.method !== 'GET' && req.method !== 'HEAD' && body == null;
+  }
+
+  function proxyAmrApiRequest(req, res) {
+    const suffix = req.originalUrl.slice(AMR_API_PROXY_PREFIX.length);
+    if (!suffix.startsWith('/api/v1/')) {
+      res.status(404).json({ error: 'unknown_amr_api_proxy_path' });
+      return;
+    }
+    const target = new URL(suffix, AMR_API_UPSTREAM_ORIGIN);
+    const body = velaProxyRequestBody(req);
+    const streamBody = shouldStreamVelaProxyRequest(req, body);
+    const headers = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      if (
+        lower === 'host' ||
+        lower === 'connection' ||
+        lower === 'transfer-encoding'
+      ) {
+        continue;
+      }
+      if (lower === 'content-length' && body) continue;
+      headers[key] = value;
+    }
+    if (body) headers['content-length'] = String(body.length);
+
+    const upstream = https.request(
+      target,
+      {
+        method: req.method,
+        headers,
+        lookup: (hostname, options, callback) => {
+          dns.lookup(hostname, { ...options, family: 4, all: false }, callback);
+        },
+      },
+      (upstreamRes) => {
+        res.status(upstreamRes.statusCode ?? 502);
+        for (const [key, value] of Object.entries(upstreamRes.headers)) {
+          if (value !== undefined) res.setHeader(key, value);
+        }
+        upstreamRes.pipe(res);
+      },
+    );
+    upstream.setTimeout(30_000, () => upstream.destroy(new Error('AMR API proxy timed out')));
+    upstream.on('error', (err) => {
+      if (!res.headersSent) {
+        res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+      } else {
+        res.end();
+      }
+    });
+    if (body) upstream.write(body);
+    if (streamBody) {
+      req.pipe(upstream);
+    } else {
+      upstream.end();
+    }
+  }
+
   // AMR (vela) login integration — see `apps/daemon/src/integrations/vela.ts`.
   // The vela CLI owns the device-authorization UX (URL + code + browser open);
   // these routes only surface enough state for Open Design's Settings card to
@@ -6731,12 +6846,18 @@ export async function startServer({
     }
   });
 
+  app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
+
   app.post('/api/integrations/vela/login', async (req, res) => {
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const attribution = parseVelaLoginAttribution(req.body);
-      const spawned = await spawnVelaLogin({ configuredEnv, attribution });
+      const spawned = await spawnVelaLogin({
+        configuredEnv,
+        attribution,
+        defaultApiUrl: velaApiProxyBaseUrl(req),
+      });
       res.status(202).json(spawned);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -11344,6 +11465,30 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Validate the checked-in `inactivityTimeoutMs` hint immediately
+    // after the runtime def is selected and before any side-effectful
+    // setup (auto-memory extract, `.mcp.json` write/unlink,
+    // composeSystemPrompt, prompt persistence). A bad def value would
+    // otherwise abort the run only at watchdog-arm time, after that
+    // setup has already mutated local state, leaving confusing partial
+    // residue behind (issue #2467 review on PR #2579).
+    //
+    // Catch is intentionally narrowed to `RangeError`, the only kind
+    // `assertValidRuntimeDefInactivityTimeoutMs` is allowed to throw
+    // for invalid checked-in values. Anything else (a regression that
+    // makes the helper throw on a valid value, an unrelated bug
+    // introduced while touching this path) should bubble up to the
+    // outer chat-run starter — which surfaces it as
+    // `AGENT_EXECUTION_FAILED` — rather than being misreported as
+    // "the runtime def is bad" and burying the real failure.
+    try {
+      assertValidRuntimeDefInactivityTimeoutMs(def.inactivityTimeoutMs);
+    } catch (err) {
+      if (err instanceof RangeError) {
+        return design.runs.fail(run, 'AGENT_RUNTIME_DEF_INVALID', err.message);
+      }
+      throw err;
+    }
     const safeCommentAttachments =
       normalizeCommentAttachments(commentAttachments);
     if (
@@ -11351,6 +11496,17 @@ export async function startServer({
       safeCommentAttachments.length === 0
     ) {
       return design.runs.fail(run, 'BAD_REQUEST', 'message required');
+    }
+    const browserUseRunState = buildBrowserUseRunState({
+      requested: isBrowserUseRequested(message, currentPrompt, systemPrompt),
+      agentId: def.id,
+    });
+    if (browserUseRunState) {
+      run.browserUse = browserUseRunState;
+      design.runs.emit(run, 'diagnostic', {
+        type: 'browser_use_unavailable',
+        ...browserUseRunState,
+      });
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
     const runId = run.id;
@@ -11722,9 +11878,10 @@ export async function startServer({
       agentResumeCtx.storedStablePromptHash,
       currentStableHash,
     );
+    const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt];
+      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, systemPrompt]
+      : [researchCommandContract, runContextPrompt, browserUsePromptGuard];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -11787,6 +11944,7 @@ export async function startServer({
         { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
         { kind: 'researchCommandContract', content: researchCommandContract },
         { kind: 'runContextPrompt', content: runContextPrompt },
+        { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
         { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
         { kind: 'echoGuard', content: ECHO_GUARD },
         { kind: 'userRequest', content: userRequestPrompt },
@@ -12588,7 +12746,7 @@ export async function startServer({
     // here; on this branch `send` was hoisted into the AMR preflight
     // earlier, so we keep only the new `runStartTimeMs` declaration.
     const runStartTimeMs = Date.now();
-    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
@@ -12797,11 +12955,20 @@ export async function startServer({
       ));
       return design.runs.finish(run, 'failed', 1, null);
     }
+    const browserUseRuntimeEnv = run.browserUse
+      ? {
+          OD_BROWSER_USE_REQUESTED: run.browserUse.requested ? '1' : '0',
+          OD_BROWSER_USE_AVAILABLE: run.browserUse.available ? '1' : '0',
+          ...(run.browserUse.reason ? { OD_BROWSER_USE_UNAVAILABLE_REASON: run.browserUse.reason } : {}),
+          OD_BROWSER_USE_REGISTRY_PATH: run.browserUse.diagnostics?.registryPath ?? '',
+        }
+      : {};
     const agentSpawnEnv = spawnEnvForAgent(
       def.id,
       {
         ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
         ...(def.env || {}),
+        ...browserUseRuntimeEnv,
       },
       configuredAgentEnv,
       undefined,

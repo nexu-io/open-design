@@ -568,7 +568,7 @@ export function InlineModelSwitcher({
       <button
         type="button"
         className={
-          'inline-switcher__chip' +
+          'inline-switcher__chip od-tooltip' +
           (showAmrReminder ? ' has-amr-reminder' : '')
         }
         data-testid="inline-model-switcher-chip"
@@ -576,8 +576,8 @@ export function InlineModelSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${chipMode} · ${chipPrimary} · ${chipModel}`}
-        title={`${chipMode} · ${chipPrimary} · ${chipModel}`}
         data-tooltip={`${chipMode} · ${chipPrimary} · ${chipModel}`}
+        data-tooltip-placement="bottom"
       >
         {showAmrReminder ? (
           <span

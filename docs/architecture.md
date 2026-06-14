@@ -2,7 +2,7 @@
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md) · [`modes.md`](modes.md)
 
-This doc describes the system topology, runtime modes, data flow, and file layout. Design rationale lives in [`spec.md`](spec.md); protocol details for skills and agent adapters live in their own docs.
+This doc describes the system topology, runtime modes, data flow, and file layout. Design rationale lives in [`spec.md`](spec.md); protocol details for skills and agent adapters live in their own docs. For embedding OD behind another control plane, see [`orchestrator-workspaces.md`](orchestrator-workspaces.md).
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [acd]: https://github.com/VoltAgent/awesome-claude-design

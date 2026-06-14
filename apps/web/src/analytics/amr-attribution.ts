@@ -3,6 +3,7 @@ import type {
   TrackingAmrEntrySource,
   TrackingPageName,
 } from '@open-design/contracts/analytics';
+import { readOnboardingProfile } from '../state/onboarding-profile';
 import { trackAmrEntryClick } from './events';
 
 type Track = (
@@ -51,11 +52,18 @@ export function recordAmrEntry(
   const existing = readReusableAmrAttribution(now, options.reuseExistingFrom);
   if (existing) return existing;
 
+  const profile = readOnboardingProfile();
   const attribution: AmrEntryAttribution = {
     entryId: `od-amr-${randomId()}`,
     sourceProduct: 'open_design',
     sourceDetail,
     occurredAt: now.toISOString(),
+    ...(profile?.role ? { odRole: profile.role } : {}),
+    ...(profile?.orgSize ? { odOrgSize: profile.orgSize } : {}),
+    ...(profile?.useCase && profile.useCase.length > 0
+      ? { odUseCase: profile.useCase }
+      : {}),
+    ...(profile?.source ? { odSource: profile.source } : {}),
   };
   writeAmrAttribution(attribution);
   trackAmrEntryClick(track, {
@@ -147,6 +155,15 @@ async function mirrorAmrEntryToAmrAnalytics(
           sourceProduct: attribution.sourceProduct,
           sourceDetail: attribution.sourceDetail,
           entryOccurredAt: attribution.occurredAt,
+          // Self-reported onboarding profile (optional). Anchored to entryId on
+          // the AMR side for paid-conversion segmentation. Not added to the
+          // redirect URL — kept to the consent-gated mirror channel only.
+          ...(attribution.odRole ? { odRole: attribution.odRole } : {}),
+          ...(attribution.odOrgSize ? { odOrgSize: attribution.odOrgSize } : {}),
+          ...(attribution.odUseCase && attribution.odUseCase.length > 0
+            ? { odUseCase: attribution.odUseCase }
+            : {}),
+          ...(attribution.odSource ? { odSource: attribution.odSource } : {}),
         },
       }),
     });

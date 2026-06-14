@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import ts from "typescript";
 
 import { checkCrossAppImports } from "./check-cross-app-imports.ts";
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
@@ -16,6 +17,7 @@ import {
   checkDesignSystemTokenFixtureSync,
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
+import { checkCraftReferences } from "./lint-craft-references.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -741,6 +743,180 @@ async function checkWebTestLayout(): Promise<boolean> {
   return true;
 }
 
+const webImportIsolationSourcePrefixes = ["apps/web/app/", "apps/web/src/"];
+const webImportIsolationExtensions = new Set([".ts", ".tsx"]);
+const webImportIsolationSkippedDirectories = new Set([
+  ".next",
+  "dist",
+  "node_modules",
+  "out",
+  "reports",
+  "test-results",
+]);
+const webImportIsolationForbiddenPackages = [
+  "@open-design/platform",
+  "@open-design/sidecar",
+  "@open-design/sidecar-proto",
+];
+const webImportIsolationForbiddenDaemonRoots = [
+  "apps/daemon/src",
+  "apps/daemon/tests",
+];
+const webImportIsolationForbiddenPackageRoots = [
+  "packages/platform",
+  "packages/sidecar",
+  "packages/sidecar-proto",
+];
+
+type WebImportIsolationViolation = {
+  filePath: string;
+  lineNumber: number;
+  specifier: string;
+  reason: string;
+};
+
+type SourceImportSpecifier = {
+  lineNumber: number;
+  specifier: string;
+};
+
+export function isWebImportIsolationSourcePath(repositoryPath: string): boolean {
+  return (
+    webImportIsolationSourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix)) &&
+    webImportIsolationExtensions.has(path.extname(repositoryPath))
+  );
+}
+
+function pushStringSpecifier(
+  imports: SourceImportSpecifier[],
+  sourceFile: ts.SourceFile,
+  node: ts.Node | undefined,
+): void {
+  if (!node) return;
+  if (!ts.isStringLiteral(node) && !ts.isNoSubstitutionTemplateLiteral(node)) return;
+
+  imports.push({
+    lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+    specifier: node.text,
+  });
+}
+
+function collectImportSpecifiersFromSource(repositoryPath: string, source: string): SourceImportSpecifier[] {
+  const sourceFile = ts.createSourceFile(
+    repositoryPath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    repositoryPath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const imports: SourceImportSpecifier[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      pushStringSpecifier(imports, sourceFile, node.moduleSpecifier);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      pushStringSpecifier(imports, sourceFile, node.argument.literal);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
+      pushStringSpecifier(imports, sourceFile, node.arguments[0]);
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return imports;
+}
+
+function isPackageOrSubpath(specifier: string, packageName: string): boolean {
+  return specifier === packageName || specifier.startsWith(`${packageName}/`);
+}
+
+function isPathOrDescendant(repositoryPath: string, root: string): boolean {
+  return repositoryPath === root || repositoryPath.startsWith(`${root}/`);
+}
+
+function resolveWebImportRepositoryPath(fromRepositoryPath: string, specifier: string): string | null {
+  const pathOnly = specifier.split(/[?#]/, 1)[0];
+  if (!pathOnly) return null;
+
+  if (pathOnly.startsWith("@/")) {
+    return path.posix.normalize(path.posix.join("apps/web", pathOnly.slice("@/".length)));
+  }
+
+  if (!pathOnly.startsWith(".")) return null;
+  return path.posix.normalize(path.posix.join(path.posix.dirname(fromRepositoryPath), pathOnly));
+}
+
+function webImportIsolationViolationReason(fromRepositoryPath: string, specifier: string): string | null {
+  if (webImportIsolationForbiddenPackages.some((packageName) => isPackageOrSubpath(specifier, packageName))) {
+    return "apps/web must not import sidecar or platform control-plane packages directly";
+  }
+
+  const resolvedPath = resolveWebImportRepositoryPath(fromRepositoryPath, specifier);
+  if (!resolvedPath) return null;
+
+  if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
+    return "apps/web must use daemon HTTP APIs or @open-design/contracts instead of daemon private source";
+  }
+
+  if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
+    return "apps/web must not import sidecar or platform control-plane source directly";
+  }
+
+  return null;
+}
+
+export function collectWebImportIsolationViolationsFromSource(
+  repositoryPath: string,
+  source: string,
+): WebImportIsolationViolation[] {
+  if (!isWebImportIsolationSourcePath(repositoryPath)) return [];
+
+  return collectImportSpecifiersFromSource(repositoryPath, source).flatMap((sourceImport) => {
+    const reason = webImportIsolationViolationReason(repositoryPath, sourceImport.specifier);
+    if (!reason) return [];
+    return [{
+      filePath: repositoryPath,
+      lineNumber: sourceImport.lineNumber,
+      specifier: sourceImport.specifier,
+      reason,
+    }];
+  });
+}
+
+async function checkWebImportIsolation(): Promise<boolean> {
+  const violations: WebImportIsolationViolation[] = [];
+
+  for (const repositoryPrefix of webImportIsolationSourcePrefixes) {
+    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
+    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
+
+    for (const repositoryPath of await collectRepositoryFiles(
+      path.join(repoRoot, repositoryDirectory),
+      webImportIsolationSkippedDirectories,
+    )) {
+      if (!isWebImportIsolationSourcePath(repositoryPath)) continue;
+      const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+      violations.push(...collectWebImportIsolationViolationsFromSource(repositoryPath, source));
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Web import isolation violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.specifier}\` -> ${violation.reason}`);
+    }
+    return false;
+  }
+
+  console.log("Web import isolation check passed: web runtime imports stay behind contracts and daemon HTTP APIs.");
+  return true;
+}
+
 const toolsRootAllowlist = new Map<string, "directory" | "file">([
   // Keep top-level tools intentionally small. `tools/launcher` was an incoming
   // Windows shim experiment from PR #683 and is not an active repo boundary.
@@ -1063,8 +1239,10 @@ const checks: GuardCheck[] = [
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
+  { name: "web import isolation", run: checkWebImportIsolation },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
+  { name: "craft references", run: checkCraftReferences },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },

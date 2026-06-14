@@ -808,10 +808,10 @@
 }
 
 /* Downward hover tooltip for the collapsed chips. */
-.entry-main__topbar-chips--icon-only [data-tooltip] {
+.entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip) {
   position: relative;
 }
-.entry-main__topbar-chips--icon-only [data-tooltip]::after {
+.entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip)::after {
   content: attr(data-tooltip);
   position: absolute;
   top: calc(100% + 8px);
@@ -830,14 +830,14 @@
   transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
   z-index: 60;
 }
-.entry-main__topbar-chips--icon-only [data-tooltip]:hover::after,
-.entry-main__topbar-chips--icon-only [data-tooltip]:focus-visible::after {
+.entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip):hover::after,
+.entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip):focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
 /* While the model-switcher popover is open, suppress its tooltip so the
    bubble doesn't collide with the menu. */
-.entry-main__topbar-chips--icon-only [data-tooltip][aria-expanded='true']::after {
+.entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip)[aria-expanded='true']::after {
   display: none;
 }
 

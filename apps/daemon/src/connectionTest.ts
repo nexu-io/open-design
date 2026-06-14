@@ -1673,6 +1673,21 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
   return text.join('');
 }
 
+const OPENCODE_OUTDATED_CLI_DETAIL =
+  'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+
+function openCodeOutdatedCliDetail(output: string): string | null {
+  const value = output.toLowerCase();
+  const looksLikeOpenCodeHelp =
+    /\bopencode\b/u.test(value) && /\b(?:usage|commands|options):/u.test(value);
+  const looksLikeUnsupportedArgs =
+    /\b(?:unknown option|unknown argument|unexpected argument|unrecognized option|invalid option|incompatible opencode args)\b/u.test(value);
+
+  return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
+    ? OPENCODE_OUTDATED_CLI_DETAIL
+    : null;
+}
+
 interface AgentSpawnHandle {
   child: ReturnType<typeof spawn>;
   acpSession?: {
@@ -2218,6 +2233,27 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
+      if (input.agentId === 'opencode') {
+        const outdatedCliDetail = openCodeOutdatedCliDetail(rawDetail);
+        if (outdatedCliDetail) {
+          console.warn(
+            `[test:agent] ${def.name} → outdated_cli: ${redactSecrets(rawDetail)}`,
+          );
+          return {
+            ok: false,
+            kind: 'agent_spawn_failed',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail: outdatedCliDetail,
+            diagnostics: buildDiagnostics({
+              phase: 'spawn',
+              exitCode: winner.code,
+              signal: winner.signal,
+            }),
+          };
+        }
+      }
       const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
       if (auth?.status === 'missing') {
         console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);

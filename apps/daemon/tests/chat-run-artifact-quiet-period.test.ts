@@ -551,7 +551,6 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
   it('keeps stdin open when usage reports a tool_use stop reason', () => {
     const run = {
       stdinOpen: true,
-      pendingHostAnswers: new Set<string>(),
       turnCompletedCleanly: false,
       child: {
         stdin: {
@@ -570,5 +569,36 @@ describe('applyClaudeStreamJsonRunBookkeeping', () => {
     expect(run.turnCompletedCleanly).toBe(false);
     expect(run.stdinOpen).toBe(true);
     expect(run.child.stdin.end).not.toHaveBeenCalled();
+  });
+
+  it('closes stdin and records clean completion after an AskUserQuestion tool_use followed by end_turn (#4273)', () => {
+    // Regression test: the dead AskUserQuestion detection branch used to add
+    // the tool_use id to pendingHostAnswers and return early, preventing stdin
+    // from ever closing when the subsequent turn_end arrived.
+    const run = {
+      stdinOpen: true,
+      turnCompletedCleanly: false,
+      child: {
+        stdin: {
+          destroyed: false,
+          end: vi.fn(),
+        },
+      },
+    };
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'tool_use',
+      name: 'AskUserQuestion',
+      id: 'auq_123',
+    });
+
+    applyClaudeStreamJsonRunBookkeeping(run, {
+      type: 'turn_end',
+      stopReason: 'end_turn',
+    });
+
+    expect(run.turnCompletedCleanly).toBe(true);
+    expect(run.stdinOpen).toBe(false);
+    expect(run.child.stdin.end).toHaveBeenCalled();
   });
 });
