@@ -34,8 +34,10 @@ Constraints:
 - Do not regress any existing behavior. Resume is best-effort: when a guard
   fails, the capability is absent, or `--resume` is rejected at runtime, the
   daemon falls back to today's full-transcript spawn for that turn.
-- Do not break the interactive `stream-json` / `AskUserQuestion` machinery
-  (`pendingHostAnswers`, `POST /api/runs/:id/tool-result`).
+- Do not break the `stream-json` input skeleton (generic mid-turn stdin
+  infrastructure). Note: the `AskUserQuestion` tool wiring and
+  `POST /api/runs/:id/tool-result` endpoint were removed in PR #4114; the
+  `pendingHostAnswers` dead branch was cleaned up in PR #4273.
 - Keep the daemon the source of truth: the stored session pointer is a cache
   keyed on daemon-owned conversation state, never the authoritative history.
 - Claude-only in v1. Other adapters keep `resumesSessionViaCli` unset and the
@@ -110,9 +112,14 @@ OD is a synchronous, interactive design-chat, not an async issue/task runner.
 These traits are why resume must be guarded rather than unconditional, and why
 it stays Claude-first and opt-out-able:
 
-1. **Interactive mid-turn tools.** OD keeps `stream-json` stdin open to answer
-   `AskUserQuestion` with a real `tool_result`. multica disables it
-   (`--disallowedTools AskUserQuestion`). Resume must not disturb this path.
+1. **Interactive mid-turn clarification.** OD routes clarifying questions
+   through the `<question-form>` markdown artifact; answers flow back as the
+   next user message (`POST /api/chat`). The `AskUserQuestion` tool wiring and
+   `POST /api/runs/:id/tool-result` endpoint were removed (PR #4114); the
+   `stream-json` stdin skeleton is retained only as generic mid-turn input
+   infrastructure, with stdin staying open across `tool_use` pauses and closing only after a terminal non-`tool_use` turn/end result. multica
+   disables `AskUserQuestion` entirely (`--disallowedTools AskUserQuestion`).
+   Resume must not disturb the `<question-form>` clarification path.
 2. **Per-turn prompt rewriting.** OD recomposes the system prompt + skills +
    memory + design system into the `# Instructions` block of the stdin user
    message every turn. Because the instructions ride the stdin message (not a
@@ -334,8 +341,12 @@ per `AGENTS.md`:
 - **Capability probe.** A `claude --help` without `--resume` → flag never sent
   AND every turn carries the full transcript (skip-transcript stays off because
   `resolveResumeDecision` returns null without the capability).
-- **Interactive intact.** An `AskUserQuestion` turn still resolves via
-  `POST /api/runs/:id/tool-result` under resume.
+- **Interactive intact.** A clarifying-question turn (`<question-form>` artifact)
+  still resolves through `POST /api/chat` (the user's answer as the next message)
+  under resume; the `<question-form>` path is independent of session state and
+  is unaffected by `--resume`. (The `AskUserQuestion` tool wiring and
+  `POST /api/runs/:id/tool-result` endpoint were removed in PR #4114 and are
+  not part of this feature.)
 
 Human verification (per `AGENTS.md`, two namespaced runtimes: `main` vs branch):
 drive a multi-turn chat through production HTTP only; confirm continuity holds

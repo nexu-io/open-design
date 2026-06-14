@@ -4574,7 +4574,6 @@ export function classifyChatRunCloseStatus(params: {
 
 type ClaudeStreamJsonBookkeepingRun = {
   stdinOpen?: boolean;
-  pendingHostAnswers?: Set<string>;
   turnCompletedCleanly?: boolean;
   child?: {
     stdin?: {
@@ -4601,30 +4600,18 @@ export function applyClaudeStreamJsonRunBookkeeping(
     stopReason?: unknown;
   };
 
-  if (
-    run.stdinOpen &&
-    event.type === 'tool_use' &&
-    (event.name === 'AskUserQuestion' || event.name === 'ask_user_question') &&
-    typeof event.id === 'string'
-  ) {
-    if (!run.pendingHostAnswers) run.pendingHostAnswers = new Set();
-    run.pendingHostAnswers.add(event.id);
-    return;
-  }
-
   const cleanTerminalTurn =
-    ((event.type === 'turn_end' &&
+    (event.type === 'turn_end' &&
       // `stop_reason: tool_use` means the model paused to wait for tool
-      // execution (claude-code is about to run an internal tool, or we owe a
-      // host tool_result). Either way the conversation is still in flight.
+      // execution (claude-code is about to run an internal tool). The
+      // conversation is still in flight.
       event.stopReason !== 'tool_use') ||
-      (event.type === 'usage' && event.stopReason !== 'tool_use')) &&
-    (!run.pendingHostAnswers || run.pendingHostAnswers.size === 0);
+    (event.type === 'usage' && event.stopReason !== 'tool_use');
   if (!cleanTerminalTurn) return;
 
-  // Record clean completion even if stdin was already closed by the
-  // host-answer path. The close-status classifier reads this to ignore late
-  // SessionEnd hook failures after the final assistant turn completed.
+  // Record clean completion even if stdin was already closed. The
+  // close-status classifier reads this to ignore late SessionEnd hook
+  // failures after the final assistant turn completed.
   run.turnCompletedCleanly = true;
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
