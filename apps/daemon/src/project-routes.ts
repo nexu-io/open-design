@@ -139,6 +139,13 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
 })();
 </script>`;
 
+function sameOrchestratorWorkspace(a: unknown, b: unknown): boolean {
+  const parsedA = parseOrchestratorWorkspace(a);
+  const parsedB = parseOrchestratorWorkspace(b);
+  if (!parsedA.ok || !parsedB.ok) return false;
+  return JSON.stringify(parsedA.value) === JSON.stringify(parsedB.value);
+}
+
 const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
 (function(){
   if (window.__odUrlSelectionBridge) return;
@@ -1087,17 +1094,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
         if ('orchestratorWorkspace' in metadata) {
-          const parsedOrchestratorWorkspace = parseOrchestratorWorkspace(
-            metadata.orchestratorWorkspace,
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
           );
-          if (!parsedOrchestratorWorkspace.ok) {
-            return sendApiError(
-              res,
-              400,
-              'BAD_REQUEST',
-              parsedOrchestratorWorkspace.message,
-            );
-          }
         }
         // Reject invalid linked working directories up front (consistent with
         // PATCH /api/projects/:id) instead of silently dropping them. The
@@ -1377,6 +1377,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
         }
         if (existingMeta?.baseDir) {
+          if ('orchestratorWorkspace' in patch.metadata) {
+            if (
+              existingMeta.orchestratorWorkspace == null ||
+              !sameOrchestratorWorkspace(
+                patch.metadata.orchestratorWorkspace,
+                existingMeta.orchestratorWorkspace,
+              )
+            ) {
+              return sendApiError(
+                res, 400, 'BAD_REQUEST',
+                'orchestratorWorkspace is immutable after import; use the working-dir route to change it',
+              );
+            }
+          }
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
             return sendApiError(
               res, 400, 'BAD_REQUEST',
@@ -1398,6 +1412,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             ...(existingMeta.fromTrustedPicker === true
               ? { fromTrustedPicker: true as const }
               : {}),
+            ...(existingMeta.orchestratorWorkspace
+              ? { orchestratorWorkspace: existingMeta.orchestratorWorkspace }
+              : {}),
           };
         } else if ('baseDir' in patch.metadata) {
           // Non-imported project trying to acquire a baseDir → reject (only
@@ -1405,6 +1422,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'baseDir can only be set via POST /api/import/folder',
+          );
+        } else if ('orchestratorWorkspace' in patch.metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
           );
         }
       }

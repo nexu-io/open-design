@@ -238,6 +238,29 @@ describe('POST /api/import/folder', () => {
           writeback: 'external',
         });
 
+        const patchResp = await fetch(`${baseUrl}/api/projects/${project.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ metadata: { kind: 'prototype', skipDiscoveryBrief: true } }),
+        });
+        expect(patchResp.status).toBe(200);
+        const patchBody = (await patchResp.json()) as {
+          project: {
+            metadata?: {
+              orchestratorWorkspace?: Record<string, unknown>;
+              skipDiscoveryBrief?: boolean;
+            };
+          };
+        };
+        expect(patchBody.project.metadata?.skipDiscoveryBrief).toBe(true);
+        expect(patchBody.project.metadata?.orchestratorWorkspace).toEqual({
+          kind: 'scratch',
+          sourceLabel: 'checkout:main',
+          sourceRef: 'main@abc123',
+          baseRevision: 'abc123',
+          writeback: 'external',
+        });
+
         const filesResp = await fetch(`${baseUrl}/api/projects/${project.id}/files`);
         expect(filesResp.status).toBe(200);
         const filesBody = (await filesResp.json()) as { files: Array<{ name: string }> };
