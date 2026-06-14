@@ -431,6 +431,9 @@ export interface Dict {
   'settings.skillsCreate': string;
   'settings.skillsSave': string;
   'settings.skillsSaving': string;
+  'settings.skillsOverrideCreate': string;
+  'settings.skillsOverrideSave': string;
+  'settings.skillsBuiltInOverrideWarning': string;
   'settings.skillsFiles': string;
   'settings.skillsNoFiles': string;
   'settings.skillsNameRequired': string;
