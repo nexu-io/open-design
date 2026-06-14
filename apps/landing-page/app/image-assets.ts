@@ -67,12 +67,20 @@ export const heroProductSrcset = [
 ].join(', ');
 
 /**
- * Default Open Graph card image. Used by every page that doesn't supply
- * its own hero (most blog posts in the v1 layout). 1200 wide is what most
- * social platforms render at; aspect ratio is whatever hero.png ships with
- * — we omit explicit og:image:width/height so platforms can resolve it.
+ * Default Open Graph card image — the purpose-built 1200×630 brand plate
+ * (light paper, lime highlight, "official open-source Claude Design
+ * alternative" headline). Used site-wide by every page that doesn't
+ * supply its own card. Referenced as the raw R2 object (not via the
+ * `cdn-cgi/image` resizer) so social crawlers always receive a real PNG
+ * at exactly 1200×630 — `format=auto` would hand some of them WebP.
+ *
+ * Source of truth for the artwork is the `/og/` route (`pages/og.astro`):
+ * render it at viewport 1200×630, screenshot, then upload the PNG to
+ * R2 at `landing/assets/og-card.png`.
  */
-export const ogDefaultImage = imageAsset('hero.png', { width: 1200, quality: 86 });
+export const ogDefaultImage = r2Asset('og-card.png');
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
 
 /**
  * 1×1 transparent SVG used as the initial `src` for precise-lazyloaded
