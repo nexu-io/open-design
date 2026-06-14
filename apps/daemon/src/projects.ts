@@ -32,6 +32,7 @@ import {
   isSandboxModeEnabled,
   SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE,
 } from './sandbox-mode.js';
+import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -77,6 +78,7 @@ export function assertSandboxProjectRootAvailable(metadata?) {
   if (
     isSandboxModeEnabled(process.env) &&
     hasExternalProjectRoot(metadata) &&
+    !isOrchestratorScratchWorkspace(metadata) &&
     !isSandboxImportedProjectRootAllowed(metadata.baseDir)
   ) {
     throw new SandboxImportedProjectError();
@@ -85,6 +87,7 @@ export function assertSandboxProjectRootAvailable(metadata?) {
 
 function usesExternalProjectRoot(metadata?) {
   if (!hasExternalProjectRoot(metadata)) return false;
+  if (isOrchestratorScratchWorkspace(metadata)) return true;
   if (!isSandboxModeEnabled(process.env)) return true;
   return isSandboxImportedProjectRootAllowed(metadata.baseDir);
 }
