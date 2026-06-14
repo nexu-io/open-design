@@ -158,6 +158,19 @@ function isManualEditNativeUndoTarget(target: EventTarget | null): boolean {
   return contentEditable == null || contentEditable.toLowerCase() !== 'false';
 }
 
+type ManualEditHistoryShortcutAction = 'undo' | 'redo';
+
+function manualEditHistoryShortcutAction(event: KeyboardEvent): ManualEditHistoryShortcutAction | null {
+  if (event.altKey || event.isComposing) return null;
+  if (!event.metaKey && !event.ctrlKey) return null;
+
+  const key = event.key.toLowerCase();
+  if (key === 'z' && !event.shiftKey) return 'undo';
+  if (key === 'z' && event.shiftKey) return 'redo';
+  if (key === 'y' && event.ctrlKey && !event.metaKey && !event.shiftKey) return 'redo';
+  return null;
+}
+
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
@@ -5942,6 +5955,15 @@ function HtmlViewer({
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as ManualEditBridgeMessage | null;
       if (!data?.type) return;
+      if (data.type === 'od-edit-history-shortcut') {
+        if (manualEditSavingRef.current) return;
+        if (data.action === 'undo' && manualEditHistory.length > 0) {
+          void undoManualEdit();
+        } else if (data.action === 'redo' && manualEditUndone.length > 0) {
+          void redoManualEdit();
+        }
+        return;
+      }
       if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
         setManualEditTargets(data.targets);
         // Target broadcasts can be briefly empty while the iframe/save path is
@@ -5990,7 +6012,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [isOurPreviewIframeSource, manualEditMode, source]);
+  }, [isOurPreviewIframeSource, manualEditHistory, manualEditMode, manualEditUndone, source]);
 
   function nextManualEditPreviewVersion(): number {
     manualEditPreviewVersionRef.current += 1;
@@ -6327,18 +6349,14 @@ function HtmlViewer({
   useEffect(() => {
     if (!manualEditMode) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (manualEditSavingRef.current || event.altKey || event.isComposing) return;
-      if (!event.metaKey && !event.ctrlKey) return;
+      if (manualEditSavingRef.current) return;
       if (isManualEditNativeUndoTarget(event.target)) return;
 
-      const key = event.key.toLowerCase();
-      const undo = key === 'z' && !event.shiftKey;
-      const redo = (key === 'z' && event.shiftKey)
-        || (key === 'y' && event.ctrlKey && !event.metaKey && !event.shiftKey);
-      if (undo && manualEditHistory.length > 0) {
+      const action = manualEditHistoryShortcutAction(event);
+      if (action === 'undo' && manualEditHistory.length > 0) {
         event.preventDefault();
         void undoManualEdit();
-      } else if (redo && manualEditUndone.length > 0) {
+      } else if (action === 'redo' && manualEditUndone.length > 0) {
         event.preventDefault();
         void redoManualEdit();
       }

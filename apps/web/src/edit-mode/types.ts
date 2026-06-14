@@ -120,13 +120,19 @@ export interface ManualEditTextCommitMessage {
   value: string;
 }
 
+export interface ManualEditHistoryShortcutMessage {
+  type: 'od-edit-history-shortcut';
+  action: 'undo' | 'redo';
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
   | ManualEditHoverMessage
   | ManualEditBackgroundMessage
   | ManualEditPreviewAppliedMessage
-  | ManualEditTextCommitMessage;
+  | ManualEditTextCommitMessage
+  | ManualEditHistoryShortcutMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',

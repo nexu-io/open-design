@@ -54,6 +54,52 @@ async function selectManualEditTarget(target = heroTarget()) {
   await waitFor(() => expect(panelState.props).not.toBeNull());
 }
 
+function extractManualEditBridgeScript(srcdoc: string): string {
+  const match = srcdoc.match(/<script data-od-edit-bridge>([\s\S]*?)<\/script>/);
+  if (!match?.[1]) throw new Error('Manual edit bridge script not found');
+  return match[1];
+}
+
+function installManualEditBridgeFromFrame(frame: HTMLIFrameElement): {
+  doc: Document;
+  win: Window & typeof globalThis;
+} {
+  const win = frame.contentWindow as (Window & typeof globalThis) | null;
+  const doc = frame.contentDocument;
+  if (!win || !doc) throw new Error('Preview frame document not ready');
+
+  Object.defineProperty(win, 'parent', {
+    configurable: true,
+    value: {
+      postMessage(message: unknown) {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: message,
+          source: win,
+        }));
+      },
+    },
+  });
+
+  const evaluate = new win.Function(extractManualEditBridgeScript(frame.srcdoc));
+  evaluate.call(win);
+  win.dispatchEvent(new win.MessageEvent('message', {
+    data: { type: 'od-edit-mode', enabled: true },
+  }));
+  return { doc, win };
+}
+
+function dispatchIframeHistoryShortcut(
+  win: Window & typeof globalThis,
+  target: EventTarget,
+  init: KeyboardEventInit,
+): boolean {
+  return target.dispatchEvent(new win.KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  }));
+}
+
 afterEach(() => {
   cleanup();
   panelState.props = null;
@@ -388,6 +434,79 @@ describe('FileViewer manual edit history regressions', () => {
 
     fireEvent.click(screen.getByTestId('manual-edit-toolbar-redo'));
 
+    await waitFor(() => expect(savedSources).toHaveLength(3));
+    expect(savedSources[2]).not.toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .not.toContain('data-od-id="hero"');
+    });
+  });
+
+  it('routes edit history shortcuts from the preview iframe document', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1><p data-od-id="body">Body</p></body></html>';
+    let persistedSource = initialSource;
+    const savedSources: string[] = [];
+    vi.stubGlobal('fetch', createPersistenceFetchMock({
+      getPersistedSource: () => persistedSource,
+      setPersistedSource: (source) => {
+        persistedSource = source;
+        savedSources.push(source);
+      },
+    }));
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onApplyPatch(
+        { id: 'hero', kind: 'remove-element' },
+        'Delete element',
+      );
+    });
+
+    await waitFor(() => expect(savedSources).toHaveLength(1));
+    expect(savedSources[0]).not.toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .not.toContain('data-od-id="hero"');
+    });
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const { doc, win } = installManualEditBridgeFromFrame(frame);
+
+    const input = doc.createElement('input');
+    const textarea = doc.createElement('textarea');
+    const select = doc.createElement('select');
+    const contentEditable = doc.createElement('div');
+    const contentEditableChild = doc.createElement('span');
+    contentEditable.setAttribute('contenteditable', 'true');
+    contentEditable.appendChild(contentEditableChild);
+    const textbox = doc.createElement('div');
+    textbox.setAttribute('role', 'textbox');
+
+    for (const target of [input, textarea, select, contentEditableChild, textbox]) {
+      const host = target === contentEditableChild ? contentEditable : target;
+      doc.body.appendChild(host);
+      expect(dispatchIframeHistoryShortcut(win, target, { key: 'z', ctrlKey: true })).toBe(true);
+      expect(savedSources).toHaveLength(1);
+      host.remove();
+    }
+
+    expect(dispatchIframeHistoryShortcut(win, doc, { key: 'z', ctrlKey: true })).toBe(false);
+    await waitFor(() => expect(savedSources).toHaveLength(2));
+    expect(savedSources[1]).toContain('data-od-id="hero"');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
+        .toContain('data-od-id="hero"');
+    });
+
+    expect(dispatchIframeHistoryShortcut(win, doc, { key: 'z', ctrlKey: true, shiftKey: true })).toBe(false);
     await waitFor(() => expect(savedSources).toHaveLength(3));
     expect(savedSources[2]).not.toContain('data-od-id="hero"');
     await waitFor(() => {

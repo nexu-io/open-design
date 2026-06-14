@@ -75,6 +75,30 @@ export function buildManualEditBridge(enabled: boolean): string {
   function isSourceMappable(el){
     return !!(el && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr)));
   }
+  function isNativeUndoTarget(target){
+    var el = target && target.nodeType === 1 ? target : target && target.parentElement ? target.parentElement : null;
+    if (!el || !el.closest) return false;
+    var editable = el.closest('input, textarea, select, [role="textbox"], [contenteditable]');
+    if (!editable) return false;
+    var contentEditable = editable.getAttribute('contenteditable');
+    return contentEditable == null || String(contentEditable).toLowerCase() !== 'false';
+  }
+  function historyShortcutAction(ev){
+    if (!enabled || ev.altKey || ev.isComposing) return null;
+    if (!ev.metaKey && !ev.ctrlKey) return null;
+    var key = String(ev.key || '').toLowerCase();
+    if (key === 'z' && !ev.shiftKey) return 'undo';
+    if (key === 'z' && ev.shiftKey) return 'redo';
+    if (key === 'y' && ev.ctrlKey && !ev.metaKey && !ev.shiftKey) return 'redo';
+    return null;
+  }
+  function onHistoryShortcutKeydown(ev){
+    if (isNativeUndoTarget(ev.target)) return;
+    var action = historyShortcutAction(ev);
+    if (!action) return;
+    ev.preventDefault();
+    window.parent.postMessage({ type: 'od-edit-history-shortcut', action: action }, '*');
+  }
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
   }
@@ -370,6 +394,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (!el) return;
     postHoverTarget(el);
   }, true);
+  document.addEventListener('keydown', onHistoryShortcutKeydown);
   window.addEventListener('resize', postTargets);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
