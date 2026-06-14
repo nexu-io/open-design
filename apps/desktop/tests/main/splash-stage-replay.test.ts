@@ -99,4 +99,34 @@ describe('splash boot-stage replay guard', () => {
     setSplashStage(splash.surface, 'engine');
     expect(splash.executed).toEqual([]);
   });
+
+  // Slow-cold-boot UX: the splash must tell the user WHICH step of how many is
+  // underway, not just a bare label, so the wait reads as forward progress. The
+  // stage payload handed to the renderer carries a 1-based step index and the
+  // total stage count alongside the label.
+  test('carries a 1-based step index and total step count for the counter', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    splash.emitDidFinishLoad();
+
+    setSplashStage(splash.surface, 'starting');
+    setSplashStage(splash.surface, 'finishing');
+
+    expect(splash.executed).toHaveLength(2);
+    // `starting` is the first stage; `finishing` is the last. Both report the
+    // same total so the renderer can render "N/total" and fill the bar.
+    const [firstCall, lastCall] = splash.executed;
+    const firstPayload = JSON.parse(
+      firstCall.match(/__odSplashSetStage\((\{.*\})\);/)?.[1] ?? '{}',
+    ) as { step: number; total: number; label: string };
+    const lastPayload = JSON.parse(
+      lastCall.match(/__odSplashSetStage\((\{.*\})\);/)?.[1] ?? '{}',
+    ) as { step: number; total: number; label: string };
+
+    expect(firstPayload.step).toBe(1);
+    expect(lastPayload.step).toBe(lastPayload.total);
+    expect(firstPayload.total).toBe(lastPayload.total);
+    expect(lastPayload.total).toBeGreaterThan(4);
+    expect(lastPayload.label).toBe('Almost ready');
+  });
 });

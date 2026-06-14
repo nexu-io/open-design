@@ -152,8 +152,18 @@ async function main(): Promise<void> {
     webOutputMode: activeConfig.webOutputMode,
     // Surface each sidecar boot phase on the splash status line so a slow
     // cold start (Defender scans, native module loads) never reads as a hang.
+    // Both the "spawning" and "ready" edges are mapped so the step counter
+    // advances the instant each long native wait clears.
     onPhase(phase) {
-      setSplashStage(splash.window, phase === "daemon" ? "engine" : "interface");
+      const stage =
+        phase === "daemon-spawning"
+          ? "engine"
+          : phase === "daemon-ready"
+            ? "engineReady"
+            : phase === "web-spawning"
+              ? "interface"
+              : "interfaceReady";
+      setSplashStage(splash.window, stage);
     },
   });
   // Sidecars are up; the remaining wait is the hidden main window loading and

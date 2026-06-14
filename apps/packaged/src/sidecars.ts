@@ -458,12 +458,14 @@ export async function startPackagedSidecars(
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
     /**
-     * Boot-progress hook, fired just before each sidecar child is spawned.
-     * The Electron entry forwards it to the splash status line so a slow
-     * cold boot shows which phase is underway instead of a frozen frame;
-     * headless callers omit it.
+     * Boot-progress hook, fired at each sidecar bring-up boundary: the
+     * `"-spawning"` edge just before a child is spawned, and the `"-ready"`
+     * edge once it reports a usable URL. The Electron entry forwards these to
+     * the splash status line so a slow cold boot shows which phase is underway
+     * (and visibly advances the step counter the moment each long native wait
+     * clears) instead of a frozen frame; headless callers omit it.
      */
-    onPhase?: (phase: "daemon" | "web") => void;
+    onPhase?: (phase: "daemon-spawning" | "daemon-ready" | "web-spawning" | "web-ready") => void;
   },
 ): Promise<PackagedSidecarHandle> {
   await mkdir(paths.namespaceRoot, { recursive: true });
@@ -479,7 +481,7 @@ export async function startPackagedSidecars(
   const children: ManagedSidecarChild[] = [];
 
   try {
-    options.onPhase?.("daemon");
+    options.onPhase?.("daemon-spawning");
     const daemon = await spawnSidecarChild({
       app: APP_KEYS.DAEMON,
       entryPath: options.daemonSidecarEntry ?? resolveSidecarEntry("@open-design/daemon", "sidecar"),
@@ -510,8 +512,9 @@ export async function startPackagedSidecars(
       { child: daemon.child, logPath: logPathFor(paths, APP_KEYS.DAEMON) },
     );
     if (daemonStatus.url == null) throw new Error("daemon did not report a URL");
+    options.onPhase?.("daemon-ready");
 
-    options.onPhase?.("web");
+    options.onPhase?.("web-spawning");
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
       entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
@@ -532,6 +535,7 @@ export async function startPackagedSidecars(
       (status) => status.url != null,
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");
+    options.onPhase?.("web-ready");
 
     return {
       daemon: daemonStatus,
