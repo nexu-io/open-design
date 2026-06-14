@@ -307,11 +307,15 @@ export function HomeView({
       return '';
     }
   });
-  // Single source of truth for draft persistence. Every code path that mutates
-  // the visible prompt (handlePromptChange, plugin handoffs, picker/context
-  // actions, submit, clearActivePlugin) routes through `setPrompt`, so a
-  // single effect that mirrors `prompt` to localStorage covers them all —
-  // no per-site localStorage writes to keep in sync.
+  // Single source of truth for draft persistence. Every code path that
+  // mutates the visible prompt (handlePromptChange, plugin handoffs,
+  // picker/context actions, clearActivePlugin) routes through `setPrompt`,
+  // so a single effect that mirrors `prompt` to localStorage covers them
+  // all. The successful-submit path is the one exception: it intentionally
+  // does not touch the React `prompt` state (the composer keeps the user's
+  // last text so they can refine it), so it has its own dedicated
+  // `localStorage.removeItem` call below — the effect wouldn't otherwise
+  // observe the submission.
   useEffect(() => {
     try {
       if (prompt) {
@@ -1585,6 +1589,20 @@ export function HomeView({
     setSelectedPluginContexts([]);
     setSelectedMcpContexts([]);
     setSelectedConnectorContexts([]);
+    // Consume the persisted draft so the next HomeView mount comes back
+    // empty. The centralized useEffect above mirrors `prompt` to
+    // localStorage, but it only fires on state change. The successful
+    // submit path here intentionally does NOT mutate `prompt` (the
+    // composer keeps the user's last text so they can refine it without
+    // re-typing), so the effect would not otherwise observe the
+    // submission. We need a dedicated cleanup that removes the key
+    // outright — the second of the two options Siri-Ray offered on
+    // PR #4271 round-2.
+    try {
+      window.localStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
+    } catch {
+      // Storage may be unavailable in privacy modes.
+    }
   }
 
   return (

@@ -10,12 +10,21 @@
 // A follow-up review (Siri-Ray on PR #4271) called out that the prompt can
 // also change through paths that bypass `handlePromptChange` — plugin
 // handoffs, picker/context actions, context removals — and those changes
-// must be persisted too. The fix now centralizes draft persistence in a
-// single `useEffect` that mirrors `prompt` to localStorage on every
-// change, so every `setPrompt` call site is covered.
+// must be persisted too. The fix centralizes draft persistence in a
+// single `useEffect` that mirrors `prompt` to localStorage on every change,
+// so every `setPrompt` call site is covered.
+//
+// A second-round review (Siri-Ray on the same PR, after the centralization
+// landed) flagged that `submit()` does not consume the draft, so the
+// localStorage entry survives a successful submission. The fix takes the
+// conservative of the two options the reviewer offered: a dedicated
+// `localStorage.removeItem` on the success path of `submit()` — keeping
+// the React `prompt` state intact (so the user can refine) while still
+// ensuring the next HomeView mount does not rehydrate the just-submitted
+// text. Plus a regression test below.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
@@ -183,5 +192,60 @@ describe('HomeView prompt draft across workspace-tab unmount/remount', () => {
     await waitFor(() => {
       expect(input.textContent).toBe(SEEDED);
     });
+  });
+
+  it('consumes the draft on submit so the next mount comes back empty (Siri-Ray round-2)', async () => {
+    // Round-2 regression: the centralized useEffect only fires on `prompt`
+    // state change. The successful `submit()` path does not mutate `prompt`
+    // (the composer keeps the user's last text so they can refine), so the
+    // effect would not otherwise observe the submission and the
+    // localStorage entry would survive — the next HomeView mount would
+    // rehydrate the just-submitted text. Walk the scenario: type a prompt,
+    // click submit, assert the storage key is cleared, unmount, remount,
+    // assert the composer comes back empty.
+    writeHomeGuideStage('done');
+    stubPluginsFetch();
+
+    const onSubmit = vi.fn();
+    const first = render(
+      <I18nProvider initial="en">
+        <HomeView
+          projects={[] as never}
+          onSubmit={onSubmit}
+          onOpenProject={() => undefined}
+          onViewAllProjects={() => undefined}
+        />
+      </I18nProvider>,
+    );
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt(TYPED_DRAFT);
+    // The useEffect should mirror the typed prompt to localStorage.
+    await waitFor(() => {
+      expect(window.localStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBe(TYPED_DRAFT);
+    });
+
+    // Click the send button — its data-testid is `home-hero-submit` (see
+    // HomeHero.tsx:1482-1484). HomeView's submit() runs, calls the
+    // onSubmit prop, then explicitly removes the storage key (the
+    // dedicated submit cleanup path; the centralized useEffect would
+    // not otherwise fire because `prompt` is unchanged).
+    const submitButton = await screen.findByTestId('home-hero-submit');
+    fireEvent.click(submitButton);
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(window.localStorage.getItem(HOME_PROMPT_DRAFT_KEY)).toBeNull();
+    });
+    first.unmount();
+
+    // Remount with no handoff. The lazy initializer must read an absent
+    // key and surface an empty composer — not the just-submitted text.
+    renderHome();
+    const input = await screen.findByTestId('home-hero-input');
+    // Give the SeedingPlugin a frame to settle; otherwise an unseeded
+    // editor can briefly show stale text from a prior render pass.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(input.textContent).toBe('');
   });
 });
