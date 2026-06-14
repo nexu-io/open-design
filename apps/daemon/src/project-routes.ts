@@ -802,9 +802,22 @@ function daemonDecodeHtmlEntitiesForTitle(encoded: string): string {
 }
 
 function daemonSanitizePreviewTitle(text: string): string {
-  let result = text.replace(/^~\$/, '');
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
   // eslint-disable-next-line no-useless-escape
   result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Final trim to remove any spaces exposed by the substitution.
   return result.trim();
 }
 

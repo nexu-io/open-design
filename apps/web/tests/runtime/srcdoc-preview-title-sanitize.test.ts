@@ -61,6 +61,38 @@ describe('sanitizePreviewTitle', () => {
     expect(sanitizePreviewTitle(clean)).toBe(clean);
   });
 
+  // ---------------------------------------------------------------------------
+  // Defect #5 (issue #3918): leading whitespace hides the ~$ prefix from the
+  // anchor-based strip, so trim must happen BEFORE the ~$ check.
+  // ---------------------------------------------------------------------------
+
+  it('strips ~$ even when leading whitespace precedes it ("  ~$Invoice #1")', () => {
+    // Bug: replace(/^~\$/, '') is anchored to position 0; when the input has
+    // leading spaces the anchor misses, and after .trim() the result still
+    // starts with "~$".
+    const result = sanitizePreviewTitle('  ~$Invoice #1');
+
+    expect(result).not.toMatch(/^~\$/);
+    expect(TEAMS_DISALLOWED.test(result)).toBe(false);
+    expect(result).not.toMatch(/^\s|\s$/);
+  });
+
+  it('strips ~$ when a space follows the prefix ("~$ Invoice")', () => {
+    // After stripping "~$" the remaining " Invoice" must also be trimmed so
+    // no leading space survives.
+    const result = sanitizePreviewTitle('~$ Invoice');
+
+    expect(result).not.toMatch(/^~\$/);
+    expect(result).not.toMatch(/^\s/);
+  });
+
+  it('strips a doubled ~$ prefix ("~$~$Doc")', () => {
+    // A doubled prefix must be fully removed; a single strip leaves "~$Doc".
+    const result = sanitizePreviewTitle('~$~$Doc');
+
+    expect(result).not.toMatch(/^~\$/);
+  });
+
   it('replaces all chars from the full disallowed set', () => {
     // Build a string that has every disallowed char
     const allDisallowed = ':#%&*{}\\<>?/+|"';

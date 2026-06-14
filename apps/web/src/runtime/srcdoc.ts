@@ -45,18 +45,27 @@ export type SrcdocOptions = {
  * Titles that are already safe pass through unchanged.
  *
  * Invariant: the returned string contains none of the Teams-disallowed
- * characters and has no leading or trailing spaces.
+ * characters and has no leading or trailing spaces, and does not start
+ * with the ~$ prefix.
  */
 export function sanitizePreviewTitle(text: string): string {
-  // Remove the ~$ prefix Teams rejects (temporary-file marker).
-  let result = text.replace(/^~\$/, '');
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
   // Replace each disallowed character (or run of them) with a single hyphen.
   // Character class: : # % & * { } \ < > ? / + | "
   // eslint-disable-next-line no-useless-escape
   result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
-  // Trim leading and trailing spaces that remain after substitution.
-  result = result.trim();
-  return result;
+  // Final trim to remove any spaces exposed by the substitution.
+  return result.trim();
 }
 
 /**

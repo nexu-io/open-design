@@ -88,6 +88,62 @@ describe('daemonSanitizeTitleInDoc – Teams-disallowed characters', () => {
     expect(title).toBe('Invoice Sable Studio INV-2025-0142');
   });
 
+  // ---------------------------------------------------------------------------
+  // Defect #5 (issue #3918): leading whitespace hides the ~$ prefix from the
+  // anchor-based strip, so trim must happen BEFORE the ~$ check.
+  // ---------------------------------------------------------------------------
+
+  it('strips ~$ even when leading whitespace precedes it ("  ~$Invoice #1")', () => {
+    // Bug: replace(/^~\$/, '') is anchored to position 0; when the title has
+    // leading spaces the anchor misses, and after .trim() the result still
+    // starts with "~$".
+    const html = `<!doctype html>
+<html>
+  <head><title>  ~$Invoice #1</title></head>
+  <body></body>
+</html>`;
+
+    const result = daemonSanitizeTitleInDoc(html);
+    const title = extractTitle(result);
+
+    expect(title).not.toBeNull();
+    expect(title).not.toMatch(/^~\$/);
+    expect(TEAMS_DISALLOWED.test(title!)).toBe(false);
+    expect(title).not.toMatch(/^\s|\s$/);
+  });
+
+  it('strips ~$ when a space follows the prefix ("~$ Invoice")', () => {
+    // After stripping "~$" the remaining " Invoice" must also be trimmed so
+    // no leading space survives.
+    const html = `<!doctype html>
+<html>
+  <head><title>~$ Invoice</title></head>
+  <body></body>
+</html>`;
+
+    const result = daemonSanitizeTitleInDoc(html);
+    const title = extractTitle(result);
+
+    expect(title).not.toBeNull();
+    expect(title).not.toMatch(/^~\$/);
+    expect(title).not.toMatch(/^\s/);
+  });
+
+  it('strips a doubled ~$ prefix ("~$~$Doc")', () => {
+    // A doubled prefix must be fully removed; a single strip would leave "~$Doc".
+    const html = `<!doctype html>
+<html>
+  <head><title>~$~$Doc</title></head>
+  <body></body>
+</html>`;
+
+    const result = daemonSanitizeTitleInDoc(html);
+    const title = extractTitle(result);
+
+    expect(title).not.toBeNull();
+    expect(title).not.toMatch(/^~\$/);
+  });
+
   it('leaves body content outside <title> completely unchanged', () => {
     const html = `<!doctype html>
 <html>
