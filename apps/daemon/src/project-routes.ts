@@ -31,6 +31,7 @@ import {
   writeProjectManifest,
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
+import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
@@ -1085,6 +1086,19 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        if ('orchestratorWorkspace' in metadata) {
+          const parsedOrchestratorWorkspace = parseOrchestratorWorkspace(
+            metadata.orchestratorWorkspace,
+          );
+          if (!parsedOrchestratorWorkspace.ok) {
+            return sendApiError(
+              res,
+              400,
+              'BAD_REQUEST',
+              parsedOrchestratorWorkspace.message,
+            );
+          }
+        }
         // Reject invalid linked working directories up front (consistent with
         // PATCH /api/projects/:id) instead of silently dropping them. The
         // caller promises the agent `--add-dir` access to this folder; if the
@@ -1348,6 +1362,19 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             res, 400, 'BAD_REQUEST',
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
+        }
+        if ('orchestratorWorkspace' in patch.metadata) {
+          const parsedOrchestratorWorkspace = parseOrchestratorWorkspace(
+            patch.metadata.orchestratorWorkspace,
+          );
+          if (!parsedOrchestratorWorkspace.ok) {
+            return sendApiError(
+              res,
+              400,
+              'BAD_REQUEST',
+              parsedOrchestratorWorkspace.message,
+            );
+          }
         }
         if (existingMeta?.baseDir) {
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {

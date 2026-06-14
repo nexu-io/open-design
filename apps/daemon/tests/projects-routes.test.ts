@@ -601,6 +601,39 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.error?.code).toBe('BAD_REQUEST');
     expect(body.error?.message).toMatch(/fromTrustedPicker/i);
   });
+
+  it('rejects malformed orchestratorWorkspace on PATCH /api/projects/:id', async () => {
+    const projectId = `proj-orchestrator-patch-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          kind: 'prototype',
+          orchestratorWorkspace: {
+            kind: 'scratch',
+            source_reference: 'typo',
+          },
+        },
+      }),
+    });
+    expect(patchResp.status).toBe(400);
+    const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/unsupported field: source_reference/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

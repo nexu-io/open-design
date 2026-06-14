@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type {
   OrchestratorWorkspace,
   RunWorkspace,
@@ -103,6 +102,7 @@ export function projectWorkspaceProvenance(metadata: unknown): RunWorkspace {
       provenance: {
         ...orchestratorWorkspace,
         kind: 'orchestrator-scratch',
+        writeback: ORCHESTRATOR_WRITEBACK,
       },
     };
   }
