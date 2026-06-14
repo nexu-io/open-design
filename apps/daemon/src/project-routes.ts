@@ -1353,6 +1353,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // For case 2 we re-stamp the immutable fields from the existing
       // project record onto the incoming patch so the user can keep
       // patching other metadata without ever losing their import root.
+      if (patch.metadata === null) {
+        const existing = getProject(db, req.params.id);
+        if (existing?.metadata?.baseDir) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'metadata cannot be cleared for imported projects',
+          );
+        }
+      }
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;

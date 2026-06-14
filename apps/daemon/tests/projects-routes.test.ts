@@ -999,6 +999,33 @@ describe('project locations routes', () => {
     expect(patchBody.project.metadata?.skipDiscoveryBrief).toBe(true);
   });
 
+  it('PATCH /api/projects/:id rejects metadata null for project-location projects', async () => {
+    const extDir = makeTempDir();
+    await putProjectLocations([{ id: 'patch-null-ext', name: 'Patch Null External', path: extDir }]);
+
+    const projectId = `ext-patch-null-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Patch Null External Project',
+        projectLocationId: 'patch-null-ext',
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadata: null }),
+    });
+    expect(patchResp.status).toBe(400);
+    const patchBody = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(patchBody.error?.code).toBe('BAD_REQUEST');
+    expect(patchBody.error?.message).toMatch(/metadata cannot be cleared/i);
+  });
+
   it('POST /api/projects with unknown projectLocationId returns 400', async () => {
     const projectId = `bad-loc-${Date.now()}`;
     const resp = await fetch(`${baseUrl}/api/projects`, {

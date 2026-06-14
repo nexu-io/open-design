@@ -73,7 +73,30 @@ describe('NewProjectPanel media provider badges', () => {
     expect(screen.queryByTestId('model-picker-option-gpt-image-2')).toBeNull();
   });
 
-  it('does not submit a hidden default model when no image provider is eligible', async () => {
+  it('shows Codex subscription image models without media API credentials', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    const codexGroup = screen.getByText('Codex Subscription').closest('.ds-picker-group');
+    expect(codexGroup?.textContent).toContain('Integrated');
+    expect(screen.getByTestId('model-picker-option-codex-gpt-image-2')).toBeTruthy();
+  });
+
+  it('uses Codex subscription as the no-key image fallback', async () => {
     const onCreate = vi.fn();
     render(
       <NewProjectPanel
@@ -91,10 +114,10 @@ describe('NewProjectPanel media provider badges', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
     await waitFor(() => {
-      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('Pick a model');
+      expect(screen.getByTestId('model-picker-trigger').textContent).toContain('gpt-image-2 (Codex)');
     });
     fireEvent.change(screen.getByTestId('new-project-name'), {
-      target: { value: 'No configured image model' },
+      target: { value: 'Codex fallback image' },
     });
     fireEvent.click(screen.getByTestId('create-project'));
 
@@ -102,11 +125,11 @@ describe('NewProjectPanel media provider badges', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({
           kind: 'image',
+          imageModel: 'codex-gpt-image-2',
           imageAspect: '1:1',
         }),
       }),
     );
-    expect(onCreate.mock.calls[0]?.[0].metadata).not.toHaveProperty('imageModel');
   });
 
   it('does not treat OpenAI OAuth-only markers as usable image credentials', () => {

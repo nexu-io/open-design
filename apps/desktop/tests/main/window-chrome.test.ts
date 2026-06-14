@@ -4,11 +4,29 @@ import { describe, expect, test } from "vitest";
 
 const runtimeSource = readFileSync(new URL("../../src/main/runtime.ts", import.meta.url), "utf8");
 
+/**
+ * runtime.ts constructs three BrowserWindows — the brand splash
+ * (`createSplashWindow`), the desktop pet, and the main app window — and the
+ * splash, declared FIRST, shares the `title: "Open Design"` / `width: 1280`
+ * markers with the main window while intentionally omitting
+ * `backgroundThrottling: false`. A loose `new BrowserWindow({` anchor therefore
+ * locks onto the splash block. Anchor instead on the `const window =`
+ * declaration that is unique to the main app window, and assert exactly one
+ * match so a rename or a second such declaration fails loudly here rather than
+ * silently inspecting the wrong window.
+ */
+function mainAppWindowOptions(): string {
+  const blocks = runtimeSource
+    .split("const window = new BrowserWindow({")
+    .slice(1)
+    .map((block) => block.slice(0, block.indexOf("});")));
+  expect(blocks).toHaveLength(1);
+  return blocks[0] ?? "";
+}
+
 describe("desktop BrowserWindow chrome options", () => {
   test("hides Electron's native menu bar in the Windows/Linux app window", () => {
-    const browserWindowBlock = /new BrowserWindow\(\{([\s\S]*?)title: "Open Design",([\s\S]*?)webPreferences:/.exec(runtimeSource)?.[0] ?? "";
-
-    expect(browserWindowBlock).toContain("autoHideMenuBar: true");
+    expect(mainAppWindowOptions()).toContain("autoHideMenuBar: true");
   });
 
   test("keeps macOS traffic-light controls clear of the web tab strip", () => {
@@ -19,8 +37,6 @@ describe("desktop BrowserWindow chrome options", () => {
   });
 
   test("keeps the visible renderer responsive when Chromium misclassifies visibility", () => {
-    const browserWindowBlock = /new BrowserWindow\(\{([\s\S]*?)title: "Open Design",([\s\S]*?)width: 1280,/.exec(runtimeSource)?.[0] ?? "";
-
-    expect(browserWindowBlock).toContain("backgroundThrottling: false");
+    expect(mainAppWindowOptions()).toContain("backgroundThrottling: false");
   });
 });
