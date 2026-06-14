@@ -12534,6 +12534,18 @@ export async function startServer({
       if (promptFile) promptFile.cleanup().catch(() => {});
     };
 
+    // Codex CLI parses config.toml before processing any -c overrides. A
+    // stale `service_tier = "priority"` (written by the Codex app's fast-mode
+    // toggle before the value was renamed to "fast") causes an immediate parse
+    // error and exit-1 before any work starts. Normalize it in-place so the
+    // launch succeeds. Errors are silently swallowed — a missing or read-only
+    // config.toml is fine, and the Codex CLI still surfaces the original error
+    // if the write fails. See issue #4276.
+    if (def.id === 'codex') {
+      const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
+      await normalizeCodexConfigFile(process.env);
+    }
+
     // Serialize antigravity spawns whose buildArgs writes a concrete
     // model into settings.json. Two concurrent runs with different
     // models would otherwise race the file: A writes model A, B writes
