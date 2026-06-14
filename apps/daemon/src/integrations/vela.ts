@@ -318,6 +318,7 @@ export interface SpawnVelaLoginDeps {
   configuredEnv?: Record<string, string>;
   baseEnv?: NodeJS.ProcessEnv;
   attribution?: AmrEntryAttribution | null;
+  defaultApiUrl?: string | null;
 }
 
 async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> {
@@ -378,7 +379,11 @@ export async function spawnVelaLogin(
   const def = getAgentDef('amr');
   if (!def) throw new Error('AMR runtime def not registered');
   const baseEnv = deps.baseEnv ?? process.env;
-  const configuredEnv = deps.configuredEnv ?? {};
+  const configuredEnv = withDefaultVelaApiUrl(
+    deps.configuredEnv ?? {},
+    baseEnv,
+    deps.defaultApiUrl,
+  );
   const launch = resolveAgentLaunch(def, configuredEnv);
   const bin = launch.selectedPath;
   if (!bin) {
@@ -418,6 +423,18 @@ export async function spawnVelaLogin(
     startedAt: new Date().toISOString(),
     profile: resolveAmrProfile(env),
   };
+}
+
+function withDefaultVelaApiUrl(
+  configuredEnv: Record<string, string>,
+  baseEnv: NodeJS.ProcessEnv,
+  defaultApiUrl: string | null | undefined,
+): Record<string, string> {
+  const trimmed = defaultApiUrl?.trim();
+  if (!trimmed) return configuredEnv;
+  if ((configuredEnv.VELA_API_URL ?? '').trim()) return configuredEnv;
+  if ((baseEnv.VELA_API_URL ?? '').trim()) return configuredEnv;
+  return { ...configuredEnv, VELA_API_URL: trimmed };
 }
 
 export function parseVelaLoginAttribution(input: unknown): AmrEntryAttribution | null {

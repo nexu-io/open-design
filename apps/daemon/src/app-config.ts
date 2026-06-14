@@ -176,6 +176,7 @@ function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['amr', new Set([
     'VELA_BIN',
+    'VELA_API_URL',
     'VELA_LINK_URL',
     'VELA_RUNTIME_KEY',
     'VELA_OPENCODE_BIN',

@@ -14,13 +14,15 @@
 
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type http from 'node:http';
+import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
@@ -122,6 +124,15 @@ function seedLogin(profile: string, payload: Record<string, unknown> = {}): void
   writeFileSync(configPath(), JSON.stringify(full, null, 2), 'utf8');
 }
 
+async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (existsSync(file)) return;
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${file}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 beforeAll(async () => {
   // The login route resolves the vela binary through the daemon's
   // `agentCliEnvForAgent` projection of `app-config.json` (NOT process.env),
@@ -164,6 +175,8 @@ afterEach(() => {
   delete process.env.FAKE_VELA_LOGIN_FAIL;
   delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
   delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
+  delete process.env.FAKE_VELA_ENV_DUMP_PATH;
+  delete process.env.OD_PUBLIC_BASE_URL;
   delete process.env.VELA_RUNTIME_KEY;
   delete process.env.VELA_LINK_URL;
   delete process.env.OPEN_DESIGN_AMR_ANALYTICS_URL;
@@ -329,6 +342,61 @@ describe('GET /api/integrations/vela/status', () => {
 });
 
 describe('POST /api/integrations/vela/login', () => {
+  it('routes default vela login API traffic through the daemon AMR API proxy', async () => {
+    const dumpPath = path.join(tmpHome, 'vela-env.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+
+    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(status).toBe(202);
+
+    await waitForFile(dumpPath);
+    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+    expect(env.VELA_API_URL).toBe(`${baseUrl}/api/integrations/vela/api-proxy`);
+  });
+
+  it('derives the default login API proxy from OD_PUBLIC_BASE_URL when configured', async () => {
+    const dumpPath = path.join(tmpHome, 'vela-env-public-base-url.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    process.env.OD_PUBLIC_BASE_URL = 'https://open-design.example.com/';
+
+    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(status).toBe(202);
+
+    await waitForFile(dumpPath);
+    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+    expect(env.VELA_API_URL).toBe(
+      'https://open-design.example.com/api/integrations/vela/api-proxy',
+    );
+  });
+
+  it('preserves an explicitly configured VELA_API_URL during login', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    const dumpPath = path.join(tmpHome, 'vela-env-custom-url.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    await writeAppConfig(dataDir, {
+      ...previous,
+      agentCliEnv: {
+        ...(previous.agentCliEnv ?? {}),
+        amr: {
+          ...((previous.agentCliEnv?.amr as Record<string, string>) ?? {}),
+          VELA_BIN: FAKE_VELA,
+          VELA_API_URL: 'https://custom-amr.example',
+        },
+      },
+    });
+    try {
+      const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
+      expect(status).toBe(202);
+
+      await waitForFile(dumpPath);
+      const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+      expect(env.VELA_API_URL).toBe('https://custom-amr.example');
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+
   it('spawns the configured vela binary and surfaces a pid + startedAt + profile', async () => {
     process.env.FAKE_VELA_LOGIN_USER_EMAIL = 'login-route@example.com';
     const { status, body } = await postJson<{
@@ -535,6 +603,64 @@ describe('POST /api/integrations/vela/login', () => {
     expect(after.body.loggedIn).toBe(false);
     expect(after.body.loginInFlight).toBe(false);
     expect(existsSync(configPath())).toBe(false);
+  });
+});
+
+describe('ALL /api/integrations/vela/api-proxy/*', () => {
+  it('forwards form-encoded POST bodies to the AMR API upstream', async () => {
+    const upstreamRequests: Array<{
+      href: string;
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+    }> = [];
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((target, options, callback) => {
+      const req = new PassThrough() as any;
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      req.on('finish', () => {
+        upstreamRequests.push({
+          href: target instanceof URL ? target.href : String(target),
+          method: String(options?.method ?? ''),
+          headers: options?.headers as Record<string, string>,
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+        const upstreamRes = new PassThrough() as any;
+        upstreamRes.statusCode = 201;
+        upstreamRes.headers = { 'content-type': 'application/json' };
+        callback?.(upstreamRes);
+        upstreamRes.end(JSON.stringify({ ok: true }));
+      });
+      req.setTimeout = () => req;
+      return req;
+    }) as typeof https.request);
+
+    try {
+      const body = new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'device-code-123',
+      }).toString();
+      const resp = await fetch(`${baseUrl}/api/integrations/vela/api-proxy/api/v1/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+
+      expect(resp.status).toBe(201);
+      expect(await resp.json()).toEqual({ ok: true });
+      expect(upstreamRequests).toHaveLength(1);
+      expect(upstreamRequests[0]?.href).toBe('https://amr-api.open-design.ai/api/v1/oauth/token');
+      expect(upstreamRequests[0]?.method).toBe('POST');
+      expect(upstreamRequests[0]?.headers['content-type']).toContain(
+        'application/x-www-form-urlencoded',
+      );
+      expect(upstreamRequests[0]?.headers['content-length']).toBe(String(Buffer.byteLength(body)));
+      expect(upstreamRequests[0]?.body).toBe(body);
+    } finally {
+      requestSpy.mockRestore();
+    }
   });
 });
 
