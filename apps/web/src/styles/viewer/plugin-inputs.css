@@ -51,6 +51,35 @@
   border-radius: var(--radius-sm);
 }
 
+/* Built-in skill edit confirmation card. Without these rules the warning text
+   sits flush against the row edge and the Cancel / Create-override buttons
+   collide; mirror the spacing of .skills-row-detail so the card reads as part
+   of the same expanded surface. */
+.settings-skills .skills-edit-builtin-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  margin: 0 4px;
+  border-top: 1px dashed var(--border);
+}
+.settings-skills .skills-edit-builtin-warning p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.settings-skills .skills-edit-builtin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.settings-skills .skills-edit-builtin-actions .btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
 .settings-skills .skills-row-detail {
   display: flex;
   flex-direction: column;
