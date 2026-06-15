@@ -2812,6 +2812,12 @@ export function homeHeroExamplePluginsForChip(
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
+  // The top-level rail is a curated showcase capped at 18 for most chips. The
+  // deck chip is the exception: surface the FULL slide-template library so every
+  // bundled deck is reachable as an example prompt straight from "All" (without
+  // first picking a sub-category), keeping the rail in parity with the Community
+  // section's "Slides" count.
+  const showcaseLimit = chipId === 'deck' ? Number.POSITIVE_INFINITY : 18;
   const presets = plugins
     .filter((plugin) => !EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS.has(plugin.id))
     .filter((plugin) => (
@@ -2823,7 +2829,7 @@ export function homeHeroExamplePluginsForChip(
       curatedPluginPriorityForChip(plugin, chipId) !== null
     ))
     .sort((a, b) => comparePluginPresetOrder(a, b, chipId))
-    .slice(0, 18);
+    .slice(0, showcaseLimit);
   if (chipId === 'image') {
     return movePluginPresetToEnd(presets, 'example-hatch-pet');
   }
