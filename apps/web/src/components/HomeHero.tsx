@@ -1728,12 +1728,17 @@ function PluginPromptPresetCard({
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
     pluginPresetPromptPreview(record, locale, chipId),
   ).text;
+  // Decks ship a fixed 16:9 stage; tag them so the preset thumbnail uses a 16:9
+  // frame the iframe fills natively, instead of letterboxing the stage with a
+  // dark band above it (matches the Community gallery deck treatment).
+  const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
   return (
     <button
       type="button"
       className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
       data-testid="home-hero-plugin-preset"
       data-plugin-id={record.id}
+      {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
       role="listitem"
       disabled={disabled}
       onClick={() => onPick(record, chipId, seedPrompt)}
