@@ -8,14 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--
-      Studio style uses three font families:
-        1. Barlow 900       — the entire display and heading system; becomes graphic at scale
-        2. Barlow 400/500   — body, lead paragraphs
-        3. IBM Plex Mono    — footer metadata, slide counters, caption labels
-        4. Noto Sans SC     — Chinese fallback for all roles
+      Studio style font roles:
+        1. Barlow 900       (the entire display and heading system; becomes graphic at scale)
+        2. Barlow 400/500   (body, lead paragraphs)
+        3. IBM Plex Mono    (footer metadata, slide counters, caption labels)
+        4. Noto Sans SC     (Chinese fallback for all roles)
     -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700;800;900&family=IBM+Plex+Mono:wght@300;400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
       rel="stylesheet"
     />
 
@@ -40,16 +40,16 @@
 
         /* Primary text on dark: acid yellow — the only colour on dark slides */
         --c-fg: #f5d200;
-        /* Secondary text on dark: yellow at 58% opacity — muted but still warm */
-        --c-fg-2: rgba(245, 210, 0, 0.58);
-        /* Tertiary / hint text on dark: yellow at 32% */
-        --c-fg-3: rgba(245, 210, 0, 0.32);
+        /* Secondary text on dark: yellow at 74% opacity, muted yet comfortably AA on near-black */
+        --c-fg-2: rgba(245, 210, 0, 0.74);
+        /* Tertiary / hint text on dark: yellow at 60%, caption mono clears 4.5:1 on near-black */
+        --c-fg-3: rgba(245, 210, 0, 0.6);
         /* Primary text on light: near-black on yellow */
         --c-fg-light: #1c1c1c;
-        /* Secondary text on light: near-black at 62% */
-        --c-fg-light-2: rgba(28, 28, 28, 0.62);
-        /* Tertiary text on light */
-        --c-fg-light-3: rgba(28, 28, 28, 0.35);
+        /* Secondary text on light: near-black at 78% */
+        --c-fg-light-2: rgba(28, 28, 28, 0.78);
+        /* Tertiary text on light: near-black at 70%, caption mono clears AA on acid yellow */
+        --c-fg-light-3: rgba(28, 28, 28, 0.7);
 
         /* Accent: yellow on dark / same yellow (var reused by engine) */
         --c-accent: #f5d200;
@@ -248,6 +248,19 @@
         }
       }
 
+      /* Reduced-motion fallback: everything visible, nothing animates */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
+      }
+
       /* ── Navigation UI ───────────────────────────────────────────────── */
       #nav-dots {
         position: fixed;
@@ -263,7 +276,8 @@
         height: 5px;
         border-radius: 50%;
         border: none;
-        background: rgba(255, 255, 255, 0.22);
+        /* Dots stay inside the two-colour world: yellow on dark, black on yellow */
+        background: rgba(245, 210, 0, 0.32);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -271,7 +285,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: rgba(255, 255, 255, 0.8);
+        background: rgba(245, 210, 0, 0.95);
         transform: scale(1.4);
       }
 
@@ -282,9 +296,21 @@
         font-family: var(--f-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: rgba(255, 255, 255, 0.25);
+        color: rgba(245, 210, 0, 0.62);
         z-index: 100;
         user-select: none;
+        transition: color 0.3s;
+      }
+
+      /* Fixed chrome recolors when the active slide is yellow (pure CSS, engine untouched) */
+      body:has(.slide.light.is-active) #slide-counter {
+        color: rgba(28, 28, 28, 0.65);
+      }
+      body:has(.slide.light.is-active) .nav-dot {
+        background: rgba(28, 28, 28, 0.28);
+      }
+      body:has(.slide.light.is-active) .nav-dot.is-active {
+        background: rgba(28, 28, 28, 0.9);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -382,13 +408,18 @@
         padding-left: 1em;
       }
       .bullet-list li::before {
-        content: "\2014"; /* em dash used as bullet marker */
+        /* Studio dash marker, drawn as a bar instead of a typed dash glyph */
+        content: "";
+        display: inline-block;
+        width: 0.8em;
+        height: 0.12em;
+        vertical-align: 0.22em;
         margin-left: -1em;
-        margin-right: 0.5em;
-        color: var(--c-accent);
+        margin-right: 0.45em;
+        background: var(--c-accent);
       }
       .light .bullet-list li::before {
-        color: var(--c-fg-light);
+        background: var(--c-fg-light);
       }
 
       /* ── Studio cover footer: three-column metadata bar ──────────────────── */
@@ -411,9 +442,25 @@
         text-align: right;
       }
 
-      /* Image placeholder box — dark warm grey rectangle, mono label centered */
+      /* Image placeholder box — print-style "image TK" frame: hairline + diagonal cross */
       .img-placeholder {
-        background: var(--c-bg-alt);
+        background-color: var(--c-bg-alt);
+        background-image:
+          linear-gradient(
+            to bottom right,
+            transparent calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.16) calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.16) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          ),
+          linear-gradient(
+            to bottom left,
+            transparent calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.16) calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.16) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          );
+        box-shadow: inset 0 0 0 1px rgba(245, 210, 0, 0.22);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -424,10 +471,30 @@
         width: 100%;
         flex: 1;
       }
+      .img-placeholder > span,
+      .img-placeholder {
+        text-transform: uppercase;
+      }
       .light .img-placeholder {
-        background: var(--c-bg-light-alt);
+        background-color: var(--c-bg-light-alt);
+        background-image:
+          linear-gradient(
+            to bottom right,
+            transparent calc(50% - 0.5px),
+            rgba(28, 28, 28, 0.18) calc(50% - 0.5px),
+            rgba(28, 28, 28, 0.18) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          ),
+          linear-gradient(
+            to bottom left,
+            transparent calc(50% - 0.5px),
+            rgba(28, 28, 28, 0.18) calc(50% - 0.5px),
+            rgba(28, 28, 28, 0.18) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          );
         color: var(--c-fg-light-3);
-        border: 1px solid var(--c-border-light);
+        border: none;
+        box-shadow: inset 0 0 0 1px var(--c-border-light);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -483,19 +550,35 @@
         padding: 0;
         position: relative;
       }
-      /* Image placeholder sits absolute behind everything */
+      /* Image placeholder sits absolute behind everything.
+         Same print-style TK frame as .img-placeholder, inset from the slide edge
+         so the cover reads as type OVER a plated image, not an empty void. */
       .cover-img-area {
         position: absolute;
         inset: 0;
-        background: var(
-          --c-bg-alt
-        ); /* warm dark placeholder — replace with real image */
+        background-color: var(--c-bg-alt);
+        background-image:
+          linear-gradient(
+            to bottom right,
+            transparent calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.12) calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.12) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          ),
+          linear-gradient(
+            to bottom left,
+            transparent calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.12) calc(50% - 0.5px),
+            rgba(245, 210, 0, 0.12) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+          );
         display: flex;
         align-items: center;
         justify-content: center;
         font-family: var(--f-mono);
         font-size: var(--sz-label);
         letter-spacing: 0.1em;
+        text-transform: uppercase;
         color: var(--c-fg-3);
       }
       /* Type area: z-index above the image, padded normally */
@@ -582,11 +665,8 @@
       }
 
       /* 5. STATS ─────────────────────────────────────────────────────────── */
-      .slide--stats {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-      }
+      /* Keeps the base slide grid: chrome pinned top, foot pinned bottom,
+         only the body content centers inside the remaining 1fr row. */
       .slide--stats .slide-body {
         display: flex;
         flex-direction: column;
@@ -612,7 +692,7 @@
       /* Value: weight-900 display type — the number IS the stat */
       .stat-value {
         font-family: var(--f-display);
-        font-size: 5.5vw;
+        font-size: 7vw;
         font-weight: 900;
         line-height: 0.9;
         color: var(--c-fg-light);
@@ -639,11 +719,7 @@
       }
 
       /* 6. LIST ─────────────────────────────────────────────────────────── */
-      .slide--list {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-      }
+      /* Same grid discipline as stats: chrome top, foot bottom, body centered. */
       .slide--list .slide-body {
         display: grid;
         grid-template-columns: 2fr 3fr;
@@ -742,7 +818,7 @@
       }
       /* Bar chart track: bars sit in a horizontal row along a baseline */
       .bar-track {
-        height: 30vh;
+        height: 42vh;
         display: flex;
         align-items: flex-end;
         gap: 4vw;
@@ -761,16 +837,16 @@
         gap: 1vh;
         height: 100%;
       }
-      /* Bar fill: default is dark muted, accent is full yellow */
+      /* Bar fill: muted bars sit clearly behind the single full-yellow accent bar */
       .bar-fill {
         width: 100%;
-        background: var(--c-fg-3);
+        background: rgba(245, 210, 0, 0.32);
       }
       .bar-fill.accent {
         background: var(--c-accent);
       }
       .light .bar-fill {
-        background: var(--c-fg-light-3);
+        background: rgba(28, 28, 28, 0.32);
       }
       .light .bar-fill.accent {
         background: var(--c-fg-light);
@@ -1331,28 +1407,28 @@
             <div class="bar-track">
               <div class="bar-col">
                 <span class="bar-val">18</span>
-                <div class="bar-fill" style="height: 7vh"></div>
+                <div class="bar-fill" style="height: 9.1vh"></div>
                 <span class="bar-x-label">VIDEO</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">27</span>
-                <div class="bar-fill" style="height: 10vh"></div>
+                <div class="bar-fill" style="height: 13.7vh"></div>
                 <span class="bar-x-label">IMAGE</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">38</span>
-                <div class="bar-fill" style="height: 14vh"></div>
+                <div class="bar-fill" style="height: 19.2vh"></div>
                 <span class="bar-x-label">SLIDES</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">51</span>
-                <div class="bar-fill" style="height: 18.5vh"></div>
+                <div class="bar-fill" style="height: 25.8vh"></div>
                 <span class="bar-x-label">DASHBOARDS</span>
               </div>
               <div class="bar-col">
                 <!-- Accent bar: the highlighted artifact type -->
                 <span class="bar-val hi">83</span>
-                <div class="bar-fill accent" style="height: 30vh"></div>
+                <div class="bar-fill accent" style="height: 42vh"></div>
                 <span class="bar-x-label">PROTOTYPES</span>
               </div>
             </div>
@@ -1379,9 +1455,9 @@
         <h1
           class="h1"
           style="
-            max-width: 85%;
+            max-width: 100%;
             line-height: 0.9;
-            font-size: var(--sz-display);
+            font-size: 9.2vw;
             color: var(--c-fg-light);
           "
           data-anim="fade-up"
@@ -1390,13 +1466,14 @@
           OPEN. LOCAL. AGENT-NATIVE.
         </h1>
 
-        <!-- Two-column contact info below the statement -->
+        <!-- Two-column contact info: grouped with the footer at the slide base -->
         <div
           style="
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: var(--gap-lg);
-            margin-top: var(--gap-lg);
+            margin-top: auto;
+            padding-bottom: var(--gap-lg);
           "
           data-anim="fade-up"
           data-delay="2"

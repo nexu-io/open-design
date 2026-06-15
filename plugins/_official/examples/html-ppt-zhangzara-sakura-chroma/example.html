@@ -6,19 +6,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800;900&family=Albert+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Albert+Sans:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@500&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper:    #F1E6CB;   /* warm cream paper canvas */
     --paper-dk: #E5D6B0;   /* slightly darker paper for layering */
     --ink:      #3A2516;   /* dark warm brown ink, the type colour */
-    --red:      #E5392A;
-    --pink:     #E54489;
+    --red:      #D93425;   /* deepened from #E5392A: red display type and paper-on-red stamps clear 3.7:1 */
+    --pink:     #D6377B;   /* deepened from #E54489: paper lockup type on pink clears 3.6:1 */
     --orange:   #F09131;
     --green:    #3D9F47;
-    --blue:     #3F8BC4;
+    --blue:     #3680B8;   /* nudged down from #3F8BC4: 3.4:1 on paper so blue display type clears large-text AA */
     --yellow:   #F0BC2A;
     --line:     #3A2516;
+    --ease:     cubic-bezier(.16, 1, .3, 1);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: #0e0e0e; }
@@ -36,53 +37,63 @@
     overflow: hidden;
     background: var(--paper);
   }
-  /* Subtle halftone-dot paper texture across all slides */
+  /* Subtle halftone-dot paper texture across all slides.
+     Sits ABOVE the opaque slide backgrounds (slides are z-index 2 with
+     their own paper fill), so it reads as print grain over the whole
+     sheet, type included, like a risograph pass. */
   .stage::before {
     content: '';
     position: absolute; inset: 0; pointer-events: none;
-    opacity: 0.16;
+    opacity: 0.11;
     background-image: radial-gradient(circle at 1px 1px, rgba(58,37,22,0.55) 1px, transparent 1.6px);
     background-size: 4px 4px;
-    z-index: 1;
+    z-index: 20;
   }
 
   /* One slide visible at a time */
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 320ms var(--ease);
     z-index: 2;
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
+  /* ─── ENTRANCE MOTION ────────────────────────────────────────── */
+  /* from-only keyframes: elements settle into their own natural
+     transform, so translateX/Y-positioned blocks are never clobbered. */
+  @keyframes rise   { from { opacity: 0; transform: translateY(16px); } }
+  @keyframes fadein { from { opacity: 0; } }
+  .slide.active > * { animation: rise 600ms var(--ease) backwards; }
+  .slide.active > :nth-child(2) { animation-delay: 70ms; }
+  .slide.active > :nth-child(3) { animation-delay: 140ms; }
+  .slide.active > :nth-child(4) { animation-delay: 210ms; }
+  .slide.active > :nth-child(5) { animation-delay: 280ms; }
+  .slide.active > :nth-child(6) { animation-delay: 350ms; }
+  .slide.active > :nth-child(7) { animation-delay: 420ms; }
+  .slide.active > :nth-child(8) { animation-delay: 490ms; }
+  /* These two carry their own positioning transforms; fade only. */
+  .s-manifesto.active > .kicker,
+  .s-stripe.active > .quote-wrap { animation-name: fadein; }
+  /* Inner stagger for card grid and ledger rows */
+  .s-catalogue.active .card,
+  .s-cal.active .row { animation: rise 500ms var(--ease) backwards; }
+  .s-catalogue.active .card:nth-child(2) { animation-delay: 90ms; }
+  .s-catalogue.active .card:nth-child(3) { animation-delay: 180ms; }
+  .s-catalogue.active .card:nth-child(4) { animation-delay: 270ms; }
+  .s-cal.active .row:nth-child(2) { animation-delay: 60ms; }
+  .s-cal.active .row:nth-child(3) { animation-delay: 120ms; }
+  .s-cal.active .row:nth-child(4) { animation-delay: 180ms; }
+  .s-cal.active .row:nth-child(5) { animation-delay: 240ms; }
+  .s-cal.active .row:nth-child(6) { animation-delay: 300ms; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > *,
+    .s-catalogue.active .card,
+    .s-cal.active .row { animation: none; }
+  }
+
   /* ─── TYPE SYSTEM ────────────────────────────────────────────── */
-  .disp {
-    font-family: 'Big Shoulders Display', sans-serif;
-    font-weight: 900;
-    line-height: 0.84;
-    letter-spacing: -0.012em;
-  }
-  .disp-700 {
-    font-family: 'Big Shoulders Display', sans-serif;
-    font-weight: 700;
-    line-height: 0.9;
-    letter-spacing: 0;
-  }
-  .micro {
-    font-family: 'Albert Sans', sans-serif;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-  }
-  .body-tx {
-    font-family: 'Albert Sans', sans-serif;
-    font-weight: 400;
-    line-height: 1.5;
-  }
-  .mono {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-weight: 400;
-  }
   .jp {
     font-family: 'Noto Sans JP', sans-serif;
     font-weight: 500;
@@ -109,7 +120,12 @@
     font-size: clamp(10px, 0.75vw, 12px);
     color: var(--ink);
     letter-spacing: 0.08em;
-    opacity: 0.36;
+    opacity: 0.55;
+    /* Paper halo keeps the hint legible where the stripe spread or the
+       colophon sash runs underneath it. */
+    text-shadow:
+      0 0 2px var(--paper), 0 0 4px var(--paper),
+      0 0 8px var(--paper), 0 0 12px var(--paper);
     z-index: 12;
     pointer-events: none;
   }
@@ -130,38 +146,7 @@
     aspect-ratio: 1 / 1;
   }
 
-  /* ─── DECORATIVE: diagonal stripe band ──────────────────────── */
-  /* A bundle of coloured ribbons that sweep diagonally then bend
-     to horizontal — echoes the cassette-label motif. Built from
-     a rotated container with stacked horizontal coloured bars. */
-  .stripe-rail {
-    position: absolute;
-    pointer-events: none;
-    z-index: 3;
-    transform-origin: 0 50%;
-  }
-  .stripe-rail .bar {
-    height: 0; /* set per-instance below */
-  }
-
   /* ─── DECORATIVE: rosette / seal badge ──────────────────────── */
-  .rosette {
-    position: absolute;
-    pointer-events: none;
-    z-index: 5;
-    display: grid;
-    place-items: center;
-    width: clamp(60px, 6vw, 110px);
-    height: clamp(60px, 6vw, 110px);
-    background: var(--ink);
-    color: var(--paper);
-    /* 12-point starburst shape via clip-path */
-    clip-path: polygon(50% 0%, 60% 8%, 73% 4%, 76% 17%, 89% 18%, 87% 31%, 100% 35%, 92% 47%, 100% 60%, 87% 64%, 90% 77%, 76% 78%, 75% 91%, 62% 88%, 53% 100%, 42% 90%, 30% 96%, 25% 84%, 12% 86%, 13% 73%, 0% 70%, 7% 58%, 0% 47%, 11% 39%, 4% 27%, 17% 25%, 13% 12%, 27% 14%, 25% 1%, 38% 7%);
-    font-family: 'Big Shoulders Display', sans-serif;
-    font-weight: 900;
-    font-size: clamp(22px, 2vw, 38px);
-    letter-spacing: -0.01em;
-  }
   .stamp {
     position: absolute;
     background: var(--red);
@@ -258,30 +243,26 @@
     z-index: 4;
   }
 
-  /* Diagonal multi-colour stripe band that sweeps right and down.
-     Positioned in the right-half of the slide so the hero number on
-     the left can sit on clean cream paper. */
+  /* Diagonal multi-colour sash sweeping out through the top-right
+     corner. One element with hard gradient stops, so all five bands
+     terminate on the same crisp slanted line instead of the ragged
+     per-band clipping the old stacked divs produced. */
   .s-cover .ribbons {
     position: absolute;
-    right: 0;
-    top: clamp(160px, 18vh, 280px);
-    bottom: clamp(180px, 18vh, 280px);
-    width: 52%;
+    right: -20%;
+    top: clamp(70px, 12vh, 130px);
+    width: 70%;
+    height: clamp(140px, 24vh, 230px);
+    transform: rotate(-22deg);
+    background: linear-gradient(to bottom,
+      var(--pink)   0 20%,
+      var(--orange) 20% 40%,
+      var(--yellow) 40% 60%,
+      var(--green)  60% 80%,
+      var(--blue)   80% 100%);
     z-index: 3;
     pointer-events: none;
-    overflow: hidden;
   }
-  .s-cover .ribbon {
-    position: absolute;
-    left: -20%;
-    width: 160%;
-    transform-origin: 0 50%;
-  }
-  .s-cover .ribbon.r-pink   { background: var(--pink);   }
-  .s-cover .ribbon.r-orange { background: var(--orange); }
-  .s-cover .ribbon.r-yellow { background: var(--yellow); }
-  .s-cover .ribbon.r-green  { background: var(--green);  }
-  .s-cover .ribbon.r-blue   { background: var(--blue);   }
 
   /* Spec checklist column on the right */
   .s-cover .specs {
@@ -405,11 +386,13 @@
     z-index: 2;
   }
   .s-manifesto .blob.b-red    { background: var(--red);    width: 16vmin; height: 16vmin; top: 8%;  left: 6%; }
-  .s-manifesto .blob.b-orange { background: var(--orange); width: 12vmin; height: 12vmin; top: 22%; left: 16%; }
+  /* Orange kisses the red blob on its upper-right shoulder, staying
+     clear of the headline's left edge (text gutter starts ~12vw). */
+  .s-manifesto .blob.b-orange { background: var(--orange); width: 12vmin; height: 12vmin; top: 4%; left: 13%; }
   .s-manifesto .blob.b-yellow { background: var(--yellow); width: 12vmin; height: 12vmin; top: 75%; left: 8%; }
   .s-manifesto .blob.b-green  { background: var(--green);  width: 14vmin; height: 14vmin; top: 70%; left: 78%; }
   .s-manifesto .blob.b-blue   { background: var(--blue);   width: 13vmin; height: 13vmin; top: 14%; left: 78%; }
-  .s-manifesto .blob.b-pink   { background: var(--pink);   width: 11vmin; height: 11vmin; top: 30%; left: 86%; }
+  .s-manifesto .blob.b-pink   { background: var(--pink);   width: 11vmin; height: 11vmin; top: 32%; left: 92%; }
 
   .s-manifesto .stmt-wrap {
     position: relative; z-index: 5;
@@ -421,7 +404,9 @@
     font-family: 'Big Shoulders Display', sans-serif;
     font-weight: 900;
     font-size: clamp(70px, min(8.4vw, 14vh), 168px);
-    line-height: 0.86;
+    /* 0.94: descenders ("truly", "capability") were colliding with the
+       caps of the next line at 0.86. */
+    line-height: 0.94;
     color: var(--ink);
     letter-spacing: -0.022em;
     text-align: center;
@@ -508,9 +493,6 @@
     line-height: 1.45;
     font-style: italic;
   }
-  .s-catalogue .card .specs {
-    margin-top: auto;
-  }
   .s-catalogue .card .nm {
     font-family: 'Big Shoulders Display', sans-serif;
     font-weight: 900;
@@ -520,13 +502,16 @@
     letter-spacing: -0.012em;
   }
   .s-catalogue .card .desc {
+    /* No flex:1 here: the italic note hugs the description and the
+       slack collects between note and the bottom-pinned spec table,
+       so the dashed rule never floats mid-card. */
     font-family: 'Albert Sans', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.4;
     color: var(--ink);
-    flex: 1;
   }
   .s-catalogue .card .specs {
+    margin-top: auto;
     border-top: 1px dashed var(--ink);
     padding-top: clamp(8px, 1vh, 14px);
     display: flex; flex-direction: column; gap: 4px;
@@ -760,7 +745,7 @@
     font-family: 'Big Shoulders Display', sans-serif;
     font-weight: 900;
     font-size: clamp(56px, min(6.4vw, 10.5vh), 130px);
-    line-height: 0.9;
+    line-height: 0.96;
     color: var(--ink);
     letter-spacing: -0.018em;
     max-width: 92%;
@@ -824,6 +809,9 @@
     padding: clamp(10px, 1.2vh, 18px) 0;
     border-bottom: 1px solid rgba(58,37,22,0.22);
   }
+  /* Data rows share the ledger's full height so the table fills the
+     slide instead of packing at the top with dead space below. */
+  .s-cal .row:not(.headrow) { flex: 1 1 0; }
   .s-cal .row.headrow { border-bottom: 1.5px solid var(--ink); padding: 8px 0; }
   .s-cal .row.headrow > div { font-family: 'Albert Sans', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; font-size: clamp(11px, 0.75vw, 12px); color: var(--ink); }
   .s-cal .date-tag { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(14px, 0.95vw, 16px); color: var(--ink); letter-spacing: 0.02em; }
@@ -839,20 +827,31 @@
   .s-cal .ven { font-family: 'Albert Sans', sans-serif; font-size: clamp(14px, 0.95vw, 15px); color: var(--ink); }
   .s-cal .chip {
     display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px;
     padding: 4px 10px;
+    border: 1.5px solid var(--ink);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(11px, 0.75vw, 12px);
     font-weight: 500;
     letter-spacing: 0.06em;
-    color: var(--paper);
+    /* Ink type on paper with a solid colour swatch: white-on-pink and
+       white-on-orange were under AA at this size, and the swatch keeps
+       the rainbow track coding intact. */
+    color: var(--ink);
+    background: var(--paper);
     text-transform: uppercase;
     width: fit-content;
   }
-  .s-cal .chip.c-red    { background: var(--red); }
-  .s-cal .chip.c-pink   { background: var(--pink); }
-  .s-cal .chip.c-orange { background: var(--orange); }
-  .s-cal .chip.c-blue   { background: var(--blue); }
-  .s-cal .chip.c-green  { background: var(--green); }
+  .s-cal .chip::before {
+    content: '';
+    width: 10px; height: 10px;
+    flex: none;
+  }
+  .s-cal .chip.c-red::before    { background: var(--red); }
+  .s-cal .chip.c-pink::before   { background: var(--pink); }
+  .s-cal .chip.c-orange::before { background: var(--orange); }
+  .s-cal .chip.c-blue::before   { background: var(--blue); }
+  .s-cal .chip.c-green::before  { background: var(--green); }
   .s-cal .nr-cell {
     display: flex; gap: 6px; justify-content: end;
   }
@@ -865,27 +864,25 @@
 
   /* ─── SLIDE 8 — COLOPHON / CLOSING (mirror of cover) ────────── */
   .s-colophon { background: var(--paper); }
+  /* Mirror of the cover sash: enters from the left edge, slants down
+     toward the footer, single gradient element so the visible end is
+     one clean diagonal cut. */
   .s-colophon .ribbons {
     position: absolute;
-    left: 0;
-    top: clamp(140px, 16vh, 240px);
-    bottom: clamp(160px, 16vh, 260px);
-    width: 60%;
+    left: -20%;
+    top: clamp(230px, 36vh, 340px);
+    width: 70%;
+    height: clamp(110px, 18vh, 180px);
+    transform: rotate(22deg);
+    background: linear-gradient(to bottom,
+      var(--pink)   0 20%,
+      var(--orange) 20% 40%,
+      var(--yellow) 40% 60%,
+      var(--green)  60% 80%,
+      var(--blue)   80% 100%);
     z-index: 3;
     pointer-events: none;
-    overflow: hidden;
   }
-  .s-colophon .ribbon {
-    position: absolute;
-    right: -20%;
-    width: 160%;
-    transform-origin: 100% 50%;
-  }
-  .s-colophon .ribbon.r-pink   { background: var(--pink);   }
-  .s-colophon .ribbon.r-orange { background: var(--orange); }
-  .s-colophon .ribbon.r-yellow { background: var(--yellow); }
-  .s-colophon .ribbon.r-green  { background: var(--green);  }
-  .s-colophon .ribbon.r-blue   { background: var(--blue);   }
 
   .s-colophon .col-petals {
     position: absolute;
@@ -1010,14 +1007,10 @@
         <div class="b2">AGENT-DRIVEN DESIGN PLATFORM</div>
       </div>
 
-      <!-- diagonal ribbons sweeping right and down -->
-      <div class="ribbons" aria-hidden="true">
-        <div class="ribbon r-pink"   style="top: 0%;   height: 18%; transform: rotate(-22deg);"></div>
-        <div class="ribbon r-orange" style="top: 18%;  height: 16%; transform: rotate(-22deg);"></div>
-        <div class="ribbon r-yellow" style="top: 35%;  height: 16%; transform: rotate(-22deg);"></div>
-        <div class="ribbon r-green"  style="top: 52%;  height: 16%; transform: rotate(-22deg);"></div>
-        <div class="ribbon r-blue"   style="top: 70%;  height: 18%; transform: rotate(-22deg);"></div>
-      </div>
+      <!-- diagonal five-band sash sweeping out the top-right corner;
+           a single hard-stop gradient so every band ends on the same
+           crisp slanted cut -->
+      <div class="ribbons" aria-hidden="true"></div>
 
       <!-- hero number / lockup -->
       <div class="hero">60K+</div>
@@ -1312,13 +1305,7 @@
 
     <!-- 8. COLOPHON / CLOSING ───────────────────────────────── -->
     <section class="slide s-colophon">
-      <div class="ribbons" aria-hidden="true">
-        <div class="ribbon r-blue"   style="bottom: 0%;   height: 18%; transform: rotate(22deg);"></div>
-        <div class="ribbon r-green"  style="bottom: 18%;  height: 16%; transform: rotate(22deg);"></div>
-        <div class="ribbon r-yellow" style="bottom: 35%;  height: 16%; transform: rotate(22deg);"></div>
-        <div class="ribbon r-orange" style="bottom: 52%;  height: 16%; transform: rotate(22deg);"></div>
-        <div class="ribbon r-pink"   style="bottom: 70%;  height: 18%; transform: rotate(22deg);"></div>
-      </div>
+      <div class="ribbons" aria-hidden="true"></div>
 
       <div class="col-petals" aria-hidden="true">
         <div class="petal p1"></div>

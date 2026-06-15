@@ -5,22 +5,18 @@
 <title>Pink Script — Open Design</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="assets/deck-stage.js"></script>
 <style>
   :root{
-    --ink: #060507;
-    --ink-2: #0F0D11;
     --paper: #F5EDF1;
     --pink: #ED3D8C;
-    --pink-2: #FF66A8;
-    --pink-deep: #B81D67;
     --line: rgba(237,61,140,.32);
-    --mute: rgba(245,237,241,.55);
+    --mute: rgba(245,237,241,.62);
     --hair: rgba(245,237,241,.14);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: #000; font-family: "Inter", system-ui, sans-serif; color: var(--paper); }
+  html, body { background: #000; font-family: "Instrument Sans", system-ui, sans-serif; color: var(--paper); }
 
   /* --- shared slide chrome ----------------------------------------- */
   deck-stage > section.slide {
@@ -64,34 +60,6 @@
   .footer .pageno { color: var(--paper); white-space: nowrap; flex-shrink: 0; }
   .footer .pageno em { color: var(--pink); font-style: normal; }
 
-  /* shared display script */
-  .script {
-    font-family: "Instrument Serif", serif;
-    font-style: italic;
-    font-weight: 400;
-    color: var(--pink);
-    letter-spacing: -.01em;
-    line-height: 1.05;
-    padding-bottom: .12em;
-  }
-  .script.huge   { font-size: 540px; }
-  .script.giant  { font-size: 360px; }
-  .script.large  { font-size: 220px; }
-  .script.med    { font-size: 140px; }
-  .script.sm     { font-size: 88px; }
-
-  /* sans display */
-  .sans-display {
-    font-family: "Inter", sans-serif; font-weight: 300;
-    text-transform: uppercase; letter-spacing: .04em;
-    color: var(--paper);
-  }
-  .mono { font-family: "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
-
-  /* hairline pink rule */
-  .rule { height: 1px; background: var(--pink); opacity: .45; }
-  .rule.thin { opacity: .25; background: var(--paper); }
-
   /* ============== 1. COVER · OPEN DESIGN =================== */
   .s-cover .stage {
     position: absolute; left: 60px; right: 60px; top: 180px; bottom: 360px;
@@ -108,11 +76,6 @@
     padding-bottom: .12em;
   }
   .s-cover .title .l2 { display: block; padding-left: 180px; color: var(--paper); }
-  .s-cover .sub {
-    font-family: "Inter", sans-serif; font-weight: 300; font-size: 28px; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--paper); opacity: .85; margin-top: 28px;
-  }
-  .s-cover .sub em { color: var(--pink); font-style: normal; }
   .s-cover .lower { position: absolute; left: 60px; right: 60px; bottom: 160px; display: flex; justify-content: space-between; align-items: end; gap: 32px; }
   .s-cover .lower .col { display: flex; flex-direction: column; gap: 6px; }
   .s-cover .lower .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
@@ -127,7 +90,7 @@
   .s-toc .row { display: grid; grid-template-columns: 110px 1fr 200px; gap: 32px; align-items: baseline; padding: 26px 0; border-bottom: 1px solid var(--hair); }
   .s-toc .row .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
   .s-toc .row .title { font-family: "Instrument Serif", serif; font-style: italic; font-size: 56px; color: var(--paper); line-height: 1.05; }
-  .s-toc .row .desc { font-family: "Inter", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
+  .s-toc .row .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.4; font-style: normal; }
   .s-toc .row .meta { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); text-align: right; }
   .s-toc .row.cur .num, .s-toc .row.cur .title { color: var(--pink); }
 
@@ -137,14 +100,14 @@
   .s-stats .left .kicker { font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .18em; text-transform: uppercase; color: var(--pink); }
   .s-stats .left h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
   .s-stats .left h2 em { color: var(--pink); font-style: italic; }
-  .s-stats .left p { font-family: "Inter", sans-serif; font-size: 24px; line-height: 1.55; color: var(--paper); opacity: .75; max-width: 36ch; font-weight: 300; }
+  .s-stats .left p { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--paper); opacity: .75; max-width: 36ch; font-weight: 400; }
   .s-stats .right { display: flex; flex-direction: column; gap: 18px; padding-top: 0; }
   .s-stats .stat { display: grid; grid-template-columns: 240px 1fr; align-items: center; gap: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--hair); }
   .s-stats .stat:last-child { border-bottom: 0; padding-bottom: 0; }
   .s-stats .stat .figure { font-family: "Instrument Serif", serif; font-style: italic; font-size: 116px; line-height: .9; color: var(--pink); display: flex; align-items: baseline; }
   .s-stats .stat .figure sup { font-size: 36px; color: var(--paper); vertical-align: top; margin-left: 4px; line-height: 1; align-self: flex-start; padding-top: 18px; }
   .s-stats .stat .meta .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
-  .s-stats .stat .meta .desc { font-family: "Inter", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.45; font-weight: 300; }
+  .s-stats .stat .meta .desc { font-family: "Instrument Sans", sans-serif; font-size: 24px; color: var(--mute); margin-top: 8px; line-height: 1.45; font-weight: 400; }
 
   /* ============== 4. MOVEMENTS · SECTION DIVIDER =========== */
   .s-section .body { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -159,7 +122,7 @@
   .s-section .right { position: absolute; right: 100px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 18px; max-width: 380px; }
   .s-section .right .kicker { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
   .s-section .right h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 88px; line-height: 1.06; color: var(--paper); padding-bottom: .1em; }
-  .s-section .right p  { font-family: "Inter", sans-serif; font-size: 24px; line-height: 1.55; color: var(--mute); font-weight: 300; }
+  .s-section .right p  { font-family: "Instrument Sans", sans-serif; font-size: 24px; line-height: 1.55; color: var(--mute); font-weight: 400; }
 
   /* ============== 5. THE CURVE · CHART ===================== */
   .s-chart .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 80px; }
@@ -182,18 +145,18 @@
   }
   .s-chart .callout .num { font-family: "Instrument Serif", serif; font-style: italic; font-size: 120px; line-height: .9; color: var(--pink); }
   .s-chart .callout .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
-  .s-chart .callout .desc { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.4; font-weight: 300; }
+  .s-chart .callout .desc { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.4; font-weight: 400; }
 
   /* ============== 6. PROCESS · DIAGRAM ===================== */
   .s-process .head { position: absolute; left: 60px; right: 60px; top: 140px; display: flex; align-items: end; justify-content: space-between; gap: 60px; }
   .s-process .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 156px; line-height: 1.04; color: var(--paper); max-width: 12ch; padding-bottom: .1em; }
   .s-process .head h2 em { color: var(--pink); font-style: italic; }
-  .s-process .head .lead { font-family: "Inter", sans-serif; font-size: 26px; color: var(--mute); max-width: 40ch; line-height: 1.55; font-weight: 300; padding-bottom: 18px; }
+  .s-process .head .lead { font-family: "Instrument Sans", sans-serif; font-size: 26px; color: var(--mute); max-width: 40ch; line-height: 1.55; font-weight: 400; padding-bottom: 18px; }
   .s-process .row { position: absolute; left: 60px; right: 60px; top: 540px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; }
   .s-process .step { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 26px 0; border-top: 1px solid var(--pink); }
   .s-process .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 96px; color: var(--pink); line-height: .8; }
   .s-process .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 38px; color: var(--paper); line-height: 1.05; }
-  .s-process .step p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 300; }
+  .s-process .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
   .s-process .step .arr {
     position: absolute; right: -16px; top: 60px; width: 24px; height: 24px;
     color: var(--pink); pointer-events: none;
@@ -208,7 +171,7 @@
   .s-matrix .head h2 em { color: var(--pink); font-style: italic; }
   .s-matrix .head .source { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); padding-bottom: 18px; max-width: 30ch; line-height: 1.5; text-align: right; }
   .s-matrix .table { position: absolute; left: 60px; right: 60px; top: 460px; bottom: 140px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; grid-auto-rows: 1fr; }
-  .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Inter", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 300; }
+  .s-matrix .cell { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; font-family: "Instrument Sans", sans-serif; font-size: 22px; line-height: 1.4; color: var(--paper); font-weight: 400; }
   .s-matrix .cell.colhead { background: transparent; font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); border-bottom-color: var(--pink); }
   .s-matrix .cell.label { font-family: "Instrument Serif", serif; font-style: italic; font-size: 32px; color: var(--paper); }
   .s-matrix .cell.us { background: rgba(237,61,140,.08); color: var(--paper); }
@@ -237,39 +200,26 @@
   .s-cta .step { display: flex; flex-direction: column; gap: 16px; padding-top: 22px; border-top: 1px solid var(--pink); }
   .s-cta .step .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 64px; color: var(--pink); line-height: 1; }
   .s-cta .step h3 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 44px; color: var(--paper); line-height: 1.05; }
-  .s-cta .step p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 300; }
+  .s-cta .step p { font-family: "Instrument Sans", sans-serif; font-size: 22px; color: var(--mute); line-height: 1.5; font-weight: 400; }
   .s-cta .qr { display: flex; flex-direction: column; gap: 14px; align-items: flex-end; }
   .s-cta .qr .box { width: 180px; height: 180px; background: var(--paper); padding: 12px; }
   .s-cta .qr .box svg { width: 100%; height: 100%; }
   .s-cta .qr .lab { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--paper); }
   .s-cta .qr .url { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .04em; color: var(--pink); }
 
-  /* ============== 10. THE SYSTEM · DESIGN SYSTEM ============ */
-  .s-system .body { position: absolute; inset: 140px 60px 140px 60px; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
-  .s-system .head { position: absolute; left: 60px; right: 60px; top: 140px; }
-  .s-system .head h2 { font-family: "Instrument Serif", serif; font-style: italic; font-size: 132px; color: var(--paper); }
-  .s-system .head h2 em { color: var(--pink); font-style: italic; }
-  .s-system .body { top: 320px; }
-  .s-system .panel { display: flex; flex-direction: column; gap: 22px; padding-top: 22px; border-top: 1px solid var(--pink); }
-  .s-system .panel h3 { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--pink); }
-  .s-system .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-  .s-system .swatch { display: flex; flex-direction: column; gap: 8px; }
-  .s-system .swatch .chip { aspect-ratio: 1; border: 1px solid var(--hair); }
-  .s-system .swatch .name { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .08em; color: var(--paper); }
-  .s-system .swatch .hex { font-family: "JetBrains Mono", monospace; font-size: 22px; color: var(--mute); }
-  .s-system .typespec { display: flex; flex-direction: column; gap: 14px; }
-  .s-system .typerow { display: grid; grid-template-columns: 240px 1fr; gap: 24px; align-items: baseline; padding-bottom: 12px; border-bottom: 1px dashed var(--hair); }
-  .s-system .typerow .meta { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .08em; color: var(--mute); text-transform: uppercase; }
-  .s-system .typerow .sample { color: var(--paper); }
-  .s-system .typerow .sample.script { font-family: "Instrument Serif", serif; font-style: italic; color: var(--pink); }
-  .s-system .typerow .sample.disp { font-family: "Instrument Serif", serif; font-style: italic; }
-  .s-system .typerow .sample.body { font-family: "Inter", sans-serif; font-weight: 300; }
-  .s-system .typerow .sample.mono { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: .12em; }
-  .s-system .rules { display: flex; flex-direction: column; gap: 12px; }
-  .s-system .rules .item { display: grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
-  .s-system .rules .item .n { font-family: "Instrument Serif", serif; font-style: italic; font-size: 48px; color: var(--pink); line-height: .9; }
-  .s-system .rules .item p { font-family: "Inter", sans-serif; font-size: 22px; color: var(--paper); line-height: 1.45; font-weight: 300; }
-  .s-system .rules .item p strong { color: var(--pink); font-weight: 500; font-style: italic; font-family: "Instrument Serif", serif; font-size: 26px; padding-right: 6px; }
+  /* entrance: stagger rise on the active slide's direct children */
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+  section.slide[data-deck-active] > * { animation: rise .6s cubic-bezier(.16,1,.3,1) both; }
+  section.slide[data-deck-active] > :nth-child(2) { animation-delay: .06s; }
+  section.slide[data-deck-active] > :nth-child(3) { animation-delay: .12s; }
+  section.slide[data-deck-active] > :nth-child(4) { animation-delay: .18s; }
+  section.slide[data-deck-active] > :nth-child(5) { animation-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    section.slide[data-deck-active] > * { animation: none; }
+  }
+  @media print {
+    section.slide > * { opacity: 1 !important; animation: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -286,7 +236,6 @@
       <div class="title-wrap">
         <div class="title">Open<span class="l2">Design.</span></div>
       </div>
-      <div class="sub" style="margin:0"></div>
     </div>
     <div class="lower">
       <div class="col">

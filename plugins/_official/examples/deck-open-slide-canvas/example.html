@@ -3,46 +3,119 @@
 <head>
 <meta charset="UTF-8" />
 <title>Open-Slide Canvas · Open Design · 一句问题</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-  body { font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif; background:#020306; margin:0; min-height:100vh; }
-  .slide-frame { width:1280px; height:720px; transform:scale(0.78); transform-origin: top left; }
-  .canvas { background:#0a0e1a; color:#f5f5f7; }
-  .accent { color:#5ac8fa; }
-  .mono { font-family:'JetBrains Mono',ui-monospace,monospace; }
-  /* hairline diag bg */
-  .grain {
+  /* Sea Indigo - locked palette: bg #0a0e1a / ink #f5f5f7 / accent #5ac8fa */
+  :root{
+    --bg:#0a0e1a;
+    --ink:#f5f5f7;
+    --ink-dim:rgba(245,245,247,.68);
+    --ink-faint:rgba(245,245,247,.56);
+    --accent:#5ac8fa;
+    --line:rgba(245,245,247,.14);
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif;
+    background:#020306;
+    height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  .slide-frame{
+    width:1920px;height:1080px;
+    flex:none;
+    transform:scale(0.625);
+    transform-origin:center center;
+    position:relative;
+    background:var(--bg);
+    color:var(--ink);
+    /* single-accent ambient glow, cyan family only */
     background-image:
-      radial-gradient(circle at 20% 80%, rgba(90,200,250,0.10) 0%, transparent 50%),
-      radial-gradient(circle at 80% 30%, rgba(124,92,255,0.08) 0%, transparent 55%);
+      radial-gradient(circle at 18% 82%, rgba(90,200,250,.10) 0%, transparent 50%),
+      radial-gradient(circle at 84% 22%, rgba(90,200,250,.045) 0%, transparent 55%);
+  }
+  .layer{
+    position:absolute;inset:0;
+    padding:160px;
+    box-sizing:border-box;
+    display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  .meta{
+    display:flex;align-items:baseline;justify-content:space-between;
+    font-size:17px;text-transform:uppercase;
+  }
+  .meta-top{letter-spacing:.18em;color:var(--ink-dim);
+    border-bottom:1px solid var(--line);padding-bottom:28px}
+  .meta-bottom{letter-spacing:.18em;color:var(--ink-faint);
+    border-top:1px solid var(--line);padding-top:28px}
+  .meta-bottom .link{color:var(--accent)}
+  .kicker{
+    font-size:19px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--accent);
+  }
+  h1{
+    margin:36px 0 0;
+    font-size:160px;
+    font-weight:900;
+    line-height:.98;
+    letter-spacing:-.025em;
+  }
+  h1 .cloud{color:var(--accent)}
+  h1 .desk{
+    font-style:normal;
+    box-shadow:inset 0 -10px 0 0 rgba(90,200,250,.45);
+  }
+  .sub{
+    margin:56px 0 0;
+    font-size:36px;
+    font-weight:400;
+    color:var(--ink-dim);
+    max-width:1380px;
+    line-height:1.45;
+  }
+  /* staggered entrance: transform + opacity only */
+  .reveal{opacity:0;transform:translateY(24px);
+    animation:reveal .8s var(--ease) forwards}
+  .reveal:nth-child(1){animation-delay:.05s}
+  .reveal:nth-child(2){animation-delay:.13s}
+  .reveal:nth-child(3){animation-delay:.21s}
+  @keyframes reveal{to{opacity:1;transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){
+    .reveal{animation:none;opacity:1;transform:none}
+  }
+  @media print{
+    body{display:block}
+    .slide-frame{transform:none}
   }
 </style>
 </head>
-<body class="p-10 overflow-hidden">
-<div class="slide-frame canvas grain relative">
-  <div class="absolute inset-0 p-32 flex flex-col justify-between">
-    <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-60">
+<body>
+<div class="slide-frame">
+  <div class="layer">
+    <header class="meta meta-top mono">
       <span>OPEN DESIGN · DECK · OPEN-SLIDE CANVAS</span>
       <span>SEA INDIGO</span>
       <span>№05 / 12</span>
     </header>
 
     <div>
-      <div class="mono text-[12px] uppercase tracking-[0.22em] accent">Question 03</div>
-      <h1 class="mt-6 font-black leading-[0.95] tracking-[-0.025em]" style="font-size:120px">
+      <div class="kicker mono reveal">Question 03</div>
+      <h1 class="reveal">
         当 AI 学会了设计,<br/>
-        它该锁在 <span class="accent">云端</span>,<br/>
-        还是回到 <em class="not-italic" style="font-family:'Source Serif Pro',serif;font-style:italic;font-weight:500">桌面</em>?
+        它该锁在 <span class="cloud">云端</span>,<br/>
+        还是回到 <span class="desk">桌面</span>?
       </h1>
-      <p class="mt-10 text-[28px] opacity-70 max-w-[820px] leading-snug">
+      <p class="sub reveal">
         Open Design 的答案: 开源、本地、Agent 驱动, 全流程在你自己的设备上完成。
       </p>
     </div>
 
-    <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-50">
+    <footer class="meta meta-bottom mono">
       <span>1920 × 1080 · CANVAS · KBD ← →</span>
-      <span class="accent">github.com/nexu-io/open-design</span>
+      <span class="link">github.com/nexu-io/open-design</span>
       <span>00 : 03 : 21</span>
     </footer>
   </div>

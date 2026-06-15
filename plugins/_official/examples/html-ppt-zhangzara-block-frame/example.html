@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Open Design — The Open-Source, Local, Agent-Driven Design Platform</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
     :root {
       --pink: #FE90E8;
@@ -13,14 +13,17 @@
       --green: #99E885;
       --yellow: #F7CB46;
       --cream: #FFDC8B;
-      --black: #000000;
-      --white: #FFFFFF;
+      --black: #17150F; /* warm ink, reads black but not raw #000 */
+      --white: #FFFEF8;
       --offwhite: #FFFDF5;
       --border: 4px solid var(--black);
       --shadow: 8px 8px 0px var(--black);
       --shadow-sm: 4px 4px 0px var(--black);
-      --radius: 0px;
-      --radius-sm: 4px;
+    }
+
+    ::selection {
+      background: var(--yellow);
+      color: var(--black);
     }
 
     * {
@@ -32,7 +35,9 @@
     html, body {
       height: 100%;
       overflow: hidden;
-      font-family: 'Inter', sans-serif;
+      /* Space Grotesk carries running copy; Archivo 800/900 is reserved
+         for the display blocks so the two voices stay distinct. */
+      font-family: 'Space Grotesk', sans-serif;
       background: var(--offwhite);
       color: var(--black);
     }
@@ -59,10 +64,28 @@
       display: flex;
     }
 
-    /* Dot grid background pattern */
-    .dot-grid {
-      background-image: radial-gradient(circle, var(--black) 1.2px, transparent 1.2px);
-      background-size: 24px 24px;
+    /* Entrance: blocks land with a short staggered drop. Transform and
+       opacity only; restarts each time a slide becomes active. */
+    @keyframes block-in {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide.active > * {
+      animation: block-in 0.45s cubic-bezier(.16, 1, .3, 1) backwards;
+    }
+    .slide.active > *:nth-child(1) { animation-delay: 0.05s; }
+    .slide.active > *:nth-child(2) { animation-delay: 0.12s; }
+    .slide.active > *:nth-child(3) { animation-delay: 0.19s; }
+    .slide.active > *:nth-child(4) { animation-delay: 0.26s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .slide.active > * {
+        animation: none;
+      }
+      .nav-btn, .nb-btn, .close-btn {
+        transition: none;
+      }
     }
 
     /* Navigation */
@@ -81,13 +104,13 @@
       border: 3px solid var(--black);
       background: var(--white);
       cursor: pointer;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
       box-shadow: var(--shadow-sm);
     }
 
@@ -101,12 +124,19 @@
       box-shadow: 2px 2px 0px var(--black);
     }
 
+    .nav-btn:focus-visible,
+    .nb-btn:focus-visible,
+    .close-btn:focus-visible {
+      outline: 3px solid var(--black);
+      outline-offset: 3px;
+    }
+
     .slide-counter {
       position: fixed;
       bottom: 24px;
       left: 24px;
       z-index: 1000;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-weight: 700;
       font-size: 14px;
       letter-spacing: 0.1em;
@@ -119,22 +149,11 @@
 
     /* ============ UTILITY COMPONENTS ============ */
 
-    .nb-card {
-      border: var(--border);
-      background: var(--white);
-      box-shadow: var(--shadow);
-    }
-
-    .nb-card-flat {
-      border: var(--border);
-      background: var(--white);
-    }
-
     .nb-label {
       display: inline-block;
       border: 3px solid var(--black);
       padding: 6px 16px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.08em;
@@ -153,7 +172,7 @@
       display: inline-block;
       border: 3px solid var(--black);
       padding: 14px 32px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 16px;
       text-decoration: none;
@@ -161,7 +180,7 @@
       background: var(--yellow);
       box-shadow: var(--shadow-sm);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
     }
 
     .nb-btn:hover {
@@ -170,57 +189,43 @@
     }
 
     .nb-heading-xl {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(48px, 6vw, 96px);
       line-height: 0.95;
       letter-spacing: -0.03em;
       text-transform: uppercase;
+      text-wrap: balance;
     }
 
     .nb-heading-lg {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 800;
       font-size: clamp(32px, 4vw, 64px);
       line-height: 1.0;
       letter-spacing: -0.02em;
       text-transform: uppercase;
+      text-wrap: balance;
     }
 
     .nb-heading-md {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: clamp(24px, 2.5vw, 40px);
       line-height: 1.1;
       letter-spacing: -0.01em;
+      text-wrap: balance;
     }
 
+    /* Body copy runs on Space Grotesk (the deck's secondary face) so
+       paragraphs read distinctly from the all-Archivo display blocks. */
     .nb-body {
-      font-family: 'Inter', sans-serif;
-      font-size: clamp(16px, 1.2vw, 20px);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(16px, 1.2vw, 19px);
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
+      text-wrap: pretty;
     }
-
-    .nb-mono {
-      font-family: 'Space Grotesk', monospace;
-      font-weight: 500;
-      font-size: 15px;
-      letter-spacing: 0.02em;
-    }
-
-    /* Decorative elements */
-    .deco-circle {
-      border-radius: 50%;
-      border: var(--border);
-    }
-
-    .deco-square {
-      border: var(--border);
-    }
-
-    .tilt-left { transform: rotate(-8deg); }
-    .tilt-right { transform: rotate(8deg); }
 
     .corner-bracket {
       position: absolute;
@@ -261,7 +266,7 @@
     }
 
     .slide-1 .hero-subtitle {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 18px;
       font-weight: 500;
       max-width: 500px;
@@ -305,7 +310,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       z-index: 5;
@@ -352,7 +357,7 @@
     }
 
     .slide-2 .intro-card h3 {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       margin-bottom: 12px;
@@ -362,7 +367,7 @@
     .slide-2 .intro-card p {
       font-size: 15px;
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-2 .stat-pill {
@@ -372,7 +377,7 @@
       border: 3px solid var(--black);
       padding: 10px 20px;
       background: var(--yellow);
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 14px;
       font-weight: 600;
     }
@@ -420,7 +425,7 @@
     .slide-3 .icon-green { background: var(--green); }
 
     .slide-3 .feature-card h3 {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 22px;
       margin-bottom: 14px;
@@ -430,7 +435,7 @@
     .slide-3 .feature-card p {
       font-size: 15px;
       line-height: 1.6;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-3 .card-deco {
@@ -486,7 +491,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
     }
@@ -545,7 +550,7 @@
     }
 
     .slide-4 .data-box .data-num {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 36px;
       display: block;
@@ -553,7 +558,7 @@
     }
 
     .slide-4 .data-box .data-label {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
@@ -579,7 +584,7 @@
     }
 
     .slide-5 .quote-text {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(28px, 3.5vw, 52px);
       line-height: 1.15;
@@ -589,7 +594,7 @@
     }
 
     .slide-5 .quote-author {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 15px;
       font-weight: 600;
       letter-spacing: 0.05em;
@@ -677,7 +682,7 @@
       background: var(--green);
       color: var(--black);
       padding: 8px 16px;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       transform: rotate(-4deg);
@@ -707,7 +712,7 @@
       gap: 14px;
       font-size: 16px;
       line-height: 1.5;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-6 .content-list .list-num {
@@ -719,7 +724,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-weight: 700;
       font-size: 14px;
     }
@@ -769,16 +774,19 @@
     }
 
     .slide-7 .step-num {
-      font-family: 'Inter', sans-serif;
+      /* Outlined numerals: family-consistent and avoids the washed-out
+         look of semi-transparent ink over the pastel step blocks. */
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 48px;
       line-height: 1;
       margin-bottom: 16px;
-      opacity: 0.6;
+      color: transparent;
+      -webkit-text-stroke: 2px var(--black);
     }
 
     .slide-7 .step-title {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       text-transform: uppercase;
@@ -788,7 +796,7 @@
     .slide-7 .step-desc {
       font-size: 14px;
       line-height: 1.5;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     .slide-7 .step-connector {
@@ -829,16 +837,15 @@
       position: relative;
     }
 
-    .slide-8 .stat-card:nth-child(odd) {
-      transform: rotate(-2deg);
-    }
-
-    .slide-8 .stat-card:nth-child(even) {
-      transform: rotate(2deg);
-    }
+    /* Hand-placed tilts: irregular angles instead of a mechanical
+       odd/even alternation, so the row reads pinned-up, not templated. */
+    .slide-8 .stat-card:nth-child(1) { transform: rotate(-1.3deg); }
+    .slide-8 .stat-card:nth-child(2) { transform: rotate(0.7deg); }
+    .slide-8 .stat-card:nth-child(3) { transform: rotate(-0.5deg); }
+    .slide-8 .stat-card:nth-child(4) { transform: rotate(1.4deg); }
 
     .slide-8 .stat-number {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(36px, 4vw, 64px);
       line-height: 1;
@@ -846,7 +853,7 @@
     }
 
     .slide-8 .stat-label {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
@@ -903,7 +910,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: 28px;
       text-transform: uppercase;
@@ -916,14 +923,14 @@
     .slide-9 .team-card:nth-child(6) .team-avatar { background: var(--blue); }
 
     .slide-9 .team-name {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 20px;
       text-transform: uppercase;
     }
 
     .slide-9 .team-role {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 14px;
       font-weight: 500;
       text-transform: uppercase;
@@ -933,7 +940,7 @@
     .slide-9 .team-bio {
       font-size: 13px;
       line-height: 1.45;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     /* ============ SLIDE 10: CLOSING ============ */
@@ -955,7 +962,7 @@
     }
 
     .slide-10 .close-title {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 900;
       font-size: clamp(40px, 5vw, 80px);
       line-height: 0.95;
@@ -966,7 +973,7 @@
     }
 
     .slide-10 .close-subtitle {
-      font-family: 'Space Grotesk', monospace;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 18px;
       font-weight: 500;
       color: var(--cream);
@@ -977,7 +984,7 @@
       display: inline-block;
       border: 3px solid var(--white);
       padding: 16px 40px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Archivo', sans-serif;
       font-weight: 700;
       font-size: 16px;
       text-decoration: none;
@@ -985,7 +992,7 @@
       background: var(--yellow);
       box-shadow: 6px 6px 0px var(--white);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: transform 0.15s cubic-bezier(.16,1,.3,1), box-shadow 0.15s cubic-bezier(.16,1,.3,1);
     }
 
     .slide-10 .close-btn:hover {
@@ -1166,47 +1173,47 @@
         <div class="chart-body">
         <svg class="chart-svg" viewBox="0 0 800 360" xmlns="http://www.w3.org/2000/svg">
           <!-- Axes (baseline at y=280, leaving room for X labels at y=320) -->
-          <line x1="60" y1="20" x2="60" y2="280" stroke="#000" stroke-width="3"/>
-          <line x1="60" y1="280" x2="780" y2="280" stroke="#000" stroke-width="3"/>
+          <line x1="60" y1="20" x2="60" y2="280" stroke="#17150F" stroke-width="3"/>
+          <line x1="60" y1="280" x2="780" y2="280" stroke="#17150F" stroke-width="3"/>
 
           <!-- Horizontal grid (33 / 66 / 100) -->
-          <line x1="60" y1="80"  x2="780" y2="80"  stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
-          <line x1="60" y1="150" x2="780" y2="150" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
-          <line x1="60" y1="215" x2="780" y2="215" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="80"  x2="780" y2="80"  stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="150" x2="780" y2="150" stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="215" x2="780" y2="215" stroke="#17150F" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
 
           <!-- Y labels -->
-          <text x="48" y="285" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">0</text>
-          <text x="48" y="220" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">33</text>
-          <text x="48" y="155" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">66</text>
-          <text x="48" y="85"  text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">100</text>
+          <text x="48" y="285" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">0</text>
+          <text x="48" y="220" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">33</text>
+          <text x="48" y="155" text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">66</text>
+          <text x="48" y="85"  text-anchor="end" font-family="Space Grotesk, sans-serif" font-size="14" font-weight="600">100</text>
 
           <!-- Bars: Stars (pink) — indexed growth, demo data; three series per period, 5 periods -->
-          <rect x="80"  y="200" width="32" height="80"  fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="224" y="160" width="32" height="120" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="368" y="120" width="32" height="160" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="512" y="80"  width="32" height="200" fill="#FE90E8" stroke="#000" stroke-width="2"/>
-          <rect x="656" y="60"  width="32" height="220" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <rect x="80"  y="200" width="32" height="80"  fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="224" y="160" width="32" height="120" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="368" y="120" width="32" height="160" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="512" y="80"  width="32" height="200" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
+          <rect x="656" y="60"  width="32" height="220" fill="#FE90E8" stroke="#17150F" stroke-width="2"/>
 
           <!-- Bars: Contributors (blue) -->
-          <rect x="118" y="220" width="32" height="60"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="262" y="190" width="32" height="90"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="406" y="150" width="32" height="130" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="550" y="110" width="32" height="170" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
-          <rect x="694" y="90"  width="32" height="190" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <rect x="118" y="220" width="32" height="60"  fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="262" y="190" width="32" height="90"  fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="406" y="150" width="32" height="130" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="550" y="110" width="32" height="170" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
+          <rect x="694" y="90"  width="32" height="190" fill="#C0F7FE" stroke="#17150F" stroke-width="2"/>
 
           <!-- Bars: Plugins (green) -->
-          <rect x="156" y="180" width="32" height="100" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="300" y="160" width="32" height="120" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="444" y="130" width="32" height="150" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="588" y="110" width="32" height="170" fill="#99E885" stroke="#000" stroke-width="2"/>
-          <rect x="732" y="92"  width="32" height="188" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <rect x="156" y="180" width="32" height="100" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="300" y="160" width="32" height="120" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="444" y="130" width="32" height="150" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="588" y="110" width="32" height="170" fill="#99E885" stroke="#17150F" stroke-width="2"/>
+          <rect x="732" y="92"  width="32" height="188" fill="#99E885" stroke="#17150F" stroke-width="2"/>
 
           <!-- X labels — bigger, sit comfortably below the baseline -->
-          <text x="134" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q1</text>
-          <text x="278" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q2</text>
-          <text x="422" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q3</text>
-          <text x="566" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q4</text>
-          <text x="710" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q5</text>
+          <text x="134" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">Q1</text>
+          <text x="278" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">Q2</text>
+          <text x="422" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">Q3</text>
+          <text x="566" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">Q4</text>
+          <text x="710" y="320" text-anchor="middle" font-family="Space Grotesk, sans-serif" font-size="18" font-weight="700">Q5</text>
         </svg>
         <div class="data-column">
           <div class="data-box">
@@ -1244,7 +1251,7 @@
     <section class="slide slide-6">
       <div class="split-visual">
         <div class="visual-box">
-          <span style="color: var(--black); font-family: Inter, sans-serif; font-weight: 700; font-size: 22px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 0 24px;">21+ Coding Agents</span>
+          <span style="color: var(--black); font-family: Archivo, sans-serif; font-weight: 800; font-size: 22px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 0 24px;">21+ Coding Agents</span>
         </div>
         <div class="visual-label">Zero Config</div>
       </div>

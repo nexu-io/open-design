@@ -16,7 +16,7 @@
         Noto Sans SC  — CJK sans fallback
     -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@200;300;400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;1,400&family=Noto+Serif+SC:wght@400&family=Noto+Sans+SC:wght@200;300;400;500&display=swap"
       rel="stylesheet"
     />
 
@@ -31,27 +31,28 @@
    ╚══════════════════════════════════════════════════════════════════════╝ */
       :root {
         /* ── Palette ──────────────────────────────────────────────────────── */
-        --c-bg: #fafadf; /* cream background for every slide       */
-        --c-bg-alt: #f2f2d2; /* cream inset surface                   */
-        --c-bg-light: #fafadf; /* title-slide cream                     */
-        --c-bg-light-alt: #f0f0d4; /* slightly deeper cream for insets      */
-        --c-bg-cream: #f5f0e4; /* warm cream variant                    */
+        /* One warm ivory ramp; ink stays #1a1a16 (nav JS reuses rgba(26,26,22)) */
+        --c-bg: #f9f5e8; /* ivory background for every slide       */
+        --c-bg-alt: #f2eddb; /* ivory inset surface                   */
+        --c-bg-light: #f9f5e8; /* title-slide ivory                     */
+        --c-bg-light-alt: #efe9d4; /* slightly deeper ivory for insets      */
+        --c-bg-cream: #f4efde; /* warm cream variant                    */
 
         --c-fg: #1a1a16; /* black ink text                         */
-        --c-fg-2: #5e5e54; /* secondary graphite text                */
-        --c-fg-3: #8a8a80; /* tertiary graphite text                 */
+        --c-fg-2: #50503f; /* secondary graphite text                */
+        --c-fg-3: #5f5f50; /* tertiary graphite text (AA on ivory)   */
         --c-fg-light: #1a1a16; /* black ink on cream                    */
-        --c-fg-light-2: #5e5e54; /* secondary graphite on cream           */
-        --c-fg-light-3: #8a8a80; /* tertiary graphite on cream            */
+        --c-fg-light-2: #50503f; /* secondary graphite on cream           */
+        --c-fg-light-3: #5f5f50; /* tertiary graphite on cream            */
 
         --c-accent: #1a1a16; /* accent collapsed to black ink         */
-        --c-border: #1a1a16; /* black dividers                        */
-        --c-border-light: #1a1a16; /* black dividers on cream               */
+        --c-border: rgba(26, 26, 22, 0.85); /* strong ink rules (chrome)     */
+        --c-border-light: rgba(26, 26, 22, 0.32); /* quiet hairlines         */
 
         /* ── Insight cards: no accent colors, just cream paper surfaces ─── */
-        --c-card-a: #fafadf;
-        --c-card-b: #f5f0e4;
-        --c-card-c: #fafadf;
+        --c-card-a: #f9f5e8;
+        --c-card-b: #f4efde;
+        --c-card-c: #f9f5e8;
 
         /* ── Typography ──────────────────────────────────────────────────── */
         --f-display: "Jost", "Noto Sans SC", system-ui, sans-serif;
@@ -255,6 +256,19 @@
         }
       }
 
+      /* Reduced motion: skip entrances and slide travel, keep content visible */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
+      }
+
       /* ── Navigation dots ──────────────────────────────────────────────── */
       #nav-dots {
         position: fixed;
@@ -440,48 +454,6 @@
         display: none !important;
       }
 
-      .slide-sidebar:not(.deck-no-such-thing) {
-        position: absolute;
-        /* Positioned in the left gutter, between outer padding and content */
-        left: var(--pad-x);
-        top: var(--pad-y);
-        bottom: var(--pad-y);
-        width: 3vw;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: flex-start;
-      }
-      /* The thin vertical spine of the sidebar */
-      .slide-sidebar::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 1px;
-        background: var(--c-border-light);
-      }
-      .dark .slide-sidebar::before {
-        background: var(--c-border);
-      }
-      /* Individual rotated label — reads bottom-to-top along the line */
-      .sidebar-label {
-        font-family: var(--f-mono);
-        font-size: 0.65vw;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--c-fg-light-3);
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-        white-space: nowrap;
-        /* Small gap between the spine and the text */
-        padding-left: 0.8vw;
-      }
-      .dark .sidebar-label {
-        color: var(--c-fg-3);
-      }
-
       /* ╔══════════════════════════════════════════════════════════════════════╗
    ║  ZONE E · LAYOUT PATTERNS                                            ║
    ║                                                                      ║
@@ -603,7 +575,8 @@
         flex-direction: column;
         gap: var(--gap-sm);
         padding: var(--gap-md) var(--gap-md) var(--gap-md) 0;
-        border-top: 1px solid var(--c-border-light);
+        /* Strong ink rule on top: the ledger's ruled-paper signature */
+        border-top: 1px solid var(--c-border);
       }
       /* The big number: weight 200, maximum lightness */
       .stat-value {
@@ -687,11 +660,15 @@
         font-weight: 300;
         line-height: 1.5;
       }
-      /* Ivory Ledger bullet: em dash in muted tan — never a heavy accent dot */
+      /* Ivory Ledger bullet: a drawn hairline tick, never a heavy accent dot */
       .bullet-list li::before {
-        content: "—";
-        color: var(--c-fg-light-3);
-        font-family: var(--f-mono);
+        content: "";
+        width: 0.9em;
+        height: 1px;
+        background: var(--c-fg-light-3);
+        justify-self: start;
+        align-self: start;
+        transform: translateY(0.7em);
       }
       .light .bullet-list li {
         color: var(--c-fg-light);
@@ -763,7 +740,10 @@
         align-items: stretch;
       }
       .insight-card {
-        border-radius: 16px;
+        /* Ledger surfaces are ruled paper, not rounded app cards */
+        border-radius: 0;
+        border: 1px solid var(--c-border-light);
+        border-top: 1px solid var(--c-border);
         padding: 3vh 2.5vw;
         display: flex;
         flex-direction: column;
@@ -1025,12 +1005,19 @@
       }
       .bar-fill {
         width: 100%;
-        background: var(--c-fg-light-3);
-        opacity: 0.5;
+        /* Non-highlight bars: hatched ink, the print-ledger texture.
+           The highlighted value stays solid ink so it reads instantly. */
+        background: repeating-linear-gradient(
+          135deg,
+          var(--c-border) 0 1px,
+          transparent 1px 6px
+        );
+        border: 1px solid var(--c-border-light);
+        border-bottom: none;
       }
       .bar-fill.accent {
         background: var(--c-accent);
-        opacity: 1;
+        border-color: var(--c-accent);
       }
       .bar-x-label {
         font-family: var(--f-mono);
@@ -1131,6 +1118,8 @@
         width: min(26vw, 42vh);
         height: min(26vw, 42vh);
         border-radius: 50%;
+        /* Hairline ring so the lightest ivory segment stays delineated */
+        border: 1px solid var(--c-border-light);
         position: relative;
         flex-shrink: 0;
         justify-self: center;
@@ -1156,7 +1145,9 @@
       .pie-swatch {
         width: 0.8em;
         height: 0.8em;
-        border-radius: 2px;
+        /* Hairline keeps the lightest (near-ivory) segment swatch legible */
+        border: 1px solid var(--c-border-light);
+        border-radius: 0;
         flex-shrink: 0;
       }
       .pie-item-label {
@@ -1181,65 +1172,6 @@
         font-size: var(--sz-label);
         letter-spacing: 0.1em;
         color: var(--c-fg-light-3);
-      }
-
-      /* ── PYRAMID ─────────────────────────────────────────────────────────── */
-      .slide--pyramid .slide-body {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .pyramid {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-        align-items: center;
-      }
-      .pyr-level {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1.3vh 2.5vw;
-        border-left: 2px solid var(--c-border-light);
-        transition: width 0.3s;
-      }
-      .pyr-level:nth-child(1) {
-        background: color-mix(in srgb, var(--c-accent) 55%, var(--c-bg-light));
-        width: 36%;
-      }
-      .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 35%, var(--c-bg-light));
-        width: 52%;
-      }
-      .pyr-level:nth-child(3) {
-        background: color-mix(in srgb, var(--c-accent) 20%, var(--c-bg-light));
-        width: 68%;
-      }
-      .pyr-level:nth-child(4) {
-        background: color-mix(in srgb, var(--c-accent) 10%, var(--c-bg-light));
-        width: 84%;
-      }
-      .pyr-level:nth-child(5) {
-        background: color-mix(in srgb, var(--c-accent) 4%, var(--c-bg-light));
-        width: 100%;
-      }
-      .pyr-name {
-        font-family: var(--f-heading);
-        font-size: var(--sz-h3);
-        font-weight: 300;
-        line-height: 1.2;
-        color: var(--c-fg-light);
-      }
-      .pyr-desc {
-        font-family: var(--f-body);
-        font-size: var(--sz-body);
-        font-weight: 300;
-        color: var(--c-fg-light-2);
-        text-align: right;
-        max-width: 55%;
-        line-height: 1.4;
       }
 
       /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
@@ -1356,55 +1288,6 @@
         justify-content: center;
       }
 
-      /* ── PIE / DONUT CHART (v2 — legend variant) ───────────────────── */
-      /* Used by slide--pie v2: donut on left, legend items on right */
-      .slide--pie .slide-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .pie-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--gap-lg);
-        align-items: center;
-        flex: 1;
-        min-height: 0;
-      }
-      .pie-donut {
-        width: min(26vw, 40vh);
-        height: min(26vw, 40vh);
-        border-radius: 50%;
-        position: relative;
-        margin: 0 auto;
-      }
-      .pie-donut::after {
-        content: "";
-        position: absolute;
-        inset: 22%;
-        border-radius: 50%;
-        background: var(--c-bg-light);
-      }
-      .pie-legend {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-sm);
-      }
-      .pie-legend-item {
-        display: flex;
-        align-items: center;
-        gap: 1.2vw;
-        font-size: var(--sz-body);
-        color: var(--c-fg-light);
-      }
-      .pie-legend-dot {
-        width: 1vw;
-        height: 1vw;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-
       /* ── PYRAMID (v2 — centered stack variant) ─────────────────────── */
       /* Used by slide--pyramid v2: centered levels, solid fills */
       .slide--pyramid .slide-body {
@@ -1426,7 +1309,7 @@
         align-items: center;
         justify-content: center;
         padding: 1.4vh 2vw;
-        border-radius: 2px;
+        border-radius: 0; /* ledger: ruled blocks, no app-card rounding */
         font-family: var(--f-body);
         font-size: var(--sz-body);
         font-weight: 500;
@@ -1435,25 +1318,25 @@
         transition: width 0.4s ease;
       }
       .pyr-level:nth-child(1) {
-        background: color-mix(in srgb, var(--c-accent) 90%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 92%, transparent);
         color: var(--c-bg-light);
         width: 30%;
       }
       .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 68%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 72%, transparent);
         color: var(--c-bg-light);
         width: 48%;
       }
       .pyr-level:nth-child(3) {
-        background: color-mix(in srgb, var(--c-accent) 46%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 32%, transparent);
         width: 66%;
       }
       .pyr-level:nth-child(4) {
-        background: color-mix(in srgb, var(--c-accent) 28%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 18%, transparent);
         width: 83%;
       }
       .pyr-level:nth-child(5) {
-        background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+        background: color-mix(in srgb, var(--c-accent) 8%, transparent);
         width: 100%;
       }
 
@@ -1511,56 +1394,6 @@
         line-height: 1.5;
       }
 
-      /* ── CYCLE PROCESS (v2 — boxed cell variant) ───────────────────── */
-      /* Used by slide--cycle v2: 2×2 grid of bordered cells with center label */
-      .slide--cycle .slide-body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--gap-md);
-        min-height: 0;
-      }
-      .cycle-grid {
-        display: grid;
-        grid-template-columns: 1fr 3em 1fr;
-        grid-template-rows: 1fr 3em 1fr;
-        gap: 0;
-        flex: 1;
-        min-height: 0;
-      }
-      .cycle-cell {
-        display: flex;
-        flex-direction: column;
-        gap: 0.6vh;
-        padding: 1.8vh 2vw;
-        background: color-mix(in srgb, var(--c-accent) 8%, transparent);
-        border: 1px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
-        border-radius: 3px;
-      }
-      .cycle-num {
-        font-family: var(--f-mono);
-        font-size: var(--sz-label);
-        color: var(--c-accent);
-        font-weight: 500;
-      }
-      .cycle-cell p {
-        font-size: var(--sz-body);
-        color: var(--c-fg-light);
-        margin: 0;
-      }
-      .cycle-arrow {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.8vw;
-        color: var(--c-accent);
-        font-family: var(--f-mono);
-      }
-      .cycle-center {
-        display: block;
-        background: transparent;
-        border-radius: 0;
-        margin: 0;
-      }
     </style>
   </head>
   <body>

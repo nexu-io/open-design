@@ -4,15 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Open Design · Presenter Mode Deck</title>
-<style>/* html-ppt :: shared webfonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+<style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
 
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
@@ -28,25 +23,25 @@
   --text-2: #55596a;
   --text-3: #8a8f9e;
   --accent: #3b6cff;
-  --accent-2: #7a5cff;
-  --accent-3: #ff5c8a;
+  --accent-2: #2f9e8f;
+  --accent-3: #1d4ed8;
   --good: #1aaf6c;
   --warn: #f5a524;
   --bad:  #e0445a;
-  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
-  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
+  --grad: linear-gradient(135deg,var(--accent),var(--accent-3));
+  --grad-soft: linear-gradient(135deg,#eef2ff,#e8f0fe);
   --radius: 18px;
   --radius-sm: 12px;
   --radius-lg: 26px;
   --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
   --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
-  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --font-sans: 'IBM Plex Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,'Noto Serif SC',serif;
+  --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
   --letter-normal: -.01em;
-  --ease: cubic-bezier(.4,0,.2,1);
+  --ease: cubic-bezier(.16,1,.3,1);
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -84,7 +79,7 @@ h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;fon
 h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
 h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
 h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
-.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:400;max-width:62ch}
 .dim{color:var(--text-2)}
 .dim2{color:var(--text-3)}
 .mono{font-family:var(--font-mono)}
@@ -125,7 +120,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* ================= CHROME (header/footer/progress) ================= */
 .deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
   font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
-.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+.deck-footer{position:absolute;bottom:44px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
   font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
 .slide-number::before{content:attr(data-current)}
 .slide-number::after{content:" / " attr(data-total)}
@@ -171,15 +166,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 :root{
   --bg:#1a1b26;--bg-soft:#16161e;--surface:#24283b;--surface-2:#2f334d;
   --border:rgba(192,202,245,.12);--border-strong:rgba(192,202,245,.24);
-  --text-1:#c0caf5;--text-2:#a9b1d6;--text-3:#565f89;
+  --text-1:#c0caf5;--text-2:#a9b1d6;--text-3:#8089b8;
   --accent:#7aa2f7;--accent-2:#bb9af7;--accent-3:#7dcfff;
   --good:#9ece6a;--warn:#e0af68;--bad:#f7768e;
-  --grad:linear-gradient(135deg,#7aa2f7,#bb9af7 55%,#f7768e);
+  --grad:linear-gradient(135deg,#7aa2f7,#7dcfff);
   --grad-soft:linear-gradient(135deg,#24283b,#2f334d);
   --radius:12px;--radius-sm:8px;--radius-lg:20px;
-  --shadow:0 10px 30px rgba(0,0,0,.45);
-  --shadow-lg:0 24px 62px rgba(0,0,0,.6);
-  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --shadow:0 1px 0 rgba(192,202,245,.06) inset;
+  --shadow-lg:0 18px 44px rgba(0,0,0,.5);
+  --font-sans:'IBM Plex Sans','Noto Sans SC',sans-serif;
 }
 
 </style>
@@ -187,7 +182,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
  * Apply by adding class="anim-<name>" or data-anim="<name>".
  * Durations are deliberately snappy; tweak --anim-dur per element.
  */
-:root{--anim-dur:.7s;--anim-ease:cubic-bezier(.4,0,.2,1)}
+:root{--anim-dur:.7s;--anim-ease:cubic-bezier(.16,1,.3,1)}
 
 /* ---------- FADE DIRECTIONALS ---------- */
 @keyframes kf-fade-up{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
@@ -334,24 +329,27 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
 .tpl-presenter-mode-reveal .kicker {
   font-family: var(--font-mono, monospace);
-  font-size: 13px;
-  color: var(--text-3);
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  color: var(--accent, #7aa2f7);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin: 0 0 18px 0;
+  margin: 0 0 20px 0;
+  font-weight: 500;
 }
 
 .tpl-presenter-mode-reveal .h1 {
-  font-size: clamp(44px, 5.6vw, 76px);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-size: clamp(40px, 5.1vw, 70px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 700;
   margin: 0 0 24px 0;
 }
 
 .tpl-presenter-mode-reveal .h2 {
   font-size: clamp(32px, 3.6vw, 48px);
-  line-height: 1.22;
-  letter-spacing: -0.01em;
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+  font-weight: 700;
   margin: 0 0 28px 0;
 }
 
@@ -365,14 +363,23 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   font-family: var(--font-mono, monospace);
   font-size: 0.9em;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.08);
-  color: var(--accent, #58a6ff);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent, #7aa2f7) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #7aa2f7) 24%, transparent);
+  color: var(--accent, #7aa2f7);
 }
 
 .tpl-presenter-mode-reveal .accent {
-  color: var(--accent, #f0883e);
+  color: var(--accent, #7aa2f7);
   font-weight: 700;
+}
+
+/* footer meta stays quiet: no chip treatment down there */
+.tpl-presenter-mode-reveal .deck-footer .mono {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-3);
 }
 
 .tpl-presenter-mode-reveal .speaker {
@@ -385,7 +392,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent, #58a6ff), #bc8cff);
+  background: var(--surface-2, rgba(255,255,255,0.06));
+  border: 1.5px solid var(--accent, #7aa2f7);
+  position: relative;
+}
+.tpl-presenter-mode-reveal .speaker .av::after {
+  content: "OD";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent, #7aa2f7);
 }
 .tpl-presenter-mode-reveal .speaker b {
   display: block;
@@ -396,26 +417,27 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   color: var(--text-3);
 }
 
-/* Agenda rows */
+/* Agenda rows: hairline list, no boxed cards */
 .tpl-presenter-mode-reveal .agenda-row {
   display: grid;
   grid-template-columns: 48px 1fr auto;
   gap: 16px;
-  align-items: center;
-  padding: 14px 18px;
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 10px;
-  margin-bottom: 10px;
-  background: var(--surface, rgba(255,255,255,0.03));
+  align-items: baseline;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.1));
+  max-width: 880px;
+}
+.tpl-presenter-mode-reveal .agenda-row:first-child {
+  border-top: 1px solid var(--border, rgba(255,255,255,0.1));
 }
 .tpl-presenter-mode-reveal .agenda-row .num {
   font-family: var(--font-mono, monospace);
   font-size: 14px;
-  color: var(--accent, #58a6ff);
+  color: var(--accent, #7aa2f7);
   font-weight: 700;
 }
 .tpl-presenter-mode-reveal .agenda-row .t {
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 500;
   color: var(--text-1);
 }
@@ -425,15 +447,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   color: var(--text-3);
 }
 
-/* Cards */
+/* Cards (kept only where hierarchy needs them: the 3-way contrast on Problem) */
 .tpl-presenter-mode-reveal .card {
   background: var(--surface, rgba(255,255,255,0.03));
   border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 12px;
-  padding: 22px 24px;
+  border-radius: 8px;
+  padding: 24px 26px;
+  box-shadow: none;
 }
 .tpl-presenter-mode-reveal .card-accent {
-  border-top: 3px solid var(--accent, #58a6ff);
+  border-top: 2px solid var(--accent, #7aa2f7);
 }
 .tpl-presenter-mode-reveal .card h4 {
   margin: 0 0 10px 0;
@@ -473,29 +496,32 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   line-height: 1.55;
   margin: 0;
 }
-.tpl-presenter-mode-reveal .blue { color: #58a6ff; }
-.tpl-presenter-mode-reveal .green { color: #3fb950; }
-.tpl-presenter-mode-reveal .orange { color: #f0883e; }
-.tpl-presenter-mode-reveal .purple { color: #bc8cff; }
-.tpl-presenter-mode-reveal .red { color: #f85149; }
+/* Step / rule numbers keep one voice: theme accent + mono. The old
+ * rainbow per-row palette (blue/green/orange/purple/red) was an AI tell. */
+.tpl-presenter-mode-reveal .blue,
+.tpl-presenter-mode-reveal .green,
+.tpl-presenter-mode-reveal .orange,
+.tpl-presenter-mode-reveal .purple { color: var(--accent, #7aa2f7); font-family: var(--font-mono, monospace); }
+.tpl-presenter-mode-reveal .red { color: var(--accent, #7aa2f7); }
 
-/* Rule rows (3 铁律) */
+/* Rule rows (3 铁律): hairline list with accent left rule */
 .tpl-presenter-mode-reveal .rule-row {
   display: grid;
   grid-template-columns: 56px 1fr;
   gap: 20px;
   align-items: start;
-  padding: 18px 22px;
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 12px;
-  margin-bottom: 14px;
-  background: var(--surface, rgba(255,255,255,0.03));
+  padding: 20px 0 20px 22px;
+  border-left: 2px solid var(--accent, #7aa2f7);
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  margin-bottom: 0;
+  max-width: 920px;
 }
+.tpl-presenter-mode-reveal .rule-row:last-child { border-bottom: none; }
 .tpl-presenter-mode-reveal .rule-row .num {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 26px;
+  font-weight: 700;
   font-family: var(--font-mono, monospace);
-  line-height: 1;
+  line-height: 1.2;
 }
 .tpl-presenter-mode-reveal .rule-row b {
   display: block;
@@ -512,20 +538,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
 /* Code block */
 .tpl-presenter-mode-reveal .code-block {
-  background: #0d1117;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
+  background: var(--bg-soft, #16161e);
+  border: 1px solid var(--border, rgba(192,202,245,0.12));
+  border-radius: 8px;
+  max-width: 920px;
   padding: 20px 26px;
   font-family: var(--font-mono, "SF Mono", monospace);
   font-size: 15px;
   line-height: 1.8;
-  color: #e6edf3;
+  color: var(--text-1, #c0caf5);
   white-space: pre-wrap;
   text-align: left;
 }
-.tpl-presenter-mode-reveal .code-block .comment { color: #8b949e; }
-.tpl-presenter-mode-reveal .code-block .cmd { color: #3fb950; font-weight: 600; }
-.tpl-presenter-mode-reveal .code-block .flag { color: #f0883e; }
+.tpl-presenter-mode-reveal .code-block .comment { color: var(--text-3, #6c75a6); }
+.tpl-presenter-mode-reveal .code-block .cmd { color: var(--good, #9ece6a); font-weight: 600; }
+.tpl-presenter-mode-reveal .code-block .flag { color: var(--accent, #7aa2f7); }
 
 /* Stack helper */
 .tpl-presenter-mode-reveal .stack > * + * { margin-top: 0; }
@@ -539,6 +566,14 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-presenter-mode-reveal .mt-l { margin-top: 32px; }
 .tpl-presenter-mode-reveal .mt-s { margin-top: 10px; }
 .tpl-presenter-mode-reveal .tc { text-align: center; }
+
+/* Closing line sits under a left-aligned code block; keep one alignment
+ * voice instead of a lone centered strip (alignment drift is an AI tell). */
+.tpl-presenter-mode-reveal .code-block + .lede.tc {
+  text-align: left;
+  max-width: 920px;
+  font-size: 18px;
+}
 
 </style>
 <style>
@@ -554,7 +589,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- ============ 1. COVER ============ -->
   <section class="slide" data-title="Cover">
     <p class="kicker">presenter-mode / demo</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Open Design</span><br>开源、本地、Agent 驱动的设计平台</h1>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="color:var(--accent)">Open Design</span><br>开源、本地、Agent 驱动的设计平台</h1>
     <p class="lede mt-m">按 <span class="mono">S</span> 进入演讲者视图 · <span class="mono">T</span> 切换主题 · <span class="mono">← →</span> 翻页</p>
     <div class="speaker">
       <div class="av"></div>
@@ -713,7 +748,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
 </div>
 
-<div style="position:fixed;bottom:12px;left:12px;font-size:11px;color:#484f5866;z-index:100;pointer-events:none">
+<div style="position:fixed;bottom:12px;left:12px;font-size:11px;font-family:var(--font-mono);color:var(--text-3);opacity:.7;z-index:100;pointer-events:none">
   S 演讲者视图 · T 切换主题 · ← → 翻页 · F 全屏 · O 总览 · R 重置计时
 </div>
 

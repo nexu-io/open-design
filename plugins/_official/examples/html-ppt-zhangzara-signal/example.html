@@ -42,17 +42,19 @@
         --c-fg: #e2dcd0;
         /* Secondary text on dark: muted blue-grey */
         --c-fg-2: #8a96a8;
-        /* Tertiary / hint text on dark */
-        --c-fg-3: #4e5a6e;
+        /* Tertiary / hint text on dark — kept readable on navy (AA-leaning) */
+        --c-fg-3: #8290ad;
         /* Primary text on light: very dark navy near-black */
         --c-fg-light: #1a2030;
         /* Secondary text on light */
         --c-fg-light-2: #5a6270;
-        /* Tertiary text on light */
-        --c-fg-light-3: #9aa0a8;
+        /* Tertiary text on light — dark enough to read on cream (AA on #f0ece3) */
+        --c-fg-light-3: #5b6270;
 
         /* Accent: warm antique gold — the single hot colour; used for italic serif em */
         --c-accent: #c8a870;
+        /* Same gold, darkened for text on the cream slides (AA: 5.2 on #f0ece3) */
+        --c-accent-deep: #7c5c1e;
         /* Dividers on dark: dark navy border */
         --c-border: #2e3d5c;
         /* Dividers on light: warm greige border */
@@ -76,8 +78,8 @@
         --sz-h3: 1.9vw; /* sub-headlines, compare panel titles */
         --sz-lead: 1.4vw; /* lead paragraph */
         --sz-body: 1.05vw; /* body text, bullets */
-        --sz-caption: 0.82vw; /* captions, footnotes */
-        --sz-label: 0.7vw; /* chrome, kickers, tags, mono metadata */
+        --sz-caption: 0.84vw; /* captions, footnotes */
+        --sz-label: 0.76vw; /* chrome, kickers, tags, mono metadata */
 
         /* ── Spacing ─────────────────────────────────────────────────────── */
         --pad-x: 7.5vw; /* horizontal slide padding */
@@ -264,7 +266,8 @@
         height: 5px;
         border-radius: 50%;
         border: none;
-        background: rgba(255, 255, 255, 0.22);
+        /* Mid blue-grey reads on both navy and cream slides */
+        background: rgba(138, 150, 168, 0.5);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -272,7 +275,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: rgba(255, 255, 255, 0.8);
+        background: var(--c-accent);
         transform: scale(1.4);
       }
 
@@ -283,9 +286,23 @@
         font-family: var(--f-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: rgba(255, 255, 255, 0.25);
+        /* Mid blue-grey reads on both navy and cream slides */
+        color: rgba(138, 150, 168, 0.7);
         z-index: 100;
         user-select: none;
+      }
+
+      /* Motion degrades gracefully when the user asks for less of it */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -357,6 +374,15 @@
         color: var(--c-accent);
         font-family: var(--f-heading);
       }
+      /* On cream slides the pale gold fails AA for text; deepen it.
+         Decorative rules keep the pale gold so the family hue stays consistent. */
+      .light .display em,
+      .light .h1 em,
+      .light .h2 em,
+      .light .h3 em,
+      .light .lead em {
+        color: var(--c-accent-deep);
+      }
 
       .dark .muted {
         color: var(--c-fg-2);
@@ -366,6 +392,9 @@
       }
       .accent {
         color: var(--c-accent);
+      }
+      .light .accent {
+        color: var(--c-accent-deep);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -612,9 +641,13 @@
         line-height: 1.5;
       }
       .bullet-list li::before {
-        content: "—";
-        color: var(--c-accent);
-        font-family: var(--f-mono);
+        /* Gold hairline marker, aligned to the first text line */
+        content: "";
+        display: block;
+        width: 100%;
+        height: 1px;
+        background: var(--c-accent);
+        margin-top: 0.72em;
       }
       .dark .bullet-list li {
         color: var(--c-fg);
@@ -734,9 +767,12 @@
       }
 
       /* Date log in left column */
+      /* space-between spreads the entries down the full column height,
+         so the editorial spread reads as a set ledger, not a top-heavy list */
       .log-list {
         display: flex;
         flex-direction: column;
+        justify-content: space-between;
         gap: 1.4vh;
         flex: 1;
       }
@@ -765,10 +801,14 @@
       }
 
       /* 2x2 mixed-font stat grid in right column */
+      /* flex:1 + space-between lets the grid occupy the column height,
+         matching the spread rhythm of the date log on the left */
       .stat-4 {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0;
+        flex: 1;
+        align-content: space-between;
       }
       .stat-4-cell {
         border-top: 1px solid var(--c-border);
@@ -799,7 +839,7 @@
       }
       .stat-4-label {
         font-family: var(--f-mono);
-        font-size: 0.62vw;
+        font-size: var(--sz-label);
         letter-spacing: 0.07em;
         color: var(--c-fg-3);
         line-height: 1.4;
@@ -941,6 +981,9 @@
         text-transform: uppercase;
         color: var(--c-accent);
       }
+      .light .kicker {
+        color: var(--c-accent-deep);
+      }
 
       /* Outlined tag */
       .tag {
@@ -955,13 +998,16 @@
         line-height: 1;
       }
 
-      /* Image caption */
+      /* Image caption — tertiary token colour, no opacity stacking (keeps AA) */
       .img-caption {
         font-family: var(--f-mono);
         font-size: var(--sz-caption);
         letter-spacing: 0.04em;
-        opacity: 0.5;
+        color: var(--c-fg-3);
         margin-top: 0.8vh;
+      }
+      .light .img-caption {
+        color: var(--c-fg-light-3);
       }
       /* ── CHART ─────────────────────────────────────────────────────────── */
       .slide--chart .slide-body {
@@ -1089,6 +1135,10 @@
         color: var(--c-accent);
         letter-spacing: -0.02em;
         font-style: italic;
+      }
+      /* Pale gold numerals wash out on cream; deepen on light slides */
+      .light .flow-num {
+        color: var(--c-accent-deep);
       }
       .flow-title {
         font-family: var(--f-heading);
@@ -1223,10 +1273,20 @@
       .pyr-level:nth-child(1) {
         background: color-mix(in srgb, var(--c-accent) 70%, var(--c-bg));
         width: 38%;
+        /* Cream text fails contrast on the strong gold band; flip to dark */
+        color: var(--c-fg-light);
+      }
+      .pyr-level:nth-child(1) .pyr-desc {
+        color: color-mix(in srgb, var(--c-fg-light) 82%, transparent);
       }
       .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 45%, var(--c-bg));
+        background: color-mix(in srgb, var(--c-accent) 40%, var(--c-bg));
         width: 54%;
+      }
+      /* Muted blue-grey desc fails contrast on the mid gold bands; lift to cream */
+      .pyr-level:nth-child(2) .pyr-desc,
+      .pyr-level:nth-child(3) .pyr-desc {
+        color: var(--c-fg);
       }
       .pyr-level:nth-child(3) {
         background: color-mix(in srgb, var(--c-accent) 27%, var(--c-bg));
@@ -1645,7 +1705,7 @@
       <!-- ═══════ SLIDE 6 · QUOTE dark ═══════════════════════════════════════ -->
       <section class="slide dark slide--quote">
         <!-- Opening quote mark in accent gold -->
-        <div class="quote-mark" data-anim="fade-in" data-delay="0">"</div>
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">&#8220;</div>
 
         <!-- Quote body: large italic serif -->
         <p class="quote-text" data-anim="fade-up" data-delay="1">
@@ -2040,22 +2100,22 @@
             <div class="bar-track">
               <div class="bar-col">
                 <span class="bar-val">9K</span>
-                <div class="bar-fill" style="height: 9vh"></div>
+                <div class="bar-fill" style="height: 4.5vh"></div>
                 <span class="bar-x-label">Launch</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">18K</span>
-                <div class="bar-fill" style="height: 14vh"></div>
+                <div class="bar-fill" style="height: 9vh"></div>
                 <span class="bar-x-label">+1 mo</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">31K</span>
-                <div class="bar-fill" style="height: 20vh"></div>
+                <div class="bar-fill" style="height: 15.5vh"></div>
                 <span class="bar-x-label">+2 mo</span>
               </div>
               <div class="bar-col">
                 <span class="bar-val">47K</span>
-                <div class="bar-fill" style="height: 26vh"></div>
+                <div class="bar-fill" style="height: 23.5vh"></div>
                 <span class="bar-x-label">+3 mo</span>
               </div>
               <div class="bar-col">

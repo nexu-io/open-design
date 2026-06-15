@@ -136,14 +136,14 @@
     color:var(--red); margin-bottom:48px;
   }
   .s-manifesto h1{
-    margin:0; font-family:'Alfa Slab One', serif; line-height:1.04;
-    font-size:108px; letter-spacing:.005em; text-transform:uppercase;
-    color:var(--blue);
+    margin:0; font-family:'Alfa Slab One', serif; line-height:1.06;
+    font-size:96px; letter-spacing:.005em; text-transform:uppercase;
+    color:var(--blue); max-width:1560px; text-wrap:balance;
   }
   .s-manifesto h1 .y{ color:var(--orange); text-shadow: 5px 5px 0 var(--red);}
   .s-manifesto h1 .scriptline{
     display:inline-block; font-family:'Caveat Brush', cursive; color:var(--red);
-    font-size:104px; transform:rotate(-2deg); margin: 0 14px;
+    font-size:96px; transform:rotate(-2deg); margin: 0 14px;
     text-transform:lowercase;
   }
   .s-manifesto .underline{
@@ -215,8 +215,10 @@
     font-family:'DM Mono', monospace; letter-spacing:.18em; font-size:24px;
   }
   .s-stat .stat{
-    position:absolute; left:90px; right:90px; top:200px;
-    display:grid; grid-template-columns: 1fr 1fr; gap:80px; align-items:center;
+    /* optically centered between the topbar (90px) and the ribbon (60px) */
+    position:absolute; left:90px; right:90px; top:96px; bottom:66px;
+    display:grid; grid-template-columns: 1fr 1fr; gap:80px;
+    align-items:center; align-content:center;
   }
   .s-stat .num{
     font-family:'Alfa Slab One', serif; font-size:540px; line-height:.82;
@@ -435,32 +437,32 @@
     font-family:'DM Mono', monospace; letter-spacing:.22em; color:var(--cream); font-size:24px;
   }
   .s-close .center{
-    position:absolute; left:100px; right:100px; top:260px;
+    position:absolute; left:100px; right:100px; top:236px;
   }
   .s-close .center .pre{
     font-family:'Caveat Brush', cursive; color:var(--orange);
-    font-size:96px; transform:rotate(-3deg); display:inline-block;
+    font-size:88px; transform:rotate(-3deg); display:inline-block;
   }
   .s-close .center h1{
     margin:10px 0 0; font-family:'Alfa Slab One', serif;
-    font-size:260px; line-height:.86; color:var(--orange);
-    text-shadow: 10px 10px 0 var(--red), 20px 20px 0 var(--red-deep);
-    text-transform:uppercase;
+    font-size:176px; line-height:.86; color:var(--orange);
+    text-shadow: 9px 9px 0 var(--red), 18px 18px 0 var(--red-deep);
+    text-transform:uppercase; white-space:nowrap;
   }
   .s-close .row{
-    margin-top:60px;
-    display:grid; grid-template-columns: auto 1fr; gap:40px; align-items:center;
+    margin-top:64px;
+    display:flex; gap:48px; align-items:center;
   }
   .s-close .cta{
     background:var(--orange); color:var(--blue);
-    padding:24px 44px; font-family:'Alfa Slab One', serif;
-    font-size:48px; text-transform:uppercase;
+    padding:20px 40px; font-family:'Alfa Slab One', serif;
+    font-size:40px; text-transform:uppercase;
     border:6px solid var(--cream);
-    box-shadow: 10px 10px 0 var(--red);
+    box-shadow: 8px 8px 0 var(--red);
     letter-spacing:.02em;
   }
   .s-close .url{
-    font-family:'Alfa Slab One', serif; font-size:46px; color:var(--cream);
+    font-family:'Alfa Slab One', serif; font-size:40px; color:var(--cream);
     text-transform:uppercase; letter-spacing:.02em;
   }
   .s-close .footrow{
@@ -801,7 +803,7 @@
   </div>
   <div class="center">
     <div class="pre">over to you —</div>
-    <h1 style="font-size: 230px">GET STARTED</h1>
+    <h1>GET STARTED</h1>
     <div class="row">
       <div class="cta">DOWNLOAD</div>
       <div class="url">github.com/nexu-io/open-design</div>

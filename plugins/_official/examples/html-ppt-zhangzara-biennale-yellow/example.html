@@ -9,18 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --paper:      #E9E5DB;   /* warm parchment ground */
-    --paper-deep: #DCD6C4;   /* slightly darker for shadows */
-    --sun:        #F1EE2E;   /* signature solar yellow */
-    --sun-soft:   #F8F39B;
-    --ink:        #1B2566;   /* deep indigo navy */
-    --ember:      #E26B4A;   /* warm peach accent */
-    --haze:       #F0DA7C;
-    --line:       #1B2566;
+    --paper: #E9E5DB;   /* warm parchment ground */
+    --sun:   #F1EE2E;   /* signature solar yellow */
+    --ink:   #1B2566;   /* deep indigo navy */
+    --ember: #E26B4A;   /* warm peach edge note */
+    --ease:  cubic-bezier(.16, 1, .3, 1);
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--ink); }
   body {
     font-family: 'Archivo', 'Helvetica Neue', sans-serif;
     color: var(--ink);
@@ -40,16 +37,23 @@
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 280ms var(--ease);
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
-  /* Type system — kept on a small set of utility classes */
-  .display      { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; line-height: 0.9; letter-spacing: -0.012em; }
-  .display-it   { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; line-height: 1.04; letter-spacing: -0.005em; }
-  .micro-label  { font-family: 'Archivo', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; }
-  .body-text    { font-family: 'Archivo', sans-serif; font-weight: 400; line-height: 1.5; }
-  .mono-tab     { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 400; }
+  /* layered poster reveal: opacity-only stagger on each slide's direct
+     children, so positioned transforms (vrail rotate, qwrap translate)
+     are never touched */
+  @keyframes settle { from { opacity: 0; } to { opacity: 1; } }
+  .slide.active > * { animation: settle .55s var(--ease) both; }
+  .slide.active > *:nth-child(2) { animation-delay: .06s; }
+  .slide.active > *:nth-child(3) { animation-delay: .12s; }
+  .slide.active > *:nth-child(4) { animation-delay: .18s; }
+  .slide.active > *:nth-child(5) { animation-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > * { animation: none; }
+  }
 
   /* Page number — single, bottom-right, on every slide */
   .pagenum {
@@ -68,12 +72,12 @@
   .nav-hint {
     position: fixed;
     left: clamp(20px, 2vw, 36px);
-    bottom: clamp(16px, 2vh, 28px);
+    bottom: 8px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(10px, 0.75vw, 12px);
     color: var(--ink);
     letter-spacing: 0.08em;
-    opacity: 0.4;
+    opacity: 0.72; /* 0.55 blended below AA on the parchment ground */
     z-index: 10;
     pointer-events: none;
   }
@@ -90,18 +94,17 @@
     grid-template-columns: 1fr 1fr 1fr 1fr;
     grid-template-rows: repeat(8, 1fr);
   }
-  .s-cover .blocks div { background: transparent; }
   .s-cover .blocks .b1 { background: rgba(241,238,46,0.55); grid-column: 1; grid-row: 3 / 6; }
   .s-cover .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 1 / 4; }
   .s-cover .blocks .b3 { background: rgba(241,238,46,0.7);  grid-column: 1 / 3; grid-row: 6 / 9; }
   .s-cover .blocks .b4 { background: rgba(241,238,46,0.45); grid-column: 3 / 5; grid-row: 6 / 8; }
 
-  /* central sun-bloom + corner peach edge */
+  /* central sun disc + ember ring echo — crisp poster shapes, no haze */
   .s-cover .sunglow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 42% 38% at 52% 42%, rgba(241,238,46,0.95) 0%, rgba(241,238,46,0.65) 38%, rgba(240,218,124,0.22) 65%, rgba(233,229,219,0) 88%),
-      radial-gradient(ellipse 28% 30% at 88% 16%, rgba(226,107,74,0.22) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 58% 36%, var(--sun) 0 17.5vmin, rgba(241,238,46,0) calc(17.5vmin + 1.5px)),
+      radial-gradient(circle at 58% 36%, rgba(226,107,74,0) 0 19.5vmin, var(--ember) calc(19.5vmin + 1px) 20vmin, rgba(226,107,74,0) calc(20vmin + 1.5px));
   }
 
   .s-cover .date-rail {
@@ -125,6 +128,10 @@
     max-width: 88%;
   }
   .s-cover .title {
+    /* h1 defaults to bold, but Instrument Serif ships 400 only; without
+       this the browser synthesizes a smeared faux-bold */
+    margin: 0;
+    font-weight: 400;
     font-family: 'Instrument Serif', Georgia, serif;
     font-size: clamp(120px, min(14.6vw, 22vh), 240px);
     line-height: 0.86;
@@ -177,13 +184,16 @@
      SLIDE 2 — MANIFESTO (single italic statement, atmospheric)
      ────────────────────────────────────────────────────────────────── */
   .s-manifesto { background: var(--paper); display: flex; align-items: center; justify-content: center; }
+  /* sun sits low in the right corner, clear of the quote's measure, so the
+     ember ring never slices through a line of text */
   .s-manifesto .haze {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 70% 60% at 50% 50%, rgba(241,238,46,0.7) 0%, rgba(248,243,155,0.42) 32%, rgba(240,218,124,0.18) 56%, rgba(233,229,219,0) 80%),
-      radial-gradient(circle 600px at 12% 88%, rgba(226,107,74,0.15) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 82% 84%, var(--sun) 0 18vmin, rgba(241,238,46,0) calc(18vmin + 1.5px)),
+      radial-gradient(circle at 82% 84%, rgba(226,107,74,0) 0 20vmin, var(--ember) calc(20vmin + 1px) 20.5vmin, rgba(226,107,74,0) calc(20.5vmin + 1.5px));
   }
   .s-manifesto .quote {
+    margin: 0; /* UA <p> margin would nudge the flex-centered measure down */
     position: relative; z-index: 4;
     max-width: min(86%, 1480px);
     padding: 0 clamp(40px, 6vw, 120px);
@@ -191,7 +201,7 @@
     font-style: italic;
     font-weight: 400;
     font-size: clamp(56px, min(7vw, 11vh), 120px);
-    line-height: 1.04;
+    line-height: 1.08;
     color: var(--ink);
     letter-spacing: -0.005em;
     text-align: left;
@@ -260,7 +270,7 @@
     display: grid;
     grid-template-columns: 56px 1fr;
     gap: clamp(14px, 1.4vw, 24px);
-    border-bottom: 1px solid rgba(27,37,102,0.18);
+    border-bottom: 1px solid rgba(27,37,102,0.28);
     padding-bottom: clamp(12px, 1.6vh, 22px);
   }
   .s-programme .strand .num {
@@ -290,11 +300,13 @@
      SLIDE 4 — CHAPTER DIVIDER (huge serif numeral)
      ────────────────────────────────────────────────────────────────── */
   .s-chapter { background: var(--paper); }
+  /* hard-edged poster blocks instead of soft corner wash — same block
+     language as the cover grid */
   .s-chapter .glow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(circle 720px at -10% -10%, rgba(241,238,46,0.7) 0%, rgba(241,238,46,0) 65%),
-      radial-gradient(circle 540px at 110% 110%, rgba(226,107,74,0.18) 0%, rgba(226,107,74,0) 70%);
+      linear-gradient(var(--sun), var(--sun)) no-repeat 0 0 / 25% 37.5%,
+      linear-gradient(rgba(241,238,46,0.45), rgba(241,238,46,0.45)) no-repeat 100% 100% / 25% 25%;
   }
   .s-chapter .vrail {
     position: absolute;
@@ -337,7 +349,7 @@
     max-width: 78%;
   }
   .s-chapter .lede {
-    margin-top: clamp(18px, 2.2vh, 36px);
+    margin: clamp(18px, 2.2vh, 36px) 0 0;
     font-family: 'Archivo', sans-serif;
     font-size: clamp(15px, 1.05vw, 18px);
     line-height: 1.55;
@@ -351,7 +363,7 @@
   .s-data { background: var(--paper); }
   .s-data .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(ellipse 50% 40% at 92% 8%, rgba(241,238,46,0.55) 0%, rgba(241,238,46,0) 70%);
+    background: linear-gradient(rgba(241,238,46,0.5), rgba(241,238,46,0.5)) no-repeat 100% 0 / 25% 25%;
   }
   .s-data .frame {
     position: absolute; inset: clamp(40px, 4vw, 76px) clamp(40px, 4vw, 76px) clamp(70px, 7vh, 120px);
@@ -372,11 +384,11 @@
   .s-data .stat .lab2 { font-family: 'Archivo', sans-serif; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; font-size: clamp(11px, 0.8vw, 13px); color: var(--ink); }
   .s-data .stat .desc { font-family: 'Archivo', sans-serif; font-size: clamp(14px, 0.95vw, 15px); line-height: 1.45; color: var(--ink); max-width: 32ch; margin-top: 4px; }
 
-  .s-data .chart { display: flex; flex-direction: column; gap: clamp(8px, 1vh, 14px); justify-content: center; }
+  .s-data .chart { display: flex; flex-direction: column; gap: clamp(10px, 1.5vh, 18px); justify-content: center; }
   .s-data .row { display: grid; grid-template-columns: 64px 1fr 80px; align-items: center; gap: clamp(12px, 1vw, 22px); }
   .s-data .row .yr { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); letter-spacing: 0.04em; }
   .s-data .row .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); text-align: right; letter-spacing: 0.02em; }
-  .s-data .bar { height: clamp(14px, 1.6vh, 22px); background: var(--ink); position: relative; }
+  .s-data .bar { height: clamp(18px, 2.4vh, 30px); background: var(--ink); position: relative; }
   .s-data .bar.lit { background: var(--sun); border: 1px solid var(--ink); }
 
   /* ──────────────────────────────────────────────────────────────────
@@ -391,7 +403,7 @@
   }
   .s-quote .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(circle 600px at 8% 92%, rgba(241,238,46,0.4) 0%, rgba(241,238,46,0) 70%);
+    background: linear-gradient(rgba(241,238,46,0.4), rgba(241,238,46,0.4)) no-repeat 0 100% / 17% 25%;
   }
   .s-quote .qwrap {
     position: absolute;
@@ -409,6 +421,7 @@
     margin-bottom: clamp(14px, 1.8vh, 26px);
   }
   .s-quote .qbody {
+    margin: 0; /* UA <p> margin throws off the translateY(-50%) centering */
     font-family: 'Instrument Serif', Georgia, serif;
     font-style: italic;
     font-size: clamp(40px, min(4.6vw, 7vh), 88px);
@@ -445,7 +458,7 @@
   .s-cal { background: var(--paper); }
   .s-cal .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(circle 700px at 105% 0%, rgba(241,238,46,0.45) 0%, rgba(241,238,46,0) 65%);
+    background: linear-gradient(rgba(241,238,46,0.45), rgba(241,238,46,0.45)) no-repeat 100% 0 / 25% 12.5%;
   }
   .s-cal .frame {
     position: absolute;
@@ -473,8 +486,11 @@
     gap: clamp(14px, 1.4vw, 28px);
     align-items: center;
     padding: clamp(10px, 1.3vh, 18px) 0;
-    border-bottom: 1px solid rgba(27,37,102,0.2);
+    border-bottom: 1px solid rgba(27,37,102,0.28);
   }
+  /* data rows share the remaining stage height so the ledger fills the
+     frame instead of stacking against the top with a dead band below */
+  .s-cal .row:not(.headrow) { flex: 1; min-height: 0; }
   .s-cal .row .date { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(13px, 0.95vw, 16px); color: var(--ink); letter-spacing: 0.02em; }
   .s-cal .row .ttl  { font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(20px, 1.6vw, 30px); line-height: 1.15; color: var(--ink); }
   .s-cal .row .ttl em { font-style: italic; }
@@ -487,11 +503,12 @@
      SLIDE 8 — COLOPHON (mirror of cover, inverted)
      ────────────────────────────────────────────────────────────────── */
   .s-colophon { background: var(--paper); }
+  /* rising sun disc on the horizon — mirrors the cover's sun, half set.
+     No ember ring here: it would slice through the colophon footer text. */
   .s-colophon .glow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 55% 50% at 50% 110%, rgba(241,238,46,0.85) 0%, rgba(241,238,46,0.5) 35%, rgba(240,218,124,0.18) 60%, rgba(233,229,219,0) 84%),
-      radial-gradient(ellipse 30% 30% at 12% 18%, rgba(226,107,74,0.18) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 64% 132%, var(--sun) 0 38vmin, rgba(241,238,46,0) calc(38vmin + 1.5px));
   }
   .s-colophon .blocks {
     position: absolute; inset: 0;
@@ -499,7 +516,9 @@
     display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; grid-template-rows: repeat(8, 1fr);
   }
   .s-colophon .blocks .b1 { background: rgba(241,238,46,0.55); grid-column: 1 / 3; grid-row: 1 / 3; }
-  .s-colophon .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 5 / 8; }
+  /* b2 ends one row higher so its hard edge never slices through the
+     License column of the colophon footer */
+  .s-colophon .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 4 / 7; }
   .s-colophon .titlewrap {
     position: absolute;
     left: clamp(40px, 4vw, 76px);
@@ -512,6 +531,9 @@
     letter-spacing: 0.22em; font-size: clamp(11px, 0.82vw, 13px); color: var(--ink); margin-bottom: clamp(12px, 1.4vh, 22px);
   }
   .s-colophon .ttl {
+    /* same faux-bold guard as the cover h1: only weight 400 is loaded */
+    margin: 0;
+    font-weight: 400;
     font-family: 'Instrument Serif', Georgia, serif;
     font-size: clamp(80px, min(10vw, 16vh), 200px);
     line-height: 0.86;
@@ -666,7 +688,7 @@
             <div class="desc">Open source under Apache-2.0, built in public with 300+ contributors and 217+ plugins.</div>
           </div>
           <div class="stat">
-            <div class="v">-8<sup>0%</sup></div>
+            <div class="v">-80<sup>%</sup></div>
             <div class="caption lab2">Monthly cost vs. Claude Design</div>
             <div class="desc">From $500 to ~$73 a month, with bring-your-own-key model and media providers.</div>
           </div>
@@ -694,7 +716,7 @@
           <div class="caption role">Open Design community · from the public GitHub discussions, 2026</div>
         </div>
       </div>
-      <div class="y-mark" aria-hidden="true">¨</div>
+      <div class="y-mark" aria-hidden="true">&rdquo;</div>
       <div class="pagenum">06 / 08</div>
     </section>
 

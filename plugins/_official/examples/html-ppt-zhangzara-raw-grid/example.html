@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Open Design — RAW GRID Neobrutalist Deck</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 /* =============================================
    RAW GRID — Neobrutalist Presentation Template
    ============================================= */
@@ -12,19 +13,22 @@
 /* --- RESET & BASE --- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --black: #0a0a0a;
-  --white: #ffffff;
+  --black: #0e0d0b;
+  --white: #f7f4ec;
   --pink: #f2d4cf;
   --green: #e5edd6;
-  --gray: #f5f5f5;
-  --darkgray: #333333;
+  --gray: #ece8db;
+  --darkgray: #3a382f;
+  --red: #c8371e;
   --border: 3px solid var(--black);
   --shadow: 6px 6px 0 var(--black);
   --shadow-sm: 4px 4px 0 var(--black);
+  --font-sans: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
 }
 html, body {
   width: 100%; height: 100%;
-  font-family: 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   background: var(--white);
   color: var(--black);
   overflow: hidden;
@@ -48,6 +52,29 @@ html, body {
 .slide-content {
   width: 100%; height: 100%;
   overflow: hidden;
+}
+.slide.active .slide-content {
+  animation: slide-in 0.5s cubic-bezier(.16,1,.3,1) both;
+}
+/* opacity-only child stagger: keeps the shared 3px grid borders aligned while panels land in sequence */
+.slide.active .slide-content > * {
+  animation: fade-in 0.45s cubic-bezier(.16,1,.3,1) both;
+}
+.slide.active .slide-content > *:nth-child(2) { animation-delay: 0.08s; }
+.slide.active .slide-content > *:nth-child(3) { animation-delay: 0.16s; }
+.slide.active .slide-content > *:nth-child(4) { animation-delay: 0.24s; }
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide.active .slide-content,
+  .slide.active .slide-content > * { animation: none; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
 /* --- TYPOGRAPHY --- */
@@ -80,13 +107,15 @@ html, body {
   letter-spacing: 0.04em;
 }
 .t-body {
-  font-size: clamp(16px, 1.3vw, 20px);
+  font-size: clamp(15px, 1.25vw, 19px);
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.55;
+  max-width: 60ch;
 }
 .t-caption {
+  font-family: var(--font-mono);
   font-size: clamp(11px, 1vw, 13px);
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -105,6 +134,7 @@ html, body {
 .b-r { border-right: var(--border); }
 .bg-pink { background: var(--pink); }
 .bg-green { background: var(--green); }
+.bg-red { background: var(--red); }
 .bg-black { background: var(--black); }
 .bg-gray { background: var(--gray); }
 .bg-white { background: var(--white); }
@@ -133,15 +163,16 @@ html, body {
   background: var(--black);
   color: var(--white);
   padding: 6px 14px;
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .line {
   width: 60px;
   height: 4px;
-  background: var(--black);
+  background: var(--red);
 }
 .line-w { width: 100%; }
 .line-v {
@@ -179,7 +210,9 @@ html, body {
   justify-content: center;
   font-size: 18px;
   font-weight: 900;
-  background: var(--white);
+  background: var(--red);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
 }
 .s1-brand-text {
   font-size: 20px;
@@ -280,8 +313,9 @@ html, body {
   margin-bottom: 20px;
 }
 .s3-bar-label {
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
@@ -298,13 +332,14 @@ html, body {
   display: flex;
   align-items: center;
   padding-left: 10px;
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 800;
-  transition: width 0.8s ease;
+  font-weight: 700;
+  background: var(--black);
+  color: var(--white);
+  transition: width 0.8s cubic-bezier(.16,1,.3,1);
 }
-.s3-bar-fill.pink { background: var(--pink); }
-.s3-bar-fill.green { background: var(--green); }
-.s3-bar-fill.black { background: var(--black); color: var(--white); }
+.s3-bar-fill.hot { background: var(--red); }
 .s3-insights {
   padding: clamp(24px, 3vw, 48px);
   display: flex;
@@ -316,6 +351,7 @@ html, body {
   border: var(--border);
   padding: clamp(16px, 2vw, 28px);
   background: var(--white);
+  box-shadow: var(--shadow-sm);
 }
 .s3-stat-number {
   font-size: clamp(36px, 4vw, 56px);
@@ -324,8 +360,9 @@ html, body {
   margin-bottom: 8px;
 }
 .s3-stat-label {
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -367,10 +404,13 @@ html, body {
   justify-content: space-between;
 }
 .s4-num {
+  font-family: var(--font-mono);
   font-size: clamp(40px, 5vw, 72px);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
-  opacity: 0.35;
+  color: var(--black);
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
 }
 .s4-icon {
   width: 48px; height: 48px;
@@ -402,16 +442,17 @@ html, body {
 .s5-image-placeholder {
   width: 80%;
   height: 70%;
-  border: 4px solid var(--white);
+  border: 3px dashed var(--white);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--white);
-  font-size: 14px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  opacity: 0.6;
+  opacity: 0.75;
 }
 .s5-text-area {
   display: flex;
@@ -440,31 +481,35 @@ html, body {
 .s6-body {
   flex: 1;
   display: flex;
-  padding: 0 clamp(32px, 4vw, 64px);
+  /* full-bleed columns: the colored panels run edge to edge like every other slide */
+  padding: 0;
 }
 .s6-step {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: clamp(24px, 3vw, 48px) clamp(16px, 2vw, 28px);
+  justify-content: center;
+  padding: clamp(24px, 3vw, 48px) clamp(24px, 3vw, 48px);
   position: relative;
 }
 .s6-step + .s6-step { border-left: var(--border); }
 .s6-step-num {
+  font-family: var(--font-mono);
   font-size: clamp(48px, 6vw, 80px);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   margin-bottom: clamp(16px, 2vw, 28px);
-  opacity: 0.2;
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
 }
 .s6-step-title { margin-bottom: 12px; }
 .s6-connector {
   position: absolute;
-  top: clamp(40px, 5vw, 64px);
+  top: calc(50% - 16px);
   right: -18px;
   width: 32px; height: 32px;
   border: var(--border);
-  background: var(--black);
+  background: var(--red);
   color: var(--white);
   display: flex;
   align-items: center;
@@ -473,8 +518,6 @@ html, body {
   font-weight: 900;
   z-index: 10;
 }
-.s6-step:nth-child(1) .s6-step-num { color: var(--black); }
-.s6-step:nth-child(2) .s6-step-num { color: var(--black); }
 .s6-step:nth-child(3) { background: var(--green); }
 .s6-step:nth-child(4) { background: var(--pink); }
 
@@ -512,8 +555,9 @@ html, body {
   line-height: 1;
 }
 .s7-donut-label {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 4px;
@@ -528,9 +572,11 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .s7-legend-swatch {
   width: 16px; height: 16px;
@@ -575,17 +621,13 @@ html, body {
   position: relative;
 }
 .s8-quote-mark {
-  position: absolute;
-  top: clamp(20px, 3vw, 40px);
-  left: clamp(32px, 4vw, 64px);
-  font-size: clamp(80px, 12vw, 160px);
+  font-size: clamp(56px, 7vw, 96px);
   font-weight: 900;
-  line-height: 1;
-  opacity: 0.15;
+  line-height: 0.6;
+  color: var(--red);
+  margin-bottom: clamp(16px, 2vw, 28px);
 }
 .s8-statement {
-  position: relative;
-  z-index: 2;
   max-width: 900px;
 }
 .s8-bottom {
@@ -629,6 +671,9 @@ html, body {
 }
 .s9-table-wrap {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: clamp(24px, 3vw, 48px) clamp(32px, 4vw, 64px);
   overflow: auto;
 }
@@ -639,14 +684,16 @@ html, body {
 .s9-table th {
   border: var(--border);
   padding: clamp(12px, 1.5vw, 20px);
-  font-size: clamp(12px, 1.1vw, 14px);
-  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.1vw, 13px);
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   text-align: left;
   background: var(--black);
   color: var(--white);
 }
+.s9-table td:nth-child(3) { font-weight: 800; color: var(--red); }
 .s9-table td {
   border: var(--border);
   padding: clamp(12px, 1.5vw, 20px);
@@ -671,6 +718,11 @@ html, body {
   padding: clamp(32px, 4vw, 64px);
   background: var(--pink);
   border-right: var(--border);
+}
+.s10-left .label {
+  background: var(--red);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
 }
 .s10-right {
   display: flex;
@@ -732,7 +784,7 @@ html, body {
     <div class="s1-right">
       <div class="s1-list-item">Why Open</div>
       <div class="s1-list-item">By The Numbers</div>
-      <div class="s1-list-item bg-green">Core Capabilities</div>
+      <div class="s1-list-item">Core Capabilities</div>
       <div class="s1-list-item">HyperFrames</div>
       <div class="s1-list-item">Workflow</div>
       <div class="s1-list-item">Open vs Closed</div>
@@ -756,12 +808,12 @@ html, body {
       <div class="s2-block">
         <span class="t-number">60K+</span>
         <span class="t-subtitle" style="margin-top: 8px;">GitHub Stars</span>
-        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Open source under Apache-2.0 — fork, self-host, and use commercially.</p>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Open source under Apache-2.0 — fork, self-host, and use commercially.</p>
       </div>
       <div class="s2-block bg-green">
         <span class="t-number">21</span>
         <span class="t-subtitle" style="margin-top: 8px;">Coding Agents</span>
-        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Claude Code, Codex, Cursor and more — auto-detected from PATH, zero config.</p>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Claude Code, Codex, Cursor and more — auto-detected from PATH, zero config.</p>
       </div>
     </div>
   </div>
@@ -779,19 +831,19 @@ html, body {
         <div class="t-subtitle s3-chart-title">GitHub Stars by Quarter (K &middot; Demo Data)</div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q1</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 20%;">12K</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 20%;">12K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q2</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill green" style="width: 42%;">25K</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 42%;">25K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q3</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill black" style="width: 70%;">42K</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 70%;">42K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q4</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 91%;">60K+</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill hot" style="width: 91%;">60K+</div></div>
         </div>
       </div>
       <div class="s3-insights">
@@ -874,7 +926,7 @@ html, body {
       <div class="label s5-badge">Featured</div>
       <div class="t-headline" style="margin-bottom: 20px;">HyperFrames</div>
       <p class="t-body" style="margin-bottom: 20px;">Turn any design artifact into video. HyperFrames renders HTML compositions straight to MP4 — marketing shorts, product demos, and cinematic generative footage.</p>
-      <p class="t-body" style="opacity: 0.7; margin-bottom: 32px;">The same artifact flows from sandbox preview to finished video — programmatic, repeatable, and entirely on your own machine.</p>
+      <p class="t-body" style="color: var(--darkgray); margin-bottom: 32px;">The same artifact flows from sandbox preview to finished video — programmatic, repeatable, and entirely on your own machine.</p>
       <div class="line"></div>
     </div>
   </div>
@@ -920,10 +972,11 @@ html, body {
     <div class="s7-left">
       <div class="s7-donut-container">
         <svg viewBox="0 0 200 200" width="100%" height="100%">
-          <circle cx="100" cy="100" r="80" fill="none" stroke="#0a0a0a" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#c8371e" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
           <circle cx="100" cy="100" r="80" fill="none" stroke="#f2d4cf" stroke-width="24" stroke-dasharray="126 502" stroke-dashoffset="-314" transform="rotate(-90 100 100)"/>
           <circle cx="100" cy="100" r="80" fill="none" stroke="#e5edd6" stroke-width="24" stroke-dasharray="50 502" stroke-dashoffset="-440" transform="rotate(-90 100 100)"/>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#0a0a0a" stroke-width="1.5" opacity="0.1"/>
+          <circle cx="100" cy="100" r="92" fill="none" stroke="#0e0d0b" stroke-width="2"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#0e0d0b" stroke-width="2"/>
         </svg>
         <div class="s7-donut-center">
           <div class="s7-donut-value">217+</div>
@@ -931,7 +984,7 @@ html, body {
         </div>
       </div>
       <div class="s7-legend">
-        <div class="s7-legend-item"><div class="s7-legend-swatch bg-black"></div>Slides &amp; Decks</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-red"></div>Slides &amp; Decks</div>
         <div class="s7-legend-item"><div class="s7-legend-swatch bg-pink"></div>Prototypes</div>
         <div class="s7-legend-item"><div class="s7-legend-swatch bg-green"></div>Video &amp; More</div>
       </div>

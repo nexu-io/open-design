@@ -6,19 +6,21 @@
   <title>Open Design — The Open-Source, Local, Agent-Driven Design Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
     :root {
       --bg: #fdfae7;
-      --primary: #1e2bfa;
-      --text: #111111;
-      --text-muted: #6b6b6b;
-      --text-light: #9a9a9a;
-      --accent-light: rgba(30, 43, 250, 0.08);
-      --accent-medium: rgba(30, 43, 250, 0.15);
-      --border: rgba(30, 43, 250, 0.2);
-      --card-bg: rgba(30, 43, 250, 0.04);
+      --primary: #002fa7;
+      --text: #181610;
+      --text-muted: #54513f;
+      --text-light: #6e6a59;
+      --accent-light: rgba(0, 47, 167, 0.06);
+      --accent-medium: rgba(0, 47, 167, 0.14);
+      --border: rgba(0, 47, 167, 0.28);
+      --hairline: rgba(24, 22, 16, 0.16);
+      --font-display: 'Archivo', 'Helvetica Neue', sans-serif;
+      --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
     }
 
     * {
@@ -31,9 +33,10 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: 'Inter', sans-serif;
+      font-family: var(--font-display);
       background: var(--bg);
       color: var(--text);
+      -webkit-font-smoothing: antialiased;
     }
 
     /* Slide container */
@@ -59,7 +62,7 @@
       opacity: 0;
       pointer-events: none;
       transform: translateX(40px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
+      transition: opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1);
       overflow: hidden;
     }
 
@@ -76,33 +79,39 @@
 
     /* Typography */
     h1, h2, h3, h4 {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-weight: 600;
       line-height: 1.1;
       letter-spacing: -0.02em;
     }
 
     h1 {
-      font-size: clamp(2.8rem, 5vw, 4.2rem);
-      font-weight: 700;
+      font-size: clamp(2.8rem, 5.2vw, 4.4rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 0.98;
     }
 
     h2 {
       font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
       margin-bottom: 1.5rem;
+      max-width: 30ch;
     }
 
     h3 {
       font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-      font-weight: 500;
+      font-weight: 600;
       line-height: 1.3;
     }
 
     h4 {
-      font-size: clamp(0.85rem, 1.2vw, 1rem);
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: clamp(0.72rem, 1vw, 0.82rem);
+      font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.14em;
       color: var(--primary);
     }
 
@@ -126,13 +135,15 @@
     }
 
     .slide-header .tag {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
       font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
       color: var(--primary);
-      background: var(--accent-light);
-      padding: 0.35rem 0.9rem;
-      border-radius: 100px;
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.8rem;
+      border-radius: 0;
     }
 
     /* Slide content area */
@@ -157,15 +168,15 @@
     .nav-btn {
       width: 44px;
       height: 44px;
-      border-radius: 50%;
-      border: 1.5px solid var(--border);
+      border-radius: 0;
+      border: 1px solid var(--border);
       background: var(--bg);
       color: var(--primary);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s ease;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1), color 0.2s cubic-bezier(.16,1,.3,1), border-color 0.2s cubic-bezier(.16,1,.3,1);
       font-size: 1.1rem;
     }
 
@@ -181,8 +192,8 @@
     }
 
     .slide-counter {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
       font-weight: 500;
       color: var(--text-muted);
       letter-spacing: 0.05em;
@@ -204,10 +215,9 @@
 
     /* Decorative elements */
     .accent-line {
-      width: 60px;
-      height: 4px;
+      width: 56px;
+      height: 3px;
       background: var(--primary);
-      border-radius: 2px;
       margin-bottom: 1.5rem;
     }
 
@@ -215,7 +225,6 @@
       width: 8px;
       height: 8px;
       background: var(--primary);
-      border-radius: 50%;
       display: inline-block;
     }
 
@@ -243,37 +252,31 @@
     }
 
     .layout-cover .meta {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
-      color: var(--text-light);
-      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .layout-cover .cover-decoration {
       position: absolute;
       top: 0;
       right: 0;
-      width: 35vw;
+      width: 30vw;
       height: 100vh;
-      background: var(--accent-light);
-      clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
-    }
-
-    .layout-cover .cover-dots {
-      position: absolute;
-      bottom: 12vh;
-      right: 8vw;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      opacity: 0.25;
-    }
-
-    .layout-cover .cover-dots .dot {
-      width: 6px;
-      height: 6px;
       background: var(--primary);
-      border-radius: 50%;
+      clip-path: polygon(42% 0, 100% 0, 100% 100%, 0% 100%);
+    }
+
+    .layout-cover .cover-mark {
+      position: absolute;
+      top: 8vh;
+      right: 5vw;
+      z-index: 2;
+      width: 44px;
+      height: 3px;
+      background: var(--bg);
     }
 
     /* ============================================================
@@ -293,23 +296,23 @@
       display: flex;
       gap: 1.2rem;
       align-items: center;
-      padding: 1rem 1.2rem;
-      border-radius: 12px;
-      transition: background 0.2s ease;
-      border-bottom: 1px solid var(--border);
+      padding: 1rem 0.4rem;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1);
+      border-bottom: 1px solid var(--hairline);
     }
 
     .agenda-item:hover {
-      background: var(--card-bg);
+      background: var(--accent-light);
     }
 
     .agenda-num {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.8rem;
-      font-weight: 700;
+      font-family: var(--font-mono);
+      font-size: 1.45rem;
+      font-weight: 500;
       color: var(--primary);
       line-height: 1;
-      min-width: 36px;
+      min-width: 44px;
+      font-variant-numeric: tabular-nums;
     }
 
     .agenda-item h3 {
@@ -343,18 +346,22 @@
       display: flex;
       flex-direction: column;
       gap: 0.7rem;
-      padding: 1.5rem 1.6rem;
-      border-radius: 14px;
-      border: 1.5px solid var(--border);
-      background: var(--card-bg);
+      padding: 1.5rem 1.6rem 1.5rem 0;
+      border-top: 2px solid var(--text);
+    }
+
+    .metric-card:first-child {
+      border-top-color: var(--primary);
     }
 
     .metric-card .metric-value {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(2.2rem, 3.4vw, 3rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.03em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .metric-card .metric-label {
@@ -377,7 +384,7 @@
       gap: 0.45rem;
       margin: 0.2rem 0 0;
       padding: 0.7rem 0 0;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     .metric-card .metric-supports li {
@@ -389,24 +396,27 @@
     }
 
     .metric-card .metric-supports li::before {
-      content: '—';
+      content: '';
       position: absolute;
       left: 0;
-      color: var(--text-light);
+      top: 0.65em;
+      width: 10px;
+      height: 1px;
+      background: var(--primary);
     }
 
     .metric-card .metric-change {
       display: inline-flex;
       align-items: center;
       gap: 0.3rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       margin-top: 0.3rem;
     }
 
-    .metric-change.positive { color: #059669; }
-    .metric-change.negative { color: #dc2626; }
+    .metric-change.positive { color: var(--primary); }
+    .metric-change.negative { color: var(--primary); }
 
     /* ============================================================
        LAYOUT 4: Data Dashboard (6 stat grid)
@@ -430,10 +440,8 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-      padding: 1.4rem 1.5rem;
-      border-radius: 12px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1.4rem 1.5rem 1.4rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .stat-cell .stat-top {
@@ -443,11 +451,13 @@
     }
 
     .stat-cell .stat-num {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.4vw, 2.1rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.025em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-cell .stat-unit {
@@ -468,7 +478,7 @@
       color: var(--text-light);
       line-height: 1.4;
       padding-top: 0.4rem;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     /* ============================================================
@@ -496,7 +506,7 @@
 
     .split-right {
       padding-left: 2.5rem;
-      border-left: 2px solid var(--border);
+      border-left: 1px solid var(--hairline);
     }
 
     .insight-list {
@@ -522,24 +532,23 @@
       position: absolute;
       left: 0;
       top: 0;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       color: var(--primary);
       letter-spacing: 0.05em;
-      line-height: 1.7;
+      line-height: 1.85;
     }
 
     .split-highlight {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.15rem, 1.55vw, 1.5rem);
       font-weight: 500;
       color: var(--text);
       line-height: 1.4;
       padding: 1.3rem 1.5rem;
       background: var(--accent-light);
-      border-radius: 12px;
-      border-left: 4px solid var(--primary);
+      border-left: 3px solid var(--primary);
     }
 
     .split-highlight cite {
@@ -561,18 +570,18 @@
     }
 
     .mini-stat {
-      padding: 0.9rem 1rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 0.9rem 1rem 0.9rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .mini-stat .mini-val {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.5rem;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.02em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .mini-stat .mini-label {
@@ -610,9 +619,8 @@
     }
 
     .bar-track {
-      height: 28px;
+      height: 26px;
       background: var(--accent-light);
-      border-radius: 6px;
       overflow: hidden;
       position: relative;
     }
@@ -620,17 +628,17 @@
     .bar-fill {
       height: 100%;
       background: var(--primary);
-      border-radius: 6px;
-      transition: width 0.8s ease;
+      transition: width 0.8s cubic-bezier(.16,1,.3,1);
     }
 
     .bar-pct {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.95rem;
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
       font-weight: 600;
       color: var(--primary);
       min-width: 45px;
       text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .bar-note {
@@ -649,17 +657,16 @@
     }
 
     .layout-quote .quote-mark {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 8rem;
+      font-family: var(--font-display);
+      font-size: 3.4rem;
       font-weight: 700;
       color: var(--primary);
-      opacity: 0.15;
-      line-height: 0.5;
-      margin-bottom: 1rem;
+      line-height: 0.6;
+      margin-bottom: 1.6rem;
     }
 
     .layout-quote blockquote {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.8vw, 2.4rem);
       font-weight: 500;
       line-height: 1.35;
@@ -678,24 +685,12 @@
       font-weight: 600;
     }
 
-    .layout-quote .quote-decoration {
-      position: absolute;
-      top: 10vh;
-      left: 5vw;
-      width: 80px;
-      height: 80px;
-      border: 2px solid var(--border);
-      border-radius: 50%;
-    }
-
-    .layout-quote .quote-decoration-2 {
-      position: absolute;
-      bottom: 12vh;
-      right: 6vw;
-      width: 60px;
-      height: 60px;
-      background: var(--accent-light);
-      border-radius: 50%;
+    /* Quote slide chrome: a single hairline rule above the attribution,
+       in place of the former floating decoration squares. */
+    .layout-quote .quote-source {
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--hairline);
+      min-width: 280px;
     }
 
     /* ============================================================
@@ -705,9 +700,10 @@
       display: flex;
       gap: 1.5rem;
       flex: 1;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       margin-top: 0.5rem;
+      padding-top: 8vh;
     }
 
     .timeline-step {
@@ -725,32 +721,33 @@
       top: 28px;
       right: -0.75rem;
       width: 1.5rem;
-      height: 2px;
-      background: var(--border);
+      height: 1px;
+      background: var(--text);
     }
 
     .step-circle {
       width: 56px;
       height: 56px;
-      border-radius: 50%;
       background: var(--primary);
       color: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.3rem;
       font-weight: 700;
       margin-bottom: 1.2rem;
       flex-shrink: 0;
     }
 
-    .timeline-step:nth-child(2) .step-circle { opacity: 0.85; }
-    .timeline-step:nth-child(3) .step-circle { opacity: 0.7; }
-    .timeline-step:nth-child(4) .step-circle { opacity: 0.55; }
+    .timeline-step:nth-child(n+2) .step-circle {
+      background: var(--bg);
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
 
     .step-title {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(0.95rem, 1.4vw, 1.15rem);
       font-weight: 600;
       color: var(--text);
@@ -783,10 +780,8 @@
     }
 
     .detail-block {
-      padding: 1rem 1.2rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1rem 1.2rem 1rem 1.1rem;
+      border-left: 2px solid var(--primary);
     }
 
     .detail-block h3 {
@@ -813,10 +808,9 @@
       content: '';
       position: absolute;
       left: 0;
-      top: 0.55rem;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
+      top: 0.65rem;
+      width: 8px;
+      height: 1px;
       background: var(--primary);
     }
 
@@ -846,21 +840,20 @@
 
     .layout-closing .cta-btn {
       display: inline-block;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 0.95rem;
       font-weight: 600;
       color: var(--bg);
       background: var(--primary);
       padding: 0.9rem 2.2rem;
-      border-radius: 100px;
       text-decoration: none;
       letter-spacing: 0.02em;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s cubic-bezier(.16,1,.3,1), opacity 0.2s cubic-bezier(.16,1,.3,1);
     }
 
     .layout-closing .cta-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(30, 43, 250, 0.25);
+      opacity: 0.9;
     }
 
     .layout-closing .closing-contact {
@@ -869,29 +862,16 @@
       color: var(--text-light);
     }
 
+    /* Closing slide mirrors the cover: same cobalt diagonal panel,
+       anchored to the left edge, instead of concentric rotated squares. */
     .layout-closing .closing-decoration {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 500px;
-      height: 500px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.4;
-      pointer-events: none;
-    }
-
-    .layout-closing .closing-decoration-2 {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 360px;
-      height: 360px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.3;
+      top: 0;
+      left: 0;
+      width: 18vw;
+      height: 62vh;
+      background: var(--primary);
+      clip-path: polygon(0 0, 100% 0, 0 100%);
       pointer-events: none;
     }
 
@@ -907,15 +887,29 @@
       opacity: 0.6;
     }
 
+    /* Reduced motion: keep slide swaps instant, no translate */
+    @media (prefers-reduced-motion: reduce) {
+      .slide,
+      .bar-fill,
+      .nav-btn,
+      .agenda-item,
+      .layout-closing .cta-btn,
+      .progress-bar {
+        transition: none !important;
+      }
+      .slide { transform: none; }
+      .slide.prev { transform: none; }
+    }
+
     /* Responsive adjustments for very small heights */
     @media (max-height: 700px) {
       .slide { padding: 2.5vh 3vw; }
       .layout-agenda .agenda-grid { gap: 0.8rem 2rem; }
-      .agenda-item { padding: 0.8rem; }
-      .metric-card { padding: 1rem; }
+      .agenda-item { padding: 0.8rem 0.4rem; }
+      .metric-card { padding: 1rem 1rem 1rem 0; }
       .layout-bars .bars-container { gap: 0.5rem; }
       .bar-item { padding: 0.4rem 0; }
-      .detail-block { padding: 0.8rem 1rem; }
+      .detail-block { padding: 0.8rem 1rem 0.8rem 1.1rem; }
     }
   </style>
 </head>
@@ -926,11 +920,7 @@
     <!-- SLIDE 1: Cover -->
     <div class="slide layout-cover active">
       <div class="cover-decoration"></div>
-      <div class="cover-dots">
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-      </div>
+      <div class="cover-mark"></div>
       <div class="accent-line"></div>
       <h1>Open Design</h1>
       <p class="subtitle">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video &mdash; the full product-design workflow, on your own machine.</p>
@@ -1214,8 +1204,6 @@
 
     <!-- SLIDE 7: Quote -->
     <div class="slide layout-quote">
-      <div class="quote-decoration"></div>
-      <div class="quote-decoration-2"></div>
       <div class="quote-mark">&ldquo;</div>
       <blockquote>
         File-system semantics plus git-diffable design artifacts &mdash; design is finally under version control.
@@ -1324,7 +1312,6 @@
     <!-- SLIDE 10: Closing -->
     <div class="slide layout-closing">
       <div class="closing-decoration"></div>
-      <div class="closing-decoration-2"></div>
       <div class="accent-line" style="margin: 0 auto 1.5rem;"></div>
       <h1>Open &middot; Local &middot; Agent-native</h1>
       <p class="closing-sub">Frontier AI design, back on every creator's desk. Download Open Design for macOS / Windows, or star the project on GitHub.</p>

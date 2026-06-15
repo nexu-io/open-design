@@ -5,15 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Open Design · The open-source, local, agent-driven design platform</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Geist+Mono:wght@400;500&display=swap');
+
+    /* warm editorial: Fraunces display serif, paper ground, burnt-orange accent */
     :root {
-      --bg: #fafaf9; --fg: #1c1b1a; --muted: #6b6964; --accent: #c96442; --surface: #ffffff;
+      --bg: #faf7f2;
+      --fg: #211d18;
+      --muted: #5d564c;
+      --faint: #6f6859;
+      --accent: #b3431b;
+      --accent-bright: #e8703d;
+      --line: rgba(33, 29, 24, 0.14);
+      --line-strong: rgba(33, 29, 24, 0.32);
+      --surface: #fffdfa;
+      --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --ease: cubic-bezier(.16, 1, .3, 1);
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
     body {
       background: var(--bg);
       color: var(--fg);
-      font: 18px/1.5 -apple-system, system-ui, sans-serif;
+      font: 18px/1.55 var(--sans);
+      -webkit-font-smoothing: antialiased;
       display: flex;
       overflow-x: auto;
       overflow-y: hidden;
@@ -25,34 +41,146 @@
       flex: 0 0 100vw;
       height: 100vh;
       scroll-snap-align: start;
-      padding: 80px 96px;
+      padding: 88px 104px;
       display: flex;
       flex-direction: column;
       justify-content: center;
       position: relative;
     }
+    .slide + .slide { border-left: 1px solid var(--line); }
+
+    /* entrance: transform + opacity only, staggered, ease-out */
+    @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+    .slide > * { animation: rise .7s var(--ease) both; }
+    .slide > *:nth-child(2) { animation-delay: .07s; }
+    .slide > *:nth-child(3) { animation-delay: .14s; }
+    @media (prefers-reduced-motion: reduce) { .slide > * { animation: none; } }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 30px;
+    }
+    .slide h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(56px, 8.5vw, 124px);
+      line-height: 1.0;
+      letter-spacing: -0.015em;
+      margin: 0 0 26px;
+      max-width: 16ch;
+      text-wrap: balance;
+    }
+    .slide h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(36px, 4.4vw, 58px);
+      line-height: 1.08;
+      letter-spacing: -0.01em;
+      margin: 0 0 24px;
+      max-width: 22ch;
+      text-wrap: balance;
+    }
+    .slide .body { font-size: 20px; line-height: 1.6; color: var(--muted); max-width: 56ch; }
+
+    /* cover stays on paper; a thick accent rule is its signature */
+    .slide.cover::before {
+      content: '';
+      position: absolute;
+      top: 88px;
+      left: 104px;
+      width: 72px;
+      height: 6px;
+      background: var(--accent);
+    }
+    .slide.cover h1 { font-size: clamp(64px, 10vw, 148px); }
+
+    /* single deliberate inversion: the closing CTA slide */
     .slide.title { background: var(--fg); color: var(--bg); }
-    .eyebrow { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 28px; }
-    .slide h1 { font-size: clamp(48px, 7vw, 96px); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 20px; max-width: 16ch; }
-    .slide h2 { font-size: clamp(32px, 4vw, 48px); letter-spacing: -0.015em; margin: 0 0 20px; max-width: 20ch; }
-    .slide .body { font-size: 22px; color: var(--muted); max-width: 56ch; }
-    .slide.title .body { color: rgba(250,250,249,0.7); }
-    .slide.big-stat .number { font-size: clamp(120px, 22vw, 280px); line-height: 0.9; letter-spacing: -0.04em; color: var(--accent); margin-bottom: 16px; font-weight: 600; }
-    .slide.big-stat .caption { font-size: 24px; color: var(--muted); max-width: 24ch; }
-    .quote-mark { font-family: Georgia, serif; font-size: 200px; line-height: 0.7; color: var(--accent); opacity: 0.18; margin-bottom: -40px; }
-    .quote-text { font-family: Georgia, serif; font-size: 36px; line-height: 1.3; max-width: 26ch; margin: 0 0 28px; }
-    .quote-author { font-size: 14px; color: var(--muted); }
-    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 40px; }
-    .grid-3 .pt { border-top: 2px solid var(--accent); padding-top: 16px; }
-    .grid-3 .pt .h { font-size: 18px; font-weight: 500; margin: 0 0 8px; }
-    .grid-3 .pt .p { color: var(--muted); margin: 0; font-size: 16px; }
-    .counter { position: fixed; bottom: 24px; right: 32px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); background: var(--surface); padding: 4px 10px; border-radius: 999px; border: 1px solid #e6e4e0; }
-    .hint { position: fixed; bottom: 24px; left: 32px; font-size: 11px; color: var(--muted); }
+    .slide.title .eyebrow { color: var(--accent-bright); }
+    .slide.title .body { color: rgba(250, 247, 242, 0.72); }
+    /* the closing line is a full sentence, not a wordmark: step the scale down so it can't clip at 720p */
+    .slide.title h1 { font-size: clamp(46px, 6.8vw, 100px); max-width: 18ch; }
+
+    .slide.big-stat .number {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(140px, 24vw, 300px);
+      line-height: 0.85;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+    .slide.big-stat .caption {
+      font-size: 22px;
+      color: var(--muted);
+      max-width: 26ch;
+      border-top: 1px solid var(--line-strong);
+      padding-top: 18px;
+    }
+
+    .quote-mark {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 96px;
+      line-height: 0.6;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+    .quote-text {
+      font-family: var(--serif);
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(30px, 3.6vw, 46px);
+      line-height: 1.25;
+      letter-spacing: -0.005em;
+      max-width: 26ch;
+      margin: 0 0 34px;
+    }
+    .quote-author { font-family: var(--mono); font-size: 13px; letter-spacing: 0.03em; color: var(--faint); }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 48px; }
+    .grid-3 .pt { border-top: 1px solid var(--line-strong); padding-top: 18px; }
+    .grid-3 .pt .h { font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; margin: 0 0 10px; }
+    .grid-3 .pt .p { color: var(--muted); margin: 0; font-size: 15.5px; line-height: 1.55; }
+
+    .counter {
+      position: fixed;
+      bottom: 26px;
+      right: 32px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      letter-spacing: 0.05em;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      background: var(--surface);
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+    }
+    /* chip ground matches .counter so the hint stays legible on the inverted CTA slide */
+    .hint {
+      position: fixed;
+      bottom: 26px;
+      left: 32px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      background: var(--surface);
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+    }
+
+    @media print { .slide { page-break-after: always; border-left: none; } }
   </style>
 </head>
 <body>
-  <section class="slide title" data-od-id="slide-1">
-    <div class="eyebrow" style="color:#c96442;">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
+  <section class="slide cover" data-od-id="slide-1">
+    <div class="eyebrow">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
     <h1>Open Design</h1>
     <p class="body">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — on your own machine.</p>
   </section>
@@ -80,7 +208,7 @@
     <p class="quote-author">— Engineering manager</p>
   </section>
   <section class="slide title" data-od-id="slide-6">
-    <div class="eyebrow" style="color:#c96442;">Open · Local · Agent-native</div>
+    <div class="eyebrow">Open · Local · Agent-native</div>
     <h1>Frontier AI design, back on every creator's desk.</h1>
     <p class="body">Download Open Design (macOS / Windows) · Star on GitHub — github.com/nexu-io/open-design</p>
   </section>

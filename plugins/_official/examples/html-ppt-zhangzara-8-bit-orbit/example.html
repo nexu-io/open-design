@@ -6,7 +6,7 @@
   <title>Open Design | 8-Bit Orbit Pixel Deck</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&family=Tektur:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,500;1,500&family=Space+Mono:wght@400;700&family=Tektur:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     :root {
       --neon-pink: #F0A6CA;
@@ -15,8 +15,7 @@
       --deep-navy: #0F1B3D;
       --dark-void: #0A0E27;
       --soft-lavender: #E2D5F2;
-      --pixel-size: 4px;
-      --font-display: 'Tektur', cursive;
+      --font-display: 'Tektur', sans-serif;
       --font-body: 'Chakra Petch', sans-serif;
       --font-mono: 'Space Mono', monospace;
     }
@@ -299,6 +298,10 @@
     .pixel-corners.pink-corners::before,
     .pixel-corners.pink-corners::after { border-color: var(--neon-pink); }
 
+    /* on the cyan slide the default cyan brackets vanish into the background */
+    .bg-grid-cyan .pixel-corners::before,
+    .bg-grid-cyan .pixel-corners::after { border-color: var(--deep-navy); }
+
     /* Section labels */
     .pixel-label {
       font-family: var(--font-mono);
@@ -343,6 +346,7 @@
     }
 
     /* === NAVIGATION === */
+    /* dark HUD backdrop so cyan dots stay legible on the cyan/lavender slides too */
     .nav-dots {
       position: fixed;
       right: 24px;
@@ -352,6 +356,8 @@
       flex-direction: column;
       gap: 12px;
       z-index: 100;
+      background: rgba(10, 14, 39, 0.8);
+      padding: 12px 8px;
     }
 
     .nav-dot {
@@ -361,7 +367,7 @@
       background: transparent;
       cursor: pointer;
       position: relative;
-      transition: all 0.3s;
+      transition: border-color 0.3s;
     }
 
     .nav-dot::after {
@@ -375,6 +381,7 @@
 
     .nav-dot.active::after { opacity: 1; }
     .nav-dot:hover { border-color: var(--neon-yellow); }
+    .nav-dot:hover::after { background: var(--neon-yellow); }
 
     .slide-counter {
       position: fixed;
@@ -410,7 +417,7 @@
     .hero-tagline {
       font-family: var(--font-body);
       font-size: clamp(0.9rem, 1.5vw, 1.2rem);
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.88);
       max-width: 500px;
       text-align: center;
       margin-top: 2rem;
@@ -520,13 +527,13 @@
       .feature-grid { grid-template-columns: 1fr; }
     }
 
+    /* flat game-dialog panel; no glass blur in a pixel deck */
     .feature-card {
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(8px);
+      background: #ECF3F8;
       padding: 32px 24px;
       text-align: center;
       position: relative;
-      border: 2px solid rgba(15, 27, 61, 0.2);
+      border: 2px solid rgba(15, 27, 61, 0.6);
     }
 
     .feature-card::before {
@@ -589,7 +596,7 @@
 
     .feature-icon.circle {
       border: 6px solid var(--neon-yellow);
-      border-radius: 0; /* pixel circle = square with careful shading? actually keep square for pixel aesthetic */
+      border-radius: 0; /* square ring reads as a pixel circle */
       background: transparent;
       position: relative;
     }
@@ -609,7 +616,7 @@
 
     .feature-card p {
       font-size: 0.85rem;
-      color: rgba(15, 27, 61, 0.75);
+      color: rgba(15, 27, 61, 0.82);
       line-height: 1.6;
     }
 
@@ -685,7 +692,7 @@
     .chart-bar-label {
       font-family: var(--font-mono);
       font-size: 0.7rem;
-      color: rgba(255,255,255,0.8);
+      color: rgba(255,255,255,0.88);
       text-align: center;
       letter-spacing: 0.05em;
     }
@@ -810,7 +817,7 @@
 
     .timeline-text p {
       font-size: 0.85rem;
-      color: rgba(15, 27, 61, 0.7);
+      color: rgba(15, 27, 61, 0.8);
       line-height: 1.5;
     }
 
@@ -855,7 +862,7 @@
       text-align: center;
       padding: 32px 16px;
       background: rgba(94, 220, 244, 0.08);
-      border: 2px solid rgba(94, 220, 244, 0.2);
+      border: 2px solid rgba(94, 220, 244, 0.38);
       position: relative;
     }
 
@@ -934,7 +941,7 @@
       margin-top: 2rem;
       font-family: var(--font-mono);
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.7);
+      color: rgba(15, 27, 61, 0.88);
       letter-spacing: 0.1em;
     }
 
@@ -960,21 +967,23 @@
     }
 
     .tier-card {
-      background: white;
+      background: #F2F4FB;
       padding: 36px 28px;
       position: relative;
       text-align: center;
     }
 
+    /* emphasis carried by the inverted panel + hard yellow shadow; no floating pop-out */
     .tier-card.featured {
       background: var(--deep-navy);
       color: white;
-      transform: translateY(-12px);
       box-shadow: 8px 8px 0 var(--neon-yellow);
     }
 
+    /* hard pixel shadow, no soft transparency */
     .tier-card:not(.featured) {
-      box-shadow: 6px 6px 0 rgba(15, 27, 61, 0.15);
+      box-shadow: 6px 6px 0 var(--deep-navy);
+      border: 2px solid var(--deep-navy);
     }
 
     .tier-name {
@@ -983,29 +992,32 @@
       margin-bottom: 8px;
     }
 
+    /* navy on light card; cyan only survives on the dark featured card */
     .tier-price {
       font-family: var(--font-mono);
       font-size: 2rem;
       font-weight: 700;
-      color: var(--neon-cyan);
+      color: var(--deep-navy);
       margin-bottom: 4px;
     }
 
+    .tier-card.featured .tier-price { color: var(--neon-cyan); }
+
     .tier-price span {
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.5);
+      color: rgba(15, 27, 61, 0.75);
     }
 
-    .tier-card.featured .tier-price span { color: rgba(255,255,255,0.5); }
+    .tier-card.featured .tier-price span { color: rgba(255,255,255,0.65); }
 
     .tier-desc {
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.6);
+      color: rgba(15, 27, 61, 0.78);
       margin-bottom: 20px;
       line-height: 1.5;
     }
 
-    .tier-card.featured .tier-desc { color: rgba(255,255,255,0.6); }
+    .tier-card.featured .tier-desc { color: rgba(255,255,255,0.82); }
 
     .tier-features {
       list-style: none;
@@ -1016,7 +1028,7 @@
     .tier-features li {
       font-size: 0.8rem;
       padding: 6px 0;
-      border-bottom: 1px dashed rgba(15, 27, 61, 0.15);
+      border-bottom: 1px dashed rgba(15, 27, 61, 0.28);
       position: relative;
       padding-left: 20px;
     }
@@ -1026,9 +1038,11 @@
       position: absolute;
       left: 0;
       font-family: var(--font-mono);
-      color: var(--neon-cyan);
+      color: var(--deep-navy);
       font-weight: 700;
     }
+
+    .tier-card.featured .tier-features li::before { color: var(--neon-cyan); }
 
     .tier-card.featured .tier-features li { border-color: rgba(255,255,255,0.1); }
 
@@ -1046,7 +1060,7 @@
     }
 
     .cta-content p {
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.88);
       margin-bottom: 2.5rem;
       font-size: 1.1rem;
     }
@@ -1081,6 +1095,7 @@
     }
 
     /* Arrow hints */
+    /* pill background keeps the hint legible over light and dark slides alike */
     .nav-hint {
       position: fixed;
       bottom: 24px;
@@ -1088,7 +1103,8 @@
       font-family: var(--font-mono);
       font-size: 0.65rem;
       color: var(--neon-cyan);
-      opacity: 0.5;
+      background: rgba(10, 14, 39, 0.8);
+      padding: 6px 12px;
       z-index: 100;
       letter-spacing: 0.1em;
     }
@@ -1147,10 +1163,10 @@
           <div style="max-width: 460px;">
             <span class="pixel-label">Mission Brief</span>
             <h2 style="color: var(--deep-navy); margin-bottom: 1.2rem; font-size: clamp(1.6rem, 3vw, 2.4rem);">Frontier Design, Set Free</h2>
-            <p style="color: rgba(15,27,61,0.75); margin-bottom: 1rem;">
+            <p style="color: rgba(15,27,61,0.85); margin-bottom: 1rem;">
               In April 2026, Claude Design proved for the first time that an LLM can truly design — not write about design, but produce real design artifacts.
             </p>
-            <p style="color: rgba(15,27,61,0.75);">
+            <p style="color: rgba(15,27,61,0.85);">
               Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK. Open Design sets that capability free — back on every creator's desk.
             </p>
           </div>
@@ -1238,7 +1254,7 @@
           <div class="pixel-chart-title" style="margin-bottom: 2.5rem;">
             <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-yellow);">Plugin Ecosystem</span>
             <h2 style="color: var(--deep-navy);">217+ Plugins by Type</h2>
-            <p class="subtitle" style="color: rgba(15,27,61,0.6);">Relative share per artifact type &mdash; demo data</p>
+            <p class="subtitle" style="color: rgba(15,27,61,0.82);">Relative share per artifact type &mdash; demo data</p>
           </div>
           <div class="pixel-hbar-chart" id="hbarChart">
             <div class="hbar-row">
@@ -1347,7 +1363,7 @@
         <div style="text-align: center; margin-bottom: 2.5rem;">
           <span class="pixel-label">Open Source</span>
           <h2 style="color: var(--neon-cyan);">Open Design in Numbers</h2>
-          <p style="color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-top: 0.5rem;">A community-built platform, open source under Apache-2.0</p>
+          <p style="color: rgba(255,255,255,0.85); font-size: 0.9rem; margin-top: 0.5rem;">A community-built platform, open source under Apache-2.0</p>
         </div>
         <div class="stats-grid" id="statsGrid">
           <div class="stat-block">

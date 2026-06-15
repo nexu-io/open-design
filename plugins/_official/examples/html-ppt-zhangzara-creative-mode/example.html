@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <script src="assets/deck-stage.js"></script>
 <style>
   :root{
@@ -16,13 +16,13 @@
     --green-dark:#136636;
     --pink:#F06CA8;
     --pink-dark:#D14E8B;
-    --orange:#E85A1F;
+    --orange:#D9531A; /* burnt orange, darkened so cream text on it clears AA-large */
     --yellow:#F5C518;
     --ink:#0F0F0F;
     --ink-2:#2A2A2A;
-    --rule:#0F0F0F;
   }
-  html, body { margin:0; padding:0; background:#000; }
+  /* warm near-black letterbox, not pure #000 (stays in the cream/ink family) */
+  html, body { margin:0; padding:0; background:#171511; }
   body { font-family:"Space Grotesk", system-ui, sans-serif; color:var(--ink); }
 
   deck-stage > section{
@@ -34,6 +34,21 @@
     box-sizing:border-box;
   }
 
+  /* entrance: stagger rise on slide activation (deck-stage toggles data-deck-active).
+     Uses the `translate` property, not `transform`, so rotated/centered elements keep
+     their own transforms. Restarts each time a slide becomes active. */
+  @media (prefers-reduced-motion: no-preference){
+    @keyframes deck-rise{ from{ opacity:0; translate:0 22px; } to{ opacity:1; translate:0 0; } }
+    deck-stage > section[data-deck-active] > *{
+      animation: deck-rise .55s cubic-bezier(.16,1,.3,1) both;
+    }
+    deck-stage > section[data-deck-active] > *:nth-child(2){ animation-delay:.06s; }
+    deck-stage > section[data-deck-active] > *:nth-child(3){ animation-delay:.12s; }
+    deck-stage > section[data-deck-active] > *:nth-child(4){ animation-delay:.18s; }
+    deck-stage > section[data-deck-active] > *:nth-child(5){ animation-delay:.24s; }
+    deck-stage > section[data-deck-active] > *:nth-child(n+6){ animation-delay:.3s; }
+  }
+
   /* shared */
   .display { font-family:"Archivo Black", sans-serif; letter-spacing:-.01em; line-height:.92; text-transform:uppercase; }
   .mono { font-family:"JetBrains Mono", monospace; }
@@ -42,15 +57,15 @@
   .slide-meta{
     position:absolute; left:64px; right:64px; bottom:40px;
     display:flex; justify-content:space-between; align-items:center;
-    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.06em; text-transform:uppercase;
+    font-family:"JetBrains Mono", monospace; font-size:20px; letter-spacing:.08em; text-transform:uppercase;
     color:var(--ink);
   }
-  .slide-meta .dot{ width:10px; height:10px; background:var(--ink); border-radius:50%; display:inline-block; margin:0 14px; transform:translateY(-2px); }
+  .slide-meta .dot{ width:8px; height:8px; background:var(--ink); border-radius:50%; display:inline-block; margin:0 14px; transform:translateY(-2px); }
 
   .topbar{
     position:absolute; left:64px; right:64px; top:48px;
     display:flex; justify-content:space-between; align-items:center;
-    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.08em; text-transform:uppercase;
+    font-family:"JetBrains Mono", monospace; font-size:20px; letter-spacing:.1em; text-transform:uppercase;
   }
   .topbar .pill{
     border:2px solid var(--ink); padding:6px 14px; border-radius:999px;
@@ -83,16 +98,9 @@
     content:""; position:absolute; left:0; right:0; bottom:-30px; height:30px;
     background:var(--pink-dark); border:4px solid var(--ink); border-top:0;
   }
-  .s1 .poster .switch .label-on{
-    position:absolute; top:78px; right:60px; font-family:"Archivo Black"; font-size:32px; color:var(--ink);
-  }
-  .s1 .poster .switch .label-off{
-    position:absolute; bottom:48px; left:0; right:0; text-align:center;
-    font-family:"Archivo Black"; font-size:32px; color:var(--ink);
-  }
   .s1 .tagline{
     position:absolute; left:96px; top:160px;
-    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.16em; text-transform:uppercase;
+    font-family:"JetBrains Mono", monospace; font-size:20px; letter-spacing:.18em; text-transform:uppercase;
     color:var(--ink);
   }
   .s1 .tagline span{ display:inline-block; width:60px; height:3px; background:var(--ink); vertical-align:middle; margin-right:18px; transform:translateY(-3px);}
@@ -121,7 +129,7 @@
     position:absolute; left:96px; bottom:160px;
     width:560px; height:120px; background:var(--pink); border:4px solid var(--ink);
     display:flex; align-items:center; justify-content:center;
-    font-family:"Archivo Black"; font-size:46px;
+    font-family:"Archivo Black", sans-serif; font-size:46px;
   }
   .s2 .marker:after{
     content:""; position:absolute; right:-24px; bottom:-24px; width:100%; height:100%;
@@ -139,11 +147,11 @@
 
   /* --- SLIDE 3: STAT GRID 2x2 --- */
   .s3 .h{
-    position:absolute; left:96px; top:130px; right:96px;
-    font-size:72px; line-height:.95; color:var(--ink);
+    position:absolute; left:96px; top:120px; right:96px;
+    font-size:84px; line-height:.95; color:var(--ink); /* matches the full-width heading scale on s5/s7 */
   }
   .s3 .grid{
-    position:absolute; left:96px; right:96px; top:380px;
+    position:absolute; left:96px; right:96px; top:330px;
     display:grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
     gap:28px; bottom:110px;
   }
@@ -152,16 +160,16 @@
     display:flex; flex-direction:column; justify-content:space-between;
   }
   .s3 .cell .num-wrap{ padding-top:32px; }
-  .s3 .cell .num{ font-family:"Archivo Black"; font-size:96px; line-height:.9; }
+  .s3 .cell .num{ font-family:"Archivo Black", sans-serif; font-size:96px; line-height:.9; }
   .s3 .cell .lbl{ font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.12em; text-transform:uppercase; }
   .s3 .cell .desc{ font-size:24px; line-height:1.3; max-width:520px; color:var(--ink-2); margin-top:6px;}
   .s3 .c1{ background:var(--green); color:var(--cream); }
   .s3 .c1 .desc{ color:var(--cream); }
   .s3 .c2{ background:var(--pink); }
-  .s3 .c3{ background:var(--cream); }
+  .s3 .c3{ background:var(--cream-2); } /* cream-2 so the cell separates from the page background */
   .s3 .c4{ background:var(--orange); color:var(--cream);}
   .s3 .c4 .desc{ color:var(--cream); }
-  .s3 .cell .corner{ position:absolute; top:24px; right:28px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; }
+  .s3 .cell .corner{ position:absolute; top:24px; right:28px; font-family:"JetBrains Mono", monospace; font-size:20px; letter-spacing:.12em; }
 
   /* --- SLIDE 4: ISOMETRIC DIAGRAM --- */
   .s4 .h{
@@ -174,7 +182,7 @@
   .s4 .legend{
     position:absolute; left:96px; bottom:140px; display:flex; flex-direction:column; gap:18px;
   }
-  .s4 .legend .row{ display:flex; align-items:center; gap:16px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.06em; text-transform:uppercase; }
+  .s4 .legend .row{ display:flex; align-items:center; gap:16px; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.06em; text-transform:uppercase; }
   .s4 .legend .sw{ width:28px; height:28px; border:3px solid var(--ink); }
   .s4 .iso{
     position:absolute; right:80px; top:120px; width:920px; height:840px;
@@ -189,8 +197,8 @@
   .s4 .b1{ background:var(--pink); top:60px; left:130px; }
   .s4 .b2{ background:var(--yellow); top:200px; left:60px; width:380px; }
   .s4 .b3{ background:var(--orange); top:340px; left:160px; }
-  .s4 .b4{ background:var(--cream); top:460px; left:80px; width:340px; }
-  .s4 .blk .tag{ position:absolute; left:14px; top:10px; font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; text-transform:uppercase;}
+  .s4 .b4{ background:var(--cream-2); top:460px; left:80px; width:340px; } /* matches the Memory legend swatch */
+  .s4 .blk .tag{ position:absolute; left:14px; top:10px; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.1em; text-transform:uppercase;}
 
   /* --- SLIDE 5: BAR CHART --- */
   .s5 .h{
@@ -200,7 +208,7 @@
     position:absolute; left:96px; top:380px; width:64px; height:520px;
     border-right:3px solid var(--ink);
     display:flex; flex-direction:column-reverse; justify-content:space-between;
-    font-family:"JetBrains Mono"; font-size:24px;
+    font-family:"JetBrains Mono", monospace; font-size:24px;
   }
   .s5 .axis-y span{ transform:translate(-12px, 6px); text-align:right; width:60px; }
   .s5 .chart{
@@ -214,21 +222,21 @@
   }
   .s5 .bar .v{
     position:absolute; left:0; right:0; top:-44px; text-align:center;
-    font-family:"Archivo Black"; font-size:30px;
+    font-family:"Archivo Black", sans-serif; font-size:30px;
   }
   .s5 .bar .x{
     position:absolute; left:0; right:0; bottom:-50px; text-align:center;
-    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.1em; text-transform:uppercase;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.1em; text-transform:uppercase;
   }
   .s5 .legend2{
     position:absolute; right:96px; top:130px; display:flex; flex-direction:column; gap:14px;
-    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.08em; text-transform:uppercase;
+    font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.08em; text-transform:uppercase;
   }
   .s5 .legend2 .row{ display:flex; align-items:center; gap:10px; }
   .s5 .legend2 .sw{ width:22px; height:22px; border:3px solid var(--ink); }
   .s5 .note{
     position:absolute; left:160px; right:600px; bottom:90px;
-    font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.06em; color:var(--ink-2);
+    font-family:"JetBrains Mono", monospace; font-size:20px; letter-spacing:.08em; color:var(--ink-2);
   }
 
   /* --- SLIDE 6: PROCESS / FLOW --- */
@@ -240,11 +248,11 @@
     display:grid; grid-template-columns: repeat(4, 1fr); gap:28px;
   }
   .s6 .step{
-    border:4px solid var(--ink); padding:28px; height:420px; position:relative;
+    border:4px solid var(--ink); padding:28px; height:500px; position:relative;
     display:flex; flex-direction:column;
   }
-  .s6 .step .n{ font-family:"Archivo Black"; font-size:140px; line-height:.85; }
-  .s6 .step .t{ font-family:"Archivo Black"; font-size:34px; margin-top:16px; line-height:1; text-transform:uppercase; }
+  .s6 .step .n{ font-family:"Archivo Black", sans-serif; font-size:140px; line-height:.85; }
+  .s6 .step .t{ font-family:"Archivo Black", sans-serif; font-size:34px; margin-top:16px; line-height:1; text-transform:uppercase; }
   .s6 .step .d{ font-size:24px; line-height:1.4; margin-top:14px; color:var(--ink-2); }
   .s6 .step .arrow{
     position:absolute; right:-22px; top:50%; transform:translateY(-50%);
@@ -284,17 +292,17 @@
   .s7 .table .row > div:last-child{ border-right:0; }
   .s7 .table .head{ background:var(--ink); color:var(--cream); }
   .s7 .table .head > div{
-    font-family:"Archivo Black"; font-size:28px; text-transform:uppercase;
+    font-family:"Archivo Black", sans-serif; font-size:28px; text-transform:uppercase;
     border-right:3px solid var(--cream);
   }
-  .s7 .table .row .label{ font-family:"Archivo Black"; font-size:28px; text-transform:uppercase; background:var(--cream);}
+  .s7 .table .row .label{ font-family:"Archivo Black", sans-serif; font-size:28px; text-transform:uppercase; background:var(--cream);}
   .s7 .table .row .col-pink{ background:var(--pink); }
   .s7 .table .row .col-green{ background:var(--green); color:var(--cream); }
   .s7 .table .row .col-orange{ background:var(--orange); color:var(--cream); }
   .s7 .badge{
     position:absolute; right:120px; top:240px;
     background:var(--yellow); border:4px solid var(--ink);
-    padding:14px 22px; font-family:"Archivo Black"; font-size:28px; text-transform:uppercase;
+    padding:14px 22px; font-family:"Archivo Black", sans-serif; font-size:28px; text-transform:uppercase;
     transform:rotate(-4deg);
   }
 
@@ -323,8 +331,8 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     text-align:center; padding:20px; box-sizing:border-box;
   }
-  .s8 .stamp .num{ font-family:"Archivo Black"; font-size:64px; line-height:.9; margin-bottom:10px; }
-  .s8 .stamp .lbl{ font-family:"JetBrains Mono"; font-size:24px; letter-spacing:.12em; text-transform:uppercase; margin-top:6px;}
+  .s8 .stamp .num{ font-family:"Archivo Black", sans-serif; font-size:64px; line-height:.9; margin-bottom:10px; }
+  .s8 .stamp .lbl{ font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:.12em; text-transform:uppercase; margin-top:6px;}
 
 </style>
 </head>
@@ -350,10 +358,6 @@
     <div class="poster" aria-hidden="true">
       <div class="switch">
         <div class="lever"></div>
-        <div class="label-on">
-</div>
-        <div class="label-off">
-</div>
       </div>
     </div>
 
@@ -495,12 +499,12 @@ ONE STORY.</h1>
 
     <div class="chart">
       <div class="bar" style="height:7%; background:var(--green);"><span class="v">4</span><span class="x">M1</span></div>
-      <div class="bar" style="height:15%; background:var(--pink);"><span class="v">9</span><span class="x">M2</span></div>
-      <div class="bar" style="height:28%; background:var(--orange);"><span class="v">17</span><span class="x">M3</span></div>
+      <div class="bar" style="height:15%; background:var(--green);"><span class="v">9</span><span class="x">M2</span></div>
+      <div class="bar" style="height:28%; background:var(--green);"><span class="v">17</span><span class="x">M3</span></div>
       <div class="bar" style="height:43%; background:var(--green);"><span class="v">26</span><span class="x">M4</span></div>
-      <div class="bar" style="height:63%; background:var(--pink);"><span class="v">38</span><span class="x">M5</span></div>
-      <div class="bar" style="height:82%; background:var(--orange);"><span class="v">49</span><span class="x">M6</span></div>
-      <div class="bar" style="height:100%; background:var(--green);"><span class="v">60</span><span class="x">M7</span></div>
+      <div class="bar" style="height:63%; background:var(--green);"><span class="v">38</span><span class="x">M5</span></div>
+      <div class="bar" style="height:82%; background:var(--green);"><span class="v">49</span><span class="x">M6</span></div>
+      <div class="bar" style="height:100%; background:var(--pink);"><span class="v">60</span><span class="x">M7</span></div>
     </div>
 
     <div class="note mono">FIG. 01 — ILLUSTRATIVE TRAJECTORY TO 60K+ STARS. DEMO DATA / GITHUB.</div>

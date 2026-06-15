@@ -6,18 +6,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;1,400&family=Hanken+Grotesk:wght@400;600&family=DM+Mono&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper:    #F0EBDE;   /* warm cream / ivory paper canvas */
-    --paper-2:  #E6E0CE;
     --ink:      #1F2BE0;   /* electric cobalt / royal blue */
-    --ink-soft: #5560E5;   /* lighter cobalt for secondary marks */
+    --ink-dim:  #4951E0;   /* secondary text: 80% ink over paper, pre-mixed solid
+                              so glyphs stay crisp over the grid lines (AA on cream) */
     --grid:     rgba(31, 43, 224, 0.10);  /* very faint blue grid */
-    --rule:     #1F2BE0;
+    --cell-off: rgba(31, 43, 224, 0.07);  /* unfilled chart cells, quieter than grid */
+    --rule-dim: rgba(31, 43, 224, 0.18);  /* secondary hairline rules */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  /* Kill default heading/paragraph margins inside slides so the layout
+     rhythm comes from the declared gaps, not from UA defaults. Local
+     margins (e.g. .s-index .row h3) re-declare what they need. */
+  .slide h1, .slide h2, .slide h3, .slide p { margin: 0; }
   body {
     font-family: 'Hanken Grotesk', 'Helvetica Neue', sans-serif;
     color: var(--ink);
@@ -48,37 +53,42 @@
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 280ms cubic-bezier(.16,1,.3,1);
     z-index: 2;
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
-  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
-  .disp {
-    font-family: 'Newsreader', Georgia, serif;
-    font-style: italic;
-    font-weight: 400;
-    line-height: 0.92;
-    letter-spacing: -0.005em;
-    color: var(--ink);
+  /* Entrance motion: transform + opacity only, ease-out, staggered.
+     Centered blocks (stmt-wrap / qframe) keep their translateY(-50%) by
+     animating to that resting transform instead of to none. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-  .body-tx {
-    font-family: 'Hanken Grotesk', sans-serif;
-    font-weight: 400;
-    line-height: 1.5;
-    color: var(--ink);
+  @keyframes rise-centered {
+    from { opacity: 0; transform: translateY(calc(-50% + 16px)); }
+    to   { opacity: 1; transform: translateY(-50%); }
   }
-  .micro {
-    font-family: 'Hanken Grotesk', sans-serif;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: var(--ink);
+  .slide.active .titlewrap,
+  .slide.active .frame {
+    animation: rise 600ms cubic-bezier(.16,1,.3,1) both;
   }
-  .mono {
-    font-family: 'DM Mono', ui-monospace, monospace;
-    font-weight: 400;
-    color: var(--ink);
+  .slide.active .cfooter,
+  .slide.active .col-footer {
+    animation: rise 600ms cubic-bezier(.16,1,.3,1) 90ms both;
+  }
+  .slide.active .stmt-wrap,
+  .slide.active .qframe {
+    animation: rise-centered 600ms cubic-bezier(.16,1,.3,1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active .titlewrap,
+    .slide.active .frame,
+    .slide.active .cfooter,
+    .slide.active .col-footer,
+    .slide.active .stmt-wrap,
+    .slide.active .qframe { animation: none; }
   }
 
   /* Single page-number marker, shared across slides.
@@ -123,7 +133,7 @@
     font-size: clamp(10px, 0.75vw, 12px);
     color: var(--ink);
     letter-spacing: 0.08em;
-    opacity: 0.4;
+    opacity: 0.55;
     z-index: 12;
     pointer-events: none;
   }
@@ -242,10 +252,11 @@
   /* Footer row */
   .s-cover .cfooter {
     /* Constrained to the left half so it never runs under the right-side
-       pixel-glitch column on any viewport. */
+       pixel-glitch column on any viewport, but wide enough that each
+       column sets on a single line instead of ragged two-line wraps. */
     position: absolute;
     left: clamp(36px, 3.6vw, 80px);
-    right: clamp(680px, 40vw, 880px);
+    right: clamp(420px, 38vw, 760px);
     bottom: clamp(82px, 8vh, 120px);
     display: flex; justify-content: flex-start; align-items: end;
     z-index: 5;
@@ -255,7 +266,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.92vw, 15px);
     line-height: 1.45;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
   .s-cover .cfooter .colf .ftag {
     font-family: 'Hanken Grotesk', sans-serif;
@@ -308,9 +319,8 @@
   .s-manifesto .attr .meta-tag {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(12px, 0.82vw, 14px);
-    color: var(--ink);
+    color: var(--ink-dim);
     letter-spacing: 0.04em;
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -351,12 +361,13 @@
     grid-template-rows: 1fr 1fr 1fr;
     gap: clamp(14px, 2vh, 28px) clamp(28px, 3vw, 56px);
   }
-  .s-index .row { align-self: stretch; }
   .s-index .row {
+    align-self: stretch;
     display: grid;
     grid-template-columns: 56px 1fr;
+    align-content: start;
     gap: clamp(12px, 1.4vw, 22px);
-    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+    border-bottom: 1px solid var(--rule-dim);
     padding-bottom: clamp(12px, 1.4vh, 20px);
   }
   .s-index .row .num-tag {
@@ -380,8 +391,8 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.5;
-    color: var(--ink);
-    max-width: 92%;
+    color: var(--ink-dim);
+    max-width: 52ch;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -426,7 +437,7 @@
     font-weight: 400;
     font-size: clamp(15px, 1vw, 18px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
     max-width: 56ch;
   }
 
@@ -492,7 +503,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(15px, 1vw, 17px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
     max-width: 30ch;
     margin-top: 6px;
   }
@@ -519,7 +530,7 @@
   .s-data .chart .stack .cell {
     flex: 1 1 0;
     min-height: 6px;
-    background: rgba(31, 43, 224, 0.10);
+    background: var(--cell-off);
   }
   .s-data .chart .stack .cell.on { background: var(--ink); }
   .s-data .chart .ticks {
@@ -594,9 +605,8 @@
   .s-quote .qattr .role-meta {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(12px, 0.85vw, 14px);
-    color: var(--ink);
+    color: var(--ink-dim);
     letter-spacing: 0.04em;
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -646,7 +656,7 @@
     padding: 0;
     flex: 1 1 0;
     min-height: clamp(46px, 6vh, 80px);
-    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+    border-bottom: 1px solid var(--rule-dim);
   }
   .s-table .row.headrow {
     border-bottom: 1.5px solid var(--ink);
@@ -660,6 +670,8 @@
     font-size: clamp(11px, 0.75vw, 12px);
     color: var(--ink);
   }
+  /* Last column header sits flush with its right-aligned values below */
+  .s-table .row.headrow > div:last-child { text-align: right; }
   .s-table .num-tag {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(13px, 0.95vw, 15px);
@@ -677,7 +689,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.4;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
   .s-table .mood-tag {
     font-family: 'Hanken Grotesk', sans-serif;
@@ -694,7 +706,7 @@
   }
   .s-table .delta-tag.up::before  { content: '↑ '; }
   .s-table .delta-tag.down::before { content: '↓ '; opacity: 0.6; }
-  .s-table .delta-tag.flat::before { content: '— '; opacity: 0.6; }
+  .s-table .delta-tag.flat::before { content: '· '; opacity: 0.6; }
 
   /* ──────────────────────────────────────────────────────────────
      SLIDE 8 — COLOPHON / CLOSING
@@ -766,21 +778,11 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
 </style>
 </head>
 <body>
-
-<!-- Reusable SVG that draws the staircase of vertical-scanline blocks.
-     Used on cover, chapter divider, quote, and colophon. -->
-<svg style="display:none" aria-hidden="true">
-  <defs>
-    <pattern id="vstripes" width="3" height="100" patternUnits="userSpaceOnUse">
-      <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.2" />
-    </pattern>
-  </defs>
-</svg>
 
 <div class="deck">
   <div class="stage">

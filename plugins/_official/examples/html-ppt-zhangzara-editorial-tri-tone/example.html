@@ -6,20 +6,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="assets/deck-stage.js"></script>
 <style>
   :root{
+    /* tri-tone system: dusty pink / mustard cream / deep burgundy.
+       Legacy alias names are kept because markup references them;
+       they all resolve to one of the three tones. */
     --pink:#F2B6C6;
     --pink-deep:#F2B6C6;
+    --sky:#F2B6C6;
     --cream:#F2D86A;
+    --lime:#F2D86A;
+    --terracotta:#F2D86A;
+    --butter:#F2D86A;
     --navy:#7A1F35;
     --forest:#7A1F35;
     --burgundy:#7A1F35;
-    --lime:#F2D86A;
-    --sky:#F2B6C6;
-    --terracotta:#F2D86A;
-    --butter:#F2D86A;
     --ink:#7A1F35;
   }
   html, body { margin:0; padding:0; background:#7A1F35; }
@@ -53,24 +56,11 @@
     text-transform: uppercase;
   }
 
-  .footer {
-    position:absolute; left:64px; right:64px; bottom:36px;
-    display:flex; justify-content:space-between; align-items:center;
-    font-family:"JetBrains Mono", monospace;
-    font-size:16px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    opacity:0.75;
-  }
-  .footer .dotrow { display:flex; gap:8px; }
-  .footer .dotrow i { width:8px; height:8px; border-radius:999px; background: currentColor; opacity:0.3; display:inline-block; }
-  .footer .dotrow i.on { opacity:1; }
-
   /* ========== SLIDE 1: COVER ========== */
   .s-cover { background: var(--pink); color: var(--ink); }
   .s-cover .pill-cluster {
     position:absolute;
-    top:120px; left:64px; right:64px;
+    top:176px; left:64px; right:64px;
     display:flex; flex-wrap:wrap; gap: 22px;
     max-width: 1500px;
   }
@@ -78,9 +68,13 @@
   .s-cover .wordmark {
     position:absolute;
     left:64px; right:64px; bottom:80px;
+    padding-top: 40px;
+    border-top: 2px solid var(--burgundy);
     font-family:"Bricolage Grotesque", sans-serif;
     font-weight:800;
-    font-size: 300px;
+    /* masthead scale: 380px lets the wordmark eat the dead band between
+       the pill cluster and the rule, like a magazine nameplate should */
+    font-size: 380px;
     line-height: 0.82;
     letter-spacing:-0.04em;
     color: var(--burgundy);
@@ -94,6 +88,8 @@
     display:flex; justify-content:space-between;
     font-family:"JetBrains Mono", monospace;
     font-size:24px; letter-spacing:0.15em; text-transform:uppercase;
+    padding-bottom: 20px;
+    border-bottom: 2px solid var(--burgundy);
   }
 
   /* ========== SLIDE 2: MANIFESTO ========== */
@@ -110,14 +106,14 @@
     font-size: 240px; line-height:0.9;
     color: var(--burgundy);
   }
-  .s-manifesto .chapter sup { font-size: 0.35em; vertical-align: super; opacity:0.6; }
   .s-manifesto .lede {
     font-family:"Bricolage Grotesque", sans-serif;
     font-size: 56px; line-height:1.05;
     font-weight:500; letter-spacing:-0.02em;
     max-width: 720px;
   }
-  .s-manifesto .lede em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color:var(--terracotta); }
+  /* on the cream panel only burgundy reads; yellow-on-yellow was invisible */
+  .s-manifesto .lede em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color:var(--burgundy); }
   .s-manifesto .right h3 {
     font-family:"JetBrains Mono", monospace;
     font-size: 24px; letter-spacing:0.18em; text-transform:uppercase;
@@ -134,8 +130,10 @@
 
   /* ========== SLIDE 3: GRID OF VALUES ========== */
   .s-grid { background: var(--pink); padding: 72px 64px 80px; }
+  /* h2 keeps margin 0 so the flex-end header row truly baselines the
+     section label against the headline instead of its margin box */
   .s-grid h2 {
-    margin:0 0 32px; font-size: 76px; line-height:1;
+    margin:0; font-size: 76px; line-height:1;
     font-family:"Bricolage Grotesque", sans-serif; font-weight:700;
     letter-spacing:-0.02em; color: var(--burgundy);
     max-width: 1100px;
@@ -149,21 +147,24 @@
     border-radius: 28px;
     padding: 28px 28px 30px;
     height: 340px;
-    display:flex; flex-direction:column; justify-content:space-between;
+    display:flex; flex-direction:column; justify-content:flex-start;
     position:relative; overflow:hidden;
   }
   .s-grid .card .num {
     font-family:"JetBrains Mono", monospace;
     font-size: 24px; letter-spacing:0.15em;
-    opacity:0.7;
+    opacity:0.8;
   }
+  /* number anchors top-left; title + body sit together at the bottom edge,
+     so the breathing room pools once instead of splitting into two voids */
   .s-grid .card h4 {
-    font-size: 40px; line-height:1; margin: 0;
+    font-size: 40px; line-height:1; margin: auto 0 14px;
     font-weight:600; letter-spacing:-0.02em;
   }
   .s-grid .card p { font-size: 24px; line-height:1.4; margin:0; opacity:0.85; }
-  .s-grid .c1, .s-grid .c3, .s-grid .c5, .s-grid .c7 { background: var(--burgundy); color: var(--butter); }
-  .s-grid .c2, .s-grid .c4, .s-grid .c6, .s-grid .c8 { background: var(--butter); color: var(--burgundy); }
+  /* checkerboard alternation (row two offset) reads editorial; straight stripes read generated */
+  .s-grid .c1, .s-grid .c3, .s-grid .c6, .s-grid .c8 { background: var(--burgundy); color: var(--butter); }
+  .s-grid .c2, .s-grid .c4, .s-grid .c5, .s-grid .c7 { background: var(--butter); color: var(--burgundy); }
 
   /* ========== SLIDE 4: BIG STAT / EDITORIAL ========== */
   .s-stat { background: var(--burgundy); color: var(--cream); padding: 96px 64px; position:relative; }
@@ -186,20 +187,26 @@
     position:absolute; right:64px; bottom:80px;
     width: 600px;
   }
+  /* hairlines derive from the butter tone so the burgundy spread stays tri-tone */
   .s-stat .breakdown .row {
     display:grid; grid-template-columns: 150px 1fr 90px;
     gap: 16px; align-items:center; padding: 14px 0;
-    border-top: 1px solid rgba(246,237,220,0.25);
+    border-top: 1px solid rgba(242,216,106,0.3);
     font-size: 24px;
   }
-  .s-stat .breakdown .row:last-child { border-bottom: 1px solid rgba(246,237,220,0.25); }
-  .s-stat .breakdown .row .lbl { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.7; }
-  .s-stat .breakdown .row .bar { height:10px; border-radius:999px; background: rgba(246,237,220,0.15); position:relative; overflow:hidden; }
+  .s-stat .breakdown .row:last-child { border-bottom: 1px solid rgba(242,216,106,0.3); }
+  .s-stat .breakdown .row .lbl { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.8; }
+  .s-stat .breakdown .row .bar { height:10px; border-radius:999px; background: rgba(242,216,106,0.18); position:relative; overflow:hidden; }
   .s-stat .breakdown .row .bar i { display:block; height:100%; border-radius:999px; }
   .s-stat .breakdown .row .val { font-family:"JetBrains Mono", monospace; font-size:24px; text-align:right; }
 
   /* ========== SLIDE 5: TIMELINE ========== */
-  .s-timeline { background: var(--butter); padding: 96px 80px; }
+  /* head / track / ribbon distribute over the full canvas height
+     instead of stacking at the top and leaving a dead lower third */
+  .s-timeline {
+    background: var(--butter); padding: 112px 80px 96px;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
   .s-timeline .head { display:flex; justify-content:space-between; align-items:flex-start; gap: 48px; margin-bottom: 48px; }
   .s-timeline .head h2 {
     margin:0; font-size: 76px; line-height:0.95;
@@ -208,27 +215,29 @@
   }
   .s-timeline .head h2 em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color: var(--burgundy); }
   .s-timeline .head .meta { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.15em; text-transform:uppercase; text-align:right; line-height:1.5; color: var(--burgundy); flex-shrink:0; }
-  .s-timeline .head .meta span { display:block; opacity:0.55; margin-top: 4px; }
+  .s-timeline .head .meta span { display:block; opacity:0.65; margin-top: 4px; }
   .s-timeline .track {
     position:relative;
     padding: 60px 0 40px;
   }
   .s-timeline .axis {
     position:absolute; left:0; right:0; top: 110px;
-    height: 4px; background: var(--ink); opacity:0.15;
+    height: 4px; background: var(--ink); opacity:0.28;
   }
   .s-timeline .stops {
     display:grid; grid-template-columns: repeat(5, 1fr);
     gap: 24px; position:relative;
   }
   .s-timeline .stop { position:relative; padding-top: 90px; }
+  /* marker sits on the axis: axis is 110px from .track top, .stops starts
+     at 60px, so the dot center lands at 50px (+2px half stroke) */
   .s-timeline .stop .dot {
-    position:absolute; top: 90px; left: 0;
+    position:absolute; top: 52px; left: 0;
     width: 28px; height: 28px; border-radius: 999px;
     transform: translateY(-50%);
     border: 4px solid var(--butter);
     background: var(--burgundy);
-    display: none;
+    box-sizing: border-box;
   }
   .s-timeline .stop .yr {
     font-family:"Instrument Serif", serif; font-style:italic;
@@ -264,37 +273,44 @@
   }
   .s-chart .l .legend .item { display:flex; align-items:center; gap: 14px; font-size:24px; }
   .s-chart .l .legend .item i { width:14px; height:14px; border-radius:4px; display:block; }
-  .s-chart .l .legend .item .cat { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.7; margin-left:auto; }
+  .s-chart .l .legend .item .cat { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.8; margin-left:auto; }
   .s-chart .r {
     background: var(--cream); color: var(--ink);
     border-radius: 32px;
     padding: 48px 48px 56px;
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:column; justify-content:center;
     position:relative;
   }
   .s-chart .r .head { display:flex; justify-content:space-between; align-items:center; margin-bottom: 32px; }
   .s-chart .r .head .ttl { font-family:"Instrument Serif", serif; font-style:italic; font-size: 40px; }
-  .s-chart .r .head .unit { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.6; }
+  .s-chart .r .head .unit { font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.75; }
   .s-chart svg.chart { width:100%; flex:0 0 auto; max-height: 480px; }
-  .s-chart .r .xax { display:grid; grid-template-columns: repeat(6, 1fr); margin-top: 12px; font-family:"JetBrains Mono", monospace; font-size:24px; opacity:0.6; letter-spacing:0.1em; }
+  .s-chart .r .xax { display:grid; grid-template-columns: repeat(6, 1fr); margin-top: 12px; font-family:"JetBrains Mono", monospace; font-size:24px; opacity:0.75; letter-spacing:0.1em; }
 
   /* ========== SLIDE 7: QUOTE / EDITORIAL SPLIT ========== */
   .s-quote { background: var(--lime); color: var(--ink); padding: 0; display:grid; grid-template-columns: 0.95fr 1fr; }
   .s-quote .l { padding: 80px 56px 80px 80px; display:flex; flex-direction:column; justify-content:space-between; gap: 24px; position:relative; }
   .s-quote .l .top { display:flex; flex-direction:column; gap: 12px; }
-  .s-quote .l .mark { font-family:"Instrument Serif", serif; font-style:italic; font-size: 200px; line-height:0.6; color: var(--burgundy); margin: 80px 0 0 0; }
+  .s-quote .l .mark { font-family:"Instrument Serif", serif; font-style:italic; font-size: 200px; line-height:0.6; color: var(--burgundy); margin: 64px 0 0 0; }
+  /* quote carries the spread; larger size eats the dead band under the mark */
   .s-quote .l blockquote {
     margin: 0;
     font-family:"Instrument Serif", serif; font-style:italic;
-    font-size: 64px; line-height:1.1;
+    font-size: 72px; line-height:1.12;
     color: var(--ink);
-    max-width: 760px;
+    max-width: 780px;
   }
   .s-quote .l blockquote b { font-family:"Bricolage Grotesque", sans-serif; font-style:normal; font-weight:600; color: var(--burgundy); }
-  .s-quote .l .attribution { display:flex; align-items:center; gap:20px; }
-  .s-quote .l .avatar { width:72px; height:72px; border-radius:999px; background: var(--burgundy); border:3px solid var(--burgundy); }
+  .s-quote .l .attribution {
+    display:flex; align-items:center; gap:20px;
+    padding-top: 28px;
+    border-top: 2px solid var(--burgundy);
+    max-width: 760px;
+  }
+  /* short burgundy dash in place of a fake avatar circle */
+  .s-quote .l .dash { width:56px; height:6px; background: var(--burgundy); flex-shrink:0; }
   .s-quote .l .who { font-size:26px; font-weight:600; }
-  .s-quote .l .who small { display:block; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.65; font-weight:400; margin-top:4px; }
+  .s-quote .l .who small { display:block; font-family:"JetBrains Mono", monospace; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.78; font-weight:400; margin-top:4px; }
   .s-quote .r {
     background: var(--burgundy); color: var(--butter);
     padding: 96px 80px;
@@ -306,9 +322,9 @@
   .s-quote .r .endorsements .row {
     display:grid; grid-template-columns: 80px 1fr;
     gap: 20px; align-items:center;
-    padding: 20px 0; border-top: 1px solid rgba(246,237,220,0.3);
+    padding: 20px 0; border-top: 1px solid rgba(242,216,106,0.32);
   }
-  .s-quote .r .endorsements .row:last-child { border-bottom: 1px solid rgba(246,237,220,0.3); }
+  .s-quote .r .endorsements .row:last-child { border-bottom: 1px solid rgba(242,216,106,0.32); }
   .s-quote .r .endorsements .num { font-family:"Instrument Serif", serif; font-style:italic; font-size: 56px; line-height:1; color: var(--pink); }
   .s-quote .r .endorsements .txt { font-size: 26px; line-height:1.4; }
   .s-quote .r .endorsements .txt strong { font-weight:600; display:block; margin-bottom: 4px; }
@@ -321,14 +337,17 @@
     margin-top: 40px;
     font-family:"Bricolage Grotesque", sans-serif;
     font-weight:700;
-    font-size: 320px;
+    font-size: 400px;
     line-height: 0.82;
     letter-spacing: -0.05em;
     color: var(--pink);
-    max-width: 800px;
+    max-width: 1100px;
   }
-  .s-closer .big em { display:inline-block; margin-left: -20px; }
-  .s-closer .big em { font-family:"Instrument Serif", serif; font-style:italic; font-weight:400; color: var(--butter); }
+  .s-closer .big em {
+    display:inline-block; margin-left: -20px;
+    font-family:"Instrument Serif", serif; font-style:italic; font-weight:400;
+    color: var(--butter);
+  }
   .s-closer .grid {
     position:absolute; left:64px; right:64px; bottom: 120px;
     display:grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
@@ -377,7 +396,6 @@
     <div class="wordmark">
       <span>Open</span>
       <span class="amp" style="color:var(--butter); margin: 0 24px 24px;">Design</span>
-      <span></span>
     </div>
   </section>
 
@@ -386,12 +404,12 @@
     <div class="left">
       <div>
         <div class="label" style="margin-bottom:32px; color: var(--burgundy);">Chapter One · Manifesto</div>
-        <div class="chapter">01<sup></sup></div>
+        <div class="chapter">01</div>
       </div>
       <div class="lede">
         Frontier AI design, <em>back on every creator's desk</em> — open, local, and driven by the agents you already run.
       </div>
-      <div class="mono" style="font-size:24px; letter-spacing:0.12em; opacity:0.6; text-transform:uppercase;">github.com/nexu-io/open-design &nbsp;·&nbsp; Apache-2.0</div>
+      <div class="mono" style="font-size:24px; letter-spacing:0.12em; opacity:0.75; text-transform:uppercase;">github.com/nexu-io/open-design &nbsp;·&nbsp; Apache-2.0</div>
     </div>
     <div class="right">
       <div>
@@ -409,7 +427,7 @@
 
   <!-- ============ SLIDE 3: VALUES GRID ============ -->
   <section class="s-grid" data-screen-label="03 Capabilities">
-    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 44px;">
       <h2>Eight capabilities, <em>shipped open.</em></h2>
       <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; color: var(--burgundy);">§ 03 — Capabilities</div>
     </div>
@@ -466,10 +484,8 @@
       </div>
       <div class="swatches">
         <i style="background:var(--pink)"></i>
-        <i style="background:var(--lime)"></i>
         <i style="background:var(--butter)"></i>
-        <i style="background:var(--terracotta)"></i>
-        <i style="background:var(--sky)"></i>
+        <i style="background:var(--burgundy); box-shadow: inset 0 0 0 3px var(--cream);"></i>
       </div>
     </div>
 
@@ -485,7 +501,7 @@
       <div class="kicker" style="margin-bottom:12px;">Alongside the stars</div>
       <div class="row">
         <span class="lbl">Contrib</span>
-        <span class="bar"><i style="width:82%; background:var(--lime)"></i></span>
+        <span class="bar"><i style="width:82%; background:var(--pink)"></i></span>
         <span class="val">300+</span>
       </div>
       <div class="row">
@@ -495,12 +511,12 @@
       </div>
       <div class="row">
         <span class="lbl">Systems</span>
-        <span class="bar"><i style="width:48%; background:var(--terracotta)"></i></span>
+        <span class="bar"><i style="width:48%; background:var(--butter)"></i></span>
         <span class="val">129</span>
       </div>
       <div class="row">
         <span class="lbl">Agents</span>
-        <span class="bar"><i style="width:31%; background:var(--sky)"></i></span>
+        <span class="bar"><i style="width:31%; background:var(--butter)"></i></span>
         <span class="val">21</span>
       </div>
     </div>
@@ -512,7 +528,7 @@
       <h2>From idea to delivery, <em>in five steps.</em></h2>
       <div class="meta">
         § 05 — Workflow<br/>
-        <span style="opacity:0.5;">idea → delivery</span>
+        <span style="opacity:0.65;">idea → delivery</span>
       </div>
     </div>
 
@@ -568,10 +584,10 @@
       <div class="legend">
         <div class="item"><i style="background:var(--pink); border:1px solid var(--burgundy);"></i> GitHub stars, cumulative <span class="cat">Series A</span></div>
         <div class="item"><i style="background:var(--butter); border:2px solid var(--burgundy); border-radius:999px;"></i> Contributors joining <span class="cat">Series B</span></div>
-        <div class="item"><i style="background:var(--burgundy);"></i> Plugins shipped <span class="cat">Series C</span></div>
+        <div class="item"><i style="background:var(--burgundy); box-shadow: inset 0 0 0 2px var(--butter);"></i> Plugins shipped <span class="cat">Series C</span></div>
         <div class="item"><i style="background:transparent; border-top: 3px dotted var(--butter); border-radius:0; height: 0;"></i> Design systems added <span class="cat">Series D</span></div>
       </div>
-      <div class="mono" style="margin-top: 40px; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.5;">Demo data · illustrative shapes · real totals: 60K+ / 300+ / 217+</div>
+      <div class="mono" style="margin-top: 40px; font-size:24px; letter-spacing:0.1em; text-transform:uppercase; opacity:0.78;">Demo data · illustrative shapes · real totals: 60K+ / 300+ / 217+</div>
     </div>
     <div class="r">
       <div class="head">
@@ -588,7 +604,7 @@
           <line x1="60" y1="380" x2="720" y2="380" />
         </g>
         <!-- y labels -->
-        <g font-family="JetBrains Mono, monospace" font-size="24" fill="#7A1F35" fill-opacity="0.6">
+        <g font-family="JetBrains Mono, monospace" font-size="24" fill="#7A1F35" fill-opacity="0.78">
           <text x="0" y="48">40</text>
           <text x="0" y="133">30</text>
           <text x="0" y="218">20</text>
@@ -645,7 +661,7 @@
         File-system semantics plus <b>git-diffable design artifacts</b> — design is finally under version control.
       </blockquote>
       <div class="attribution">
-        <div class="avatar"></div>
+        <div class="dash"></div>
         <div class="who">
           Indie developer
           <small>Early adopter · Open Design community</small>
@@ -688,9 +704,9 @@
         <div class="kicker">§ 08 — Get Open Design</div>
         <div class="serif" style="font-size:48px; color:var(--pink); margin-top:12px;">Frontier AI design, back on every creator's desk.</div>
       </div>
-      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; opacity:0.7; text-align:right; line-height:1.4;">
+      <div class="mono" style="font-size:24px; letter-spacing:0.15em; text-transform:uppercase; opacity:0.85; text-align:right; line-height:1.4;">
         Apache-2.0 · BYOK<br/>
-        <span style="opacity:0.5;">No sign-up required</span>
+        <span style="opacity:0.7;">No sign-up required</span>
       </div>
     </div>
 
@@ -699,7 +715,7 @@
     </div>
 
     <div class="corner-pills">
-      <span class="pill" style="background:var(--burgundy); color:var(--cream); font-size:24px; padding: 12px 28px;">open</span>
+      <span class="pill" style="background:var(--pink); color:var(--burgundy); font-size:24px; padding: 12px 28px;">open</span>
       <span class="pill" style="background:var(--lime); color:var(--ink); font-size:24px; padding: 12px 28px;">local</span>
       <span class="pill" style="background:var(--butter); color:var(--ink); font-size:24px; padding: 12px 28px;">agent-native</span>
     </div>

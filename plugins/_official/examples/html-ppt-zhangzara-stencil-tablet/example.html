@@ -6,24 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="assets/deck-stage.js"></script>
 <style>
   :root {
     --bone:    #E2DCC9;
-    --black:   #000000;
+    --black:   #15120D; /* warm near-black, not pure #000, keeps the charcoal-rubbing feel */
     --ink:     #0A0A0A;
     --paper:   #F4EFE0;
-    --sienna:  #A06A3C;
-    --magenta: #C73B7A;
+    --sienna:  #A9713F; /* lightened from #A06A3C so 18-22px ink body copy clears AA on sienna surfaces */
+    --magenta: #B13069; /* display accents on bone only */
+    --rose:    #9E2A5C; /* deep rose for surfaces that carry body text, bone copy clears AA */
     --orange:  #EE7A2E;
-    --teal:    #2D7E73;
-    --blue:    #3F73B7;
+    --teal:    #266B61;
+    --blue:    #345F9A;
     --mustard: #D8A93B;
-    --olive:   #6F7A2E;
   }
   html, body { margin:0; padding:0; background:#1a1a1a; }
-  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  body { font-family: "Barlow", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
   deck-stage { background: #1a1a1a; }
 
   section.slide { background: var(--bone); color: var(--ink); overflow: hidden; position: relative; }
@@ -53,36 +53,6 @@
     opacity: .75;
   }
   section.slide.dark .footer { color: var(--bone); }
-
-  /* ---------- shared tablet card ---------- */
-  .tablet { border-radius: 26px; padding: 38px 32px 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
-  .tablet .num {
-    font-family: "Stardos Stencil", "Bowlby One", serif;
-    font-weight: 700;
-    line-height: .9;
-    color: var(--ink);
-    font-size: 220px;
-    letter-spacing: -.02em;
-  }
-  .tablet h3 {
-    font-family: "Stardos Stencil", serif;
-    font-weight: 700;
-    font-size: 30px;
-    line-height: 1;
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    margin-top: auto;
-    margin-bottom: 14px;
-  }
-  .tablet p {
-    font-family: "Inter", sans-serif;
-    font-size: 22px;
-    line-height: 1.4;
-    color: var(--ink);
-  }
-  .tablet.dark { color: var(--bone); }
-  .tablet.dark h3 { color: var(--bone); }
-  .tablet.dark p  { color: var(--bone); opacity: .9; }
 
   /* =========== 01 COVER =========== */
   .s-cover { padding: 0; }
@@ -115,7 +85,13 @@
   }
   .s-cover .row .lockup { display: flex; align-items: center; gap: 18px; }
   .s-cover .row .mark {
-    width: 56px; height: 56px; border-radius: 14px; background: var(--orange);
+    width: 56px; height: 56px; border-radius: 12px; background: var(--orange);
+    position: relative; overflow: hidden;
+  }
+  /* stencil bridge cut through the mark, ties the lockup to the headline letterforms */
+  .s-cover .row .mark::after {
+    content: ""; position: absolute; left: 16%; right: 16%; top: 42%; height: 16%;
+    background: var(--bone);
   }
   .s-cover .row .who {
     font-family: "Barlow Condensed", sans-serif; font-weight: 700;
@@ -156,6 +132,9 @@
     font-size: 32px; line-height: 1.05; text-align: center;
     text-transform: uppercase; color: var(--ink);
   }
+  /* teal and blue tablets are too dark for ink labels, switch to bone */
+  .s-agenda .item:nth-child(2) .n, .s-agenda .item:nth-child(2) .lab,
+  .s-agenda .item:nth-child(3) .n, .s-agenda .item:nth-child(3) .lab { color: var(--bone); }
 
   /* =========== 03 PRINCIPLES (the source slide) =========== */
   .s-princ { padding: 0; }
@@ -168,7 +147,7 @@
   }
   .s-princ .card { border-radius: 26px; padding: 36px 30px 32px; display: flex; flex-direction: column; min-height: 0; }
   .s-princ .card.c1 { background: var(--sienna); }
-  .s-princ .card.c2 { background: var(--magenta); }
+  .s-princ .card.c2 { background: var(--rose); }
   .s-princ .card.c3 { background: var(--orange); }
   .s-princ .card.c4 { background: var(--teal); }
   .s-princ .card .n {
@@ -176,6 +155,7 @@
     font-size: 240px; line-height: .85; letter-spacing: -.02em;
     color: var(--ink);
   }
+  .s-princ .card.c2 .n, .s-princ .card.c4 .n { color: var(--bone); }
   .s-princ .card h3 {
     font-family: "Stardos Stencil", serif; font-weight: 700;
     font-size: 30px; line-height: 1.05;
@@ -185,6 +165,7 @@
   .s-princ .card p {
     font-size: 22px; line-height: 1.4; color: var(--ink);
   }
+  .s-princ .card.c2 h3, .s-princ .card.c2 p,
   .s-princ .card.c4 h3, .s-princ .card.c4 p { color: var(--bone); }
 
   /* =========== 04 SECTION DIVIDER =========== */
@@ -293,6 +274,7 @@
     background: var(--paper); border-radius: 22px;
     padding: 32px 32px 28px 80px;
     display: flex; flex-direction: column; overflow: hidden;
+    color: var(--ink);
   }
   .s-chart .right .yhead {
     font-family: "Barlow Condensed", sans-serif; font-weight: 700;
@@ -337,7 +319,7 @@
     display: flex; flex-direction: column; gap: 8px; position: relative;
   }
   .s-process .node.n1 { background: var(--sienna); color: var(--ink); }
-  .s-process .node.n2 { background: var(--magenta); color: var(--ink); }
+  .s-process .node.n2 { background: var(--rose); color: var(--bone); }
   .s-process .node.n3 { background: var(--orange); color: var(--ink); }
   .s-process .node.n4 { background: var(--teal); color: var(--bone); }
   .s-process .node.n5 { background: var(--blue); color: var(--bone); }
@@ -353,6 +335,7 @@
   .s-process .node .arr {
     position: absolute; right: -16px; top: 40%;
     width: 32px; height: 32px; z-index: 2;
+    color: var(--ink); /* arrows straddle the bone gap, currentColor from bone-text nodes made them vanish */
   }
   .s-process .node.n5 .arr { display: none; }
   .s-process .timeline {
@@ -410,7 +393,7 @@
   }
   .s-matrix .pill.yes  { background: var(--teal); color: var(--bone); }
   .s-matrix .pill.part { background: var(--mustard); color: var(--ink); }
-  .s-matrix .pill.no   { background: var(--magenta); color: var(--bone); }
+  .s-matrix .pill.no   { background: var(--rose); color: var(--bone); }
   .s-matrix .pill.note { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
 
   /* =========== 09 STATS / NUMBERS =========== */
@@ -460,7 +443,7 @@
   .s-quote { padding: 0; }
   .s-quote .panel {
     position: absolute; left: 64px; right: 64px; top: 130px; bottom: 110px;
-    background: var(--magenta);
+    background: var(--rose);
     border-radius: 26px;
     padding: 60px 80px;
     display: grid;
@@ -469,24 +452,24 @@
     align-items: center;
   }
   .s-quote .panel .qmark {
-    font-family: "Bowlby One", "Stardos Stencil", serif; font-weight: 700;
-    font-size: 320px; line-height: .8; color: var(--ink);
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 320px; line-height: .8; color: var(--ink); opacity: .55;
   }
   .s-quote .panel blockquote {
     margin: 0;
     font-family: "Stardos Stencil", serif; font-weight: 400;
     font-size: 60px; line-height: 1.05;
-    color: var(--ink);
+    color: var(--bone);
     letter-spacing: -.005em;
   }
   .s-quote .panel .who {
     margin-top: 32px;
     font-family: "Barlow Condensed", sans-serif; font-weight: 800;
     font-size: 26px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--ink);
+    color: var(--bone);
   }
   .s-quote .panel .who small {
-    display: block; font-weight: 600; font-size: 22px; opacity: .7; margin-top: 4px;
+    display: block; font-weight: 600; font-size: 22px; opacity: .8; margin-top: 4px;
   }
 
   /* =========== 11 CTA =========== */
@@ -523,53 +506,18 @@
   }
   .s-cta .pane.r .step p { font-size: 20px; line-height: 1.4; }
 
-  /* =========== 12 DESIGN SYSTEM =========== */
-  .s-system .wrap {
-    position: absolute; left: 64px; right: 64px; top: 130px; bottom: 80px;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
-  }
-  .s-system .card {
-    border-radius: 22px; padding: 28px;
-    display: flex; flex-direction: column; gap: 14px;
-    background: var(--paper);
-  }
-  .s-system .card h3 {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 28px; text-transform: uppercase; letter-spacing: .02em;
-    border-bottom: 2px solid var(--ink); padding-bottom: 10px;
-  }
-  .s-system .card .row { display: flex; align-items: center; gap: 14px; }
-  .s-system .swatch { width: 48px; height: 48px; border-radius: 10px; border: 1.5px solid var(--ink); }
-  .s-system .row .label {
-    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
-    font-size: 22px; letter-spacing: .04em; text-transform: uppercase;
-  }
-  .s-system .row .label small {
-    display: block; font-weight: 500; opacity: .65; letter-spacing: .04em;
-  }
-  .s-system .typespec {
-    display: flex; align-items: baseline; gap: 14px;
-    border-bottom: 1px dashed rgba(10,10,10,.3); padding-bottom: 12px;
-  }
-  .s-system .typespec .name {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 36px; text-transform: uppercase; flex-shrink: 0;
-  }
-  .s-system .typespec .name.barlow {
-    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
-  }
-  .s-system .typespec .name.inter {
-    font-family: "Inter", sans-serif; font-weight: 600; text-transform: none; font-size: 28px;
-  }
-  .s-system .typespec .desc {
-    font-size: 18px; opacity: .75;
-  }
-  .s-system ul { margin: 0; padding-left: 20px; font-size: 18px; line-height: 1.45; }
-  .s-system ul li { margin-bottom: 6px; }
-  .s-system .principle {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 30px; line-height: 1.05; text-transform: uppercase;
-    color: var(--magenta);
+  /* ---------- entrance motion (transform+opacity only, staggered, reduced-motion safe) ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes slide-rise {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: none; }
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer) {
+      animation: slide-rise .6s cubic-bezier(.16,1,.3,1) both;
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(3) { animation-delay: .07s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(4) { animation-delay: .14s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(5) { animation-delay: .21s; }
   }
 </style>
 </head>
@@ -611,7 +559,7 @@
       <div class="item">
         <!-- figure-8 / peanut -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="#EE7A2E"/>
+          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="var(--orange)"/>
         </svg>
         <span class="n">01</span>
         <span class="lab">Why<br/>open</span>
@@ -619,7 +567,7 @@
       <div class="item">
         <!-- octagon -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="#2D7E73"/>
+          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="var(--teal)"/>
         </svg>
         <span class="n">02</span>
         <span class="lab">The<br/>workflow</span>
@@ -627,7 +575,7 @@
       <div class="item">
         <!-- hourglass / bowtie -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="#3F73B7"/>
+          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="var(--blue)"/>
         </svg>
         <span class="n">03</span>
         <span class="lab">The<br/>numbers</span>
@@ -635,7 +583,7 @@
       <div class="item">
         <!-- pinched X -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 0 Q 20 0 35 20 Q 50 40 65 20 Q 80 0 100 0 L100 90 Q 70 125 100 160 L100 250 Q 80 250 65 230 Q 50 210 35 230 Q 20 250 0 250 L0 160 Q 30 125 0 90 Z" fill="#A06A3C"/>
+          <path d="M0 0 L100 0 L100 90 Q 70 125 100 160 L100 250 L0 250 L0 160 Q 30 125 0 90 Z" fill="var(--sienna)"/>
         </svg>
         <span class="n">04</span>
         <span class="lab">Get<br/>started</span>
@@ -947,7 +895,6 @@
     <div class="footer"><span>Open Design</span><span>11 / 11</span></div>
   </section>
 
-  <!-- ============ 12 DESIGN SYSTEM ============ -->
 </deck-stage>
 
 </body>

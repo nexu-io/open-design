@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Open Design — Cartesian Presentation</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -17,16 +16,32 @@
             --bg-primary: #ede8e0;
             --bg-secondary: #e2dbd1;
             --text-primary: #1a1a1a;
-            --text-secondary: #5a5a5a;
-            --accent: #8a8178;
+            --text-secondary: #4f4b45;
+            --accent: #8c4130; /* quiet rubric red, manuscript rubrication; 5.7:1 on --bg-primary */
             --line: #b8b0a4;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Source Serif 4', Georgia, serif;
+            --ease-out: cubic-bezier(.16, 1, .3, 1);
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             background: var(--bg-primary);
             color: var(--text-primary);
             overflow: hidden;
+        }
+
+        /* Faint paper grain, part of the Cartesian manuscript identity.
+           Inline SVG turbulence, no remote assets. */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            pointer-events: none;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 160px 160px;
         }
 
         .presentation {
@@ -43,10 +58,11 @@
             left: 0;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.6s ease, visibility 0.6s ease;
+            transition: opacity 0.6s var(--ease-out), visibility 0.6s var(--ease-out);
             display: flex;
             flex-direction: column;
-            padding: 4vh 4vw;
+            /* Generous book margins; the page should breathe like a set spread */
+            padding: 6vh 6vw;
             background: var(--bg-primary);
             overflow: hidden;
         }
@@ -56,29 +72,24 @@
             visibility: visible;
         }
 
-        /* Geometric decorations */
-        .geo-lines {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 45vw;
-            height: 45vh;
-            pointer-events: none;
-            z-index: 0;
+        /* Quiet entrance: content rises gently on each slide change.
+           Transform + opacity only, ease-out. */
+        @keyframes slide-rise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: none; }
         }
 
-        .geo-circle {
-            position: absolute;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            opacity: 0.5;
+        .slide.active .content > * {
+            animation: slide-rise 0.7s var(--ease-out) both;
         }
 
-        .geo-arc {
-            position: absolute;
-            border: 1px dashed var(--line);
-            border-radius: 50%;
-            opacity: 0.3;
+        .slide.active .content > *:nth-child(2) { animation-delay: 0.07s; }
+        .slide.active .content > *:nth-child(3) { animation-delay: 0.14s; }
+        .slide.active .content > *:nth-child(4) { animation-delay: 0.21s; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active .content > * { animation: none; }
+            .slide, .nav-dot, .nav-arrow { transition: none; }
         }
 
         /* Navigation */
@@ -94,26 +105,33 @@
         }
 
         .nav-dot {
-            width: 8px;
-            height: 8px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
-            background: var(--line);
+            background: transparent;
+            border: 1px solid var(--line);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background 0.3s var(--ease-out), transform 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+        }
+
+        .nav-dot:hover {
+            border-color: var(--accent);
         }
 
         .nav-dot.active {
-            background: var(--text-primary);
-            transform: scale(1.3);
+            background: var(--accent);
+            border-color: var(--accent);
+            transform: scale(1.25);
         }
 
         .slide-counter {
             position: fixed;
             bottom: 3vh;
             right: 3vw;
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
+            font-variant-numeric: tabular-nums;
             font-size: 0.75rem;
-            color: var(--accent);
+            color: var(--text-secondary);
             letter-spacing: 2px;
             z-index: 100;
         }
@@ -130,27 +148,35 @@
         .nav-arrow {
             width: 40px;
             height: 40px;
-            border: 1px solid var(--line);
+            border: 1px solid var(--text-secondary);
+            border-radius: 50%;
             background: transparent;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             color: var(--text-primary);
-            transition: all 0.3s ease;
+            transition: background 0.3s var(--ease-out), color 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
         }
 
         .nav-arrow:hover {
             background: var(--text-primary);
+            border-color: var(--text-primary);
             color: var(--bg-primary);
         }
 
         /* Typography */
         h1, h2, h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-weight: 400;
-            line-height: 1.1;
+            line-height: 1.08;
+            letter-spacing: -0.015em;
+            text-wrap: balance;
+        }
+
+        h4 {
+            font-weight: 600;
         }
 
         h1 {
@@ -166,19 +192,27 @@
         }
 
         p, li {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             font-size: clamp(0.9rem, 1.2vw, 1.1rem);
-            line-height: 1.6;
+            line-height: 1.65;
             color: var(--text-secondary);
+            max-width: 62ch;
+            /* Oldstyle figures sit into the serif text like a set manuscript page */
+            font-variant-numeric: oldstyle-nums;
+        }
+
+        ::selection {
+            background: var(--accent);
+            color: var(--bg-primary);
         }
 
         .label {
-            font-family: 'Inter', sans-serif;
-            font-size: 0.75rem;
+            font-family: var(--font-body);
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 3px;
+            letter-spacing: 0.22em;
             color: var(--accent);
-            font-weight: 500;
+            font-weight: 600;
         }
 
         /* Slide 1: Title */
@@ -202,10 +236,11 @@
         }
 
         .slide-title .subtitle {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             font-size: clamp(1rem, 1.5vw, 1.3rem);
+            line-height: 1.6;
             color: var(--text-secondary);
-            max-width: 40vw;
+            max-width: 44ch;
         }
 
         /* All geo-decoration instances are decorative overlays, not flex
@@ -271,10 +306,11 @@
         }
 
         .slide-agenda .agenda-number {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.5rem;
             color: var(--accent);
             min-width: 3vw;
+            font-variant-numeric: lining-nums tabular-nums;
         }
 
         /* Slide 3: Statement */
@@ -295,12 +331,13 @@
             height: 100%;
         }
 
+        /* Rubricated opening quote, echoing the manuscript-red accent */
         .slide-statement .quote-mark {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 5rem;
-            line-height: 1;
-            color: var(--line);
-            opacity: 0.5;
+            line-height: 0.6;
+            color: var(--accent);
+            opacity: 0.45;
             display: block;
             margin-bottom: 2vh;
         }
@@ -336,6 +373,80 @@
             position: relative;
             height: 55vh;
             width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Hand-drawn cost comparison: flat single-hue bars, accent on ours */
+        .cost-bars {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 6vw;
+            border-bottom: 1px solid var(--line);
+            min-height: 0;
+        }
+
+        .cost-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            width: 9vw;
+            height: 100%;
+        }
+
+        .cost-value {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            margin-bottom: 1.2vh;
+            color: var(--text-primary);
+            font-variant-numeric: lining-nums tabular-nums;
+        }
+
+        .cost-fill {
+            width: 100%;
+            background: var(--text-primary);
+        }
+
+        .cost-fill.is-ours {
+            background: var(--accent);
+        }
+
+        .cost-bar-label {
+            margin-top: 1.5vh;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .cost-bars-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .cost-bar-labels {
+            display: flex;
+            justify-content: center;
+            gap: 6vw;
+        }
+
+        .cost-bar-labels .cost-bar-label {
+            width: 9vw;
+        }
+
+        .chart-caption {
+            margin-top: 2.5vh;
+            text-align: center;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
         }
 
         /* Slide 5: Two Column */
@@ -405,9 +516,10 @@
         }
 
         .slide-twocol .stat-item h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 2rem;
             margin-bottom: 0.5vh;
+            font-variant-numeric: lining-nums;
         }
 
         .slide-twocol .stat-item span {
@@ -447,21 +559,16 @@
         }
 
         .slide-cards .card {
-            border: 1px solid var(--line);
-            padding: 4vh 2vw;
-            background: rgba(255,255,255,0.3);
+            border-top: 1px solid var(--text-primary);
+            padding: 3.5vh 0.5vw 0 0;
+            background: transparent;
         }
 
         .slide-cards .card-icon {
-            width: 40px;
-            height: 40px;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 3vh;
-            font-size: 1rem;
+            font-family: var(--font-display);
+            font-style: italic;
+            margin-bottom: 2.5vh;
+            font-size: 1.15rem;
             color: var(--accent);
         }
 
@@ -494,10 +601,38 @@
             flex: 1;
             position: relative;
             min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
 
-        .slide-linechart .chart-wrapper canvas {
-            max-height: 100%;
+        .slide-linechart .chart-wrapper svg {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+        }
+
+        .slide-linechart .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 3vw;
+            padding-top: 2vh;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .slide-linechart .chart-legend .key {
+            display: inline-block;
+            width: 22px;
+            height: 0;
+            border-top: 2px solid var(--text-primary);
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .slide-linechart .chart-legend .key.dashed {
+            border-top-style: dashed;
+            border-top-color: var(--line);
         }
 
         /* Slide 8: Timeline */
@@ -544,7 +679,7 @@
         }
 
         .slide-timeline .timeline-item h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.2rem;
             margin-bottom: 1vh;
             margin-top: 2vh;
@@ -602,7 +737,7 @@
         }
 
         .slide-team .team-member h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.2rem;
             margin-bottom: 0.5vh;
         }
@@ -660,29 +795,6 @@
             height: 70%;
             border: 1px dashed var(--line);
             border-radius: 50%;
-        }
-
-        /* Vertical line decoration */
-        .vertical-line {
-            position: absolute;
-            left: 8vw;
-            top: 0;
-            width: 1px;
-            height: 100%;
-            background: var(--line);
-            opacity: 0.3;
-            z-index: 0;
-        }
-
-        /* Horizontal accent */
-        .horizontal-accent {
-            position: absolute;
-            bottom: 15vh;
-            left: 0;
-            width: 20vw;
-            height: 1px;
-            background: var(--text-primary);
-            z-index: 0;
         }
 
         @media (max-aspect-ratio: 4/3) {
@@ -747,7 +859,7 @@
         <!-- Slide 3: Statement -->
         <div class="slide slide-statement">
             <div class="content">
-                <span class="quote-mark">"</span>
+                <span class="quote-mark" aria-hidden="true">&ldquo;</span>
                 <h2>File-system semantics plus git-diffable design artifacts — design is finally under version control.</h2>
                 <div class="attribution">Indie Developer</div>
             </div>
@@ -764,7 +876,23 @@
                 </div>
                 <div class="right-col">
                     <div class="chart-container">
-                        <canvas id="barChart"></canvas>
+                        <div class="cost-bars-wrap">
+                            <div class="cost-bars">
+                                <div class="cost-bar">
+                                    <div class="cost-value">$500</div>
+                                    <div class="cost-fill" style="height: 78%;"></div>
+                                </div>
+                                <div class="cost-bar">
+                                    <div class="cost-value">$73</div>
+                                    <div class="cost-fill is-ours" style="height: 11.4%;"></div>
+                                </div>
+                            </div>
+                            <div class="cost-bar-labels">
+                                <div class="cost-bar-label">Claude Design</div>
+                                <div class="cost-bar-label">Open Design (BYOK)</div>
+                            </div>
+                        </div>
+                        <div class="chart-caption">Monthly cost (USD)</div>
                     </div>
                 </div>
             </div>
@@ -839,7 +967,39 @@
                     <p style="max-width: 25vw; text-align: right;">Illustrative monthly trajectory to today's 60K+ GitHub Stars, backed by 300+ contributors. Demo data.</p>
                 </div>
                 <div class="chart-wrapper">
-                    <canvas id="lineChart"></canvas>
+                    <svg viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="GitHub Stars growth, demo data">
+                        <!-- gridlines -->
+                        <line x1="70" y1="350" x2="960" y2="350" stroke="#b8b0a4" stroke-width="1"/>
+                        <line x1="70" y1="240" x2="960" y2="240" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="130" x2="960" y2="130" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="20" x2="960" y2="20" stroke="#d3ccc0" stroke-width="1"/>
+                        <!-- y labels -->
+                        <text x="58" y="354" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">0K</text>
+                        <text x="58" y="244" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">20K</text>
+                        <text x="58" y="134" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">40K</text>
+                        <text x="58" y="24" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">60K</text>
+                        <!-- milestone pace: 10, 20, 30, 40, 50, 60 -->
+                        <polyline points="80,295 256,240 432,185 608,130 784,75 960,20" fill="none" stroke="#b8b0a4" stroke-width="2" stroke-dasharray="6 6"/>
+                        <!-- actual stars: 8, 15, 24, 35, 48, 60 -->
+                        <polyline points="80,306 256,267.5 432,218 608,157.5 784,86 960,20" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+                        <circle cx="80" cy="306" r="4" fill="#1a1a1a"/>
+                        <circle cx="256" cy="267.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="432" cy="218" r="4" fill="#1a1a1a"/>
+                        <circle cx="608" cy="157.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="784" cy="86" r="4" fill="#1a1a1a"/>
+                        <circle cx="960" cy="20" r="5" fill="#8c4130" stroke="#ede8e0" stroke-width="2"/>
+                        <!-- x labels -->
+                        <text x="80" y="382" text-anchor="start" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Jan 2026</text>
+                        <text x="256" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Feb 2026</text>
+                        <text x="432" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Mar 2026</text>
+                        <text x="608" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Apr 2026</text>
+                        <text x="784" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">May 2026</text>
+                        <text x="960" y="382" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Jun 2026</text>
+                    </svg>
+                    <div class="chart-legend">
+                        <span><span class="key"></span>GitHub Stars (demo data)</span>
+                        <span><span class="key dashed"></span>Milestone pace (demo data)</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -990,138 +1150,6 @@
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 prevSlide();
-            }
-        });
-
-        // Bar Chart
-        const barCtx = document.getElementById('barChart').getContext('2d');
-        new Chart(barCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Claude Design', 'Open Design (BYOK)'],
-                datasets: [{
-                    label: 'Monthly cost (USD)',
-                    data: [500, 73],
-                    backgroundColor: '#1a1a1a',
-                    borderColor: '#1a1a1a',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#5a5a5a',
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: '#e2dbd1',
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#8a8178',
-                            padding: 10
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 12 },
-                            color: '#1a1a1a',
-                            padding: 10
-                        }
-                    }
-                }
-            }
-        });
-
-        // Line Chart
-        const lineCtx = document.getElementById('lineChart').getContext('2d');
-        new Chart(lineCtx, {
-            type: 'line',
-            data: {
-                labels: ['Jan 2026', 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026'],
-                datasets: [{
-                    label: 'GitHub Stars (demo data)',
-                    data: [8, 15, 24, 35, 48, 60],
-                    borderColor: '#1a1a1a',
-                    backgroundColor: 'rgba(26, 26, 26, 0.05)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointBackgroundColor: '#1a1a1a',
-                    pointBorderColor: '#ede8e0',
-                    pointBorderWidth: 2,
-                    pointRadius: 5
-                }, {
-                    label: 'Milestone pace (demo data)',
-                    data: [10, 20, 30, 40, 50, 60],
-                    borderColor: '#b8b0a4',
-                    backgroundColor: 'transparent',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.4,
-                    pointBackgroundColor: '#b8b0a4',
-                    pointRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#5a5a5a',
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: '#e2dbd1',
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#8a8178',
-                            padding: 10,
-                            callback: function(value) {
-                                return value + 'K';
-                            }
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 12 },
-                            color: '#1a1a1a',
-                            padding: 10
-                        }
-                    }
-                }
             }
         });
     </script>

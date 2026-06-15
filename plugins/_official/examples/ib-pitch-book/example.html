@@ -4,20 +4,21 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Open Design — Investor Narrative · The Open-Source AI Design Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..600;1,8..60,300..600&display=swap" rel="stylesheet">
 <style>
   :root {
     --paper:        oklch(98.5% 0.008 80);
     --paper-warm:   oklch(96% 0.012 78);
     --ink:          oklch(18% 0.012 70);
-    --ink-mid:      oklch(38% 0.010 70);
-    --ink-soft:     oklch(56% 0.008 70);
+    --ink-mid:      oklch(36% 0.010 70);
+    --ink-soft:     oklch(41% 0.008 70);
     --rule:         oklch(86% 0.008 75);
-    --accent:       oklch(48% 0.18 28);   /* deep red ribbon */
-    --gold:         oklch(72% 0.12 78);
-    --teal:         oklch(45% 0.07 200);
+    --accent:       oklch(48% 0.18 28);   /* deep red ribbon, single accent */
     --neg:          oklch(48% 0.16 28);
     --pos:          oklch(45% 0.10 165);
-    --serif: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --serif: 'Source Serif 4', 'Iowan Old Style', 'Charter', Georgia, serif;
     --sans:  system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
@@ -32,7 +33,7 @@
   ────────────────────────────────────────────────────────────────────────── */
   .deck {
     width: 100vw; height: 100vh; overflow: hidden; position: relative;
-    background: linear-gradient(180deg, oklch(14% 0.012 70), oklch(20% 0.012 70));
+    background: oklch(17% 0.012 70);
     display: flex;
     flex-direction: column;
   }
@@ -80,17 +81,20 @@
     will-change: transform;
   }
   .slide {
-    min-width: 100vw; height: 100vh;
+    /* 100% of the stage, not 100vh: the demo banner above the stage
+       was pushing every slide down and clipping the footer */
+    min-width: 100vw; height: 100%;
     background: var(--paper);
     display: grid; place-items: stretch;
     position: relative; overflow: hidden;
   }
   .slide-inner {
     width: min(1320px, 92vw);
-    height: min(820px, 86vh);
+    /* size against the slide (banner already subtracted), not the viewport */
+    height: min(820px, calc(100% - 36px));
     margin: auto;
-    padding: 56px 64px 48px;
-    display: grid; grid-template-rows: auto 1fr auto;
+    padding: clamp(30px, 4.6vh, 56px) clamp(36px, 5vw, 64px) clamp(24px, 3.8vh, 48px);
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
     background: var(--paper);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
     position: relative;
@@ -128,8 +132,9 @@
     content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
   }
 
-  /* Body region (per slide overrides this) */
-  .body { padding: 28px 0 22px; }
+  /* Body region (per slide overrides this); overflow guard keeps dense
+     tables from painting over the footer when the viewport runs short */
+  .body { padding: clamp(14px, 2.6vh, 28px) 0 clamp(10px, 2vh, 22px); min-height: 0; overflow: hidden; }
 
   /* ──────────────────────────────────────────────────────────────────────────
      Chrome — counter, nav, print badge
@@ -137,17 +142,17 @@
   .chrome {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 10px; align-items: center;
-    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(8px);
-    border: 1px solid oklch(86% 0.008 75); border-radius: 999px;
+    background: oklch(98% 0.005 80 / 0.94); backdrop-filter: blur(8px);
+    border: 1px solid oklch(80% 0.008 75); border-radius: 2px;
     padding: 6px 8px; box-shadow: 0 8px 24px -10px rgba(0,0,0,0.35);
     z-index: 50;
   }
   .chrome button {
-    width: 28px; height: 28px; border: 0; border-radius: 999px;
+    width: 28px; height: 28px; border: 0; border-radius: 2px;
     background: transparent; cursor: pointer; color: var(--ink);
     display: grid; place-items: center;
   }
-  .chrome button:hover { background: oklch(94% 0.008 75); }
+  .chrome button:hover { background: oklch(92% 0.012 78); }
   .chrome .counter {
     font-family: var(--mono); font-size: 11px; padding: 0 10px; color: var(--ink-mid);
     letter-spacing: 0.04em;
@@ -155,9 +160,9 @@
   .chrome .counter .now { color: var(--ink); font-weight: 500; }
 
   .agent-stamp {
-    position: fixed; top: 18px; right: 18px;
-    background: oklch(98% 0.005 80 / 0.92); backdrop-filter: blur(6px);
-    border: 1px solid oklch(86% 0.008 75); border-radius: 8px;
+    position: fixed; top: 46px; right: 18px;
+    background: oklch(98% 0.005 80 / 0.94); backdrop-filter: blur(6px);
+    border: 1px solid oklch(80% 0.008 75); border-radius: 2px;
     padding: 8px 12px;
     font-family: var(--sans); font-size: 11px; color: var(--ink-mid);
     display: flex; gap: 10px; align-items: center;
@@ -165,8 +170,7 @@
   }
   .agent-stamp b { color: var(--ink); font-weight: 600; }
   .agent-stamp .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--pos);
-    box-shadow: 0 0 0 3px oklch(45% 0.10 165 / 0.18);
+    width: 7px; height: 7px; border-radius: 1px; background: var(--accent);
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -184,8 +188,9 @@
   h1.display em { font-style: italic; color: var(--accent); }
   h2.section {
     font-family: var(--serif); font-weight: 500;
-    font-size: 44px; line-height: 1.04; letter-spacing: -0.012em;
+    font-size: clamp(30px, 3.6vw, 44px); line-height: 1.04; letter-spacing: -0.012em;
     color: var(--ink);
+    text-wrap: balance;
   }
   h2.section em { font-style: italic; font-weight: 400; color: var(--accent); }
   h3 {
@@ -244,7 +249,7 @@
     font-family: var(--serif); font-size: 18px; color: var(--ink); line-height: 1.3;
   }
   .cover .marque {
-    position: absolute; right: 56px; top: 56px;
+    position: absolute; right: 64px; top: 118px;
     font-family: var(--serif); font-style: italic;
     font-size: 11px; color: var(--ink-mid); letter-spacing: 0.04em;
     transform: rotate(-2deg);
@@ -270,7 +275,7 @@
     counter-increment: toc;
     display: grid; grid-template-columns: auto 1fr auto;
     gap: 18px; align-items: baseline;
-    padding: 14px 0; border-bottom: 1px solid var(--rule);
+    padding: clamp(8px, 1.4vh, 14px) 0; border-bottom: 1px solid var(--rule);
   }
   .toc ol li::before {
     content: counter(toc, decimal-leading-zero);
@@ -314,7 +319,7 @@
   .kpi .delta {
     font-family: var(--mono); font-size: 10.5px; margin-top: 4px; letter-spacing: 0.02em;
   }
-  .kpi .delta.up { color: var(--pos); }
+  .kpi .delta.up { color: var(--accent); }
   .kpi .delta.down { color: var(--neg); }
   .market-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 26px; min-height: 0; }
   .chartbox {
@@ -349,14 +354,16 @@
   table.fin th {
     font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--ink-soft); font-weight: 600;
-    text-align: right; padding: 10px 8px; border-bottom: 1px solid var(--ink);
+    text-align: right; padding: clamp(6px, 1.1vh, 10px) 8px; border-bottom: 1px solid var(--ink);
   }
   table.fin th:first-child, table.fin td:first-child { text-align: left; }
   table.fin td {
     font-family: var(--mono); font-size: 12px; color: var(--ink);
-    padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--rule);
+    padding: clamp(5px, 1vh, 10px) 8px; text-align: right; border-bottom: 1px solid var(--rule);
     font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
+  table.fin td:first-child { white-space: normal; }
   table.fin td:first-child {
     font-family: var(--serif); font-size: 13.5px; color: var(--ink); font-weight: 400;
   }
@@ -413,12 +420,12 @@
   .ff-bar {
     position: absolute; top: 0; bottom: 0; background: var(--ink);
   }
-  .ff-bar.alt { background: var(--accent); opacity: 0.85; }
-  .ff-bar.alt2 { background: var(--gold); }
+  .ff-bar.alt { background: var(--accent); }
+  .ff-bar.alt2 { background: oklch(56% 0.008 70); }
   .ff-tick {
     position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent);
   }
-  .ff-tick::after {
+  .ff-row:first-child .ff-tick::after {
     content: "demo scale"; position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     font-family: var(--mono); font-size: 10px; color: var(--accent); white-space: nowrap;
   }
@@ -452,10 +459,10 @@
   }
   .dcf table.sens td.h { color: var(--accent); font-weight: 600; }
   .dcf table.sens td.center { background: oklch(96% 0.04 78); font-weight: 600; color: var(--ink); }
-  .dcf-asm { display: grid; gap: 10px; }
+  .dcf-asm { display: grid; gap: clamp(4px, 0.9vh, 10px); }
   .dcf-asm .row {
     display: grid; grid-template-columns: 1fr auto;
-    border-bottom: 1px dashed var(--rule); padding: 8px 0;
+    border-bottom: 1px dashed var(--rule); padding: clamp(4px, 0.8vh, 8px) 0;
     align-items: baseline;
   }
   .dcf-asm .row .k {
@@ -474,9 +481,10 @@
     gap: 14px;
   }
   .alt {
-    border: 1px solid var(--rule); padding: 22px 24px;
-    display: grid; grid-template-rows: auto auto auto 1fr; gap: 12px;
+    border: 1px solid var(--rule); padding: clamp(12px, 2vh, 22px) clamp(14px, 1.8vw, 24px);
+    display: grid; grid-template-rows: auto auto auto 1fr; gap: clamp(6px, 1.1vh, 12px);
     background: var(--paper-warm);
+    min-height: 0; overflow: hidden;
   }
   .alt.recommended {
     background: var(--ink); color: var(--paper);
@@ -486,7 +494,7 @@
     font-family: var(--sans); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--ink-soft); display: flex; gap: 8px; align-items: center;
   }
-  .alt.recommended .badge { color: var(--gold); }
+  .alt.recommended .badge { color: oklch(82% 0.025 78); }
   .alt h3 { font-size: 24px; }
   .alt.recommended h3 { color: var(--paper); }
   .alt .stat { display: flex; gap: 24px; align-items: baseline; }
@@ -524,7 +532,7 @@
   .reco .next .step {
     display: grid; grid-template-columns: auto 1fr auto;
     gap: 18px; align-items: baseline;
-    padding: 14px 0; border-bottom: 1px solid var(--rule);
+    padding: clamp(8px, 1.4vh, 14px) 0; border-bottom: 1px solid var(--rule);
   }
   .reco .next .step .n {
     font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em;
@@ -552,6 +560,10 @@
   .disc .stamp .lab { font-family: var(--sans); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
   .disc .stamp .who { font-family: var(--serif); font-size: 18px; color: var(--ink); }
   .disc .stamp .det { font-family: var(--sans); font-size: 12px; color: var(--ink-mid); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stage { transition: none; }
+  }
 
   @media print {
     html, body, .deck { height: auto; overflow: visible; background: white; }
@@ -669,25 +681,19 @@
           </div>
           <div class="chart">
             <svg viewBox="0 0 600 180" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="g1" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stop-color="oklch(48% 0.18 28)" stop-opacity="0.18"/>
-                  <stop offset="100%" stop-color="oklch(48% 0.18 28)" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
               <g stroke="oklch(86% 0.008 75)" stroke-width="1">
                 <line x1="0" y1="40" x2="600" y2="40"/>
                 <line x1="0" y1="80" x2="600" y2="80"/>
                 <line x1="0" y1="120" x2="600" y2="120"/>
                 <line x1="0" y1="160" x2="600" y2="160"/>
               </g>
-              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(56% 0.008 70)">
+              <g font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="9" fill="oklch(50% 0.008 70)">
                 <text x="2" y="38">60K</text>
                 <text x="2" y="78">40K</text>
                 <text x="2" y="118">20K</text>
                 <text x="2" y="158">0</text>
               </g>
-              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="url(#g1)"/>
+              <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58 L 600 180 L 0 180 Z" fill="oklch(48% 0.18 28)" fill-opacity="0.07"/>
               <path d="M 0 130 L 50 122 L 100 138 L 150 124 L 200 110 L 250 96 L 300 100 L 350 88 L 400 76 L 450 82 L 500 70 L 560 62 L 600 58" fill="none" stroke="oklch(48% 0.18 28)" stroke-width="2"/>
               <line x1="0" y1="100" x2="600" y2="100" stroke="oklch(38% 0.010 70)" stroke-dasharray="4 4" stroke-width="1"/>
               <text x="540" y="96" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="10" fill="oklch(38% 0.010 70)">30K mark</text>

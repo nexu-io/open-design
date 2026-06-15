@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Work+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet" />
 <script src="assets/deck-stage.js"></script>
 <style>
   :root {
@@ -18,7 +18,10 @@
     --lemon:    #D6DD63;     /* chartreuse */
     --blush:    #E8C9B6;     /* soft peach */
     --sage:     #B7C7A8;     /* sage (extra) */
-    --lilac:    #C9BEDC;     /* lilac (extra) */
+    --ink-tint: #453D30;     /* body text on tinted blocks (AA on every pastel) */
+    --rose-ink: #B25A85;     /* deepened pink, thin data strokes only */
+    --olive-ink:#7E8826;     /* deepened lemon, thin data strokes only */
+    --hairline: rgba(42,36,27,.22);
   }
   html, body { margin:0; padding:0; background:#1a1a1a; }
   body { font-family: "Work Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
@@ -34,12 +37,13 @@
   /* Header / footer chrome shared across slides */
   .eyebrow {
     position: absolute;
-    top: 60px; left: 80px;
+    top: 66px; left: 80px;
     font-family: "Work Sans", sans-serif;
-    font-size: 28px;
-    font-weight: 400;
+    font-size: 19px;
+    font-weight: 500;
     color: var(--ink);
-    letter-spacing: -0.005em;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
   }
   .footer {
     position: absolute;
@@ -47,16 +51,19 @@
     display: flex;
     justify-content: space-between;
     font-family: "Cormorant Garamond", "Garamond", serif;
-    font-size: 26px;
+    font-size: 21px;
     font-style: italic;
+    letter-spacing: 0.01em;
     color: var(--ink-soft);
+    border-top: 1px solid var(--hairline);
+    padding-top: 16px;
   }
   .pagedot {
     position: absolute;
     right: 80px; top: 60px;
     font-family: "Cormorant Garamond", serif;
     font-style: italic;
-    font-size: 26px;
+    font-size: 24px;
     color: var(--ink-soft);
   }
 
@@ -64,26 +71,6 @@
   h1, h2, h3, p { margin: 0; }
   .serif      { font-family: "Cormorant Garamond", "Garamond", serif; font-weight: 500; }
   .serif-it   { font-family: "Cormorant Garamond", serif; font-style: italic; font-weight: 500; }
-  .display {
-    font-family: "Cormorant Garamond", serif;
-    font-weight: 500;
-    font-size: 188px;
-    line-height: 0.95;
-    letter-spacing: -0.015em;
-  }
-  .title {
-    font-family: "Cormorant Garamond", serif;
-    font-weight: 500;
-    font-size: 124px;
-    line-height: 0.98;
-    letter-spacing: -0.01em;
-  }
-  .subtitle {
-    font-family: "Work Sans", sans-serif;
-    font-weight: 500;
-    font-size: 44px;
-    line-height: 1.1;
-  }
   .body {
     font-family: "Work Sans", sans-serif;
     font-weight: 400;
@@ -91,12 +78,31 @@
     line-height: 1.5;
   }
 
+  /* Entrance motion: opacity only (layout containers rely on centering
+     transforms, so we never animate transform here), reduced-motion safe */
+  @keyframes settle {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  section.slide[data-deck-active] > :not(.eyebrow):not(.pagedot):not(.footer) {
+    animation: settle .6s cubic-bezier(.16,1,.3,1) both;
+  }
+  section.slide[data-deck-active] > :not(.eyebrow):not(.pagedot):not(.footer) ~ :not(.eyebrow):not(.pagedot):not(.footer) {
+    animation-delay: .08s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    section.slide > * { animation: none !important; }
+  }
+  @media print {
+    section.slide > * { animation: none !important; }
+  }
+
   /* ============== 1. COVER ================================== */
   .s-cover .stack {
     position: absolute;
     left: 80px; right: 80px; top: 50%;
     transform: translateY(-50%);
-    display: flex; flex-direction: column; gap: 36px;
+    display: flex; flex-direction: column; gap: 44px;
   }
   .s-cover .kicker {
     font-family: "Cormorant Garamond", serif;
@@ -178,8 +184,7 @@
     gap: 28px;
   }
   .s-method .step {
-    background: rgba(255,255,255,0.55);
-    border-radius: 32px;
+    border-radius: 28px;
     padding: 36px 32px;
     display: flex; flex-direction: column;
     justify-content: space-between;
@@ -201,7 +206,7 @@
   .s-method .step p {
     font-size: 24px;
     line-height: 1.45;
-    color: var(--ink-soft);
+    color: var(--ink-tint);
   }
   .s-method .step.pink  { background: var(--pink); }
   .s-method .step.lemon { background: var(--lemon); }
@@ -217,7 +222,7 @@
     gap: 28px;
   }
   .s-insights .card {
-    border-radius: 36px;
+    border-radius: 28px;
     padding: 64px 48px;
     display: flex;
     flex-direction: column;
@@ -254,7 +259,7 @@
   .s-closer .eyebrow,
   .s-closer .pagedot,
   .s-closer .footer { color: var(--ink); }
-  .s-closer .footer { color: rgba(42,36,27,.7); }
+  .s-closer .footer { color: rgba(42,36,27,.85); border-top-color: rgba(42,36,27,.3); }
   .s-closer .center {
     position: absolute;
     left: 50%; top: 50%;
@@ -295,7 +300,7 @@
     gap: 28px;
   }
   .s-numbers .stat {
-    border-radius: 36px;
+    border-radius: 28px;
     padding: 42px 44px;
     display: flex; flex-direction: column;
     justify-content: space-between;
@@ -331,7 +336,7 @@
     font-style: italic;
     font-size: 220px;
     line-height: 0.7;
-    color: var(--blush);
+    color: var(--pink);
     margin-bottom: 12px;
   }
   .s-quote blockquote {
@@ -377,7 +382,9 @@
     gap: 18px;
   }
   .s-next .panel.l {
-    background: rgba(255,255,255,0.55);
+    border-top: 1px solid var(--hairline);
+    border-radius: 0;
+    padding-left: 0;
     justify-content: center;
   }
   .s-next .panel.l h2 {
@@ -427,8 +434,7 @@
   .s-next .item p {
     font-size: 24px;
     line-height: 1.4;
-    color: var(--ink);
-    opacity: 0.85;
+    color: var(--ink-tint);
   }
 
   /* ============== CONSULT (text-dense) ====================== */
@@ -467,9 +473,8 @@
     gap: 28px;
   }
   .s-consult .col {
-    background: rgba(255,255,255,0.55);
-    border-radius: 24px;
-    padding: 28px 30px;
+    border-top: 1px solid rgba(42,36,27,.4);
+    padding: 28px 6px 0 0;
     display: flex; flex-direction: column;
     gap: 16px;
   }
@@ -543,8 +548,6 @@
   .s-chart .right {
     position: absolute;
     right: 80px; top: 200px; bottom: 200px; left: 680px;
-    background: rgba(255,255,255,0.55);
-    border-radius: 28px;
     padding: 36px 40px 30px 80px;
     display: flex; flex-direction: column;
     overflow: hidden;
@@ -631,13 +634,13 @@
   .s-process .node p {
     font-size: 24px;
     line-height: 1.4;
-    color: var(--ink-soft);
+    color: var(--ink-tint);
   }
   .s-process .node.n1 { background: var(--pink); }
   .s-process .node.n2 { background: var(--blush); }
   .s-process .node.n3 { background: var(--lemon); }
   .s-process .node.n4 { background: var(--sage); }
-  .s-process .node.n5 { background: var(--lilac); }
+  .s-process .node.n5 { background: var(--pink); }
   .s-process .node .arrow {
     position: absolute;
     right: -20px; top: 50%; transform: translateY(-50%);
@@ -650,8 +653,8 @@
     position: absolute;
     left: 80px; right: 80px; bottom: 140px; top: auto;
     height: 60px;
-    background: rgba(255,255,255,0.55);
-    border-radius: 18px;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
     padding: 14px 28px;
     display: flex; justify-content: space-between; align-items: center;
     font-family: "Cormorant Garamond", serif;
@@ -688,9 +691,7 @@
   .s-matrix .table {
     position: absolute;
     left: 80px; right: 80px; top: 320px; bottom: 130px;
-    background: rgba(255,255,255,0.55);
-    border-radius: 28px;
-    padding: 8px;
+    border-top: 1.5px solid rgba(42,36,27,.4);
     display: grid;
     grid-template-columns: 1.4fr 1fr 1fr 1fr;
     grid-auto-rows: minmax(0, 1fr);
@@ -734,63 +735,21 @@
   .s-matrix .pill.yes  { background: var(--lemon); }
   .s-matrix .pill.part { background: var(--blush); }
   .s-matrix .pill.no   { background: var(--pink); }
-  .s-matrix .pill.note { background: rgba(255,255,255,0.6); border: 1px solid rgba(42,36,27,.18); color: var(--ink-soft); font-style: italic; font-family: "Cormorant Garamond", serif; font-weight: 400; }
+  .s-matrix .pill.note { background: transparent; border: 1px solid rgba(42,36,27,.3); color: var(--ink-soft); font-style: italic; font-family: "Cormorant Garamond", serif; font-weight: 400; }
 
-  /* ============== 9. DESIGN SYSTEM ========================== */
-  .s-system .wrap {
-    position: absolute;
-    left: 80px; right: 80px; top: 140px; bottom: 100px;
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    grid-template-rows: auto 1fr 1fr;
-    gap: 24px;
+  /* Hover lift on color blocks: transform only, quiet */
+  .s-method .step, .s-insights .card, .s-numbers .stat, .s-next .item, .s-process .node {
+    transition: transform .3s cubic-bezier(.16,1,.3,1);
   }
-  .s-system .wrap > * { background: rgba(255,255,255,.55); border-radius: 24px; padding: 22px 26px; }
-  .s-system h4 {
-    font-family: "Cormorant Garamond", serif;
-    font-style: italic;
-    font-weight: 500;
-    font-size: 26px;
-    margin-bottom: 12px;
-    color: var(--ink);
+  .s-method .step:hover, .s-insights .card:hover, .s-numbers .stat:hover,
+  .s-next .item:hover, .s-process .node:hover {
+    transform: translateY(-3px);
   }
-  .s-system .small { font-size: 17px; line-height: 1.5; color: var(--ink-soft); }
-  .s-system .small li { margin-bottom: 6px; }
-  .s-system .small ul { margin: 0; padding-left: 18px; }
-
-  .s-system .pal { grid-column: 1 / span 5; grid-row: 1 / span 2; }
-  .s-system .pal .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-  .s-system .pal .sw { aspect-ratio: 1/1.2; border-radius: 16px; display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; font-family: "Work Sans", sans-serif; font-size: 11px; color: var(--ink); }
-  .s-system .pal .sw.s1 { background: var(--paper); border: 1px solid rgba(0,0,0,0.06); }
-  .s-system .pal .sw.s2 { background: var(--pink); }
-  .s-system .pal .sw.s3 { background: var(--lemon); }
-  .s-system .pal .sw.s4 { background: var(--blush); }
-  .s-system .pal .sw.s5 { background: var(--sage); }
-
-  .s-system .type { grid-column: 6 / span 7; grid-row: 1 / span 2; }
-  .s-system .type .row {
-    display: flex; align-items: baseline; gap: 18px;
-    padding: 6px 0; border-bottom: 1px dashed rgba(42,36,27,.15);
+  @media (prefers-reduced-motion: reduce) {
+    .s-method .step, .s-insights .card, .s-numbers .stat, .s-next .item, .s-process .node {
+      transition: none;
+    }
   }
-  .s-system .type .row:last-child { border-bottom: 0; }
-  .s-system .type .lbl {
-    font-family: "Work Sans", sans-serif;
-    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--ink-soft); margin-left: auto; white-space: nowrap;
-  }
-
-  .s-system .rules { grid-column: 1 / span 7; grid-row: 3; }
-  .s-system .dont  { grid-column: 8 / span 5; grid-row: 3; }
-  .s-system .corners {
-    display: flex; gap: 12px; margin-top: 8px;
-  }
-  .s-system .corners .box {
-    width: 42px; height: 42px;
-    background: var(--pink);
-  }
-  .s-system .corners .box.r1 { border-radius: 14px; background: var(--lemon); }
-  .s-system .corners .box.r2 { border-radius: 22px; background: var(--blush); }
-  .s-system .corners .box.r3 { border-radius: 50%; background: var(--sage); }
 </style>
 </head>
 <body>
@@ -1054,8 +1013,8 @@
       <h2>The community <em>compounds</em><br/>month over month.</h2>
       <p>Since the project opened, the curve has only steepened: 60K+ GitHub Stars, 300+ contributors, and 217+ plugins, all built in the open under Apache-2.0. (Curve shapes are illustrative.)</p>
       <div class="legend">
-        <div class="li"><i style="background:var(--pink)"></i> Plugins (217+)</div>
-        <div class="li"><i style="background:var(--lemon)"></i> Contributors (300+)</div>
+        <div class="li"><i style="background:var(--rose-ink)"></i> Plugins (217+)</div>
+        <div class="li"><i style="background:var(--olive-ink)"></i> Contributors (300+)</div>
         <div class="li"><i style="background:var(--ink); height:14px"></i> GitHub Stars (60K+)</div>
       </div>
     </div>
@@ -1070,9 +1029,9 @@
         <div class="gline" style="top:50%"></div>
         <div class="gline" style="top:75%"></div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <polyline fill="none" stroke="#E1A4C2" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+          <polyline fill="none" stroke="#B25A85" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
             points="0,98 16,90 32,78 48,62 64,44 80,24 100,2" />
-          <polyline fill="none" stroke="#D6DD63" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
+          <polyline fill="none" stroke="#7E8826" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
             points="0,96 16,86 32,72 48,56 64,40 80,22 100,2" />
           <polyline fill="none" stroke="#2A241B" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"
             points="0,99 16,94 32,84 48,68 64,46 80,24 100,2" />

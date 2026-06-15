@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Open Design — Retro Zine Presentation</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400&family=Space+Grotesk:wght@400;500;600&display=swap');
 
     :root {
       --bg: #C8B99A;
       --bg-dark: #B8A98A;
-      --green: #008F4D;
-      --green-light: #00A85D;
+      --green: #00713B;        /* zine ink green, >=3:1 on kraft for display sizes */
+      --green-light: #1FAE6A;  /* green for use on black surfaces */
+      --green-deep: #0B5132;   /* green for small labels on kraft, >=4.5:1 */
       --black: #1A1A1A;
       --white: #F4EFE6;
       --line: #1A1A1A;
@@ -115,13 +116,39 @@
       opacity: 0;
       pointer-events: none;
       transform: translateY(20px);
-      transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
       overflow: hidden;
     }
     .slide.active {
       opacity: 1;
       pointer-events: all;
       transform: translateY(0);
+    }
+    /* staggered ink-in for slide children: opacity only, so rotated
+       collage pieces / stamps keep their own transforms intact */
+    @keyframes inkIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .slide.active > * {
+      animation: inkIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+    .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+    .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+    .slide.active > *:nth-child(5) { animation-delay: 0.28s; }
+    .slide.active > *:nth-child(6) { animation-delay: 0.35s; }
+    @media (prefers-reduced-motion: reduce) {
+      .slide {
+        transition: none;
+        transform: none;
+      }
+      .slide.active > * {
+        animation: none;
+      }
+      .progress-bar {
+        transition: none;
+      }
     }
 
     /* ---------- UTILITIES ---------- */
@@ -182,7 +209,7 @@
       font-weight: 600;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: var(--green);
+      color: var(--green-deep);
       margin-bottom: 12px;
     }
     .slide-hero .hero-title {
@@ -241,7 +268,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: 14px;
       letter-spacing: 3px;
-      color: var(--green);
+      color: var(--green-deep);
       margin-bottom: 20px;
     }
     .slide-split .split-heading {
@@ -272,17 +299,20 @@
       margin-top: 8px;
     }
 
-    /* ---------- SLIDE 3: STATEMENT ---------- */
+    /* ---------- SLIDE 3: STATEMENT ----------
+       green ink flooded onto kraft, not an inverted page;
+       the closing slide keeps the deck's single inversion */
     .slide-statement {
       text-align: center;
-      background: var(--green);
-      color: var(--white);
+      background: var(--bg);
+      color: var(--black);
+      box-shadow: inset 0 0 0 16px var(--green), inset 0 0 0 20px var(--bg), inset 0 0 0 23px var(--green);
     }
     .slide-statement .statement-line-top,
     .slide-statement .statement-line-bottom {
       width: 60px;
       height: 4px;
-      background: var(--white);
+      background: var(--black);
       margin: 0 auto;
     }
     .slide-statement .statement-quote {
@@ -293,6 +323,7 @@
       letter-spacing: 2px;
       margin: 40px auto;
       max-width: 900px;
+      color: var(--green);
     }
     .slide-statement .statement-author {
       font-family: 'Caveat', cursive;
@@ -320,16 +351,21 @@
       width: 100%;
       max-width: 1000px;
       border: 3px solid var(--black);
+      background: var(--white);
     }
+    /* hairline grid: single shared rules instead of doubled box borders */
     .slide-grid .grid-box {
       padding: 32px;
-      border: 1.5px solid var(--black);
+      border-right: 1.5px solid var(--black);
+      border-bottom: 1.5px solid var(--black);
     }
+    .slide-grid .grid-box:nth-child(2n) { border-right: none; }
+    .slide-grid .grid-box:nth-last-child(-n+2) { border-bottom: none; }
     .slide-grid .grid-box-label {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 13px;
       letter-spacing: 3px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
       margin-bottom: 8px;
     }
@@ -470,7 +506,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(14px, 1.5vw, 18px);
       letter-spacing: 4px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
       margin-bottom: 24px;
       text-align: center;
@@ -481,12 +517,15 @@
       gap: 0;
       max-width: 1000px;
       width: 100%;
+      border: 3px solid var(--black);
+      background: var(--white);
     }
     .slide-numbers .num-item {
-      padding: 24px 20px;
-      border: 1.5px solid var(--black);
+      padding: 32px 24px;
+      border-right: 1.5px solid var(--black);
       text-align: center;
     }
+    .slide-numbers .num-item:last-child { border-right: none; }
     .slide-numbers .num-digit {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(44px, 6vw, 80px);
@@ -521,7 +560,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(14px, 1.5vw, 18px);
       letter-spacing: 4px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
     }
     .slide-collage .collage-container {
@@ -587,7 +626,7 @@
       background: var(--black);
       color: var(--bg);
     }
-    .slide-collage .piece-4 h3 { color: var(--green); }
+    .slide-collage .piece-4 h3 { color: var(--green-light); }
     .slide-collage .piece-4 p { color: var(--bg); }
 
     /* Tape effects */
@@ -669,13 +708,13 @@
       bottom: -20px;
       right: 30px;
       background: var(--black);
-      color: var(--green);
+      color: var(--green-light);
       font-family: 'Bebas Neue', sans-serif;
       font-size: 18px;
       letter-spacing: 2px;
       padding: 10px 24px;
       transform: rotate(-8deg);
-      border: 2px solid var(--green);
+      border: 2px solid var(--green-light);
     }
 
     /* ---------- SLIDE 10: CLOSING ---------- */
@@ -689,7 +728,7 @@
       font-size: 12px;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: var(--green);
+      color: var(--green-light);
       margin-bottom: 24px;
     }
     .slide-closing .closing-title {
@@ -702,13 +741,13 @@
     .slide-closing .closing-divider {
       width: 80px;
       height: 4px;
-      background: var(--green);
+      background: var(--green-light);
       margin: 32px auto;
     }
     .slide-closing .closing-hand {
       font-family: 'Caveat', cursive;
       font-size: clamp(24px, 3vw, 36px);
-      color: var(--green);
+      color: var(--green-light);
       margin-top: 16px;
     }
     .slide-closing .closing-social {
@@ -724,12 +763,12 @@
     .slide-closing .closing-social a {
       color: var(--bg);
       text-decoration: none;
-      border-bottom: 2px solid var(--green);
+      border-bottom: 2px solid var(--green-light);
       padding-bottom: 4px;
       transition: color 0.3s;
     }
     .slide-closing .closing-social a:hover {
-      color: var(--green);
+      color: var(--green-light);
     }
 
     /* ---------- HANDWRITTEN SVG ILLUSTRATION ---------- */
@@ -745,7 +784,11 @@
       .slide-split { flex-direction: column; }
       .slide-split .split-left { border-right: none; border-bottom: 3px solid var(--black); }
       .slide-grid .grid-boxes { grid-template-columns: 1fr; }
+      .slide-grid .grid-box { border-right: none; border-bottom: 1.5px solid var(--black); }
+      .slide-grid .grid-box:last-child { border-bottom: none; }
       .slide-numbers .num-grid { grid-template-columns: 1fr; }
+      .slide-numbers .num-item { border-right: none; border-bottom: 1.5px solid var(--black); }
+      .slide-numbers .num-item:last-child { border-bottom: none; }
       .slide-editorial .ed-columns { grid-template-columns: 1fr; gap: 24px; }
       .slide-editorial .ed-col:first-child { border-right: none; padding-right: 0; border-bottom: 2px solid var(--black); padding-bottom: 24px; }
       .slide-collage .collage-piece { position: relative; top: auto; left: auto; right: auto; bottom: auto; width: 90%; height: auto; margin: 10px auto; transform: none; }
@@ -854,7 +897,7 @@
           <line x1="40" y1="200" x2="360" y2="200" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
           <line x1="80" y1="80" x2="320" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
           <line x1="320" y1="80" x2="80" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
-          <path d="M200 40 Q240 120 320 200 Q240 280 200 360 Q160 280 80 200 Q160 120 200 40" stroke="#008F4D" stroke-width="3" fill="none" opacity="0.2"/>
+          <path d="M200 40 Q240 120 320 200 Q240 280 200 360 Q160 280 80 200 Q160 120 200 40" stroke="#00713B" stroke-width="3" fill="none" opacity="0.2"/>
         </svg>
       </div>
       <div class="visual-overlay stamp">
@@ -881,7 +924,7 @@
           real runnable files, previewed and edited in a sandbox.
         </div>
         <div class="ed-col">
-          <strong style="font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--green);">SHIP IT, OR FILM IT</strong>
+          <strong style="font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--green-deep);">SHIP IT, OR FILM IT</strong>
           <br><br>
           Hand the artifact off to engineering, or turn it into a marketing video with
           HyperFrames — an HTML-to-MP4 pipeline that runs entirely on your own machine.

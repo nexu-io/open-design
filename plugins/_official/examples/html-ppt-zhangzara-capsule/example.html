@@ -6,7 +6,7 @@
 <title>Open Design — The Open-Source, Local, Agent-Driven Design Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,600..800;1,6..96,600..800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after {
     margin: 0;
@@ -24,9 +24,15 @@
     --violet: #A06CE8;
     --yellow: #F2D160;
     --peach: #F5B895;
-    --mint: #A8E6CF;
     --outline: #1E1E1E;
-    --shadow: rgba(26, 26, 26, 0.08);
+    --card: #FCFBF6;
+    /* darker ink-tones of the family hues, for text on light surfaces */
+    --coral-ink: #C73D2E;
+    --lime-ink: #6E7C1A;
+    --sky-ink: #2D5FBF;
+    --violet-ink: #7A3FD1;
+    --shadow: var(--outline);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
     --font-display: 'Bodoni Moda', serif;
     --font-body: 'Space Grotesk', sans-serif;
   }
@@ -69,13 +75,32 @@
     padding: 3rem 4rem;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.5s var(--ease);
     overflow: hidden;
   }
 
   .slide.active {
     opacity: 1;
     pointer-events: all;
+  }
+
+  /* Entrance: transform + opacity only, staggered, ease-out */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide.active > * {
+    animation: rise 0.6s var(--ease) both;
+  }
+
+  .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+  .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+  .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > * { animation: none; }
   }
 
   /* Decorative pill elements */
@@ -102,8 +127,7 @@
   .pill-violet { background: var(--violet); }
   .pill-yellow { background: var(--yellow); }
   .pill-peach { background: var(--peach); }
-  .pill-mint { background: var(--mint); }
-  .pill-white { background: #fff; }
+  .pill-white { background: var(--card); }
 
   .pill-outline {
     background: transparent;
@@ -128,7 +152,7 @@
     border: 2px solid var(--outline);
     background: transparent;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
   }
 
   .nav-dot.active {
@@ -147,7 +171,7 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--fg);
-    opacity: 0.5;
+    opacity: 0.74;
     z-index: 100;
   }
 
@@ -162,7 +186,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg);
-    opacity: 0.3;
+    opacity: 0.7;
     z-index: 100;
   }
 
@@ -172,11 +196,7 @@
   .slide-1 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 20% 80%, rgba(200, 217, 78, 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 20%, rgba(139, 180, 247, 0.12) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 50%, rgba(245, 184, 149, 0.08) 0%, transparent 60%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-1 .deco-pills {
@@ -220,7 +240,7 @@
     text-transform: uppercase;
     margin-top: 1.5rem;
     color: var(--fg);
-    opacity: 0.6;
+    opacity: 0.82;
   }
 
   .slide-1 .title-pill {
@@ -243,9 +263,7 @@
      ============================================ */
   .slide-2 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 0% 50%, rgba(160, 108, 232, 0.08) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-2 .slide-inner {
@@ -276,8 +294,8 @@
     font-family: var(--font-body);
     font-size: clamp(0.95rem, 1.2vw, 1.15rem);
     line-height: 1.6;
-    opacity: 0.7;
-    max-width: 90%;
+    opacity: 0.8;
+    max-width: 60ch;
   }
 
   .slide-2 .left-content .accent-line {
@@ -329,10 +347,7 @@
      ============================================ */
   .slide-3 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 100% 0%, rgba(232, 93, 78, 0.06) 0%, transparent 40%),
-      radial-gradient(ellipse at 0% 100%, rgba(139, 180, 247, 0.08) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-3 .slide-inner {
@@ -376,15 +391,23 @@
   }
 
   .slide-3 .pillar-card {
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 2.5rem 2rem;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-    box-shadow: 8px 8px 0 var(--shadow);
-    transition: transform 0.3s ease;
+    box-shadow: 6px 6px 0 var(--shadow);
+    transition: transform 0.3s var(--ease);
+  }
+
+  .slide-3 .pillar-card:hover {
+    transform: translate(-3px, -3px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide-3 .pillar-card:hover { transform: none; }
   }
 
   .slide-3 .pillar-card .card-icon {
@@ -411,7 +434,7 @@
   .slide-3 .pillar-card p {
     font-size: 0.9rem;
     line-height: 1.55;
-    opacity: 0.65;
+    opacity: 0.84;
   }
 
   /* ============================================
@@ -419,9 +442,7 @@
      ============================================ */
   .slide-4 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 100%, rgba(200, 217, 78, 0.1) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-4 .slide-inner {
@@ -445,11 +466,11 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 3rem;
-    box-shadow: 8px 8px 0 var(--shadow);
+    box-shadow: 6px 6px 0 var(--shadow);
   }
 
   .slide-4 .chart-row {
@@ -480,20 +501,19 @@
   .slide-4 .chart-bar-fill {
     height: 100%;
     border-radius: 9999px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 1rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 1s var(--ease);
     border-right: 2px solid var(--outline);
+    /* value is read from the column on the right; the duplicate inside the bar is visually muted */
+    font-size: 0;
+    color: transparent;
   }
 
   .slide-4 .chart-value {
-    width: 60px;
-    font-size: 0.9rem;
-    font-weight: 600;
+    width: 72px;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     flex-shrink: 0;
   }
 
@@ -503,10 +523,7 @@
   .slide-5 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 30% 70%, rgba(245, 209, 96, 0.15) 0%, transparent 45%),
-      radial-gradient(ellipse at 70% 30%, rgba(160, 108, 232, 0.1) 0%, transparent 45%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-5 .statement-box {
@@ -559,7 +576,7 @@
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    opacity: 0.5;
+    opacity: 0.78;
   }
 
   .slide-5 .floating-pills {
@@ -587,9 +604,7 @@
      ============================================ */
   .slide-6 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 0%, rgba(232, 93, 78, 0.06) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-6 .slide-inner {
@@ -655,7 +670,7 @@
     font-family: var(--font-display);
     font-size: 1.3rem;
     font-weight: 700;
-    background: #fff;
+    background: var(--card);
     flex-shrink: 0;
     box-shadow: 4px 4px 0 var(--shadow);
   }
@@ -673,7 +688,7 @@
     text-align: center;
     font-size: 0.8rem;
     line-height: 1.4;
-    opacity: 0.55;
+    opacity: 0.8;
     margin-top: -0.5rem;
   }
 
@@ -682,10 +697,7 @@
      ============================================ */
   .slide-7 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 80% 80%, rgba(200, 217, 78, 0.1) 0%, transparent 40%),
-      radial-gradient(ellipse at 20% 20%, rgba(245, 184, 149, 0.1) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-7 .slide-inner {
@@ -715,7 +727,7 @@
   }
 
   .slide-7 .stat-pill {
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 2rem 1.5rem;
@@ -724,7 +736,7 @@
     align-items: center;
     text-align: center;
     gap: 0.75rem;
-    box-shadow: 6px 6px 0 var(--shadow);
+    box-shadow: 5px 5px 0 var(--shadow);
   }
 
   .slide-7 .stat-pill .stat-number {
@@ -740,7 +752,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    opacity: 0.6;
+    opacity: 0.82;
     line-height: 1.3;
   }
 
@@ -756,9 +768,7 @@
      ============================================ */
   .slide-8 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 50%, rgba(139, 180, 247, 0.08) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-8 .slide-inner {
@@ -800,9 +810,9 @@
     font-size: 0.85rem;
     line-height: 1.3;
     padding: 1rem 2rem;
-    box-shadow: 6px 6px 0 var(--shadow);
+    box-shadow: 5px 5px 0 var(--shadow);
     z-index: 2;
-    background: #fff;
+    background: var(--card);
     min-width: 140px;
     min-height: 60px;
   }
@@ -848,9 +858,7 @@
      ============================================ */
   .slide-9 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 100% 50%, rgba(245, 209, 96, 0.1) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-9 .slide-inner {
@@ -876,18 +884,17 @@
     height: 100%;
     border-radius: 2rem;
     border: 2px solid var(--outline);
-    background: 
-      linear-gradient(135deg, var(--lavender) 0%, var(--sky) 50%, var(--mint) 100%);
+    background: var(--sky);
     position: relative;
     overflow: hidden;
-    box-shadow: 12px 12px 0 var(--shadow);
+    box-shadow: 8px 8px 0 var(--shadow);
   }
 
   .slide-9 .visual-frame .frame-pattern {
     position: absolute;
     inset: 0;
-    opacity: 0.15;
-    background-image: 
+    opacity: 0.18;
+    background-image:
       radial-gradient(circle at 25% 25%, var(--outline) 2px, transparent 2px),
       radial-gradient(circle at 75% 75%, var(--outline) 2px, transparent 2px);
     background-size: 40px 40px;
@@ -906,10 +913,10 @@
   .slide-9 .visual-frame .frame-content span {
     font-family: var(--font-body);
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    opacity: 0.5;
+    opacity: 0.75;
   }
 
   .slide-9 .text-side {
@@ -929,7 +936,8 @@
   .slide-9 .text-side p {
     font-size: clamp(0.9rem, 1.1vw, 1.05rem);
     line-height: 1.6;
-    opacity: 0.65;
+    opacity: 0.84;
+    max-width: 60ch;
   }
 
   .slide-9 .text-side .text-pills {
@@ -955,11 +963,7 @@
   .slide-10 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 20% 20%, rgba(200, 217, 78, 0.12) 0%, transparent 40%),
-      radial-gradient(ellipse at 80% 80%, rgba(245, 184, 149, 0.12) 0%, transparent 40%),
-      radial-gradient(ellipse at 50% 50%, rgba(160, 108, 232, 0.06) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-10 .closing-content {
@@ -1002,10 +1006,10 @@
   .slide-10 .closing-sub {
     font-family: var(--font-body);
     font-size: 0.85rem;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    opacity: 0.5;
+    opacity: 0.7;
   }
 
   .slide-10 .deco-pills-closing {
@@ -1229,22 +1233,22 @@
       </div>
       <div class="stats-grid">
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--coral);">-80%</div>
+          <div class="stat-number" style="color: var(--coral-ink);">-80%</div>
           <div class="stat-label">Monthly Cost vs.<br>Claude Design</div>
           <div class="stat-bar pill-coral"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--lime);">BYOK</div>
+          <div class="stat-number" style="color: var(--lime-ink);">BYOK</div>
           <div class="stat-label">Your Keys,<br>Your Providers</div>
           <div class="stat-bar pill-lime"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--sky);">Local</div>
+          <div class="stat-number" style="color: var(--sky-ink);">Local</div>
           <div class="stat-label">Your Data Stays<br>on Your Machine</div>
           <div class="stat-bar pill-sky"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--violet);">0</div>
+          <div class="stat-number" style="color: var(--violet-ink);">0</div>
           <div class="stat-label">Sign-ups<br>Required</div>
           <div class="stat-bar pill-violet"></div>
         </div>
@@ -1270,15 +1274,15 @@
       <div style="display:flex;justify-content:center;gap:2rem;margin-top:2.5rem;">
         <div style="text-align:center;max-width:180px;">
           <div class="pill pill-filled pill-sky" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Full Context</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">The agent reads local files, Figma exports, and code repositories in place</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">The agent reads local files, Figma exports, and code repositories in place</div>
         </div>
         <div style="text-align:center;max-width:180px;">
           <div class="pill pill-filled pill-violet" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Sandbox Preview</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">Real runnable files, previewed and edited instantly before anything ships</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Real runnable files, previewed and edited instantly before anything ships</div>
         </div>
         <div style="text-align:center;max-width:180px;">
           <div class="pill pill-filled pill-yellow" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Design Memory</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">Every choice is remembered and sharpens the next generation</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Every choice is remembered and sharpens the next generation</div>
         </div>
       </div>
     </div>
