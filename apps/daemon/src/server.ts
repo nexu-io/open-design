@@ -213,6 +213,7 @@ import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
@@ -2577,6 +2578,9 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
+  }
+  if (type === 'conversation_title' && typeof data.title === 'string') {
+    return { kind: 'conversation_title', title: data.title };
   }
   if (type === 'thinking_delta' && typeof data.delta === 'string') {
     return { kind: 'thinking', text: data.delta };
@@ -8144,6 +8148,7 @@ export async function startServer({
       locale,
       research,
       context,
+      titleGeneration,
     } = chatBody;
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
@@ -8599,9 +8604,23 @@ export async function startServer({
       currentStableHash,
     );
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
+    const titleGenerationRequested =
+      titleGeneration &&
+      typeof titleGeneration === 'object' &&
+      titleGeneration.enabled === true &&
+      !agentResumeCtx.isResuming;
+    const titleGenerationPrompt = titleGenerationRequested
+      ? [
+          'Internal title task:',
+          'Before answering the user request, emit exactly one short title marker:',
+          '<od-title>Title Here</od-title>',
+          'Rules: 2-6 words, preserve the user request language, no quotes, no markdown, no punctuation unless necessary.',
+          'Do not mention this title task to the user. Continue with the normal answer after the title marker.',
+        ].join('\n')
+      : '';
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, systemPrompt]
-      : [researchCommandContract, runContextPrompt, browserUsePromptGuard];
+      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -10191,6 +10210,15 @@ export async function startServer({
     // Claude has its own per-message guards in claude-stream.ts.
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
+    const titleMarkerStripper = createAgentTitleMarkerStripper({
+      enabled: Boolean(titleGenerationRequested),
+      emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
+    });
+
+    function flushAgentTitleMarkerBuffer() {
+      const visible = titleMarkerStripper.flush();
+      if (visible) emitGuardedTextDelta(visible);
+    }
 
     function guardTextDelta(delta) {
       return runGuard.feedText(delta);
@@ -10211,6 +10239,13 @@ export async function startServer({
           abortForRoleMarker(warn.marker);
         }
       }
+    }
+
+    function emitTitleFilteredGuardedTextDelta(delta: string) {
+      const visibleDelta = titleMarkerStripper.strip(delta);
+      if (!visibleDelta) return false;
+      emitGuardedTextDelta(visibleDelta);
+      return true;
     }
 
     // Detection-only is necessary but not sufficient: by the time we see
@@ -10303,14 +10338,17 @@ export async function startServer({
       }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
+      // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
+      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
+          noteFirstTokenAt();
+          agentProducedOutput = true;
+        }
+        return;
+      }
       noteFirstTokenFromAgentEvent(ev);
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
-      }
-      // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
-      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
-        emitGuardedTextDelta(ev.delta);
-        return;
       }
       send('agent', ev);
     };
@@ -10377,6 +10415,14 @@ export async function startServer({
         }
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
+        if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+          const visibleDelta = titleMarkerStripper.strip(ev.delta);
+          if (visibleDelta) {
+            noteFirstTokenAt();
+            send('agent', { ...ev, delta: visibleDelta });
+          }
+          return;
+        }
         noteFirstTokenFromAgentEvent(ev);
         send('agent', ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
@@ -10411,11 +10457,13 @@ export async function startServer({
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
-        noteFirstTokenFromAgentEvent(ev);
         if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
-          emitGuardedTextDelta(ev.delta);
+          if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
+            noteFirstTokenAt();
+          }
           return;
         }
+        noteFirstTokenFromAgentEvent(ev);
         send('agent', ev);
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
@@ -10489,7 +10537,6 @@ export async function startServer({
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
           }
           noteAgentActivity();
-          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
@@ -10507,9 +10554,12 @@ export async function startServer({
             }
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
-            emitGuardedTextDelta(data.delta);
+            if (emitTitleFilteredGuardedTextDelta(data.delta)) {
+              noteFirstTokenAt();
+            }
             return;
           }
+          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
           send(event, data);
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
@@ -10547,7 +10597,8 @@ export async function startServer({
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
-        const safe = guardTextDelta(text);
+        const visibleText = titleMarkerStripper.strip(text);
+        const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
           noteFirstTokenAt();
           send('stdout', { chunk: safe });
@@ -10602,6 +10653,7 @@ export async function startServer({
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
       parseBufferedAntigravityGeminiJsonEventStream();
+      flushAgentTitleMarkerBuffer();
       if (agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
@@ -10919,8 +10971,11 @@ export async function startServer({
         noteFirstTokenAt(firstBufferedStdoutAt);
       }
       for (const chunk of plaintextStdoutBuffer) {
-        send('stdout', { chunk: chunk.text });
+        const visibleText = titleMarkerStripper.strip(chunk.text);
+        if (visibleText) send('stdout', { chunk: visibleText });
       }
+      const flushedTitleMarkerText = titleMarkerStripper.flush();
+      if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so

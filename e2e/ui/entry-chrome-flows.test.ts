@@ -1124,19 +1124,23 @@ test('[P0] @critical home Ask mode creates a chat conversation without the defau
   await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
 
   const input = page.getByTestId('home-hero-input');
-  await input.fill('Summarize the product positioning and point out gaps.');
+  const prompt =
+    'Turn this into an infographic: "5 habits of effective code reviewers — read the PR description first, review tests before implementation"';
+  await input.fill(prompt);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
   await page.getByTestId('home-hero-submit').click();
 
   const request = await projectRequestPromise;
   const body = request.postDataJSON() as {
+    name?: string;
     pendingPrompt?: string;
     conversationMode?: string;
     pluginId?: string | null;
     metadata?: { kind?: string };
   };
-  expect(body.pendingPrompt).toBe('Summarize the product positioning and point out gaps.');
+  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
+  expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('chat');
   expect(body.pluginId).toBeUndefined();
   expect(body.metadata?.kind).toBe('other');

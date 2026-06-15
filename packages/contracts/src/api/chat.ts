@@ -52,6 +52,14 @@ export interface ChatRequest {
    */
   mediaExecution?: MediaExecutionPolicy;
   /**
+   * Ask the selected run agent to emit a short title for this first turn.
+   * The daemon strips the title marker from visible assistant text and falls
+   * back to client-side naming when the marker is absent or malformed.
+   */
+  titleGeneration?: {
+    enabled?: boolean;
+  };
+  /**
    * Run-scoped tool bundle supplied by an external orchestrator.
    * These servers are made available only to the spawned agent for this run
    * and are never written into the persistent Settings MCP registry.
@@ -368,6 +376,7 @@ export type PersistedAgentEvent =
   // decide error-specific affordances such as the hosted-AMR nudge.
   | { kind: 'status'; label: string; detail?: string; code?: string }
   | { kind: 'text'; text: string }
+  | { kind: 'conversation_title'; title: string }
   | { kind: 'thinking'; text: string }
   | {
       kind: 'live_artifact';

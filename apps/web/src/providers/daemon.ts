@@ -285,6 +285,7 @@ export interface DaemonStreamOptions {
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   mediaExecution?: MediaExecutionPolicy;
+  titleGeneration?: { enabled?: boolean };
   locale?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
@@ -578,6 +579,7 @@ export async function streamViaDaemon({
   context,
   appliedPluginSnapshotId,
   mediaExecution,
+  titleGeneration,
   locale,
   initialLastEventId,
   onRunCreated,
@@ -614,6 +616,7 @@ export async function streamViaDaemon({
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
+    ...(titleGeneration?.enabled ? { titleGeneration: { enabled: true } } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
@@ -1197,6 +1200,9 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
   }
   if (t === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
+  }
+  if (t === 'conversation_title' && typeof data.title === 'string') {
+    return { kind: 'conversation_title', title: data.title };
   }
   if (t === 'thinking_delta' && typeof data.delta === 'string') {
     return { kind: 'thinking', text: data.delta };

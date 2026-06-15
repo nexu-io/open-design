@@ -1353,6 +1353,99 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
+  it('replaces a raw prompt-head project name with the first prompt summary', async () => {
+    const promptNamedProject: Project = {
+      ...project,
+      name: 'hello from b',
+      metadata: { kind: 'prototype', nameSource: 'prompt' },
+    };
+    const emptyConversation: Conversation = {
+      id: 'conv-empty',
+      projectId: promptNamedProject.id,
+      title: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView(config, promptNamedProject);
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() =>
+      expect(patchConversation).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        emptyConversation.id,
+        { title: 'Hello From B' },
+      ),
+    );
+    await waitFor(() =>
+      expect(patchProject).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        expect.objectContaining({
+          name: 'Hello From B',
+          metadata: expect.objectContaining({ nameSource: 'prompt' }),
+        }),
+      ),
+    );
+  });
+
+  it('replaces the first-turn fallback title with an agent-generated title', async () => {
+    const promptNamedProject: Project = {
+      ...project,
+      name: 'hello from b',
+      metadata: { kind: 'prototype', nameSource: 'prompt' },
+    };
+    const emptyConversation: Conversation = {
+      id: 'conv-empty',
+      projectId: promptNamedProject.id,
+      title: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+    streamViaDaemon.mockImplementation(async (input: {
+      handlers: { onAgentEvent: (event: { kind: 'conversation_title'; title: string }) => void };
+    }) => {
+      input.handlers.onAgentEvent({ kind: 'conversation_title', title: 'Agent Title' });
+    });
+
+    renderProjectView(config, promptNamedProject);
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      titleGeneration: { enabled: true },
+    }));
+    await waitFor(() =>
+      expect(patchConversation).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        emptyConversation.id,
+        { title: 'Agent Title' },
+      ),
+    );
+    await waitFor(() =>
+      expect(patchProject).toHaveBeenCalledWith(
+        promptNamedProject.id,
+        expect.objectContaining({
+          name: 'Agent Title',
+          metadata: expect.objectContaining({ nameSource: 'agent' }),
+        }),
+      ),
+    );
+  });
+
   it('forwards staged skill and external context selections into the next daemon run payload', async () => {
     renderProjectView();
 

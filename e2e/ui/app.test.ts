@@ -1517,12 +1517,7 @@ async function runConversationPersistenceFlow(
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
-  await historyList
-    .locator('.chat-conv-item')
-    .filter({ hasText: entry.prompt })
-    .first()
-    .locator('[data-testid^="conversation-select-"]')
-    .click();
+  await historyList.getByTestId(`conversation-select-${firstConversationId}`).click();
 
   await expect(page.locator('.msg.user').getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.msg.user').getByText(nextPrompt, { exact: true })).toHaveCount(0);

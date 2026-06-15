@@ -1022,8 +1022,8 @@ test('[P0] @critical reloading the project keeps the latest conversation selecte
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
-  const activeRow = historyList.locator('.chat-conv-item.active').first();
-  await expect(activeRow).toContainText(secondPrompt);
+  const activeRow = historyList.getByTestId(`conversation-item-${secondContext.conversationId}`);
+  await expect(activeRow).toHaveClass(/active/);
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
 });
 
@@ -1100,8 +1100,8 @@ test('[P0] @critical deleting the active conversation selects the remaining conv
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
-  const activeRow = historyList.locator('.chat-conv-item.active').first();
-  await expect(activeRow).toContainText(secondPrompt);
+  const activeRow = historyList.getByTestId(`conversation-item-${secondContext.conversationId}`);
+  await expect(activeRow).toHaveClass(/active/);
   await activeRow.getByTestId(/conversation-delete-/).click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
@@ -1115,7 +1115,7 @@ test('[P0] @critical deleting the active conversation selects the remaining conv
   await page.getByTestId('conversation-history-trigger').click();
   await expect(historyList).toBeVisible();
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(1);
-  await expect(historyList.locator('.chat-conv-item.active').first()).toContainText(firstPrompt);
+  await expect(historyList.getByTestId(`conversation-item-${firstContext.conversationId}`)).toHaveClass(/active/);
 });
 
 test('[P0] returning from workspace surfaces keeps the older conversation reachable from history', async ({ page }) => {
@@ -1586,7 +1586,7 @@ test('[P0] returning from a file deep-link to the project root keeps the chosen 
 
   await sendPrompt(page, firstPrompt);
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
-  const { projectId } = await getCurrentProjectContext(page);
+  const { projectId, conversationId: firstConversationId } = await getCurrentProjectContext(page);
 
   await startNewConversation(page);
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -1610,12 +1610,7 @@ test('[P0] returning from a file deep-link to the project root keeps the chosen 
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
-  await historyList
-    .locator('.chat-conv-item')
-    .filter({ hasText: firstPrompt })
-    .first()
-    .locator('[data-testid^="conversation-select-"]')
-    .click();
+  await historyList.getByTestId(`conversation-select-${firstConversationId}`).click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);

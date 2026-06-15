@@ -136,6 +136,7 @@ import {
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
+import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -584,9 +585,11 @@ export function EntryShell({
   // projectKind='other', so the agent asks for the exact task type
   // before continuing.
   function handlePluginLoopSubmit(payload: PluginLoopSubmit) {
+    const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
-    const fallbackName = head.length > 0 ? head : firstAttachmentName || 'Untitled';
+    const fallbackName =
+      summarizedName || (head.length > 0 ? head : firstAttachmentName || 'Untitled');
     const name =
       payload.pluginTitle && payload.pluginTitle.trim().length > 0
         ? payload.pluginTitle.trim()

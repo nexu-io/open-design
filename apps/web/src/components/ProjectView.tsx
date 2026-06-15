@@ -865,6 +865,10 @@ export function ProjectView({
     }
   }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
@@ -3211,13 +3215,16 @@ export function ProjectView({
           current.filter((comment) => !consumedCommentIds.has(comment.id)),
         );
       }
+      const isFirstTurn = !retryTarget && historyBase.length === 0;
+      const fallbackFirstTurnTitle = isDesignSystemWorkspacePrompt(prompt)
+        ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
+        : summarizeProjectNameFromPrompt(prompt) || prompt.slice(0, 60).trim();
+      const fallbackProjectName = summarizeProjectNameFromPrompt(prompt);
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
-      if (!retryTarget && historyBase.length === 0) {
-        const title = isDesignSystemWorkspacePrompt(prompt)
-          ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
-          : prompt.slice(0, 60).trim();
+      if (isFirstTurn) {
+        const title = fallbackFirstTurnTitle;
         if (title) {
           setConversations((curr) =>
             curr.map((c) =>
@@ -3226,11 +3233,11 @@ export function ProjectView({
           );
           void patchConversation(project.id, runConversationId, { title });
         }
-        const projectName = summarizeProjectNameFromPrompt(prompt);
+        const projectName = fallbackProjectName;
         if (
           projectName &&
           projectName !== project.name &&
-          canAutoRenameProjectFromPrompt(project)
+          canAutoRenameProjectFromPrompt(project, prompt)
         ) {
           const metadata = project.metadata
             ? { ...project.metadata, nameSource: 'prompt' as const }
@@ -3248,6 +3255,52 @@ export function ProjectView({
           });
         }
       }
+      const canReplaceConversationTitle = (title: string | null | undefined) => {
+        const trimmed = (title ?? '').trim();
+        return (
+          !trimmed ||
+          trimmed === fallbackFirstTurnTitle ||
+          trimmed === prompt.slice(0, 60).trim()
+        );
+      };
+      const applyAgentGeneratedTitle = (rawTitle: string) => {
+        if (!isFirstTurn) return;
+        const agentTitle = rawTitle.trim();
+        if (!agentTitle || isDesignSystemWorkspacePrompt(prompt)) return;
+        const currentConversationTitle = conversationsRef.current.find(
+          (conversation) => conversation.id === runConversationId,
+        )?.title;
+        const shouldPatchConversation = canReplaceConversationTitle(currentConversationTitle);
+        setConversations((curr) =>
+          curr.map((conversation) => {
+            if (conversation.id !== runConversationId) return conversation;
+            if (!canReplaceConversationTitle(conversation.title)) return conversation;
+            return { ...conversation, title: agentTitle };
+          }),
+        );
+        if (shouldPatchConversation) {
+          void patchConversation(project.id, runConversationId, { title: agentTitle });
+        }
+        if (
+          agentTitle !== project.name &&
+          canAutoRenameProjectFromPrompt(project, prompt)
+        ) {
+          const metadata = project.metadata
+            ? { ...project.metadata, nameSource: 'agent' as const }
+            : undefined;
+          const updated: Project = {
+            ...project,
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+            updatedAt: Date.now(),
+          };
+          onProjectChange(updated);
+          void patchProject(project.id, {
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+          });
+        }
+      };
 
       // Snapshot the file list at turn-start so we can diff after the
       // agent finishes and surface anything new (e.g. a generated .pptx)
@@ -3419,6 +3472,10 @@ export function ProjectView({
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (ev.kind === 'conversation_title') {
+            applyAgentGeneratedTitle(ev.title);
+            return;
+          }
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
@@ -3677,6 +3734,7 @@ export function ProjectView({
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
+          titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
