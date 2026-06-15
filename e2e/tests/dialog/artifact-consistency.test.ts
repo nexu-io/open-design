@@ -7,6 +7,7 @@ import { chromium, expect as playwrightExpect, type Browser, type Page } from '@
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { createFakeAgentRuntimes } from '@/fake-agents';
+import { T } from '@/timeouts';
 import type { ProjectFile } from '@/vitest/artifacts';
 import { requestJson, requestText } from '@/vitest/http';
 import { listMessages, type E2eChatMessage } from '@/vitest/messages';
@@ -93,6 +94,7 @@ describe('dialog artifact consistency', () => {
       }, { key: STORAGE_KEY, codexEnv: fakeAgents.codex.env });
 
       const page = await context.newPage();
+      page.setDefaultNavigationTimeout(T.xlong);
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await waitForLoadingToClear(page);
       const target = `/projects/${encodeURIComponent(project.project.id)}/conversations/${encodeURIComponent(project.conversationId)}`;

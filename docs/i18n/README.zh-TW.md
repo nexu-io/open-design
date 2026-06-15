@@ -1,6 +1,8 @@
 <h1 align="center">Open Design：開源的 Claude Design 替代方案</h1>
 
-> 🔥 **Open Design 0.9.0 登場：免設定即可開始創作。** [官方 Model Router](https://open-design.ai/amr) 已直接內建於應用程式中——無須額外設定、無須安裝 CLI、無須準備 API key。只要打開應用程式、登入，就能立刻開始設計與創作。[下載 0.9.0](https://github.com/nexu-io/open-design/releases) · [加入討論](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 正式發布：All-in-one 的 Agentic 設計工作台。** 設計的完整流程從此只需一個視窗——從一個模糊的想法出發，到發現參考、蒐集素材、互動式編輯、留言排入佇列、打磨動效，再交付給編輯器或 Code Agent，全程無須離開應用程式。搭配多會話並行，它不再只是一個助手，而是一支為你工作的本地設計團隊。[下載 0.10.0](https://github.com/nexu-io/open-design/releases) · [參與討論](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR（Agentic Model Router）——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/amr/)
 >
 > 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/qhbcCH8Am4)。
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">官方網站</a> ·
   <a href="https://open-design.ai/">下載</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">追蹤 @nexudotio</a>
 </p>
@@ -116,13 +119,13 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 | [Cursor](https://www.cursor.com/cli) | ✅ 已支援 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 已支援 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 已支援 | `od mcp install copilot` |
-| Gemini CLI | ✅ 已支援 | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ 已支援 | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ 已支援 | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 已支援 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 已支援 | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 已支援 | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 已支援 | `od mcp install trae` |
-| Kimi CLI | ✅ 已支援 | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 已支援 | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 已支援 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 已支援 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 已支援 | `od mcp install hermes` |
@@ -261,7 +264,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
 - 🧠 **預設即品牌級。** 每一次渲染都會讀取目前啟用的 `DESIGN.md`——這是一份涵蓋色票、字體、間距、動態、語氣、反模式的 9 段式 schema。儲存庫隨附 150 套系統（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma…）。放進一個資料夾，選擇器就會找到它。
-- 🖥️ **本地優先、每一層都可 BYOK。** 為 macOS（Apple Silicon + Intel）與 Windows（x64）提供原生桌面應用程式。Linux AppImage 則在選用的發行通道上。SQLite 位於 `.od/app.sqlite`、檔案位於 `.od/projects/<id>/`，無遙測、無雲端往返。
+- 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先，不會雲端往返。在描述 daemon 資料路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **在三個平面上可組合。** **外掛** 承載可執行的工作流程 · **skills** 承載 agent 的設計品味 · **設計系統** 承載品牌。三者都是任何人都能撰寫、版控與發布的純文字檔案。
 - 🔁 **翻新既有的程式碼庫。** 把一個 `git` 儲存庫 + `DESIGN.md` 交給 agent，它就會把你真實的元件重構至品牌規格。專屬外掛能把 Figma / Pencil 工作流程遷移成 React / Next.js / Vue 程式碼。
 - 🔒 **出於信念的隱私。** 一切都在你資料所在之處執行——你的筆電、你團隊的伺服器、你的 Vercel 專案。當需要連網時，BYOK 代理具備 SSRF 防護。
@@ -533,7 +536,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -547,7 +550,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE 串流 · `better-sqlite3` |
-| 儲存 | 檔案位於 `.od/projects/<id>/` + SQLite 位於 `.od/app.sqlite` + `media-config.json`（已 gitignore、自動建立）。`OD_DATA_DIR` 可重新指定全部位置。 |
+| 儲存 | 在變更或記錄 daemon 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。本 README 不得重述該契約。 |
 | 預覽 | 沙箱化 `srcdoc` iframe + 串流式 `<artifact>` parser |
 | 匯出 | HTML（內嵌）· PDF（瀏覽器列印）· PPTX（agent 驅動）· ZIP · Markdown · MP4（HyperFrames） |
 | 桌面 | Electron shell + 沙箱化 renderer + sidecar IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |

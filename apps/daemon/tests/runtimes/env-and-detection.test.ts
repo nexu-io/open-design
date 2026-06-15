@@ -458,9 +458,14 @@ test('detectAgents includes sanitized install and docs metadata from split runti
       process.env.OD_AGENT_HOME = dir;
 
       const agents = await detectAgents();
+      const amr = agents.find((agent) => agent.id === 'amr');
       const qoder = agents.find((agent) => agent.id === 'qoder');
       const deepseek = agents.find((agent) => agent.id === 'deepseek');
+      const kimi = agents.find((agent) => agent.id === 'kimi');
 
+      assert.ok(amr);
+      assert.equal(amr.available, false);
+      assert.equal(amr.installUrl, 'https://open-design.ai/amr');
       assert.ok(qoder);
       assert.equal(qoder.available, false);
       assert.equal(qoder.installUrl, 'https://qoder.com/download');
@@ -470,6 +475,55 @@ test('detectAgents includes sanitized install and docs metadata from split runti
         deepseek.docsUrl,
         'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
       );
+      assert.ok(kimi);
+      assert.equal(
+        kimi.docsUrl,
+        'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
+      );
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('detectAgents keeps Kimi available when the installed CLI rejects the legacy acp positional arg', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-modern-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const kimiBin = join(dir, 'kimi');
+      writeFileSync(
+        kimiBin,
+        [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          "if (args.includes('acp')) {",
+          "  console.error('error: too many arguments. Expected 0 arguments but got 1.');",
+          '  process.exit(1);',
+          '}',
+          "if (args.length === 1 && args[0] === '--version') {",
+          "  console.log('kimi 0.6.0');",
+          '  process.exit(0);',
+          '}',
+          "console.error('unexpected args: ' + JSON.stringify(args));",
+          'process.exit(1);',
+          '',
+        ].join('\n'),
+      );
+      chmodSync(kimiBin, 0o755);
+
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const kimi = agents.find((agent) => agent.id === 'kimi');
+
+      assert.ok(kimi);
+      assert.equal(kimi.available, true);
+      assert.equal(kimi.version, 'kimi 0.6.0');
+      assert.equal(kimi.models[0]?.id, 'default');
+      assert.equal(kimi.models[1]?.id, 'kimi-k2-turbo-preview');
+      assert.equal(kimi.models[2]?.id, 'moonshot-v1-8k');
+      assert.equal(kimi.models[3]?.id, 'moonshot-v1-32k');
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

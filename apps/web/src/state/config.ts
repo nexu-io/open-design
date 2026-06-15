@@ -18,6 +18,7 @@ import {
   DEFAULT_FAILURE_SOUND_ID,
   DEFAULT_SUCCESS_SOUND_ID,
 } from '../utils/notifications';
+import { randomUUID } from '../utils/uuid';
 
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 1;
@@ -189,8 +190,16 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Google Gemini',
     protocol: 'google',
     baseUrl: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-2.0-flash',
-    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    model: 'gemini-3.5-flash',
+    models: [
+      'gemini-3.5-flash',
+      'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ],
   },
   {
     label: 'DeepSeek — OpenAI',
@@ -732,6 +741,30 @@ export function mergeDaemonConfig(
     // existed. If the daemon already has an id or telemetry prefs, the user
     // has resolved the first-run prompt and should not see it again.
     next.privacyDecisionAt = Date.now();
+  }
+  // Default-on reporting. Unless the user has explicitly opted out
+  // (Settings → "Don't share", which persists telemetry.metrics === false
+  // together with installationId: null), an install reports with the
+  // product's default telemetry channels on and carries a stable
+  // installationId. This is the single source of the "Opted out" state:
+  // previously an upgraded or never-prompted install could sit with
+  // telemetry on but no id (the daemon ships a metrics+content default but
+  // never mints an id), which the Settings → Privacy field rendered as
+  // "Opted out" even though the user never declined. We mint the id and
+  // keep the default channels on so the displayed state matches the product
+  // default — the same metrics+content surface the first-run banner's "I
+  // get it" opt-in enables (artifactManifest stays off, as it does there).
+  // This does NOT override an explicit opt-out: metrics === false short-
+  // circuits the whole block, and any channel the user already turned off
+  // is preserved via the nullish-coalesce.
+  const explicitlyOptedOut = next.telemetry?.metrics === false;
+  if (!explicitlyOptedOut && !next.installationId) {
+    next.installationId = randomUUID();
+    next.telemetry = {
+      metrics: true,
+      content: next.telemetry?.content ?? true,
+      artifactManifest: next.telemetry?.artifactManifest ?? false,
+    };
   }
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;

@@ -5,6 +5,7 @@ import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
+  getPublicBaseUrl?: (...args: any[]) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };

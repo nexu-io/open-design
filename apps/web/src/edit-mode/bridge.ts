@@ -43,6 +43,89 @@ export function isSourceMappableManualEditElement(el: Element): boolean {
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
 }
 
+export function buildManualEditKeyboardGuard(): string {
+  return `<script data-od-edit-keyboard-guard>(function(){
+  window.__odEditGuard = window.__odEditGuard || { editingEl: null };
+  function shouldBlock(){
+    var el = window.__odEditGuard && window.__odEditGuard.editingEl;
+    return el && el.isConnected;
+  }
+  function captureFromOptions(options){
+    if (options == null) return false;
+    if (typeof options === 'boolean') return options;
+    return !!(options && options.capture);
+  }
+  function onceFromOptions(options){
+    if (options == null) return false;
+    if (typeof options === 'boolean') return false;
+    return !!(options && options.once);
+  }
+  function signalFromOptions(options){
+    if (options == null) return null;
+    if (typeof options === 'boolean') return null;
+    return (options && options.signal) || null;
+  }
+  function removeWrappedEntry(wrapped, handler){
+    for (var i = wrapped.length - 1; i >= 0; i--) {
+      if (wrapped[i].handler === handler) {
+        wrapped.splice(i, 1);
+        return;
+      }
+    }
+  }
+  function patchTarget(target){
+    var originalAdd = target.addEventListener.bind(target);
+    var originalRemove = target.removeEventListener.bind(target);
+    var wrapped = []; // [{ original, handler, capture }] so removeEventListener can map back to the registered wrapper
+    target.addEventListener = function(type, listener, options){
+      if (type === 'keydown' && typeof listener === 'function') {
+        var capture = captureFromOptions(options);
+        for (var i = 0; i < wrapped.length; i++) {
+          if (wrapped[i].original === listener && wrapped[i].capture === capture) return;
+        }
+        var once = onceFromOptions(options);
+        var signal = signalFromOptions(options);
+        if (signal && signal.aborted) {
+          // Already aborted — browser will not register the listener; skip bookkeeping entirely
+          return originalAdd(type, listener, options);
+        }
+        var handler = function(ev){
+          if (once) removeWrappedEntry(wrapped, handler);
+          if (shouldBlock() && (window.__odEditGuard.editingEl === ev.target || window.__odEditGuard.editingEl.contains(ev.target))) {
+            return;
+          }
+          return listener.call(this, ev);
+        };
+        wrapped.push({ original: listener, handler: handler, capture: capture });
+        if (signal) {
+          signal.addEventListener('abort', function(){
+            removeWrappedEntry(wrapped, handler);
+          });
+        }
+        return originalAdd(type, handler, options);
+      }
+      return originalAdd(type, listener, options);
+    };
+    target.removeEventListener = function(type, listener, options){
+      if (type === 'keydown' && typeof listener === 'function') {
+        var capture = captureFromOptions(options);
+        for (var i = wrapped.length - 1; i >= 0; i--) {
+          var entry = wrapped[i];
+          if (entry.original === listener && entry.capture === capture) {
+            originalRemove(type, entry.handler, options);
+            wrapped.splice(i, 1);
+            return;
+          }
+        }
+      }
+      return originalRemove(type, listener, options);
+    };
+  }
+  patchTarget(document);
+  patchTarget(window);
+})();</script>`;
+}
+
 export function buildManualEditBridge(enabled: boolean): string {
   return `<script data-od-edit-bridge>(function(){
   var enabled = ${JSON.stringify(enabled)};
@@ -237,19 +320,35 @@ export function buildManualEditBridge(enabled: boolean): string {
       sel.addRange(range);
     } catch (e) {}
   }
+  var guard = window.__odEditGuard || null;
   function makeEditable(el, clickEvent){
     if (!el || el.getAttribute('contenteditable') === 'true') return;
     var originalText = el.textContent || '';
     clearSelectedTarget();
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
+    if (guard) guard.editingEl = el;
     try { el.focus(); } catch (e) {}
     placeCaretFromClick(clickEvent, el);
+    function onKey(ev){
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        finish(true);
+        try { el.blur(); } catch (e2) {}
+      }
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        finish(false);
+        try { el.blur(); } catch (e2) {}
+      }
+    }
+    el.addEventListener('keydown', onKey);
     function finish(commit){
       el.removeAttribute('contenteditable');
       el.removeAttribute('data-od-editing');
       el.removeEventListener('blur', onBlur);
       el.removeEventListener('keydown', onKey);
+      if (guard) guard.editingEl = null;
       var value = (el.textContent || '').trim();
       if (commit && value !== originalText.trim()) {
         window.parent.postMessage({
@@ -262,20 +361,7 @@ export function buildManualEditBridge(enabled: boolean): string {
       }
     }
     function onBlur(){ finish(true); }
-    function onKey(ev){
-      if (ev.key === 'Enter' && !ev.shiftKey) {
-        ev.preventDefault();
-        finish(true);
-        try { el.blur(); } catch (e) {}
-      }
-      if (ev.key === 'Escape') {
-        ev.preventDefault();
-        finish(false);
-        try { el.blur(); } catch (e) {}
-      }
-    }
     el.addEventListener('blur', onBlur);
-    el.addEventListener('keydown', onKey);
   }
   function camelToKebab(name){ return String(name).replace(/[A-Z]/g, function(m){ return '-' + m.toLowerCase(); }); }
   function cssEscapeId(value){ if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value); return String(value).replace(/"/g, '\\\\"'); }

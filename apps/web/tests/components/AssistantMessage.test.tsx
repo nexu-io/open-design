@@ -123,7 +123,7 @@ describe('AssistantMessage feedback gate', () => {
 
     render(
       <AssistantMessage
-        message={baseMessage()}
+        message={baseMessage({ producedFiles: [producedFile('landing.html')] })}
         streaming={false}
         projectId="proj-1"
         isLast

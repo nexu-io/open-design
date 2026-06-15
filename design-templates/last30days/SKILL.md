@@ -42,11 +42,11 @@ research/last30days/<safe-topic-slug>.md
 Use the bundled engine when the environment can run it:
 
 ```bash
-python3.12 ".od-skills/last30days/scripts/last30days.py" "<topic>" --emit=compact --save-dir "research/last30days" --save-suffix raw
+python3.12 "<staged-skill-dir>/last30days/scripts/last30days.py" "<topic>" --emit=compact --save-dir "research/last30days" --save-suffix raw
 ```
 
 If `python3.12` is unavailable, try `python3` only after confirming it is
-Python 3.12 or newer. If the staged `.od-skills/last30days/` path is
+Python 3.12 or newer. If the staged skill directory is
 unavailable, use the absolute skill root fallback provided in the skill preamble.
 
 The upstream engine may create a raw support file such as

@@ -1505,6 +1505,7 @@ export const th: Dict = {
   'chat.annotationSendDisabledReason': 'มีงานกำลังทำงานอยู่',
   'chat.annotationPreviewMissing': 'ไม่สามารถจับภาพตัวอย่างได้ โปรดลองอีกครั้ง',
   'chat.annotationPreviewMissingInk': 'ไม่สามารถจับภาพตัวอย่างได้ ลองอีกครั้งเพื่อหลีกเลี่ยงการส่งเฉพาะลายเส้น',
+  'chat.annotationSentWithoutScreenshot': 'ไม่สามารถจับภาพตัวอย่างได้ ส่งคำอธิบายประกอบโดยไม่มีภาพหน้าจอแล้ว',
   'chat.annotationTimeout': 'การส่งคำอธิบายประกอบหมดเวลา โปรดลองอีกครั้ง',
   'chat.annotationFailed': 'การส่งคำอธิบายประกอบล้มเหลว โปรดลองอีกครั้ง',
   'chat.annotationProjectCreateFailed': 'ไม่สามารถสร้างโปรเจกต์ได้ จึงไม่ได้ส่งคำอธิบายประกอบ',

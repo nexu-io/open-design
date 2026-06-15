@@ -253,6 +253,104 @@ function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
 }
 
 describe('FileWorkspace upload input', () => {
+  it('does not promote raw design-system assets into component review cards', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('tokens.css'),
+          workspaceFile('preview/logo.html'),
+          workspaceFile('ui_kits/website/index.html'),
+          baseFile({ name: 'assets/favicon.png', path: 'assets/favicon.png' }),
+          baseFile({ name: 'assets/site/avatar-1.png', path: 'assets/site/avatar-1.png' }),
+          baseFile({ name: 'assets/site/community.png', path: 'assets/site/community.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>website</strong>');
+    expect(markup).not.toContain('<strong>favicon</strong>');
+    expect(markup).not.toContain('<strong>avatar-1</strong>');
+    expect(markup).not.toContain('<strong>community</strong>');
+  });
+
+  it('keeps image-based UI kit previews as component review cards', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          baseFile({ name: 'ui_kits/button.png', path: 'ui_kits/button.png' }),
+          baseFile({ name: 'src/components/card.svg', path: 'src/components/card.svg' }),
+          baseFile({ name: 'assets/site/avatar-1.png', path: 'assets/site/avatar-1.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>button</strong><small>Reusable product interface examples</small>');
+    expect(markup).toContain('<strong>card</strong><small>Reusable product interface examples</small>');
+    expect(markup).not.toContain('<strong>avatar-1</strong>');
+  });
+
+  it('treats favicon previews as brand guidance', () => {
+    const markup = renderToStaticMarkup(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('preview/favicon.html'),
+          baseFile({ name: 'assets/favicon.png', path: 'assets/favicon.png' }),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={{
+          id: 'user:passive-book',
+          title: 'Passive Book Design System',
+          category: 'Brand',
+          summary: 'Passive Book brand system',
+          source: 'user',
+          status: 'draft',
+        }}
+      />,
+    );
+
+    expect(markup).toContain('<strong>favicon</strong><small>Brand app icon and favicon</small>');
+    expect(markup).not.toContain('<strong>favicon</strong><small>Reusable product interface examples</small>');
+  });
+
   it('keeps the Design Files picker aligned with drag-and-drop file support', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace

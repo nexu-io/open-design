@@ -415,11 +415,15 @@ jobs:
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   daemon_workspace_tests:
-    name: Daemon workspace tests
+    name: Daemon workspace tests (${{ matrix.shard }})
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.daemon_tests_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/3", "2/3", "3/3"]
 
     steps:
       - name: Checkout
@@ -432,7 +436,33 @@ jobs:
         run: pnpm --filter @open-design/daemon build
 
       - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon test
+        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard ${{ matrix.shard }}
+
+  daemon_workspace_gate:
+    name: Daemon workspace tests
+    needs:
+      - change_scopes
+      - daemon_workspace_tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check daemon workspace test shards
+        env:
+          DAEMON_REQUIRED: ${{ needs.change_scopes.outputs.daemon_tests_required }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS_JSON" | jq .
+          shard_result="$(echo "$NEEDS_JSON" | jq -r '.daemon_workspace_tests.result')"
+          if [ "$DAEMON_REQUIRED" != "true" ] && [ "$shard_result" = "skipped" ]; then
+            exit 0
+          fi
+          if [ "$shard_result" != "success" ]; then
+            echo "Daemon workspace test shards failed: $shard_result"
+            exit 1
+          fi
 
   web_workspace_tests:
     name: Web workspace tests
@@ -485,6 +515,7 @@ jobs:
         run: pnpm --filter @open-design/e2e test
 
       - name: Playwright critical
+        if: ${{ github.event_name != 'pull_request' || needs.change_scopes.outputs.ui_p0_pr_required != 'true' }}
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
           pnpm -C e2e run test:ui:critical
@@ -529,7 +560,7 @@ jobs:
       - nix_validation
       - workspace_unit_tests
       - windows_tools_pack_payload_tests
-      - daemon_workspace_tests
+      - daemon_workspace_gate
       - web_workspace_tests
       - browser_tests
       - build_workspaces

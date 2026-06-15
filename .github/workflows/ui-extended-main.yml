@@ -39,6 +39,9 @@ jobs:
           - name: project-workspace
             smoke_shard: smoke
             shard: project-workspace
+          - name: workspace-restoration
+            smoke_shard: smoke
+            shard: workspace-restoration
           - name: runtime-recovery
             smoke_shard: smoke
             shard: runtime-recovery

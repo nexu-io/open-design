@@ -84,7 +84,6 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'html-ppt': {},
   'html-ppt-course-module': {},
-  'html-ppt-dir-key-nav-minimal': {},
   'html-ppt-graphify-dark-graph': {},
   'html-ppt-hermes-cyber-terminal': {},
   'html-ppt-knowledge-arch-blueprint': {},
@@ -96,7 +95,6 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
   'html-ppt-testing-safety-alert': {},
   'html-ppt-weekly-report': {},
   'html-ppt-xhs-pastel-card': {},
-  'html-ppt-xhs-post': {},
   'html-ppt-xhs-white-editorial': {},
   'hyperframes': {
     examplePrompt:

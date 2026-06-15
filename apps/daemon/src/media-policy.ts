@@ -1,15 +1,20 @@
-import type { MediaExecutionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import {
+  DEFAULT_MEDIA_EXECUTION_POLICY,
+  MEDIA_EXECUTION_MODES,
+  MEDIA_SURFACES,
+  mediaExecutionPolicyDenial,
+  type MediaExecutionMode,
+  type MediaExecutionPolicy,
+  type MediaPolicyDenial,
+  type MediaPolicyTarget,
+  type MediaSurface,
+} from '@open-design/contracts';
 
-const MEDIA_EXECUTION_MODES = new Set<MediaExecutionMode>(['enabled', 'disabled']);
-const MEDIA_SURFACES = new Set<MediaSurface>(['image', 'video', 'audio']);
-
-export interface MediaPolicyTarget {
-  surface: MediaSurface;
-  model?: string;
-}
+const MEDIA_EXECUTION_MODE_SET = new Set<MediaExecutionMode>(MEDIA_EXECUTION_MODES);
+const MEDIA_SURFACE_SET = new Set<MediaSurface>(MEDIA_SURFACES);
 
 export function defaultMediaExecutionPolicy(): MediaExecutionPolicy {
-  return { mode: 'enabled' };
+  return { ...DEFAULT_MEDIA_EXECUTION_POLICY };
 }
 
 export function normalizeMediaExecutionPolicyForRun(value: unknown): MediaExecutionPolicy {
@@ -28,7 +33,7 @@ export function parseMediaExecutionPolicyInput(value: unknown):
   }
 
   const rawMode = typeof value.mode === 'string' ? value.mode : 'enabled';
-  if (!MEDIA_EXECUTION_MODES.has(rawMode as MediaExecutionMode)) {
+  if (!MEDIA_EXECUTION_MODE_SET.has(rawMode as MediaExecutionMode)) {
     return {
       ok: false,
       message: 'mediaExecution.mode must be enabled or disabled',
@@ -45,7 +50,7 @@ export function parseMediaExecutionPolicyInput(value: unknown):
     const surfaces: MediaSurface[] = [];
     for (const surface of value.allowedSurfaces) {
       const candidate = surface as MediaSurface;
-      if (typeof surface !== 'string' || !MEDIA_SURFACES.has(candidate)) {
+      if (typeof surface !== 'string' || !MEDIA_SURFACE_SET.has(candidate)) {
         return {
           ok: false,
           message: 'mediaExecution.allowedSurfaces may only include image, video, or audio',
@@ -77,35 +82,8 @@ export function parseMediaExecutionPolicyInput(value: unknown):
 export function mediaPolicyDenial(
   policy: MediaExecutionPolicy,
   target: MediaPolicyTarget,
-): { code: string; message: string } | null {
-  if (policy.mode === 'disabled') {
-    return {
-      code: 'MEDIA_EXECUTION_DISABLED',
-      message: 'media generation is disabled for this run',
-    };
-  }
-  if (
-    Array.isArray(policy.allowedSurfaces) &&
-    policy.allowedSurfaces.length > 0 &&
-    !policy.allowedSurfaces.includes(target.surface)
-  ) {
-    return {
-      code: 'MEDIA_SURFACE_DENIED',
-      message: `media surface "${target.surface}" is not allowed for this run`,
-    };
-  }
-  if (
-    target.model &&
-    Array.isArray(policy.allowedModels) &&
-    policy.allowedModels.length > 0 &&
-    !policy.allowedModels.includes(target.model)
-  ) {
-    return {
-      code: 'MEDIA_MODEL_DENIED',
-      message: `media model "${target.model}" is not allowed for this run`,
-    };
-  }
-  return null;
+): MediaPolicyDenial | null {
+  return mediaExecutionPolicyDenial(policy, target);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

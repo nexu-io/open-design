@@ -23,6 +23,7 @@ import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,
   structuredPromptStackInput,
+  type PromptTelemetrySection,
   type PromptStackTelemetry,
 } from './prompt-telemetry.js';
 import type {
@@ -47,6 +48,7 @@ const SESSION_ID_MAX = 200; // Langfuse drops sessionIds longer than this.
 const HARD_BATCH_MAX_BYTES = 1024 * 1024;
 const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 const DEFAULT_FETCH_RETRIES = 1;
+const PROMPT_STACK_BLAME_MAX_SECTIONS = 8;
 let missingTelemetrySinkWarned = false;
 
 export interface LangfuseConfig {
@@ -631,6 +633,140 @@ function buildCostBreakdown(ctx: ReportContext): Record<string, unknown> {
   };
 }
 
+function cleanNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function sectionAttributionBytes(section: PromptTelemetrySection): number {
+  return cleanNumber(section.redactedBytes) ?? cleanNumber(section.rawBytes) ?? 0;
+}
+
+function redactedContentBytes(section: PromptTelemetrySection): number {
+  return Buffer.byteLength(section.redactedContent ?? '', 'utf8');
+}
+
+function allocateProportionalTokens(
+  total: number | undefined,
+  sections: Array<{ section: PromptTelemetrySection; weightBytes: number }>,
+): Map<PromptTelemetrySection, number> {
+  const out = new Map<PromptTelemetrySection, number>();
+  const cleanTotal = cleanNumber(total);
+  if (cleanTotal === undefined || cleanTotal <= 0) return out;
+  const totalWeight = sections.reduce((sum, item) => sum + item.weightBytes, 0);
+  if (totalWeight <= 0) return out;
+
+  let assigned = 0;
+  let largest: { section: PromptTelemetrySection; tokens: number } | null = null;
+  for (const item of sections) {
+    const exact = (cleanTotal * item.weightBytes) / totalWeight;
+    const rounded = Math.floor(exact);
+    out.set(item.section, rounded);
+    assigned += rounded;
+    if (!largest || item.weightBytes > sectionAttributionBytes(largest.section)) {
+      largest = { section: item.section, tokens: rounded };
+    }
+  }
+  const remainder = Math.round(cleanTotal) - assigned;
+  if (largest && remainder > 0) {
+    out.set(largest.section, (out.get(largest.section) ?? 0) + remainder);
+  }
+  return out;
+}
+
+function buildPromptStackBlameMetadata(
+  promptStack: PromptStackTelemetry | undefined,
+  usage: MessageSummary['usage'] | undefined,
+  timings: RunTimingAnalytics | undefined,
+): Record<string, unknown> {
+  if (!promptStack || promptStack.sections.length === 0) return {};
+  const weightedSections = promptStack.sections
+    .map((section) => ({
+      section,
+      weightBytes: sectionAttributionBytes(section),
+    }))
+    .filter((item) => item.weightBytes > 0);
+  if (weightedSections.length === 0) return {};
+
+  const totalBytes = weightedSections.reduce((sum, item) => sum + item.weightBytes, 0);
+  const sorted = [...weightedSections].sort(
+    (a, b) => b.weightBytes - a.weightBytes || a.section.ordinal - b.section.ordinal,
+  );
+  const cacheCreationBySection = allocateProportionalTokens(
+    usage?.cacheCreationInputTokens,
+    weightedSections,
+  );
+  const cacheReadBySection = allocateProportionalTokens(
+    usage?.cacheReadInputTokens,
+    weightedSections,
+  );
+  const inputEffectiveBySection = allocateProportionalTokens(
+    usage?.inputTokensEffective ?? usage?.inputTokens,
+    weightedSections,
+  );
+  const uncachedBySection = allocateProportionalTokens(
+    usage?.uncachedInputTokens,
+    weightedSections,
+  );
+
+  const sectionRow = ({ section, weightBytes }: { section: PromptTelemetrySection; weightBytes: number }) => {
+    const share = totalBytes > 0 ? weightBytes / totalBytes : 0;
+    return {
+      kind: section.kind,
+      ordinal: section.ordinal,
+      contentMode: section.contentMode,
+      rawBytes: section.rawBytes,
+      redactedBytes: section.redactedBytes,
+      redactedContentBytes: redactedContentBytes(section),
+      attributionBytes: weightBytes,
+      attributionShare: Number(share.toFixed(6)),
+      truncated: section.truncated,
+      ...(section.truncationReason ? { truncationReason: section.truncationReason } : {}),
+      estimatedInputEffectiveTokens: inputEffectiveBySection.get(section) ?? undefined,
+      estimatedCacheCreationInputTokens: cacheCreationBySection.get(section) ?? undefined,
+      estimatedCacheReadInputTokens: cacheReadBySection.get(section) ?? undefined,
+      estimatedUncachedInputTokens: uncachedBySection.get(section) ?? undefined,
+    };
+  };
+
+  const primary = sorted[0]!;
+  const primaryShare = totalBytes > 0 ? primary.weightBytes / totalBytes : 0;
+  return {
+    promptStack_topSectionsByBytes: sorted
+      .slice(0, PROMPT_STACK_BLAME_MAX_SECTIONS)
+      .map(sectionRow),
+    cacheCreationTokensBySection: sorted
+      .filter(({ section }) => (cacheCreationBySection.get(section) ?? 0) > 0)
+      .map(({ section, weightBytes }) => ({
+        kind: section.kind,
+        ordinal: section.ordinal,
+        attributionBytes: weightBytes,
+        estimatedCacheCreationInputTokens: cacheCreationBySection.get(section) ?? 0,
+      })),
+    promptStack_ttftAttribution: {
+      method: 'proportional_by_prompt_section_redacted_bytes',
+      estimation_warning:
+        'Provider reports aggregate prompt/cache tokens only; section token values are estimates for diagnosis, not billing truth.',
+      time_to_first_token_ms: timings?.time_to_first_token_ms,
+      spawn_to_first_token_ms: timings?.spawn_to_first_token_ms,
+      totalAttributionBytes: totalBytes,
+      sectionCount: weightedSections.length,
+      primarySectionKind: primary.section.kind,
+      primarySectionOrdinal: primary.section.ordinal,
+      primarySectionAttributionBytes: primary.weightBytes,
+      primarySectionAttributionShare: Number(primaryShare.toFixed(6)),
+      primarySectionEstimatedInputEffectiveTokens:
+        inputEffectiveBySection.get(primary.section) ?? undefined,
+      primarySectionEstimatedCacheCreationInputTokens:
+        cacheCreationBySection.get(primary.section) ?? undefined,
+      primarySectionEstimatedCacheReadInputTokens:
+        cacheReadBySection.get(primary.section) ?? undefined,
+      cacheTokenSource: usage?.cacheTokenSource,
+    },
+  };
+}
+
 function durationMs(startedAt: number, endedAt: number): number {
   return Math.max(0, Math.round(endedAt - startedAt));
 }
@@ -1101,6 +1237,11 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
   const promptStackFlatMetadata = promptStack
     ? buildPromptStackFlatMetadata(promptStack)
     : {};
+  const promptStackBlameMetadata = buildPromptStackBlameMetadata(
+    promptStack,
+    ctx.message.usage,
+    ctx.run.timings,
+  );
   const generationInput = promptStack
     ? structuredPromptStackInput(promptStack)
     : inputText;
@@ -1157,6 +1298,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     arch: ctx.runtime?.arch,
     clientType: ctx.runtime?.clientType,
     ...promptStackFlatMetadata,
+    ...promptStackBlameMetadata,
   };
 
   // Generation-level model parameters mirror the Langfuse schema so the UI
@@ -1250,6 +1392,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
           ...promptStackFlatMetadata,
+          ...promptStackBlameMetadata,
         },
       },
     });
@@ -1278,6 +1421,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
           cost_breakdown: costBreakdown,
           performance_diagnostics: performanceDiagnostics,
           ...promptStackFlatMetadata,
+          ...promptStackBlameMetadata,
           reason: 'no_model_generation',
         },
       },

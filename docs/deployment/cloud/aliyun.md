@@ -187,8 +187,8 @@ spec:
           ports:
             - containerPort: 7456
           env:
-            - name: OD_DATA_DIR
-              value: /data
+            # Storage env vars are intentionally omitted here.
+            # Before setting them, you MUST read root AGENTS.md -> Daemon data directory contract.
             - name: OD_BIND_HOST
               value: "0.0.0.0"            # required so the readinessProbe and Service can reach the daemon
             - name: OD_API_TOKEN
@@ -198,9 +198,8 @@ spec:
                   key: api-token            # required whenever OD_BIND_HOST is non-loopback
             - name: OD_ALLOWED_ORIGINS
               value: "https://design.example.cn"  # set when fronting with an Ingress; daemon reads OD_*, not OPEN_DESIGN_*
-          volumeMounts:
-            - name: data
-              mountPath: /data
+          # Storage volume mounts are intentionally omitted here.
+          # Before adding them, you MUST read root AGENTS.md -> Daemon data directory contract.
           readinessProbe:
             httpGet: { path: /api/health, port: 7456 }
             initialDelaySeconds: 10
@@ -226,7 +225,7 @@ spec:
 
 Apply with `kubectl apply -f open-design.yaml`. Front the Service with an Ingress (NGINX Ingress Controller is preinstalled on ACK Pro) and an ACM-issued certificate. With `OD_API_TOKEN` set, every `/api/*` request from non-loopback origins must carry an `Authorization: Bearer <token>` header — wire that into your Ingress / proxy auth layer.
 
-> **Note on `replicas: 1`:** the daemon writes SQLite at `.od/app.sqlite` (see [`AGENTS.md`](../../../AGENTS.md) FAQ "Where is data written?"). Running multiple replicas without shared storage will diverge state. A multi-replica ACK topology needs an external database; that is out of scope for this guide.
+> **Note on `replicas: 1`:** before changing storage paths or shared persistent storage, you MUST read root [`AGENTS.md`](../../../AGENTS.md) → **Daemon data directory contract**. Running multiple replicas without shared persistent daemon storage will diverge state. A multi-replica ACK topology needs an external database; that is out of scope for this guide.
 
 ## Path C — ROS templates
 

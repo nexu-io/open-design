@@ -1505,6 +1505,7 @@ export const fa: Dict = {
   'chat.annotationSendDisabledReason': 'در حال حاضر یک وظیفه در حال اجراست',
   'chat.annotationPreviewMissing': 'امکان ثبت پیش‌نمایش وجود نداشت. لطفاً دوباره تلاش کنید.',
   'chat.annotationPreviewMissingInk': 'امکان ثبت پیش‌نمایش وجود نداشت. برای جلوگیری از ارسال صرفِ ترسیم، دوباره تلاش کنید.',
+  'chat.annotationSentWithoutScreenshot': 'پیش‌نمایش قابل ثبت نبود. حاشیه‌نویسی بدون اسکرین‌شات ارسال شد.',
   'chat.annotationTimeout': 'زمان ارسال حاشیه‌نویسی به پایان رسید. لطفاً دوباره تلاش کنید.',
   'chat.annotationFailed': 'ارسال حاشیه‌نویسی ناموفق بود. لطفاً دوباره تلاش کنید.',
   'chat.annotationProjectCreateFailed': 'امکان ایجاد پروژه وجود نداشت، بنابراین حاشیه‌نویسی ارسال نشد.',

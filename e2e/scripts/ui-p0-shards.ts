@@ -27,12 +27,15 @@ const shards: Record<string, Shard> = {
     grep: String.raw`\[P0\]`,
     files: [
       'ui/app.test.ts',
-      'ui/app-restoration.test.ts',
       'ui/app-design-files.test.ts',
       'ui/app-manual-edit.test.ts',
       'ui/project-management-flows.test.ts',
       'ui/workspace-keyboard-flows.test.ts',
     ],
+  },
+  'workspace-restoration': {
+    grep: String.raw`\[P0\]`,
+    files: ['ui/app-restoration.test.ts'],
   },
   'runtime-recovery': {
     grep: String.raw`\[P0\]`,

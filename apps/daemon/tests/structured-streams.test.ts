@@ -256,7 +256,7 @@ describe('structured agent stream fixtures', () => {
     })).toBe(false);
   });
 
-  it('preserves later Claude artifact text after plain prose clears file-write suppression', () => {
+  it('suppresses duplicate Claude artifact text after intervening prose', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
     handler.feed(`${JSON.stringify({
@@ -310,7 +310,110 @@ describe('structured agent stream fixtures', () => {
     });
     expect(events).toContainEqual({
       type: 'text_delta',
-      delta: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Done',
+      delta: 'Done',
+    });
+    expect(events.some((event) => {
+      if (typeof event !== 'object' || event === null) return false;
+      const record = event as { type?: string; delta?: string };
+      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<!doctype html>');
+    })).toBe(false);
+  });
+
+  it('suppresses later Claude HTML artifact text after prose even when content differs from the write', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler(
+      (event: unknown) => events.push(event),
+      { suppressHtmlArtifactsAfterFileWrite: true },
+    );
+    handler.feed(`${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'message_start', message: { id: 'msg-1' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'toolu-write-1', name: 'Write' },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: {
+          type: 'input_json_delta',
+          partial_json: '{"file_path":"index.html","content":"<!doctype html><html>written</html>"}',
+        },
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_stop',
+        index: 0,
+      },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: '全部完成。\\n\\n' } },
+    })}\n${JSON.stringify({
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 1,
+        delta: {
+          type: 'text_delta',
+          text: '<artifact identifier="page" type="text/html">\\n<!doctype html><html>different</html>\\n</artifact>Done',
+        },
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: '全部完成。\\n\\n',
+    });
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Done',
+    });
+    expect(events.some((event) => {
+      if (typeof event !== 'object' || event === null) return false;
+      const record = event as { type?: string; delta?: string };
+      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<html>different</html>');
+    })).toBe(false);
+  });
+
+  it('preserves different later HTML artifacts unless Claude filesystem suppression is enabled', () => {
+    const events: unknown[] = [];
+    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    handler.feed(`${JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg-1',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu-write-1',
+            name: 'Write',
+            input: {
+              file_path: 'index.html',
+              content: '<!doctype html><html>written</html>',
+            },
+          },
+          {
+            type: 'text',
+            text: 'Final:\\n\\n<artifact identifier="page" type="text/html">\\n<!doctype html><html>different</html>\\n</artifact>',
+          },
+        ],
+      },
+    })}\n`);
+    handler.flush();
+
+    expect(events).toContainEqual({
+      type: 'text_delta',
+      delta: 'Final:\\n\\n<artifact identifier="page" type="text/html">\\n<!doctype html><html>different</html>\\n</artifact>',
     });
   });
 
@@ -399,9 +502,12 @@ describe('structured agent stream fixtures', () => {
     });
   });
 
-  it('preserves later Claude artifact text after suppressing immediate file-write echo', () => {
+  it('suppresses later Claude HTML artifact text after suppressing immediate file-write echo', () => {
     const events: unknown[] = [];
-    const handler = createClaudeStreamHandler((event: unknown) => events.push(event));
+    const handler = createClaudeStreamHandler(
+      (event: unknown) => events.push(event),
+      { suppressHtmlArtifactsAfterFileWrite: true },
+    );
     handler.feed(`${JSON.stringify({
       type: 'assistant',
       message: {
@@ -435,12 +541,14 @@ describe('structured agent stream fixtures', () => {
     });
     expect(events).toContainEqual({
       type: 'text_delta',
-      delta: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+      delta: 'Final artifact:\\n\\n',
     });
     expect(events.some((event) => {
       if (typeof event !== 'object' || event === null) return false;
       const record = event as { type?: string; delta?: string };
-      return record.type === 'text_delta' && typeof record.delta === 'string' && record.delta.includes('<html>helper</html>');
+      return record.type === 'text_delta' && typeof record.delta === 'string' && (
+        record.delta.includes('<html>helper</html>') || record.delta.includes('<html>final</html>')
+      );
     })).toBe(false);
   });
 

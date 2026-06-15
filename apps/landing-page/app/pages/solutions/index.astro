@@ -99,7 +99,7 @@ const jsonLd = [
     <span aria-current="page">{page.heading}</span>
   </nav>
 
-  <article class="info-page">
+  <article class="info-page solution-index-page">
     <header class="catalog-head">
       <span class="label">{page.label}</span>
       <h1 class="display">{page.heading}</h1>
@@ -113,7 +113,10 @@ const jsonLd = [
           <li class="compare-card">
             <h3>{c.title}</h3>
             <p>{c.blurb}</p>
-            <a href={c.href}>{c.title} →</a>
+            <a class="btn btn-ghost solution-card-action" href={c.href}>
+              <span>{c.title}</span>
+              <span class="ri" aria-hidden="true">&#xea6c;</span>
+            </a>
           </li>
         ))}
       </ul>
@@ -126,7 +129,10 @@ const jsonLd = [
           <li class="compare-card">
             <h3>{c.title}</h3>
             <p>{c.blurb}</p>
-            <a href={c.href}>{c.title} →</a>
+            <a class="btn btn-ghost solution-card-action" href={c.href}>
+              <span>{c.title}</span>
+              <span class="ri" aria-hidden="true">&#xea6c;</span>
+            </a>
           </li>
         ))}
       </ul>

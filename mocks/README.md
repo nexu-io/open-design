@@ -154,7 +154,8 @@ verified line-by-line against the parsers in `apps/daemon/src/`:
 | `gemini`          | `json-event-stream` (gemini kind)       | `json-event-stream.ts:handleGeminiEvent`     |
 | `cursor-agent`    | `json-event-stream` (cursor-agent kind) | `json-event-stream.ts:handleCursorEvent`     |
 | `deepseek` `qwen` `grok` | `plain`                          | `server.ts` (raw stdout = final assistant text) |
-| `devin` `hermes` `kilo` `kimi` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
+| `kimi`            | `json-event-stream` (kimi kind)         | `json-event-stream.ts:handleKimiEvent`         |
+| `devin` `hermes` `kilo` `kiro` `vibe` | `acp-json-rpc` | `acp.ts:attachAcpSession`                       |
 | `vela` (AMR) | `acp-json-rpc` + `login` / `models` subcommands | `runtimes/defs/amr.ts` + `apps/daemon/tests/fixtures/fake-vela.mjs` (sibling stub) |
 
 > **Note on `cursor-agent`**: OD's parser does NOT recognize tool-call
@@ -164,7 +165,7 @@ verified line-by-line against the parsers in `apps/daemon/src/`:
 > `gemini` recognizes the current Gemini CLI `stream-json` tool_use /
 > tool_result frames and replays recorded tool calls through that envelope.
 
-> **Note on ACP agents** (`devin` / `hermes` / `kilo` / `kimi` / `kiro` /
+> **Note on ACP agents** (`devin` / `hermes` / `kilo` / `kiro` /
 > `vibe`): These do NOT stream stdout — they speak JSON-RPC v2 over stdio.
 > OD's daemon sends `initialize` → `session/new` → (optional `session/set_model`)
 > → `session/prompt`; the mock responds in order, streams text via
@@ -172,6 +173,11 @@ verified line-by-line against the parsers in `apps/daemon/src/`:
 > then responds to the prompt request with usage stats. Tool calls
 > aren't part of the ACP protocol on this path (tools surface via MCP or
 > other side channels), so they're dropped from playback.
+
+> **Note on `kimi`**: Modern Kimi CLI is not an ACP stdio adapter in Open
+> Design. The runtime launches it in prompt mode (`kimi -p ... --output-format
+> stream-json`), so the mock replays Kimi-flavored JSON-event-stream frames
+> instead of JSON-RPC.
 
 > **Note on `vela` (AMR)**: vela is the bin OD's AMR runtime spawns. It
 > extends the generic ACP shape with `agentCapabilities` + `models`
@@ -421,6 +427,7 @@ mocks/
 │   ├── format-gemini.mjs         ← matches handleGeminiEvent
 │   ├── format-cursor-agent.mjs   ← matches handleCursorEvent
 │   ├── format-acp.mjs            ← JSON-RPC server matching attachAcpSession
+│   ├── format-kimi.mjs           ← kimi stream-json renderer
 │   ├── format-vela.mjs           ← AMR vela: ACP + models block + set_model gate
 │   ├── vela-subcommands.mjs      ← `vela login` + `vela models` handlers
 │   └── format-plain.mjs          ← raw stdout (deepseek/qwen/grok)

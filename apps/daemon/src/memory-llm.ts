@@ -128,7 +128,7 @@ const PROVIDER_DEFAULTS = {
     apiVersion: '2024-10-21',
   },
   google: {
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.5-flash',
     baseUrl: 'https://generativelanguage.googleapis.com',
   },
   // Ollama Cloud speaks OpenAI-compatible chat-completions, so the

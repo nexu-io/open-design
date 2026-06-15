@@ -1505,6 +1505,7 @@ export const pl: Dict = {
   'chat.annotationSendDisabledReason': 'Zadanie jest obecnie w toku',
   'chat.annotationPreviewMissing': 'Nie udało się przechwycić podglądu. Spróbuj ponownie.',
   'chat.annotationPreviewMissingInk': 'Nie udało się przechwycić podglądu. Spróbuj ponownie, aby nie wysłać samego rysunku.',
+  'chat.annotationSentWithoutScreenshot': 'Nie udało się przechwycić podglądu. Adnotacja została wysłana bez zrzutu ekranu.',
   'chat.annotationTimeout': 'Przekroczono limit czasu wysyłania adnotacji. Spróbuj ponownie.',
   'chat.annotationFailed': 'Nie udało się wysłać adnotacji. Spróbuj ponownie.',
   'chat.annotationProjectCreateFailed': 'Nie udało się utworzyć projektu, więc adnotacja nie została wysłana.',

@@ -1505,6 +1505,7 @@ export const de: Dict = {
   'chat.annotationSendDisabledReason': 'Eine Aufgabe wird gerade ausgeführt',
   'chat.annotationPreviewMissing': 'Vorschau konnte nicht erfasst werden. Bitte versuche es erneut.',
   'chat.annotationPreviewMissingInk': 'Vorschau konnte nicht erfasst werden. Versuche es erneut, um nicht nur die Tinte zu senden.',
+  'chat.annotationSentWithoutScreenshot': 'Vorschau konnte nicht erfasst werden. Die Anmerkung wurde ohne Screenshot gesendet.',
   'chat.annotationTimeout': 'Zeitüberschreitung beim Senden der Annotation. Bitte versuche es erneut.',
   'chat.annotationFailed': 'Senden der Anmerkung fehlgeschlagen. Bitte versuche es erneut.',
   'chat.annotationProjectCreateFailed': 'Es konnte kein Projekt erstellt werden, daher wurde die Anmerkung nicht gesendet.',

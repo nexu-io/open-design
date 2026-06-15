@@ -390,25 +390,18 @@ integration boundaries.
 
 | Option | Where raw events live | Implication |
 |---|---|---|
-| A. Engine package owns raw events | `<storage_root>/<userId>/raw_events.jsonl` alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
-| B. Daemon owns raw events | `<OD_DATA_DIR>/memory/<userId>/raw_events.jsonl`, or a `raw_events` table inside `<OD_DATA_DIR>/app.sqlite` | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
-| C. Hybrid — daemon writes, engine reads | Daemon appends under the `OD_DATA_DIR` precedence; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
+| A. Engine package owns raw events | Engine-owned storage alongside `preferences.json` | Engine boundary expands to include event log. Re-derivation runs inside the package. |
+| B. Daemon owns raw events | Daemon-managed storage | Engine becomes a pure derivation function over an event slice handed in by the daemon. |
+| C. Hybrid — daemon writes, engine reads | Daemon writes through its storage contract; engine reads through a typed accessor | Decouples write path (event capture is a host concern) from derivation (engine concern). |
 
-`<OD_DATA_DIR>` here means the resolved daemon data root: `OD_DATA_DIR` if
-set, otherwise `<projectRoot>/.od`. The path is resolved with `~/` expansion
-and relative paths anchored to `<projectRoot>`. Packaged installs and Home
-Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory
-because the install root may be read-only; raw events must ride that
-contract rather than hard-code a repo-rooted `.od/` path.
+This spec MUST NOT define daemon data paths. Before documenting or changing
+daemon storage, read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data
+directory contract**.
 
-`OD_MEDIA_CONFIG_DIR` is **not** part of this precedence. Per
-[`AGENTS.md`](../../AGENTS.md) FAQ "Where is data written?",
-`OD_MEDIA_CONFIG_DIR` is a narrower override that relocates *only*
-`media-config.json` (API credentials). Raw events are general daemon
-runtime data and follow the daemon data-root contract above; an
-implementation that respected `OD_MEDIA_CONFIG_DIR` for raw events would
-route preference event data into the credentials directory, which is the
-wrong contract.
+Media config storage is outside this spec. Read the same root contract before
+documenting any storage exception. Raw events are general daemon runtime data
+and must follow the daemon storage contract; an implementation that routes
+preference event data into credentials storage would use the wrong contract.
 
 Lean: **C**. Event capture is intrinsically a host concern — the daemon is
 where the pipeline events fire from, where debounce/coalesce happens, and where

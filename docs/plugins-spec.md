@@ -457,8 +457,8 @@ Multiple marketplaces coexist — the user runs `od marketplace add <url>` to re
 | -------- | ------------------------------------------------ | ------------------ | ---------------------------------------------------------------------- |
 | 1        | `<projectCwd>/.open-design/plugins/<id>/`        | plugin bundle      | New; explicitly installed into the project and committed with user code |
 | 2        | `<projectCwd>/.claude/skills/<id>/`              | legacy `SKILL.md`  | Keeps the project-private skill path from [`skills-protocol.md`](skills-protocol.md) compatible |
-| 3        | `<daemonDataDir>/plugins/<id>/`                  | plugin bundle      | New; written by `od plugin install` under the daemon data root          |
-| 4        | `~/.open-design/skills/<id>/`                    | legacy `SKILL.md`  | OD canonical skill install path; may symlink into other agents          |
+| 3        | Daemon-managed plugin location                   | plugin bundle      | This spec MUST NOT define daemon data paths; read root `AGENTS.md` → **Daemon data directory contract** before documenting storage |
+| 4        | User-global skill location                       | legacy `SKILL.md`  | This spec MUST NOT define daemon data paths; read root `AGENTS.md` → **Daemon data directory contract** before documenting storage |
 | 5        | `~/.claude/skills/<id>/`                         | legacy `SKILL.md`  | Compatibility scan for external Claude Code / skills tooling            |
 | 6        | repo root `skills/`, `design-systems/`, `craft/` | bundled resources  | Existing first-party resources, unchanged                              |
 
@@ -1241,7 +1241,7 @@ In practice this means:
 What this unlocks:
 
 - A user with **only Claude Code** (or any code agent) plus `npm i -g @open-design/cli` plus a running headless daemon can do the entire user journey: install plugin → create project → run → consume artifacts. No OD desktop required.
-- The OD desktop UI installs the same daemon and the same CLI; it just adds a window. Users who later install the desktop find the same projects, plugins, and history that the headless flow produced — there is no "headless project format" vs. "desktop project format". Same `.od/projects/<id>/`, same SQLite db.
+- The OD desktop UI installs the same daemon and the same CLI; it just adds a window. Users who later install the desktop find the same projects, plugins, and history that the headless flow produced — there is no "headless project format" vs. "desktop project format". This spec MUST NOT define daemon data paths; read root `AGENTS.md` → **Daemon data directory contract** before changing or documenting shared storage.
 - CI is a first-class citizen: a GitHub Action can `npm i -g @open-design/cli && od daemon start --headless && od plugin install … && od run start --project … --follow`. No display, no electron, no per-step UI scripting.
 - External products can embed OD by spawning a headless daemon and shelling out — `od` is the public surface, internals are free to evolve.
 
@@ -1327,7 +1327,7 @@ od run logs   <runId>                # historical tail; --since for incremental
 
 #### File system operations on a project (new)
 
-The daemon already owns project filesystems under `.od/projects/<id>/` (or `metadata.baseDir` for imported folders). These commands are project-scoped — agents do not need to know where the project lives on disk.
+The daemon already owns project filesystems (or `metadata.baseDir` for imported folders). These commands are project-scoped — agents do not need to know where the project lives on disk. This spec MUST NOT define daemon data paths; read root `AGENTS.md` → **Daemon data directory contract** before changing or documenting project storage.
 
 ```
 od files list   <projectId> [--path <subdir>] [--json]
@@ -1574,8 +1574,8 @@ od run start --project "$PID" --plugin make-a-deck \
 CWD=$(od project info "$PID" --json | jq -r .cwd)
 cd "$CWD"
 # OD has already staged the merged SKILL.md / DESIGN.md / craft / atoms into
-# .od-skills/ inside the cwd, exactly as the desktop run would.
-claude code "Read .od-skills/ and produce the deliverables the active plugin describes."
+# The skill staging directory is inside the cwd, exactly as the desktop run would prepare it.
+claude code "Read the staged skill context and produce the deliverables the active plugin describes."
 
 # Consume the produced artifacts.
 od files list "$PID" --json
@@ -1587,7 +1587,7 @@ What this proves:
 
 - The full marketplace -> plugin -> apply -> run -> artifact pipeline is reachable from a terminal in <10 lines.
 - The OD daemon does not need to render anything; it acts as a project + plugin + artifact server.
-- The same project, when later opened in the OD desktop UI, shows the full conversation history, files, and artifacts produced by the headless run — because there is exactly one storage layer (§4.6 in [`spec.md`](spec.md), `.od/projects/<id>/` + SQLite).
+- The same project, when later opened in the OD desktop UI, shows the full conversation history, files, and artifacts produced by the headless run. This spec MUST NOT define daemon data paths; read root `AGENTS.md` → **Daemon data directory contract** before changing or documenting shared storage.
 
 ### 14.4 Analogy: Cursor vs `cursor-agent`, OD desktop vs `od` CLI
 
@@ -1596,7 +1596,7 @@ The mental model:
 | Layer                 | Cursor                                       | Open Design                                          |
 | --------------------- | -------------------------------------------- | ---------------------------------------------------- |
 | Headless agent CLI    | `cursor-agent` (drives the agent loop)       | `od run start --agent claude --follow` + `od plugin run` |
-| Local services / db   | Cursor's background indexing / state         | OD daemon, SQLite, `.od/projects/<id>/`              |
+| Local services / db   | Cursor's background indexing / state         | OD daemon-managed state. Storage paths are governed only by root `AGENTS.md` → **Daemon data directory contract**. |
 | GUI productivity layer| Cursor IDE                                   | OD desktop / web UI (`apps/web` + `apps/desktop`)    |
 | Plugin / skill format | `.cursor/rules/`, MCP servers                | `SKILL.md` + `open-design.json` + atoms              |
 
@@ -1622,15 +1622,10 @@ The base image is `node:24-bookworm-slim`. The user inside the container is non-
 
 ### 15.2 Persistence
 
-Three paths the operator should mount as volumes; they map onto existing OD env vars from the root [`AGENTS.md`](../AGENTS.md), so no daemon code change is needed.
-
-| Mount path        | Env var                  | Purpose                                                |
-| ----------------- | ------------------------ | ------------------------------------------------------ |
-| `/data/od`        | `OD_DATA_DIR`            | Projects, SQLite, artifacts, installed plugins (`<OD_DATA_DIR>/plugins`) |
-| `/data/config`    | `OD_MEDIA_CONFIG_DIR`    | Provider credentials (`media-config.json`)             |
-| `/data/marketplaces` | (under `OD_DATA_DIR`)  | Cached marketplace indexes                             |
-
-Mounting `/data/od` alone is the minimal config. Splitting `/data/config` separately is the recommended hosted-mode pattern so secrets follow a different lifecycle than data.
+This deployment draft MUST NOT define daemon data paths, mount paths, or
+persistence examples. Before choosing, documenting, or changing persistence,
+you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory
+contract**. That section is mandatory and is the only truth source.
 
 ### 15.3 Configuration
 
@@ -1639,8 +1634,7 @@ All configuration flows through env vars and an optional pre-baked config file. 
 ```env
 OD_PORT=17456
 OD_BIND_HOST=0.0.0.0                 # the variable the daemon already reads ([`apps/daemon/src/server.ts`](../apps/daemon/src/server.ts))
-OD_DATA_DIR=/data/od
-OD_MEDIA_CONFIG_DIR=/data/config
+# Set daemon storage env vars only after reading root AGENTS.md -> Daemon data directory contract.
 OD_TRUST_DEFAULT=restricted          # safe default for hosted (§9) — introduced in Phase 5
 OD_AGENT_BACKEND=claude              # default code agent backend
 OD_API_TOKEN=<random>                # required when OD_BIND_HOST != 127.0.0.1 — Phase 5 introduces the bearer middleware
@@ -1656,7 +1650,7 @@ TAVILY_API_KEY=...
 > - `OD_BIND_HOST` already exists in the daemon ([`apps/daemon/src/server.ts`](../apps/daemon/src/server.ts), [`apps/daemon/src/origin-validation.ts`](../apps/daemon/src/origin-validation.ts)). Earlier draft text referred to the same variable as `OD_HOST`; the correct name is `OD_BIND_HOST`, and this spec uses it everywhere. **No `OD_HOST` alias is introduced** — that would invite double-name drift.
 > - `OD_TRUST_DEFAULT`, `OD_API_TOKEN`, and the corresponding bearer-token middleware are **not yet implemented**; they are part of Phase 5 "Cloud deployment + pluggable storage" (§15.7, §16 Phase 5). Until landed, hosted deployments must rely on a reverse proxy / network ACL for access control; §15.7 explicitly calls out this prerequisite.
 
-Anything settable via the desktop UI is also settable via `docker exec od od config set ...` or by mounting a pre-baked `media-config.json` into `/data/config`.
+Anything settable via the desktop UI is also settable via `docker exec od od config set ...`. This document MUST NOT provide concrete storage paths.
 
 ### 15.4 One-command deploy
 
@@ -1667,20 +1661,9 @@ docker run --rm -p 17456:17456 ghcr.io/open-design/od:latest
 open http://localhost:17456
 ```
 
-Persistent server:
-
-```bash
-docker run -d --name od \
-  -p 17456:17456 \
-  -v od-data:/data/od \
-  -v od-config:/data/config \
-  -e OD_DATA_DIR=/data/od \
-  -e OD_MEDIA_CONFIG_DIR=/data/config \
-  -e OD_BIND_HOST=0.0.0.0 \
-  -e OD_API_TOKEN="$(openssl rand -hex 32)" \
-  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  ghcr.io/open-design/od:latest
-```
+Persistent server storage examples are intentionally omitted here. Before
+writing one, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data
+directory contract**.
 
 Reach the same surfaces inside the container:
 
@@ -2170,7 +2153,7 @@ Until Phases 6, 7, and 8 land, the production-code experience for users follows 
 
 The contract has four locked points:
 
-1. **OD stages the design substrate into a project cwd.** Per §14.3, the daemon writes SKILL.md / DESIGN.md / craft into `.od-skills/` and generated artifacts into the project cwd via `od files`. The cwd is discoverable via `od project info <id> --json | jq -r .cwd`.
+1. **OD stages the design substrate into a project cwd.** Per §14.3, the daemon writes SKILL.md / DESIGN.md / craft into a staged skill-context directory and generated artifacts into the project cwd via `od files`. The cwd is discoverable via `od project info <id> --json | jq -r .cwd`.
 2. **The user's code agent operates in that cwd or in their own repo cwd.** OD does not run inside the IDE; it runs as a daemon next to the IDE. Cursor / Claude Code / Codex / Gemini CLI are the patch-applying surface.
 3. **Bookkeeping stays in OD.** `ArtifactManifest` (§11.5.1) records `sourcePluginSnapshotId`, `sourceTaskKind: 'tune-collab'` (or `'code-migration'` once Phase 7 lands), and `handoffKind: 'patch'`; `od files` tracks every artifact byte. Even when the code agent does the patch, OD remains the audit log.
 4. **Re-entry into OD is single-step.** The user can reapply any plugin (or a different plugin) on top of the same project at any time via the inline rail (§8) or `od plugin apply ... --project <id>`. `parentArtifactId` chaining (§11.5.1) preserves the lineage across the OD ↔ code-agent boundary.

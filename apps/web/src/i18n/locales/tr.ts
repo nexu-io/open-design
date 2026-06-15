@@ -1505,6 +1505,7 @@ export const tr: Dict = {
   'chat.annotationSendDisabledReason': 'Şu anda bir görev çalışıyor',
   'chat.annotationPreviewMissing': 'Önizleme yakalanamadı. Lütfen tekrar deneyin.',
   'chat.annotationPreviewMissingInk': 'Önizleme yakalanamadı. Yalnızca çizim göndermemek için tekrar deneyin.',
+  'chat.annotationSentWithoutScreenshot': 'Önizleme yakalanamadı. Açıklama ekran görüntüsü olmadan gönderildi.',
   'chat.annotationTimeout': 'Açıklama gönderimi zaman aşımına uğradı. Lütfen tekrar deneyin.',
   'chat.annotationFailed': 'Açıklama gönderimi başarısız oldu. Lütfen tekrar deneyin.',
   'chat.annotationProjectCreateFailed': 'Bir proje oluşturulamadığından açıklama gönderilmedi.',
