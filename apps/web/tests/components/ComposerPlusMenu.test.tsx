@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState, type ComponentProps } from 'react';
 import { ComposerPlusMenu } from '../../src/components/ComposerPlusMenu';
@@ -128,117 +128,74 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
     expect(screen.getByText('Linear')).toBeTruthy();
   });
 
-  it('keeps the plugins flyout width class when search returns no plugins', () => {
-    renderMenu();
-    fireEvent.click(screen.getByTestId('plus-trigger'));
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
-    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
-      'plus-menu__flyout--plugins',
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Plugins'), {
-      target: { value: 'definitely-no-plugin' },
-    });
-
-    expect(screen.getByText('No installed plugins')).toBeTruthy();
-    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
-      'plus-menu__flyout--plugins',
-    );
-  });
-
-  it('keeps the plugins flyout open when empty-search layout changes fire mouseleave', () => {
-    vi.useFakeTimers();
+  it('keeps the plugins flyout height stable while search is active', () => {
     renderMenu();
     fireEvent.click(screen.getByTestId('plus-trigger'));
     fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
 
-    const pluginSearch = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
-    pluginSearch.focus();
-    expect(document.activeElement).toBe(pluginSearch);
-
-    fireEvent.change(pluginSearch, {
-      target: { value: 'definitely-no-plugin' },
-    });
     const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
-    fireEvent.mouseLeave(flyout);
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(screen.getByText('No installed plugins')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Plugins')).toBeTruthy();
-  });
-
-  it('closes the plugins flyout after the empty-search mouseleave grace period', () => {
-    vi.useFakeTimers();
-    renderMenu();
-    fireEvent.click(screen.getByTestId('plus-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+    flyout.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 466,
+        bottom: 286,
+        width: 466,
+        height: 286,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const pluginSearch = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
-    pluginSearch.focus();
     fireEvent.change(pluginSearch, {
       target: { value: 'definitely-no-plugin' },
     });
-    act(() => {
-      vi.advanceTimersByTime(450);
-    });
-    fireEvent.mouseLeave(document.querySelector('.plus-menu__flyout') as HTMLDivElement);
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
 
-    expect(screen.queryByText('No installed plugins')).toBeNull();
-    expect(screen.getByRole('menuitem', { name: /Plugins/i }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText('No installed plugins')).toBeTruthy();
+    expect(flyout.style.minHeight).toBe('286px');
+
+    fireEvent.change(pluginSearch, {
+      target: { value: '' },
+    });
+    expect(flyout.style.minHeight).toBe('');
   });
 
-  it('keeps the design toolbox flyout width class when search returns no resources', () => {
-    renderMenu({
-      toolboxLabel: 'Design toolbox',
-      renderToolbox: () => <SearchableToolboxFixture />,
-    });
-    fireEvent.click(screen.getByTestId('plus-trigger'));
-
-    fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
-    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
-      'plus-menu__flyout--toolbox',
-    );
-
-    fireEvent.change(screen.getByLabelText('Search design toolbox resources'), {
-      target: { value: 'definitely-no-resource' },
-    });
-
-    expect(screen.getByText('No toolbox resources')).toBeTruthy();
-    expect(document.querySelector('.plus-menu__flyout')?.className).toContain(
-      'plus-menu__flyout--toolbox',
-    );
-  });
-
-  it('keeps the design toolbox flyout open when empty-search layout changes fire mouseleave', () => {
-    vi.useFakeTimers();
+  it('keeps the design toolbox flyout height stable while search is active', () => {
     renderMenu({
       toolboxLabel: 'Design toolbox',
       renderToolbox: () => <SearchableToolboxFixture />,
     });
     fireEvent.click(screen.getByTestId('plus-trigger'));
     fireEvent.click(screen.getByRole('menuitem', { name: /Design toolbox/i }));
+
+    const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
+    expect(flyout.className).toContain('plus-menu__flyout--toolbox');
+    flyout.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 360,
+        bottom: 248,
+        width: 360,
+        height: 248,
+        toJSON: () => ({}),
+      }) as DOMRect;
 
     const toolboxSearch = screen.getByLabelText('Search design toolbox resources') as HTMLInputElement;
-    toolboxSearch.focus();
-    expect(document.activeElement).toBe(toolboxSearch);
-
     fireEvent.change(toolboxSearch, {
       target: { value: 'definitely-no-resource' },
     });
-    const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
-    fireEvent.mouseLeave(flyout);
-    act(() => {
-      vi.advanceTimersByTime(250);
-    });
 
     expect(screen.getByText('No toolbox resources')).toBeTruthy();
-    expect(screen.getByLabelText('Search design toolbox resources')).toBeTruthy();
+    expect(flyout.style.minHeight).toBe('248px');
+
+    fireEvent.change(toolboxSearch, {
+      target: { value: '' },
+    });
+    expect(flyout.style.minHeight).toBe('');
   });
 
   it('portals the menu and constrains it to the available viewport height', async () => {
