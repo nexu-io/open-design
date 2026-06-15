@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countDesignSystemPreviewModules,
   countNewHtmlArtifacts,
+  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from '../src/run-artifacts.js';
@@ -378,5 +379,79 @@ describe('runAskedUserQuestion', () => {
         ...questionFormText(),
       ]),
     ).toBe(true);
+  });
+});
+
+// `deriveActivationMilestones` powers the `$set_once` person-property stamp on
+// `run_finished` — the first-touch "has produced an artifact / has generated a
+// design system" segmentation. Pins: only successful runs count, a design
+// system requires `designSystemCreated`, both can fire from one run, and a
+// no-milestone run returns undefined so the caller omits `$set_once`.
+describe('deriveActivationMilestones', () => {
+  const ISO = '2026-06-15T12:00:00.000Z';
+
+  it('stamps first_artifact_at when a successful run produced artifacts', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 2,
+        designSystemCreated: false,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_artifact_at: ISO });
+  });
+
+  it('stamps first_design_system_at when a successful run wrote DESIGN.md', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: true,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_design_system_at: ISO });
+  });
+
+  it('stamps both when one run crossed both milestones', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 3,
+        designSystemCreated: true,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_artifact_at: ISO, first_design_system_at: ISO });
+  });
+
+  it('returns undefined for a successful run that crossed no milestone', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: false,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for a failed run even when it touched files', () => {
+    // A failed/cancelled run that happened to write a file is not a
+    // milestone — the funnel only credits successful generation.
+    expect(
+      deriveActivationMilestones({
+        result: 'failed',
+        artifactCount: 5,
+        designSystemCreated: true,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+    expect(
+      deriveActivationMilestones({
+        result: 'cancelled',
+        artifactCount: 5,
+        designSystemCreated: true,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
   });
 });

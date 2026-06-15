@@ -24,6 +24,7 @@
 // uniform zero on PostHog and made the same funnel useless from the
 // other direction.
 
+import type { TrackingRunResult } from '@open-design/contracts/analytics';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 
 // Tool names cover Claude-style, Codex-style, and the ACP/MCP shapes
@@ -243,4 +244,43 @@ export function runAskedUserQuestion(
     else if (typeof data.text === 'string') text += data.text;
   }
   return emittedRenderableQuestionForm(text);
+}
+
+// First-touch activation milestones a brand-new user crosses, written to the
+// PostHog person record via `$set_once` on `run_finished` (the authoritative
+// daemon-side run-outcome event that already carries `artifact_count` and
+// `design_system_created`). Two milestones the growth funnel needs to segment
+// a fresh user without replaying their whole event history:
+//
+//   - `first_artifact_at`        — the user has ever produced an artifact
+//   - `first_design_system_at`   — the user has ever generated a design system
+//
+// `$set_once` semantics mean each timestamp sticks to the FIRST qualifying
+// run and is never overwritten by later runs, so the value doubles as a
+// time-to-first-value signal. The two are independent: a single design-system
+// run that also emits HTML artifacts legitimately crosses both at once.
+//
+// Only a SUCCESSFUL run counts — a failed/cancelled run that happened to touch
+// a file is not a milestone (mirrors the `artifact_count` funnel's "generation
+// success → artifact produced" framing). A design system counts only when the
+// run actually wrote `DESIGN.md` (`designSystemCreated`), matching the
+// `run_finished.design_system_created` definition. Returns undefined when the
+// run crossed no milestone so the caller omits the `$set_once` key entirely
+// rather than shipping an empty object.
+export function deriveActivationMilestones(args: {
+  result: TrackingRunResult;
+  artifactCount: number;
+  designSystemCreated: boolean;
+  capturedAtIso: string;
+}): { first_artifact_at?: string; first_design_system_at?: string } | undefined {
+  if (args.result !== 'success') return undefined;
+  const milestones: {
+    first_artifact_at?: string;
+    first_design_system_at?: string;
+  } = {};
+  if (args.artifactCount > 0) milestones.first_artifact_at = args.capturedAtIso;
+  if (args.designSystemCreated) {
+    milestones.first_design_system_at = args.capturedAtIso;
+  }
+  return Object.keys(milestones).length > 0 ? milestones : undefined;
 }
