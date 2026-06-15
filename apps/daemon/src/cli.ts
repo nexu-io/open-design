@@ -15,6 +15,7 @@ import {
   SUPPORTED_SHELLS,
   isSupportedShell,
   computeCompletions,
+  parseCompleteArgs,
   generateCompletionScript,
 } from './completion.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -6965,13 +6966,7 @@ Then restart your shell (or source the file) and press <TAB> after \`od\`.`);
   // Everything after `--` is the already-typed argv (after `od`); --current is
   // the partial token under the cursor. Prints one candidate per line.
   if (first === '__complete') {
-    const rest = args.slice(1);
-    const sep = rest.indexOf('--');
-    const flagPart = sep === -1 ? rest : rest.slice(0, sep);
-    const words = sep === -1 ? [] : rest.slice(sep + 1);
-    const curIdx = flagPart.indexOf('--current');
-    const current = curIdx !== -1 && flagPart[curIdx + 1] != null ? flagPart[curIdx + 1] : '';
-    const matches = computeCompletions({ words, current });
+    const matches = computeCompletions(parseCompleteArgs(args.slice(1)));
     if (matches.length > 0) process.stdout.write(matches.join('\n') + '\n');
     return;
   }

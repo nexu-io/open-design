@@ -6,6 +6,7 @@ import {
   computeCompletions,
   generateCompletionScript,
   isSupportedShell,
+  parseCompleteArgs,
   topLevelCommands,
 } from '../src/completion.js';
 
@@ -220,6 +221,34 @@ describe('COMMAND_SPEC integrity', () => {
       new Set(SUPPORTED_SHELLS),
     );
   });
+
+  it('restricts the completion command to the flags it actually accepts', () => {
+    // runCompletion only parses --help; --json/--daemon-url would error.
+    expect(COMMAND_SPEC.completion?.flags).toEqual(['--help']);
+  });
+});
+
+describe('computeCompletions — per-command flag overrides', () => {
+  it('offers only --help for `od completion --<TAB>`', () => {
+    const out = computeCompletions({ words: ['completion'], current: '--' });
+    expect(out).toEqual(['--help']);
+    // The globals that would error must not be suggested.
+    expect(out).not.toContain('--json');
+    expect(out).not.toContain('--daemon-url');
+  });
+
+  it('still offers shells alongside --help when no dash is typed', () => {
+    const out = computeCompletions({ words: ['completion'], current: '' });
+    for (const shell of SUPPORTED_SHELLS) expect(out).toContain(shell);
+    expect(out).toContain('--help');
+    expect(out).not.toContain('--json');
+    expect(out).not.toContain('--daemon-url');
+  });
+
+  it('keeps the full global flag set for commands without an override', () => {
+    const out = computeCompletions({ words: ['config'], current: '--' });
+    expect(out).toEqual(['--daemon-url', '--help', '--json']);
+  });
 });
 
 // Fixture pinning the known second-level surface for command families that
@@ -300,4 +329,47 @@ describe('COMMAND_SPEC does not advertise nested verbs as top-level', () => {
       );
     });
   }
+});
+
+describe('parseCompleteArgs', () => {
+  it('splits --current and the words after the -- separator', () => {
+    expect(parseCompleteArgs(['--current', 'g', '--', 'config'])).toEqual({
+      current: 'g',
+      words: ['config'],
+    });
+  });
+
+  it('handles an empty current token', () => {
+    expect(parseCompleteArgs(['--current', '', '--', 'config'])).toEqual({
+      current: '',
+      words: ['config'],
+    });
+  });
+
+  // Regression: a literal `--` as the partial token must be taken as the
+  // --current value, not as the words separator (od completion --<TAB>).
+  it('treats a literal -- partial token as the current value', () => {
+    expect(parseCompleteArgs(['--current', '--', '--', 'completion'])).toEqual({
+      current: '--',
+      words: ['completion'],
+    });
+  });
+
+  it('returns empty words when no separator is present', () => {
+    expect(parseCompleteArgs(['--current', 'co'])).toEqual({
+      current: 'co',
+      words: [],
+    });
+  });
+
+  it('preserves value-flag pairs inside words', () => {
+    expect(
+      parseCompleteArgs(['--current', '', '--', 'config', '--daemon-url', 'http://x']),
+    ).toEqual({ current: '', words: ['config', '--daemon-url', 'http://x'] });
+  });
+
+  it('round-trips through computeCompletions for `od completion --<TAB>`', () => {
+    const req = parseCompleteArgs(['--current', '--', '--', 'completion']);
+    expect(computeCompletions(req)).toEqual(['--help']);
+  });
 });

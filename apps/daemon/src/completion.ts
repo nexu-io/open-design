@@ -40,6 +40,13 @@ export function isSupportedShell(value: string): value is Shell {
 export interface CommandSpec {
   /** Second-level keywords, e.g. config -> [get, set, list, unset]. */
   subcommands: string[];
+  /**
+   * Flags this command actually accepts. When omitted the command inherits
+   * GLOBAL_FLAGS. Set it when a command only handles a subset — e.g.
+   * `completion` parses --help but not --json/--daemon-url, so advertising the
+   * full global set would suggest flags that error when used.
+   */
+  flags?: readonly string[];
 }
 
 // Flags accepted by virtually every subcommand (the library/diagnostics/config
@@ -126,7 +133,10 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
   version: { subcommands: [] },
   doctor: { subcommands: [] },
   config: { subcommands: ['get', 'set', 'list', 'unset'] },
-  completion: { subcommands: [...SUPPORTED_SHELLS] },
+  // `od completion` only parses --help; --json/--daemon-url are not accepted
+  // (they fall through runCompletion's shell check and error). Restrict the
+  // offered flags so completion never suggests a flag that would fail.
+  completion: { subcommands: [...SUPPORTED_SHELLS], flags: ['--help'] },
 };
 
 /** Sorted list of all top-level command names. */
@@ -143,6 +153,37 @@ export interface CompletionRequest {
   words: string[];
   /** The partial token under the cursor (may be ''). */
   current: string;
+}
+
+/**
+ * Parse the args passed to the hidden `od completion __complete` resolver into
+ * a {@link CompletionRequest}. The wire form is:
+ *
+ *   --current <partial> -- <word> <word> ...
+ *
+ * Scans left-to-right so `--current`'s value is consumed before we look for the
+ * `--` words separator. A naive `indexOf('--')` breaks when the partial token
+ * is literally `--` (e.g. `od completion --<TAB>`): the `--current` value would
+ * be mistaken for the separator, dropping the prefix filter.
+ *
+ * @param args argv after the `__complete` keyword.
+ */
+export function parseCompleteArgs(args: string[]): CompletionRequest {
+  let current = '';
+  let words: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const tok = args[i];
+    if (tok === '--current') {
+      current = args[i + 1] ?? '';
+      i++; // consume the value, whatever it is (including '--')
+      continue;
+    }
+    if (tok === '--') {
+      words = args.slice(i + 1);
+      break;
+    }
+  }
+  return { words, current };
 }
 
 /**
@@ -167,10 +208,20 @@ export function computeCompletions(req: CompletionRequest): string[] {
   return [...new Set(filtered)].sort();
 }
 
+// Flags to offer for the command currently on the line. Honors a command's
+// `flags` override (e.g. `completion` only accepts --help) and falls back to
+// GLOBAL_FLAGS for everything else, including an unknown/absent command.
+function flagsForCommand(words: string[]): readonly string[] {
+  const command = collectPositionals(words)[0];
+  const spec = command ? COMMAND_SPEC[command] : undefined;
+  return spec?.flags ?? GLOBAL_FLAGS;
+}
+
 function collectCandidates(words: string[], current: string): string[] {
-  // 1. Flag completion takes precedence regardless of position.
+  // 1. Flag completion takes precedence regardless of position. Offer the flag
+  // set the command on the line actually accepts, not the global default.
   if (current.startsWith('-')) {
-    return [...GLOBAL_FLAGS];
+    return [...flagsForCommand(words)];
   }
 
   // Only the command path matters for positional completion; ignore any flags
@@ -191,13 +242,13 @@ function collectCandidates(words: string[], current: string): string[] {
     return [...GLOBAL_FLAGS];
   }
 
-  // 3. Exactly the command typed -> its subcommands + global flags.
+  // 3. Exactly the command typed -> its subcommands + the flags it accepts.
   if (positionals.length === 1) {
-    return [...spec.subcommands, ...GLOBAL_FLAGS];
+    return [...spec.subcommands, ...(spec.flags ?? GLOBAL_FLAGS)];
   }
 
-  // 4. Deeper paths -> global flags only.
-  return [...GLOBAL_FLAGS];
+  // 4. Deeper paths -> the command's accepted flags.
+  return [...(spec.flags ?? GLOBAL_FLAGS)];
 }
 
 /**
