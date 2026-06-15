@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-themes="tokyo-night,dracula,catppuccin-mocha,nord,corporate-clean">
+<html lang="en" data-themes="tokyo-night,dracula,catppuccin-mocha,nord,corporate-clean">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Open Design · Presenter Mode Deck</title>
 <style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 </style>
@@ -35,8 +34,8 @@
   --radius-lg: 26px;
   --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
   --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'IBM Plex Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: Georgia,'Noto Serif SC',serif;
+  --font-sans: 'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,serif;
   --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
@@ -174,7 +173,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --radius:12px;--radius-sm:8px;--radius-lg:20px;
   --shadow:0 1px 0 rgba(192,202,245,.06) inset;
   --shadow-lg:0 18px 44px rgba(0,0,0,.5);
-  --font-sans:'IBM Plex Sans','Noto Sans SC',sans-serif;
+  --font-sans:'IBM Plex Sans',sans-serif;
 }
 
 </style>
@@ -504,7 +503,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-presenter-mode-reveal .purple { color: var(--accent, #7aa2f7); font-family: var(--font-mono, monospace); }
 .tpl-presenter-mode-reveal .red { color: var(--accent, #7aa2f7); }
 
-/* Rule rows (3 铁律): hairline list with accent left rule */
+/* Rule rows (3 core principles): hairline list with accent left rule */
 .tpl-presenter-mode-reveal .rule-row {
   display: grid;
   grid-template-columns: 56px 1fr;
@@ -589,148 +588,148 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- ============ 1. COVER ============ -->
   <section class="slide" data-title="Cover">
     <p class="kicker">presenter-mode / demo</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="color:var(--accent)">Open Design</span><br>开源、本地、Agent 驱动的设计平台</h1>
-    <p class="lede mt-m">按 <span class="mono">S</span> 进入演讲者视图 · <span class="mono">T</span> 切换主题 · <span class="mono">← →</span> 翻页</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="color:var(--accent)">Open Design</span><br>The open-source, local, agent-driven design platform</h1>
+    <p class="lede mt-m">Press <span class="mono">S</span> for presenter view · <span class="mono">T</span> to switch themes · <span class="mono">← →</span> to navigate</p>
     <div class="speaker">
       <div class="av"></div>
       <div><b>Open Design</b><span>github.com/nexu-io/open-design · 30 min</span></div>
     </div>
     <div class="deck-footer">
-      <span class="mono">Apache-2.0 · 本地运行 · BYOK · 无需注册</span>
+      <span class="mono">Apache-2.0 · Runs locally · BYOK · No sign-up</span>
       <span class="slide-number" data-current="1" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>大家好，欢迎来到今天的分享。今天想跟大家介绍 <strong>Open Design——一个开源、本地、Agent 驱动的设计平台</strong>：从想法到原型、网页、Slides、HTML 视频，产品设计全流程都在你自己的设备上完成。</p>
-      <p>正式开始前先说一下这份 deck 本身：它支持<em>演讲者模式</em>。你们看到的是观众视图，而我的屏幕上是当前页、下一页、完整逐字稿和计时器——这正是 Open Design 用 Plugin 产出 Slides 的一个例子。</p>
-      <p>四个关键词先记住：<strong>Apache-2.0 开源、本地运行、BYOK、无需注册</strong>。这不是又一个云端订阅工具，而是跑在你自己机器上的设计工作流。</p>
-      <p>今天大概 30 分钟，分 5 个部分。有问题随时打断。Let's go.</p>
+      <p>Hi everyone, welcome to today's session. I want to introduce <strong>Open Design — an open-source, local, agent-driven design platform</strong>: from idea to prototype, web page, slides, and HTML video, the entire product-design workflow runs on your own machine.</p>
+      <p>Before we dive in, a word about this deck itself: it supports <em>presenter mode</em>. You're seeing the audience view, while my screen shows the current slide, the next slide, the full script, and a timer — which is itself an example of Open Design producing slides with a Plugin.</p>
+      <p>Four keywords to remember: <strong>Apache-2.0 open source, runs locally, BYOK, no sign-up</strong>. This is not another cloud subscription tool — it's a design workflow that runs on your own machine.</p>
+      <p>We've got about 30 minutes, split into 5 parts. Interrupt me anytime with questions. Let's go.</p>
     </aside>
   </section>
 
   <!-- ============ 2. AGENDA ============ -->
   <section class="slide" data-title="Agenda">
     <p class="kicker">agenda</p>
-    <h2 class="h2">今天要讲的 5 件事</h2>
+    <h2 class="h2">Five things on the agenda</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Why · Claude Design 证明了什么，又锁住了什么</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">工作流 · 从想法到交付几步完成</span><span class="d">~6min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">三大主张 · Open Design 凭什么不一样</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · 现场用演讲者模式讲完这份 deck</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why · What Claude Design proved — and what it locked away</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow · From idea to deliverable in a few steps</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Three principles · What makes Open Design different</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · Presenting this very deck in presenter mode</span><span class="d">~8min</span></div>
       <div class="agenda-row"><span class="num">05</span><span class="t">CTA + Q&amp;A</span><span class="d">~3min</span></div>
     </div>
     <aside class="notes">
-      <p>先过一下今天的议程。</p>
-      <p>第一部分讲 <strong>Why</strong>——2026 年 4 月 Claude Design 证明了 LLM 能真正做设计，但它闭源、付费、只跑云端。这是 Open Design 存在的理由。</p>
-      <p>第二部分讲<strong>工作流</strong>：从一句话想法到可交付的 Artifact，整条链路在本地怎么跑通。</p>
-      <p>第三部分是今天的<em>核心</em>——Open Design 的三大主张：桌面端原生、不造 Agent 而是接入 Agent、越用越懂你。</p>
-      <p>第四部分是现场 demo——其实 demo 从第一页就开始了：这份 deck 本身就是 Open Design 产出的，我全程开着演讲者模式在讲。</p>
-      <p>最后收尾 + 答疑。</p>
-      <p>OK，进入第一部分。</p>
+      <p>Let's walk through today's agenda.</p>
+      <p>Part one is the <strong>Why</strong> — in April 2026, Claude Design proved that LLMs can genuinely do design, but it's closed-source, paid, and cloud-only. That's the reason Open Design exists.</p>
+      <p>Part two covers the <strong>workflow</strong>: how the whole pipeline runs locally, from a one-line idea to a deliverable artifact.</p>
+      <p>Part three is the <em>core</em> of today — Open Design's three principles: desktop-native, plug into agents instead of building one, and getting smarter the more you use it.</p>
+      <p>Part four is the live demo — though really, the demo started on slide one: this deck was produced by Open Design, and I've had presenter mode on the whole time.</p>
+      <p>Then we wrap up with the CTA and Q&amp;A.</p>
+      <p>OK, on to part one.</p>
     </aside>
   </section>
 
   <!-- ============ 3. PROBLEM ============ -->
   <section class="slide" data-title="Problem">
     <p class="kicker">// part 01 · why</p>
-    <h2 class="h2">AI 能做设计了，<br>但能力被<span class="accent">锁在云端</span>。</h2>
+    <h2 class="h2">AI can do design now —<br>but the capability is <span class="accent">locked in the cloud</span>.</h2>
     <div class="grid g3 mt-l">
       <div class="card card-accent">
-        <h4>✅ 它证明了</h4>
-        <p class="dim">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计——不是写文章，是直接产出设计稿。</p>
+        <h4>✅ What it proved</h4>
+        <p class="dim">In April 2026, Claude Design proved for the first time that LLMs can genuinely do design — not write about it, but produce real design work.</p>
       </div>
       <div class="card card-accent">
-        <h4>❌ 但它锁住了</h4>
-        <p class="dim">闭源、付费、只跑云端：模型锁 Anthropic，换 Agent、自部署、BYOK 全做不到。</p>
+        <h4>❌ What it locked away</h4>
+        <p class="dim">Closed-source, paid, cloud-only: the model is locked to Anthropic — no swapping agents, no self-hosting, no BYOK.</p>
       </div>
       <div class="card card-accent">
         <h4>💡 Open Design</h4>
-        <p class="dim">让这套能力变得开放——<strong>让最前沿的 AI 设计能力，回到每一个创作者的桌上</strong>。</p>
+        <p class="dim">Opens that capability up — <strong>bringing frontier AI design power back to every creator's desk</strong>.</p>
       </div>
     </div>
     <aside class="notes">
-      <p>先从一个时间点说起——<strong>2026 年 4 月，Claude Design 发布</strong>。</p>
-      <p>大家看左边这张卡片，它证明了什么？LLM 能<em>真正做设计</em>——不是写一篇关于设计的文章，而是直接产出可用的设计稿。这是质变。</p>
-      <p>但中间这张卡片是问题所在：它<strong>闭源、付费、只跑在云端</strong>。模型被锁死在 Anthropic 一家，你想换个 Agent 不行，想自部署不行，想用自己的 API Key——也就是 BYOK——还是不行。能力很强，但你拿不到手。</p>
-      <p>所以才有了右边这张卡片——<strong>Open Design 的使命就是把这套能力放开</strong>：开源、跑在本地、Agent 随便换。一句话：让最前沿的 AI 设计能力，回到每一个创作者的桌上。</p>
-      <p>那它具体怎么工作？看下一部分。</p>
+      <p>Let's start with a moment in time — <strong>April 2026, Claude Design launches</strong>.</p>
+      <p>Look at the card on the left. What did it prove? That LLMs can <em>genuinely do design</em> — not write an essay about design, but directly produce usable design work. That's a qualitative leap.</p>
+      <p>But the middle card is the problem: it's <strong>closed-source, paid, and cloud-only</strong>. The model is locked to Anthropic. Want to swap in a different agent? No. Self-host? No. Use your own API key — BYOK? Still no. The capability is powerful, but you can't get your hands on it.</p>
+      <p>Which brings us to the card on the right — <strong>Open Design's mission is to open that capability up</strong>: open source, runs locally, swap agents freely. In one sentence: bring frontier AI design power back to every creator's desk.</p>
+      <p>So how does it actually work? On to the next part.</p>
     </aside>
   </section>
 
   <!-- ============ 4. SOLUTION ============ -->
   <section class="slide" data-title="Presenter View">
     <p class="kicker">// part 02 · workflow</p>
-    <h2 class="h2">从想法到交付，<span class="accent">四步</span>完成</h2>
+    <h2 class="h2">From idea to deliverable in <span class="accent">four steps</span></h2>
     <div class="grid g2 mt-l">
       <div>
-        <div class="feature-row"><span class="num blue">①</span><div><b>选择起点</b><p class="dim">一句话描述目标，或从模板 / Plugin 直接选起点。</p></div></div>
-        <div class="feature-row"><span class="num green">②</span><div><b>确定视觉方向</b><p class="dim">选定方向后，色板、字体、间距自动带入生成流程。</p></div></div>
+        <div class="feature-row"><span class="num blue">①</span><div><b>Pick a starting point</b><p class="dim">Describe your goal in one sentence, or start from a template or Plugin.</p></div></div>
+        <div class="feature-row"><span class="num green">②</span><div><b>Set the visual direction</b><p class="dim">Once chosen, the palette, typography, and spacing flow into every generation step.</p></div></div>
       </div>
       <div>
-        <div class="feature-row"><span class="num orange">③</span><div><b>生成 Artifact</b><p class="dim">Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览和修改。</p></div></div>
-        <div class="feature-row"><span class="num purple">④</span><div><b>交付 + 记忆沉淀</b><p class="dim">导出给工程继续开发，或用 HyperFrames 转为视频；每次选择都成为下次生成的上下文。</p></div></div>
+        <div class="feature-row"><span class="num orange">③</span><div><b>Generate the artifact</b><p class="dim">The agent reads the full context and produces real, runnable files — preview and edit instantly in the sandbox.</p></div></div>
+        <div class="feature-row"><span class="num purple">④</span><div><b>Deliver + build memory</b><p class="dim">Hand off to engineering, or turn it into video with HyperFrames; every choice becomes context for the next generation.</p></div></div>
       </div>
     </div>
     <aside class="notes">
-      <p>Open Design 的工作流就四步。我按顺序过一遍。</p>
-      <p>第一步，<strong>选择起点</strong>。一句话描述你要什么，或者直接从模板和 Plugin 里挑一个起点——比如今天这份 deck，起点就是一个演讲者模式的 Slides Plugin。</p>
-      <p>第二步，<strong>确定视觉方向</strong>。方向一旦选定，色板、字体、间距会自动带进后面的生成流程，不用每页手调。</p>
-      <p>第三步，<strong>生成 Artifact</strong>——这是最关键的一步。Agent 读取全部上下文，产出的是<em>真实可运行的文件</em>，不是截图也不是预览图，在沙盒里可以即时预览和修改。</p>
-      <p>第四步，<strong>交付加记忆沉淀</strong>。文件可以直接交给工程继续开发，也可以用 HyperFrames 转成营销视频；同时你的每次选择都沉淀为记忆，下次生成更接近你要的结果。</p>
-      <p>那支撑这套工作流的理念是什么？看下一部分。</p>
+      <p>Open Design's workflow is four steps. Let me walk through them in order.</p>
+      <p>Step one, <strong>pick a starting point</strong>. Describe what you want in one sentence, or pick a starting point straight from templates and Plugins — today's deck, for example, started from a presenter-mode Slides Plugin.</p>
+      <p>Step two, <strong>set the visual direction</strong>. Once the direction is locked in, the palette, fonts, and spacing automatically carry into the rest of the generation flow — no per-slide hand-tuning.</p>
+      <p>Step three, <strong>generate the artifact</strong> — the most important step. The agent reads the full context and produces <em>real, runnable files</em> — not screenshots, not preview images — that you can preview and edit instantly in the sandbox.</p>
+      <p>Step four, <strong>deliver and build memory</strong>. The files can go straight to engineering for further development, or become a marketing video via HyperFrames; meanwhile every choice you make is captured as memory, so the next generation lands closer to what you want.</p>
+      <p>So what's the philosophy behind this workflow? Next part.</p>
     </aside>
   </section>
 
   <!-- ============ 5. SCRIPT ============ -->
   <section class="slide" data-title="Script">
     <p class="kicker">// part 03 · principles</p>
-    <h2 class="h2">Open Design 的<span class="accent">三大主张</span></h2>
+    <h2 class="h2">Open Design's <span class="accent">three principles</span></h2>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num red">01</span>
         <div>
-          <b>🖥️ <span class="accent">桌面端</span>原生</b>
-          <p class="dim">设计在桌面端发生。本地文件、Figma 导出、代码仓库直接可读，<em>Agent 拥有终端执行全部能力</em>。</p>
+          <b>🖥️ <span class="accent">Desktop</span>-native</b>
+          <p class="dim">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable, and <em>the agent has full terminal execution power</em>.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">02</span>
         <div>
-          <b>🤖 不造 Agent，<span class="accent">接入 Agent</span></b>
-          <p class="dim">你电脑上的 Claude Code / Codex / Cursor 已经够强。Open Design 把它们接进完整设计工作流。</p>
+          <b>🤖 Don't build agents — <span class="accent">plug into them</span></b>
+          <p class="dim">The Claude Code / Codex / Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">03</span>
         <div>
-          <b>🧠 越用越<span class="accent">懂你</span></b>
-          <p class="dim">每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果。</p>
+          <b>🧠 Gets <span class="accent">smarter</span> with every use</b>
+          <p class="dim">Every choice settles into your Design System, preferences, and memory — so the next generation lands closer to what you want.</p>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>进入最核心的一部分——Open Design 的三大主张。</p>
-      <p><strong>第一条，桌面端原生</strong>。设计真正发生的地方是桌面：本地文件、Figma 导出、代码仓库，全部直接可读。更重要的是，Agent 在这里拥有<em>终端执行的全部能力</em>——这是云端工具给不了的。</p>
-      <p><strong>第二条，不造 Agent，接入 Agent</strong>。我们不重新发明轮子。你电脑上的 Claude Code、Codex、Cursor 已经够强了，Open Design 做的是把它们接进完整的设计工作流——目前已经接入 <strong>21 个 Coding Agent</strong>，自动检测 PATH 上的 CLI，零配置。</p>
-      <p><strong>第三条，越用越懂你</strong>。每一次选择都沉淀为 Design System、偏好和记忆，下次生成会更接近你要的结果。这就是自进化的设计系统。</p>
-      <p>三条合起来：开放、本地、Agent 原生。最后看怎么上手。</p>
+      <p>Now for the heart of today's talk — Open Design's three principles.</p>
+      <p><strong>First, desktop-native</strong>. The desktop is where design actually happens: local files, Figma exports, code repositories — all directly readable. More importantly, the agent here has <em>full terminal execution power</em> — something no cloud tool can give you.</p>
+      <p><strong>Second, don't build agents — plug into them</strong>. We don't reinvent the wheel. The Claude Code, Codex, and Cursor on your machine are already strong; what Open Design does is wire them into a complete design workflow — <strong>21 coding agents</strong> supported so far, auto-detected from your PATH, zero configuration.</p>
+      <p><strong>Third, it gets smarter the more you use it</strong>. Every choice settles into your Design System, preferences, and memory, so the next generation lands closer to what you want. That's a self-evolving design system.</p>
+      <p>Put the three together: open, local, agent-native. Finally, let's see how to get started.</p>
     </aside>
   </section>
 
   <!-- ============ 6. DEMO + CLOSING ============ -->
   <section class="slide" data-title="Demo & Close">
     <p class="kicker">// part 04-05 · demo + close</p>
-    <h2 class="h2">让最前沿的 AI 设计能力<span class="accent">回到你桌上</span></h2>
+    <h2 class="h2">Bring frontier AI design power <span class="accent">back to your desk</span></h2>
     <div class="code-block mt-m">
-<span class="comment"># 获取 Open Design（macOS / Windows · Apache-2.0）</span>
+<span class="comment"># Get Open Design (macOS / Windows · Apache-2.0)</span>
 <span class="cmd">open</span> <span class="flag">https://github.com/nexu-io/open-design</span>
 
 <span class="comment"># 60K+ Stars · 300+ Contributors · 217+ Plugins · 129 Design Systems</span>
 
-<span class="comment"># 本 deck 键盘操作（演讲者模式演示）</span>
-<span class="flag">S</span>  <span class="comment">→ 进入演讲者视图</span>
-<span class="flag">T</span>  <span class="comment">→ 切换主题（5 种预设）</span>
-<span class="flag">← →</span> <span class="comment">→ 翻页</span>
-<span class="flag">R</span>  <span class="comment">→ 重置计时器</span>
+<span class="comment"># Keyboard shortcuts for this deck (presenter-mode demo)</span>
+<span class="flag">S</span>  <span class="comment">→ open presenter view</span>
+<span class="flag">T</span>  <span class="comment">→ switch theme (5 presets)</span>
+<span class="flag">← →</span> <span class="comment">→ navigate slides</span>
+<span class="flag">R</span>  <span class="comment">→ reset timer</span>
     </div>
     <p class="lede mt-m tc"><strong>Open · Local · Agent-native</strong> — Download Open Design ｜ Star on GitHub · discord.gg/qhbcCH8Am4</p>
     <div class="deck-footer">
@@ -738,18 +737,18 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
       <span class="slide-number" data-current="6" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>最后是行动召唤，给大家省点时间自己摸索。</p>
-      <p>上手很简单：打开 GitHub 仓库 <code>nexu-io/open-design</code>，下载 macOS 或 Windows 客户端就能用。<strong>Apache-2.0 开源，无需注册，BYOK 用自己的 Key</strong>。社区现在是 60K+ Stars、300+ 贡献者、217+ Plugins、129 个 Design System——生态已经很热闹了。</p>
-      <p>键盘操作我列在这里了。<strong>S 进入演讲者视图、T 切换主题、左右键翻页、R 重置计时器</strong>。主题默认带 5 个——tokyo-night、dracula、catppuccin-mocha、nord、corporate-clean——深色技术分享、浅色商务汇报都覆盖了。</p>
-      <p>别忘了，这份 deck 本身就是 Open Design 的产物——<em>演讲者模式、逐字稿、主题切换，全是它生成的 HTML</em>。你看到的 demo 就是产品本身。</p>
-      <p>好，我今天就讲到这里。一句话带走：<strong>开放、本地、Agent 原生</strong>。谢谢大家，有问题现在开始。</p>
+      <p>Finally, the call to action — to save you some time figuring it out yourselves.</p>
+      <p>Getting started is simple: open the GitHub repo <code>nexu-io/open-design</code> and download the macOS or Windows client. <strong>Apache-2.0 open source, no sign-up, BYOK with your own key</strong>. The community is at 60K+ stars, 300+ contributors, 217+ Plugins, and 129 Design Systems — the ecosystem is buzzing.</p>
+      <p>The keyboard shortcuts are listed here. <strong>S for presenter view, T to switch themes, arrow keys to navigate, R to reset the timer</strong>. Five themes ship by default — tokyo-night, dracula, catppuccin-mocha, nord, corporate-clean — covering dark tech talks and light business reviews alike.</p>
+      <p>And remember, this deck is itself an Open Design artifact — <em>presenter mode, the full script, theme switching: all generated HTML</em>. The demo you've been watching is the product.</p>
+      <p>That's all from me today. One line to take home: <strong>open, local, agent-native</strong>. Thank you — questions, go.</p>
     </aside>
   </section>
 
 </div>
 
 <div style="position:fixed;bottom:12px;left:12px;font-size:11px;font-family:var(--font-mono);color:var(--text-3);opacity:.7;z-index:100;pointer-events:none">
-  S 演讲者视图 · T 切换主题 · ← → 翻页 · F 全屏 · O 总览 · R 重置计时
+  S presenter view · T theme · ← → navigate · F fullscreen · O overview · R reset timer
 </div>
 
 

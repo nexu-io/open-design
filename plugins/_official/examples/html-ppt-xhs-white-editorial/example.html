@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>白底杂志风 · XHS Editorial</title>
+<title>White Editorial · XHS Style</title>
 <style>/* html-ppt :: shared webfonts (only families actually used) */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 </style>
@@ -35,8 +34,8 @@
   --radius-lg: 0px;
   --shadow: none;
   --shadow-lg: none;
-  --font-sans: 'Noto Sans SC','PingFang SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Fraunces','Noto Serif SC',Georgia,serif;
+  --font-sans: 'Inter',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Fraunces',Georgia,serif;
   --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-serif);
   --letter-tight: -.02em;
@@ -162,8 +161,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* xhs-white-editorial — 白底杂志风
-   restyle direction: warm paper masthead editorial. Serif display (Fraunces + Noto Serif SC),
+<style>/* xhs-white-editorial — white-paper magazine style
+   restyle direction: warm paper masthead editorial. Serif display (Fraunces),
    single ink-red accent, hairline rules instead of shadow cards, zero gradients. */
 .tpl-xhs-white-editorial{
   --xw-bg:#fbfaf7;
@@ -174,8 +173,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --xw-line:rgba(25,23,20,.14);
   --xw-line-strong:rgba(25,23,20,.6);
   --xw-accent:#b3261e;
-  --xw-serif:'Fraunces','Noto Serif SC',Georgia,serif;
-  --xw-sans:'Noto Sans SC','PingFang SC',-apple-system,sans-serif;
+  --xw-serif:'Fraunces',Georgia,serif;
+  --xw-sans:'Inter',-apple-system,sans-serif;
   --xw-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   background:var(--xw-bg);
   color:var(--xw-ink);
@@ -256,16 +255,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide is-active">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>开源工具 · 真心种草</div>
+      <div class="xw-tag"><span class="dot"></span>Open-source find · Honest rec</div>
       <div class="xw-page">01 / 08</div>
     </div>
-    <div class="xw-kicker">我最近最上头的一个开源项目</div>
-    <h1 class="xw-title">把设计工作流，<br>搬回 <span class="xw-grad">自己的电脑</span></h1>
-    <p class="xw-sub">Open Design：开源、本地、Agent 驱动。从想法到 <span class="xw-focus">原型</span>、<span class="xw-focus">Slides</span>、<span class="xw-focus">HTML 视频</span>，全在你自己的设备上完成。</p>
+    <div class="xw-kicker">The open-source project I can't stop using lately</div>
+    <h1 class="xw-title">Move your design workflow<br>back to <span class="xw-grad">your own computer</span></h1>
+    <p class="xw-sub">Open Design: open-source, local, agent-driven. From idea to <span class="xw-focus">prototypes</span>, <span class="xw-focus">slides</span>, and <span class="xw-focus">HTML video</span> — all on your own machine.</p>
     <div class="xw-hero">
-      <div class="xw-quote">Apache-2.0 · 本地运行 · BYOK，<br>不用 <span class="xw-focus-orange">注册</span>，装好 <span class="xw-focus">就能用</span>。</div>
+      <div class="xw-quote">Apache-2.0 · runs locally · BYOK.<br>No <span class="xw-focus-orange">sign-up</span> — install it and <span class="xw-focus">just go</span>.</div>
     </div>
-    <div class="xw-footer"><span>白底｜强重点｜杂志竖排</span><span>Cover · 01</span></div>
+    <div class="xw-footer"><span>White paper | Bold highlights | Editorial layout</span><span>Cover · 01</span></div>
   </section>
 
   <!-- 2. SECTION DIVIDER -->
@@ -276,9 +275,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
       <div class="xw-page">02 / 08</div>
     </div>
     <div style="margin-top:120px">
-      <div class="xw-kicker" style="font-family:var(--xw-mono);font-size:15px;letter-spacing:.3em;text-transform:uppercase;color:var(--xw-accent)">第一章</div>
-      <h1 class="xw-title" style="font-size:110px;margin-top:20px">先说 <span class="xw-grad">为什么</span></h1>
-      <p class="xw-sub" style="font-size:28px">Claude Design 证明了 AI 能做设计，但它闭源、付费、只跑云端。</p>
+      <div class="xw-kicker" style="font-family:var(--xw-mono);font-size:15px;letter-spacing:.3em;text-transform:uppercase;color:var(--xw-accent)">Chapter One</div>
+      <h1 class="xw-title" style="font-size:104px;margin-top:20px">First, the <span class="xw-grad">why</span></h1>
+      <p class="xw-sub" style="font-size:28px">Claude Design proved AI can design — but it's closed-source, paid, and cloud-only.</p>
     </div>
     <div class="xw-footer"><span>Section Divider</span><span>02 / 08</span></div>
   </section>
@@ -287,15 +286,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>一个工具能产出什么</div>
+      <div class="xw-tag"><span class="dot"></span>What one tool can produce</div>
       <div class="xw-page">03 / 08</div>
     </div>
-    <h2 class="xw-title-md">从想法到交付，这些都 <span class="xw-grad">直接出</span></h2>
+    <h2 class="xw-title-md">From idea to delivery, it <span class="xw-grad">ships all of this</span></h2>
     <div class="xw-grid-2">
-      <div class="xw-card soft-pink"><div class="xw-label">原型</div><div class="main">移动端 · Web 高保真原型</div><div class="desc">真实可运行的文件，不是贴图</div></div>
-      <div class="xw-card soft-blue"><div class="xw-label">Slides</div><div class="main">创意 Deck · 研究报告</div><div class="desc">像这份笔记一样的 HTML PPT</div></div>
-      <div class="xw-card soft-green"><div class="xw-label">视频</div><div class="main">HyperFrames · HTML→MP4</div><div class="desc">营销短片、产品 Demo 编程式产出</div></div>
-      <div class="xw-card soft-orange"><div class="xw-label">图像</div><div class="main">海报 · 插画 · 产品 Mockup</div><div class="desc">可交互仪表盘、运营简报也能做</div></div>
+      <div class="xw-card soft-pink"><div class="xw-label">Prototypes</div><div class="main">Mobile · Web hi-fi prototypes</div><div class="desc">Real, runnable files — not static mockups</div></div>
+      <div class="xw-card soft-blue"><div class="xw-label">Slides</div><div class="main">Creative decks · Research reports</div><div class="desc">HTML decks just like this very post</div></div>
+      <div class="xw-card soft-green"><div class="xw-label">Video</div><div class="main">HyperFrames · HTML→MP4</div><div class="desc">Marketing shorts and product demos, generated programmatically</div></div>
+      <div class="xw-card soft-orange"><div class="xw-label">Images</div><div class="main">Posters · Illustrations · Product mockups</div><div class="desc">Interactive dashboards and ops briefs, too</div></div>
     </div>
     <div class="xw-footer"><span>Content · Grid 2x2</span><span>03 / 08</span></div>
   </section>
@@ -304,17 +303,17 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>它是怎么工作的</div>
+      <div class="xw-tag"><span class="dot"></span>How it works</div>
       <div class="xw-page">04 / 08</div>
     </div>
-    <h2 class="xw-title-md">一句话开始，<span class="xw-grad">全流程</span> 走完</h2>
+    <h2 class="xw-title-md">One sentence in, the <span class="xw-grad">whole flow</span> out</h2>
     <div class="xw-steps">
-      <div class="xw-step"><div class="xw-num">1</div><div class="xw-txt">选择起点：一句话描述目标，或直接选模板</div></div>
-      <div class="xw-step"><div class="xw-num">2</div><div class="xw-txt">确定视觉方向，色板字体间距自动带入</div></div>
-      <div class="xw-step"><div class="xw-num">3</div><div class="xw-txt">Agent 产出可运行文件，沙盒里即时预览</div></div>
-      <div class="xw-step"><div class="xw-num">4</div><div class="xw-txt">交付工程或转成视频，选择 <span class="xw-focus">沉淀为记忆</span></div></div>
+      <div class="xw-step"><div class="xw-num">1</div><div class="xw-txt">Pick a start: describe your goal in one sentence, or grab a template</div></div>
+      <div class="xw-step"><div class="xw-num">2</div><div class="xw-txt">Lock the visual direction — palette, type, and spacing carry over automatically</div></div>
+      <div class="xw-step"><div class="xw-num">3</div><div class="xw-txt">The agent outputs runnable files, previewed instantly in a sandbox</div></div>
+      <div class="xw-step"><div class="xw-num">4</div><div class="xw-txt">Hand off to engineering or turn into video — choices <span class="xw-focus">settle into memory</span></div></div>
     </div>
-    <div class="xw-hero"><div class="xw-quote" style="font-size:30px">每次选择都成为下次的「<span class="xw-focus-blue">上下文</span>」，<br>它会 <span class="xw-focus">越用越懂你</span>。</div></div>
+    <div class="xw-hero"><div class="xw-quote" style="font-size:30px">Every choice becomes next time's <span class="xw-focus-blue">context</span> —<br>it <span class="xw-focus">gets you more with every use</span>.</div></div>
     <div class="xw-footer"><span>Content · Steps</span><span>04 / 08</span></div>
   </section>
 
@@ -322,10 +321,10 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>我的设计系统就是一个 Markdown</div>
+      <div class="xw-tag"><span class="dot"></span>My design system is just a Markdown file</div>
       <div class="xw-page">05 / 08</div>
     </div>
-    <h2 class="xw-title-md">不是锁进工具，<br>是一份 <span class="xw-grad">DESIGN.md</span></h2>
+    <h2 class="xw-title-md">Not locked inside a tool —<br>just one <span class="xw-grad">DESIGN.md</span></h2>
     <pre class="xw-codebox"><span class="cm"># design-systems/my-brand/DESIGN.md</span>
 <span class="kw">name</span>: <span class="st">my-brand</span>
 <span class="kw">description</span>: <span class="st">"Single source of truth for brand tokens."</span>
@@ -342,38 +341,38 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>GitHub 上的真实社区数据</div>
+      <div class="xw-tag"><span class="dot"></span>Real community numbers from GitHub</div>
       <div class="xw-page">06 / 08</div>
     </div>
-    <h2 class="xw-title-md">社区有多 <span class="xw-focus-pink">活跃</span>，生态有多 <span class="xw-focus-green">能打</span></h2>
+    <h2 class="xw-title-md">How <span class="xw-focus-pink">alive</span> the community is, how <span class="xw-focus-green">strong</span> the ecosystem</h2>
     <svg viewBox="0 0 960 380" style="width:100%;max-width:1000px;margin-top:30px" xmlns="http://www.w3.org/2000/svg">
-      <g font-family="'Noto Sans SC','PingFang SC',sans-serif" font-size="16" fill="#52504a">
+      <g font-family="'Inter',sans-serif" font-size="16" fill="#52504a">
         <!-- baseline: spans exactly the bar-track width so the axis ends with the tracks -->
         <line x1="180" y1="330" x2="700" y2="330" stroke="#191714" stroke-width="1.5"/>
         <!-- rows: monochrome ink bars, accent reserved for the headline value -->
         <g transform="translate(0,40)">
-          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Coding Agent</text>
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Coding agents</text>
           <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
           <rect x="180" y="10" width="120" height="24" fill="#191714"/>
-          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">21 个接入</text>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">21 connected</text>
         </g>
         <g transform="translate(0,100)">
-          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">设计系统</text>
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Design systems</text>
           <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
           <rect x="180" y="10" width="200" height="24" fill="#191714"/>
-          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">129 套</text>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">129</text>
         </g>
         <g transform="translate(0,160)">
-          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">插件</text>
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Plugins</text>
           <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
           <rect x="180" y="10" width="320" height="24" fill="#191714"/>
-          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">217+ 个</text>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">217+</text>
         </g>
         <g transform="translate(0,220)">
-          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">贡献者</text>
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Contributors</text>
           <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
           <rect x="180" y="10" width="440" height="24" fill="#191714"/>
-          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">300+ 人</text>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">300+</text>
         </g>
         <g transform="translate(0,280)">
           <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">GitHub Stars</text>
@@ -390,16 +389,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="xw-topline"></div>
     <div class="xw-topbar">
-      <div class="xw-tag"><span class="dot"></span>今晚就可以做的三件事</div>
+      <div class="xw-tag"><span class="dot"></span>Three things you can do tonight</div>
       <div class="xw-page">07 / 08</div>
     </div>
-    <h2 class="xw-title-md">别只是收藏，<br>今晚就 <span class="xw-grad">跑起来</span></h2>
+    <h2 class="xw-title-md">Don't just save this post —<br><span class="xw-grad">run it tonight</span></h2>
     <div class="xw-grid-3">
-      <div class="xw-card soft-purple"><div class="xw-label">Tonight</div><div class="main">下载<br>Open Design</div><div class="desc">macOS / Windows，无需注册</div></div>
-      <div class="xw-card soft-blue"><div class="xw-label">This week</div><div class="main">接入你的<br>Coding Agent</div><div class="desc">Claude Code / Codex / Cursor，自动检测零配置</div></div>
-      <div class="xw-card soft-green"><div class="xw-label">This month</div><div class="main">沉淀一套<br>Design System</div><div class="desc">它会记住你的偏好，越用越准</div></div>
+      <div class="xw-card soft-purple"><div class="xw-label">Tonight</div><div class="main">Download<br>Open Design</div><div class="desc">macOS / Windows, no sign-up</div></div>
+      <div class="xw-card soft-blue"><div class="xw-label">This week</div><div class="main">Connect your<br>coding agent</div><div class="desc">Claude Code / Codex / Cursor — auto-detected, zero config</div></div>
+      <div class="xw-card soft-green"><div class="xw-label">This month</div><div class="main">Grow your own<br>design system</div><div class="desc">It remembers your preferences and gets sharper with use</div></div>
     </div>
-    <div class="xw-hero"><div class="xw-quote" style="font-size:32px">让最前沿的 AI 设计能力，<br>回到 <span class="xw-focus">每一个创作者的桌上</span>。</div></div>
+    <div class="xw-hero"><div class="xw-quote" style="font-size:32px">Putting frontier AI design power<br>back on <span class="xw-focus">every creator's desk</span>.</div></div>
     <div class="xw-footer"><span>CTA</span><span>07 / 08</span></div>
   </section>
 
@@ -411,12 +410,12 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
       <div class="xw-page">08 / 08</div>
     </div>
     <div style="margin-top:100px">
-      <div class="xw-big-stat xw-grad">谢谢<small> · thanks</small></div>
-      <p class="xw-sub" style="font-size:28px;margin-top:36px">如果你也想把设计工作流搬回本地，去 GitHub 点个 Star——<br>你最想让 Agent 帮你做什么设计？评论区聊聊。</p>
+      <div class="xw-big-stat xw-grad">thanks<small> · for reading</small></div>
+      <p class="xw-sub" style="font-size:28px;margin-top:36px">If you want your design workflow back on your own machine, drop a star on GitHub —<br>and tell me in the comments: what would you have an agent design first?</p>
       <div style="margin-top:40px">
         <span class="xw-pill">github.com/nexu-io/open-design</span>
         <span class="xw-pill">Open · Local · Agent-native</span>
-        <span class="xw-pill">小红书 · 白底杂志风</span>
+        <span class="xw-pill">XHS · White editorial</span>
       </div>
     </div>
     <div class="xw-footer"><span>End</span><span>08 / 08</span></div>

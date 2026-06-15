@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hermes Cyber Terminal</title>
 <style>/* html-ppt :: webfonts (only families actually used by this deck) */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@300;400;500&display=swap');
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
 /* Default tokens. Themes in assets/themes/*.css override the :root block. */
@@ -31,8 +31,8 @@
   --radius-lg: 6px;
   --shadow: none;
   --shadow-lg: none;
-  --font-sans: 'Geist','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Noto Serif SC',Georgia,serif;
+  --font-sans: 'Geist',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,serif;
   --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-mono);
   --letter-tight: -.03em;
@@ -158,7 +158,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* hermes-cyber-terminal — 暗终端 + 霓虹绿青 + 扫描线 */
+<style>/* hermes-cyber-terminal — dark terminal + neon mint-cyan + scanlines */
 .tpl-hermes-cyber-terminal{
   --hc-bg:#0a0c10;
   --hc-bg2:#15151b;
@@ -173,7 +173,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --hc-red:#ff6b6b;
   background:var(--hc-bg);
   color:var(--hc-ink);
-  font-family:'JetBrains Mono','SF Mono','Noto Sans SC',monospace;
+  font-family:'JetBrains Mono','SF Mono',monospace;
 }
 .tpl-hermes-cyber-terminal .slide{background:var(--hc-bg);color:var(--hc-ink);padding:60px 84px;overflow:hidden}
 .tpl-hermes-cyber-terminal .hc-scanlines{position:absolute;inset:0;pointer-events:none;z-index:3;background:repeating-linear-gradient(180deg,transparent 0,transparent 3px,rgba(126,211,164,.025) 3px,rgba(126,211,164,.025) 4px);mix-blend-mode:screen}
@@ -191,7 +191,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-hermes-cyber-terminal .hc-h1{font-family:'JetBrains Mono',monospace;font-size:72px;font-weight:700;line-height:1.05;letter-spacing:-.02em;color:var(--hc-green);text-shadow:0 0 30px rgba(126,211,164,.35),0 0 60px rgba(126,211,164,.1);margin:14px 0 12px}
 .tpl-hermes-cyber-terminal .hc-h2{font-size:46px;font-weight:600;color:var(--hc-ink);margin:0 0 10px;letter-spacing:-.015em}
 .tpl-hermes-cyber-terminal .hc-h3{font-size:22px;font-weight:600;color:var(--hc-amber);margin:0 0 10px}
-.tpl-hermes-cyber-terminal .hc-lede{font-size:18px;line-height:1.7;color:#b9b7ad;max-width:62ch;font-family:'Geist','Noto Sans SC',sans-serif;font-weight:300}
+.tpl-hermes-cyber-terminal .hc-lede{font-size:18px;line-height:1.7;color:#b9b7ad;max-width:62ch;font-family:'Geist',sans-serif;font-weight:300}
 .tpl-hermes-cyber-terminal .hc-cursor{display:inline-block;width:12px;height:1em;background:var(--hc-green);vertical-align:middle;margin-left:6px;animation:hcBlink 1s steps(2) infinite}
 @keyframes hcBlink{50%{opacity:0}}
 .tpl-hermes-cyber-terminal .hc-card{background:var(--hc-surface);border:1px solid var(--hc-border);border-radius:2px;padding:20px 24px;position:relative}
@@ -200,7 +200,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-hermes-cyber-terminal .hc-card::after{content:'';position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-bottom:2px solid rgba(126,211,164,.45);border-right:2px solid rgba(126,211,164,.45)}
 .tpl-hermes-cyber-terminal .hc-card .lbl{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--hc-ink2);margin-bottom:8px}
 .tpl-hermes-cyber-terminal .hc-card .val{font-size:22px;font-weight:700;color:var(--hc-green);font-family:'JetBrains Mono',monospace}
-.tpl-hermes-cyber-terminal .hc-card .desc{font-size:13px;color:#9d9ba3;margin-top:10px;line-height:1.6;font-family:'Geist','Noto Sans SC',sans-serif}
+.tpl-hermes-cyber-terminal .hc-card .desc{font-size:13px;color:#9d9ba3;margin-top:10px;line-height:1.6;font-family:'Geist',sans-serif}
 .tpl-hermes-cyber-terminal .hc-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px}
 .tpl-hermes-cyber-terminal .hc-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
 .tpl-hermes-cyber-terminal .hc-codebox{background:#0c0d12;border:1px solid var(--hc-border);border-radius:2px;padding:22px 26px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.85;color:#d8d4c8;box-shadow:inset 0 0 60px rgba(126,211,164,.04)}
@@ -247,7 +247,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <p class="hc-prompt">od --version</p>
       <h1 class="hc-h1" style="font-size:104px">OPEN<br>DESIGN<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">开源、本地、Agent 驱动的设计平台。<br>从想法到原型、网页、Slides、HTML 视频——产品设计全流程，在你自己的设备上完成。</p>
+      <p class="hc-lede">An open-source, local, agent-driven design platform.<br>From idea to prototypes, websites, slides, and HTML video — the entire product design workflow, on your own machine.</p>
       <div style="margin-top:26px">
         <span class="hc-tag">local-first</span>
         <span class="hc-tag">byok</span>
@@ -266,7 +266,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <p class="hc-prompt">cat why_open_design.md</p>
       <h1 class="hc-h1" style="font-size:110px">// Why</h1>
-      <p class="hc-lede">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计。但它 <code style="color:var(--hc-amber)">closed-source · cloud-only</code> ——换 Agent、自部署、BYOK 全做不到。Open Design 让这套能力变得开放。</p>
+      <p class="hc-lede">In April 2026, Claude Design proved for the first time that LLMs can truly design. But it is <code style="color:var(--hc-amber)">closed-source · cloud-only</code> — no agent swapping, no self-hosting, no BYOK. Open Design sets that capability free.</p>
     </div>
     <div class="hc-footer"><span>section · why</span><span>02 / 08</span></div>
   </section>
@@ -276,16 +276,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>stats · ecosystem</div></div>
-    <h2 class="hc-h2">生态数字</h2>
-    <p class="hc-lede">GitHub 公开口径 · Apache-2.0 开源</p>
+    <h2 class="hc-h2">The ecosystem in numbers</h2>
+    <p class="hc-lede">Public GitHub figures · Apache-2.0 open source</p>
     <div class="hc-grid-3">
-      <div class="hc-card"><div class="lbl">github stars</div><div class="val">60K+</div><div class="desc">300+ 贡献者共同维护的开源项目。</div></div>
-      <div class="hc-card"><div class="lbl">plugins</div><div class="val">217+</div><div class="desc">原型、Slides、海报、仪表盘、周报、OKR。</div></div>
-      <div class="hc-card"><div class="lbl">coding agents</div><div class="val">21</div><div class="desc">自动检测 PATH 上已安装的 CLI，零配置。</div></div>
+      <div class="hc-card"><div class="lbl">github stars</div><div class="val">60K+</div><div class="desc">An open-source project maintained by 300+ contributors.</div></div>
+      <div class="hc-card"><div class="lbl">plugins</div><div class="val">217+</div><div class="desc">Prototypes, slides, posters, dashboards, weekly reports, OKRs.</div></div>
+      <div class="hc-card"><div class="lbl">coding agents</div><div class="val">21</div><div class="desc">Auto-detects CLIs already on your PATH — zero config.</div></div>
     </div>
     <div class="hc-grid-2">
-      <div class="hc-card"><div class="lbl">// open design</div><div class="val" style="color:var(--hc-green);font-size:18px">桌面端原生 · 本地运行</div><div class="desc">本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力。</div></div>
-      <div class="hc-card"><div class="lbl">// closed alternatives</div><div class="val" style="color:var(--hc-red);font-size:18px">模型锁定 · 只跑云端</div><div class="desc">换 Agent、自部署、BYOK 全做不到，每一次生成都离开你的机器。</div></div>
+      <div class="hc-card"><div class="lbl">// open design</div><div class="val" style="color:var(--hc-green);font-size:18px">desktop-native · runs locally</div><div class="desc">Reads local files, Figma exports, and code repos directly; the agent gets full terminal execution power.</div></div>
+      <div class="hc-card"><div class="lbl">// closed alternatives</div><div class="val" style="color:var(--hc-red);font-size:18px">model lock-in · cloud-only</div><div class="desc">No agent swapping, self-hosting, or BYOK — and every generation leaves your machine.</div></div>
     </div>
     <div class="hc-footer"><span>data · github public</span><span>03 / 08</span></div>
   </section>
@@ -295,18 +295,18 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · od run</div></div>
-    <p class="hc-prompt">od run "为新品发布做一个 landing page"</p>
-    <h3 class="hc-h3" style="margin-top:12px">↓ 从想法到交付，5 步完成</h3>
+    <p class="hc-prompt">od run "build a landing page for the new product launch"</p>
+    <h3 class="hc-h3" style="margin-top:12px">↓ From idea to delivery in 5 steps</h3>
     <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># open design · session 42a1</span>
-[<span class="fn">start</span>]   <span class="st">"选择起点：一句话目标，或从模板 / Plugin 直接选"</span>
-[<span class="fn">style</span>]   design-systems/DESIGN.md   <span class="cm">// 色板·字体·间距自动带入</span>
-[<span class="kw">think</span>]   <span class="st">"Agent 读取本地文件 + Figma 导出 + 代码仓库全部上下文"</span>
-[<span class="fn">gen</span>]     artifacts/landing.html     <span class="hl">真实可运行文件</span>
-[<span class="fn">preview</span>] sandbox                    <span class="st">即时预览 · 即时修改</span>
-[<span class="fn">ship</span>]    <span class="var">"导出给工程，或用 HyperFrames 直接转为营销视频"</span>
-[<span class="fn">memory</span>]  偏好已沉淀                 <span class="st">ok</span>
+[<span class="fn">start</span>]   <span class="st">"pick a start: a one-sentence goal, or straight from a template / plugin"</span>
+[<span class="fn">style</span>]   design-systems/DESIGN.md   <span class="cm">// palette · type · spacing auto-applied</span>
+[<span class="kw">think</span>]   <span class="st">"agent reads local files + figma exports + the full repo context"</span>
+[<span class="fn">gen</span>]     artifacts/landing.html     <span class="hl">real runnable file</span>
+[<span class="fn">preview</span>] sandbox                    <span class="st">instant preview · live edits</span>
+[<span class="fn">ship</span>]    <span class="var">"hand off to engineering, or convert to a marketing video via HyperFrames"</span>
+[<span class="fn">memory</span>]  preferences saved          <span class="st">ok</span>
 
-<span class="cm"># 每次选择都成为下次生成的上下文，越用越精准</span></pre>
+<span class="cm"># every choice becomes context for the next run — sharper with every use</span></pre>
     <div class="hc-footer"><span>trace · workflow</span><span>04 / 08</span></div>
   </section>
 
@@ -315,8 +315,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · monthly cost</div></div>
-    <h2 class="hc-h2">月成本 -80%</h2>
-    <p class="hc-lede">对比 Claude Design：$500 → ~$73（BYOK 实测口径，demo data）</p>
+    <h2 class="hc-h2">Monthly cost: -80%</h2>
+    <p class="hc-lede">vs Claude Design: $500 → ~$73 (measured BYOK usage, demo data)</p>
     <svg viewBox="0 0 1000 380" style="width:100%;max-width:1040px;margin-top:24px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="JetBrains Mono, monospace" font-size="13" fill="#96949d">
         <!-- axis -->
@@ -343,14 +343,14 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         <!-- delta annotation -->
         <g>
           <text x="470" y="150" text-anchor="middle" fill="#7ed3a4" font-size="34" font-weight="700">-80%</text>
-          <text x="470" y="176" text-anchor="middle" fill="#96949d">同等用量，月账单降幅</text>
+          <text x="470" y="176" text-anchor="middle" fill="#96949d">same usage, lower monthly bill</text>
         </g>
         <!-- legend -->
         <g transform="translate(800,50)">
           <rect x="0" y="0" width="14" height="14" fill="rgba(233,197,138,.12)" stroke="#e9c58a"/>
-          <text x="22" y="12" fill="#e9c58a">订阅制 · 云端</text>
+          <text x="22" y="12" fill="#e9c58a">subscription · cloud</text>
           <rect x="0" y="22" width="14" height="14" fill="rgba(126,211,164,.15)" stroke="#7ed3a4"/>
-          <text x="22" y="34" fill="#7ed3a4">byok · 本地</text>
+          <text x="22" y="34" fill="#7ed3a4">byok · local</text>
         </g>
       </g>
     </svg>
@@ -364,10 +364,10 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>tldr</div></div>
     <p class="hc-prompt">echo $STARS</p>
     <div class="hc-big">60K+<span style="font-size:60px;color:var(--hc-ink2)"> stars</span></div>
-    <p class="hc-lede" style="margin-top:14px">Apache-2.0 开源 · 300+ 贡献者共建。</p>
+    <p class="hc-lede" style="margin-top:14px">Apache-2.0 open source · built with 300+ contributors.</p>
     <div class="hc-grid-2" style="margin-top:24px">
-      <div class="hc-card"><div class="lbl">+ core capabilities</div><div class="desc">• 129 个 Design System：GitHub / Figma / 本地导入<br>• HyperFrames：HTML→MP4 视频全流程<br>• 自进化设计记忆，越用越懂你</div></div>
-      <div class="hc-card"><div class="lbl">+ open by default</div><div class="desc">• 全链路 BYOK：Anthropic / OpenAI / Azure / Google<br>• 数据全在本地，无需注册<br>• Fork、自部署、商用全部允许</div></div>
+      <div class="hc-card"><div class="lbl">+ core capabilities</div><div class="desc">• 129 design systems: import from GitHub / Figma / local files<br>• HyperFrames: full HTML→MP4 video pipeline<br>• Self-evolving design memory — it understands you better with use</div></div>
+      <div class="hc-card"><div class="lbl">+ open by default</div><div class="desc">• BYOK end to end: Anthropic / OpenAI / Azure / Google<br>• All data stays local, no sign-up<br>• Forking, self-hosting, and commercial use all allowed</div></div>
     </div>
     <div class="hc-footer"><span>numbers · canonical</span><span>06 / 08</span></div>
   </section>
@@ -377,15 +377,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>install</div></div>
-    <h2 class="hc-h2">想自己跑一遍？</h2>
-    <p class="hc-lede">下载 Open Design（macOS / Windows），或三条命令从源码启动。</p>
+    <h2 class="hc-h2">Want to run it yourself?</h2>
+    <p class="hc-lede">Download Open Design (macOS / Windows), or boot it from source with three commands.</p>
     <pre class="hc-codebox" style="margin-top:22px"><span class="cm"># 1. clone (apache-2.0)</span>
 <span class="kw">$</span> git clone https://github.com/nexu-io/open-design
 
 <span class="cm"># 2. install (node 24 + pnpm)</span>
 <span class="kw">$</span> cd open-design && pnpm install
 
-<span class="cm"># 3. start (byok：用你自己的 api key)</span>
+<span class="cm"># 3. start (byok: your own api key)</span>
 <span class="kw">$</span> pnpm tools-dev</pre>
     <div style="margin-top:26px">
       <span class="hc-tag">local-first</span>
@@ -403,7 +403,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <p class="hc-prompt">exit 0</p>
       <h1 class="hc-h1" style="font-size:120px">// thanks<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">让最前沿的 AI 设计能力回到每一个创作者的桌上。<br><span style="color:var(--hc-amber)">github.com/nexu-io/open-design</span> · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
+      <p class="hc-lede">Putting frontier AI design capability back on every creator's desk.<br><span style="color:var(--hc-amber)">github.com/nexu-io/open-design</span> · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
     </div>
     <div class="hc-footer"><span>open · local · agent-native</span><span>08 / 08</span></div>
   </section>

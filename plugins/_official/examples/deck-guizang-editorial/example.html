@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>贵赞编辑墨水 · 章节封页</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,400&family=Inter:wght@400;500&family=Noto+Serif+SC:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet" />
+<title>Guizang Editorial Ink · Act Dividers</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   /* tokens: warm editorial paper / warm off-black ink, single rubric-red accent */
   :root{
@@ -17,7 +17,7 @@
   }
   *,*::before,*::after{ box-sizing:border-box; }
   body{
-    font-family:'Inter','Noto Sans SC',system-ui,sans-serif;
+    font-family:'Inter',system-ui,sans-serif;
     background:var(--ink); margin:0;
     -webkit-font-smoothing:antialiased;
   }
@@ -28,8 +28,8 @@
   }
   .paper{ background:var(--paper); color:var(--ink); }
   .ink{ background:var(--ink); color:var(--paper); }
-  .display{ font-family:'Playfair Display','Noto Serif SC',serif; letter-spacing:-0.01em; }
-  .body-serif{ font-family:'Playfair Display','Noto Serif SC',serif; font-style:italic; letter-spacing:0; }
+  .display{ font-family:'Playfair Display',serif; letter-spacing:-0.01em; }
+  .body-serif{ font-family:'Playfair Display',serif; font-style:italic; letter-spacing:0; }
   .kicker{ font-size:11px; letter-spacing:0.14em; text-transform:uppercase; font-weight:500; }
   .folio{ font-feature-settings:'tnum'; font-variant-numeric:tabular-nums; }
 
@@ -110,11 +110,11 @@
         <span class="folio">01 / 12</span>
       </header>
       <div>
-        <div class="kicker lede-kicker">开篇 · Apache-2.0 · 本地运行 · BYOK</div>
+        <div class="kicker lede-kicker">Prologue · Apache-2.0 · Runs Locally · BYOK</div>
         <h1 class="display">
           Open Design,<br/>
-          <span class="body-serif">开源、本地、</span><br/>
-          Agent 驱动的设计。
+          <span class="body-serif">open &amp; local,</span><br/>
+          agent-driven.
         </h1>
       </div>
       <footer class="row kicker footline">
@@ -135,29 +135,29 @@
       <div>
         <div class="kicker lede-kicker">By the numbers</div>
         <h2 class="display">
-          四个数字, <span class="body-serif">一个生态</span> —— Open Design 正在长大。
+          Four numbers, <span class="body-serif">one ecosystem</span> — Open Design is growing up.
         </h2>
       </div>
       <div class="num-grid">
         <article class="stat">
           <div class="kicker">GitHub Stars</div>
           <div class="display stat-num">60<span class="body-serif">K+</span></div>
-          <p>Apache-2.0 <span class="body-serif">开源</span>; fork、自部署、商用全部允许.</p>
+          <p>Apache-2.0 <span class="body-serif">open source</span>; fork, self-host &amp; commercial use all allowed.</p>
         </article>
         <article class="stat">
-          <div class="kicker">插件 Plugins</div>
+          <div class="kicker">Plugins</div>
           <div class="display stat-num">217<span class="body-serif">+</span></div>
-          <p>原型 · Slides · 海报 · <span class="body-serif">仪表盘</span> · 周报 · OKR.</p>
+          <p>Prototypes · Slides · Posters · <span class="body-serif">dashboards</span> · weekly reports · OKR.</p>
         </article>
         <article class="stat">
           <div class="kicker">Design Systems</div>
           <div class="display stat-num">129</div>
-          <p>从 GitHub / Figma / <span class="body-serif">本地</span>一键导入.</p>
+          <p>One-click import from GitHub / Figma / <span class="body-serif">local files</span>.</p>
         </article>
         <article class="stat">
           <div class="kicker">Coding Agents</div>
           <div class="display stat-num">21</div>
-          <p>自动检测 PATH 上的 CLI, <span class="body-serif">零配置</span>接入.</p>
+          <p>Auto-detects CLIs on your PATH; <span class="body-serif">zero-config</span> hookup.</p>
         </article>
       </div>
       <footer class="row kicker footline">

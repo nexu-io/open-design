@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Open Design · Tech Sharing</title>
 <style>/* html-ppt :: tech-sharing webfonts (only families actually used) */
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 </style>
 <style>/* tech-sharing :: amber-phosphor terminal deck
  * Stance: warm off-black, single CRT-amber accent, IBM Plex Mono structure,
@@ -22,8 +22,8 @@
   --accent-deep:#a85d14;
   --paper:#f1ece3;
   --paper-ink:#1c1814;
-  --font-display:'Sora','Noto Sans SC',-apple-system,BlinkMacSystemFont,sans-serif;
-  --font-sans:'Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-display:'Sora',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
   --font-mono:'IBM Plex Mono',SFMono-Regular,Menlo,monospace;
   --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -160,8 +160,8 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <!-- 1. Cover -->
   <section class="slide" data-title="Cover">
     <p class="kicker">tech-sharing / open-design</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">Open Design<br>开源、本地、<span class="ac">Agent 驱动</span></h1>
-    <p class="lede mt-m">从想法到原型、网页、Slides、HTML 视频——产品设计全流程，在你自己的设备上完成。</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Open Design<br>Open, local, <span class="ac">agent-driven</span></h1>
+    <p class="lede mt-m">From idea to prototype, web page, slides, and HTML video — the entire product-design workflow, on your own device.</p>
     <div class="speaker"><div class="av"></div><div><b>Open Design</b><span>github.com/nexu-io/open-design · 45 min + Q&amp;A</span></div></div>
     <div class="deck-footer"><span class="mono">#apache-2.0 #local #byok</span><span class="slide-number" data-current="1" data-total="8"></span></div>
   </section>
@@ -169,11 +169,11 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <!-- 2. Agenda -->
   <section class="slide" data-title="Agenda">
     <p class="kicker">agenda.toml</p>
-    <h2 class="h2">今天的路线图</h2>
+    <h2 class="h2">Today's roadmap</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Why: 设计能力为什么要开放</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Agents: 接入 21+ Coding Agent</span><span class="d">~10min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">Workflow: 从想法到交付 5 步</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why: design capability should be open</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Agents: plugging into 21+ coding agents</span><span class="d">~10min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Workflow: idea to delivery in 5 steps</span><span class="d">~12min</span></div>
       <div class="agenda-row"><span class="num">04</span><span class="t">Design System as Markdown</span><span class="d">~8min</span></div>
       <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~5min</span></div>
     </div>
@@ -182,28 +182,28 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <!-- 3. Context -->
   <section class="slide" data-title="Context">
     <p class="kicker">// why-open</p>
-    <h2 class="h2">问题：最前沿的 AI 设计能力，<br>被锁在了云端。</h2>
+    <h2 class="h2">The problem: frontier AI design power<br>is locked in the cloud.</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>Claude Design</h4><p class="dim">2026 年 4 月首次证明 LLM 能真正做设计。但闭源、付费、只跑云端，换 Agent、自部署、BYOK 全做不到。</p><span class="tag mt-s">❌ 锁死在云端</span></div>
-      <div class="card card-accent"><h4>裸用 Coding Agent</h4><p class="dim">Claude Code / Codex 已经够强，但缺设计工作流：没有视觉方向、设计系统和沙盒预览。</p><span class="tag mt-s">😩 缺设计工作流</span></div>
-      <div class="card card-hot"><h4>Open Design</h4><p class="dim">开源、本地、接入你已有的 Agent。月成本从 $500 降到约 $73，降幅超 80%。</p><span class="tag mt-s">✅ Apache-2.0 开源</span></div>
+      <div class="card card-accent"><h4>Claude Design</h4><p class="dim">In April 2026 it proved for the first time that LLMs can genuinely do design. But it's closed-source, paid, cloud-only — no agent swapping, no self-hosting, no BYOK.</p><span class="tag mt-s">❌ locked in the cloud</span></div>
+      <div class="card card-accent"><h4>Raw coding agents</h4><p class="dim">Claude Code / Codex are strong enough, but lack a design workflow: no visual direction, no design system, no sandbox preview.</p><span class="tag mt-s">😩 no design workflow</span></div>
+      <div class="card card-hot"><h4>Open Design</h4><p class="dim">Open source, local, plugs into the agents you already have. Monthly cost drops from $500 to ~$73 — over 80% less.</p><span class="tag mt-s">✅ Apache-2.0 open source</span></div>
     </div>
   </section>
 
   <!-- 4. Deep dive 1 -->
   <section class="slide" data-title="Deep Dive 1">
     <p class="kicker">deep-dive · 1 / 2</p>
-    <h2 class="h2">不造 Agent，接入 Agent。</h2>
+    <h2 class="h2">Don't build agents. Plug into them.</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">你电脑上的 <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> 已经够强。Open Design 自动检测 PATH 上已安装的 CLI，把它们接进完整设计工作流——零配置。</p>
+        <p class="lede">The <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> on your machine are already powerful. Open Design auto-detects the CLIs installed on your PATH and wires them into a complete design workflow — zero configuration.</p>
         <div class="mt-l">
-          <span class="tag">21 个 Coding Agent</span> <span class="tag">零配置</span> <span class="tag">全链路 BYOK</span>
+          <span class="tag">21 coding agents</span> <span class="tag">zero config</span> <span class="tag">end-to-end BYOK</span>
         </div>
       </div>
       <div class="terminal">
         <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>agents.sh</span></div>
-<pre><span class="cmt"># 自动检测 PATH 上已安装的 CLI</span>
+<pre><span class="cmt"># auto-detect CLIs installed on PATH</span>
 <span class="kw">$</span> <span class="fn">od</span> agents
 
   <span class="str">✓</span> Claude Code     <span class="str">✓</span> Codex CLI
@@ -212,8 +212,8 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <span class="str">✓</span> Kimi            <span class="str">✓</span> Copilot CLI
   …
 
-<span class="cmt">// 共 21 个 agent，零配置</span>
-<span class="cmt">// OpenAI / Azure / Google 兼容端点经 BYOK 接入</span></pre>
+<span class="cmt">// 21 agents total, zero config</span>
+<span class="cmt">// OpenAI / Azure / Google endpoints via BYOK</span></pre>
       </div>
     </div>
   </section>
@@ -221,25 +221,25 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <!-- 5. Deep dive 2 -->
   <section class="slide" data-title="Deep Dive 2">
     <p class="kicker">deep-dive · 2 / 2</p>
-    <h2 class="h2">从想法到交付，5 步完成。</h2>
+    <h2 class="h2">From idea to delivery in 5 steps.</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览和修改。每次选择都成为下次生成的上下文，越用越精准。</p>
+        <p class="lede">The agent reads the full context and produces real, runnable files you can preview and edit instantly in the sandbox. Every choice becomes context for the next generation — sharper with every use.</p>
         <div class="stack mt-m">
-          <div class="tag">✦ 217+ plugins 起点模板</div>
-          <div class="tag">✦ 沙盒即时预览与修改</div>
+          <div class="tag">✦ 217+ plugins as starting points</div>
+          <div class="tag">✦ instant sandbox preview &amp; edits</div>
           <div class="tag">✦ HyperFrames HTML→MP4</div>
-          <div class="tag">✦ 自进化设计记忆</div>
+          <div class="tag">✦ self-evolving design memory</div>
         </div>
       </div>
       <div class="card" style="padding:32px">
         <h4 class="mono" style="color:var(--accent)">workflow · 5 steps</h4>
         <div class="stack mt-m" style="font-family:var(--font-mono);font-size:14px;line-height:1.9;color:var(--text-2)">
-          <div><span style="color:var(--accent)">1.</span> 选择起点——一句话描述目标，或从模板 / Plugin 起步</div>
-          <div><span style="color:var(--accent)">2.</span> 确定视觉方向——色板、字体、间距自动带入</div>
-          <div><span style="color:var(--accent)">3.</span> 生成 Artifact——真实可运行的文件，沙盒预览</div>
-          <div><span style="color:var(--accent)">4.</span> 交付或制作视频——工程接手，或转营销短片</div>
-          <div><span style="color:var(--accent)">5.</span> 记忆沉淀——成为下次生成的上下文</div>
+          <div><span style="color:var(--accent)">1.</span> Pick a starting point — describe the goal in one line, or start from a template / Plugin</div>
+          <div><span style="color:var(--accent)">2.</span> Set the visual direction — palette, fonts, spacing flow in automatically</div>
+          <div><span style="color:var(--accent)">3.</span> Generate the artifact — real runnable files, previewed in the sandbox</div>
+          <div><span style="color:var(--accent)">4.</span> Deliver or make video — engineering takes over, or render a marketing clip</div>
+          <div><span style="color:var(--accent)">5.</span> Build memory — it becomes context for the next generation</div>
         </div>
       </div>
     </div>
@@ -248,7 +248,7 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
   <!-- 6. Code example -->
   <section class="slide" data-title="Code">
     <p class="kicker">design-systems/DESIGN.md</p>
-    <h2 class="h2">设计系统，是一个能 git diff 的 Markdown。</h2>
+    <h2 class="h2" style="font-size:40px">A design system is a Markdown file you can git diff.</h2>
     <div class="terminal mt-m">
       <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>DESIGN.md</span></div>
 <pre><span class="kw">## Palette</span>
@@ -257,34 +257,34 @@ h4,.h4{font-family:var(--font-display);font-size:20px;line-height:1.35;font-weig
 
 <span class="kw">## Typography</span>
 - display: <span class="str">Inter / 600</span>
-- body:    <span class="str">Noto Sans SC / 400</span>
+- body:    <span class="str">Inter / 400</span>
 
 <span class="kw">## Rules</span>
-- 圆角统一 <span class="num">12px</span>，间距用 <span class="num">8</span> 的倍数
-- 营销页可用渐变，产品页禁用
+- Radii fixed at <span class="num">12px</span>; spacing in multiples of <span class="num">8</span>
+- Gradients allowed on marketing pages, banned in product UI
 
-<span class="cmt"># 129 个 Design System：GitHub / Figma / 本地导入</span>
-<span class="cmt"># Markdown 避免 token 漂移，品牌一致性可控、可版本化</span></pre>
+<span class="cmt"># 129 Design Systems: import from GitHub / Figma / local files</span>
+<span class="cmt"># Markdown prevents token drift — brand consistency stays auditable and versioned</span></pre>
     </div>
   </section>
 
   <!-- 7. Takeaways -->
   <section class="slide" data-title="Takeaways">
     <p class="kicker">// takeaways</p>
-    <h2 class="h2">三件事带回去。</h2>
+    <h2 class="h2">Three things to take home.</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>1 · 桌面端原生</h4><p class="dim">设计在桌面端发生。本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力。</p></div>
-      <div class="card card-accent"><h4>2 · 不造 Agent，接入 Agent</h4><p class="dim">你电脑上的 <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> 已经够强，Open Design 把它们接进完整设计工作流。</p></div>
-      <div class="card card-accent"><h4>3 · 越用越懂你</h4><p class="dim">每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果。</p></div>
+      <div class="card card-accent"><h4>1 · Desktop-native</h4><p class="dim">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable — and the agent has full terminal execution power.</p></div>
+      <div class="card card-accent"><h4>2 · Plug into agents, don't build one</h4><p class="dim">The <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> on your machine are already strong; Open Design wires them into a complete design workflow.</p></div>
+      <div class="card card-accent"><h4>3 · Gets smarter with use</h4><p class="dim">Every choice settles into your Design System, preferences, and memory, so the next generation lands closer to what you want.</p></div>
     </div>
-    <p class="lede mt-l">延伸阅读：<span class="mono">github.com/nexu-io/open-design</span> · <span class="mono">discord.gg/qhbcCH8Am4</span></p>
+    <p class="lede mt-l">Further reading: <span class="mono">github.com/nexu-io/open-design</span> · <span class="mono">discord.gg/qhbcCH8Am4</span></p>
   </section>
 
   <!-- 8. Q&A -->
   <section class="slide center tc invert" data-title="Q and A">
     <div>
       <div class="mono glyph" style="font-size:96px;font-weight:600;letter-spacing:-.04em;line-height:1;margin:0 0 40px">&gt;_</div>
-      <h2 class="h2">让最前沿的 AI 设计能力<br>回到每一个创作者的桌上</h2>
+      <h2 class="h2">Bring frontier AI design power<br>back to every creator's desk</h2>
       <p class="lede" style="margin:14px auto">Open · Local · Agent-native</p>
       <div class="row mt-l" style="justify-content:center">
         <span class="tag">download: macOS / Windows</span>

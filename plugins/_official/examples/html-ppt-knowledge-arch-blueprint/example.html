@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Design · 工程化蓝图</title>
+<title>Open Design · Engineering Blueprint</title>
 <style>/* html-ppt :: shared webfonts (trimmed to faces actually in use) */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
@@ -30,8 +29,8 @@
   --radius-lg: 3px;
   --shadow: none;
   --shadow-lg: none;
-  --font-sans: 'Archivo','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Archivo','Noto Sans SC',Georgia,serif;
+  --font-sans: 'Archivo',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Archivo',Georgia,serif;
   --font-mono: 'IBM Plex Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
@@ -157,7 +156,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* knowledge-arch-blueprint — 奶油纸 + 建筑蓝图风
+<style>/* knowledge-arch-blueprint — cream paper + architectural blueprint style
    family signatures kept: cream paper, drafting grid, rust ink, 2px ruled borders.
    polish pass: Archivo drafting grotesque (Inter retired), sharp corners, shadows
    removed (drawings are flat), contrast fixes, staggered entrance on transform+opacity. */
@@ -171,7 +170,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --kb-line:#cec8be;
   background:var(--kb-bg);
   color:var(--kb-ink);
-  font-family:'Archivo','Noto Sans SC',-apple-system,sans-serif;
+  font-family:'Archivo',-apple-system,sans-serif;
 }
 .tpl-knowledge-arch-blueprint .slide{background:var(--kb-bg);color:var(--kb-ink);padding:64px 80px}
 .tpl-knowledge-arch-blueprint .kb-grid-bg{position:absolute;inset:0;pointer-events:none;opacity:.35;background-image:linear-gradient(rgba(26,26,26,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(26,26,26,.06) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse at center,black 40%,transparent 85%)}
@@ -209,7 +208,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-knowledge-arch-blueprint .kb-codebox .kw{color:#e8a87c}
 .tpl-knowledge-arch-blueprint .kb-codebox .st{color:#b3d1bc}
 .tpl-knowledge-arch-blueprint .kb-codebox .hl{color:#f3a99e;background:rgba(255,255,255,.08);padding:0 4px;border-radius:2px}
-.tpl-knowledge-arch-blueprint .kb-big-num{font-family:'Archivo','Noto Sans SC',sans-serif;font-size:188px;font-weight:900;line-height:.9;color:var(--kb-rust);letter-spacing:-.05em}
+.tpl-knowledge-arch-blueprint .kb-big-num{font-family:'Archivo',sans-serif;font-size:188px;font-weight:900;line-height:.9;color:var(--kb-rust);letter-spacing:-.05em}
 
 /* entrance: staggered rise, transform+opacity only */
 @keyframes kb-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
@@ -236,18 +235,18 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="kb-grid-bg"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:40px;margin-bottom:44px">
       <div>
-        <div class="kb-kicker">Apache-2.0 · 本地运行 · BYOK</div>
-        <h1 class="kb-h1">Open <span class="rust">Design</span> 的<br>工程化蓝图</h1>
-        <p class="kb-sub">开源、本地、Agent 驱动的设计平台 —— 从想法到原型、网页、Slides、HTML 视频，产品设计全流程在你自己的设备上完成。</p>
+        <div class="kb-kicker">Apache-2.0 · Runs locally · BYOK</div>
+        <h1 class="kb-h1" style="font-size:58px">Open <span class="rust">Design</span>'s<br>engineering blueprint</h1>
+        <p class="kb-sub">Open-source, local, agent-driven — idea to prototypes, websites, slides, and HTML video, all on your own machine.</p>
       </div>
-      <div class="kb-insight"><span class="kk">KEY INSIGHT</span>不造 Agent，接入 Agent：<br>你电脑上的 Claude Code / Codex 已经够强。</div>
+      <div class="kb-insight"><span class="kk">KEY INSIGHT</span>Don't build agents — plug them in:<br>the Claude Code / Codex on your machine is already strong enough.</div>
     </div>
     <div class="kb-section-label">Pipeline · End-to-end</div>
     <div class="kb-pipeline">
-      <div class="kb-step"><div class="kb-step-num">STEP 01</div><div class="kb-step-title">选择起点</div><div class="kb-step-body">一句话描述目标，或从模板 / Plugin 直接选起点</div></div>
-      <div class="kb-step"><div class="kb-step-num">STEP 02</div><div class="kb-step-title">视觉方向</div><div class="kb-step-body">色板、字体、间距自动带入生成流程</div></div>
-      <div class="kb-step hero"><div class="kb-step-num">STEP 03 · CORE</div><div class="kb-step-title">生成 Artifact</div><div class="kb-step-body">Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览</div></div>
-      <div class="kb-step"><div class="kb-step-num">STEP 04</div><div class="kb-step-title">交付沉淀</div><div class="kb-step-body">导出给工程，或转为视频；每次选择都成为下次的上下文</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 01</div><div class="kb-step-title">Pick a start</div><div class="kb-step-body">Describe the goal in one sentence, or start from a template / plugin</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 02</div><div class="kb-step-title">Visual direction</div><div class="kb-step-body">Palette, type, and spacing flow into generation automatically</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">STEP 03 · CORE</div><div class="kb-step-title">Generate artifacts</div><div class="kb-step-body">The agent reads full context and produces real, runnable files with instant sandbox preview</div></div>
+      <div class="kb-step"><div class="kb-step-num">STEP 04</div><div class="kb-step-title">Ship &amp; settle</div><div class="kb-step-body">Hand off to engineering or convert to video; every choice becomes next time's context</div></div>
     </div>
     <div class="kb-footer"><span>Open Design · github.com/nexu-io/open-design</span><span>01 / 08</span></div>
   </section>
@@ -257,8 +256,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="kb-grid-bg"></div>
     <div style="margin:auto 0">
       <div class="kb-kicker">Chapter One</div>
-      <h1 class="kb-h1" style="font-size:120px">为什么 <span class="rust">设计</span><br>需要开放</h1>
-      <p class="kb-sub" style="font-size:24px;margin-top:20px">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计。<br>但它闭源、付费、只跑在云端 —— Open Design 让这套能力<b>变得开放</b>。</p>
+      <h1 class="kb-h1" style="font-size:108px">Why <span class="rust">design</span><br>must be open</h1>
+      <p class="kb-sub" style="font-size:24px;margin-top:20px">In April 2026, Claude Design proved for the first time that LLMs can truly design.<br>But it is closed-source, paid, and cloud-only — Open Design makes that capability <b>open</b>.</p>
     </div>
     <div class="kb-footer"><span>Section · Chapter 1</span><span>02 / 08</span></div>
   </section>
@@ -267,23 +266,23 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div class="kb-kicker">Problem · Solution</div>
-    <h1 class="kb-h1" style="font-size:48px">闭源云端 vs <span class="rust">开放本地</span></h1>
+    <h1 class="kb-h1" style="font-size:48px">Closed cloud vs <span class="rust">open local</span></h1>
     <div class="kb-grid-2">
       <div class="kb-card">
         <div class="kb-kicker" style="color:#6f6a5f">Claude Design</div>
-        <h4>闭源 · 付费 · 云端</h4>
-        <p>模型锁 Anthropic，换 Agent、自部署、BYOK 全做不到。能力很强，但只属于一朵云。</p>
+        <h4>Closed · Paid · Cloud-only</h4>
+        <p>Model locked to Anthropic; swapping agents, self-hosting, and BYOK are all off the table. Powerful — but it belongs to one cloud.</p>
       </div>
       <div class="kb-card" style="background:var(--kb-rust-soft);border-color:var(--kb-rust)">
         <div class="kb-kicker">Open Design</div>
-        <h4>开源 · 本地 · Agent 驱动</h4>
-        <p>Apache-2.0，跑在你自己的设备上；接入你已有的 Coding Agent，任何兼容端点 BYOK 接入。</p>
+        <h4>Open source · Local · Agent-driven</h4>
+        <p>Apache-2.0, running on your own machine; plug in the coding agents you already have, and BYOK any compatible endpoint.</p>
       </div>
     </div>
     <div class="kb-legend">
-      <div class="d"><span class="b"></span>云端闭源能力</div>
-      <div class="d"><span class="b rust"></span>本地开放能力 · Open Design</div>
-      <div class="d">—— 数据流 &nbsp;&nbsp; ┈┈ 记忆回流</div>
+      <div class="d"><span class="b"></span>Closed cloud capability</div>
+      <div class="d"><span class="b rust"></span>Open local capability · Open Design</div>
+      <div class="d">—— data flow &nbsp;&nbsp; ┈┈ memory feedback</div>
     </div>
     <div class="kb-footer"><span>Content · Compare</span><span>03 / 08</span></div>
   </section>
@@ -292,8 +291,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div class="kb-kicker">Implementation · Design Memory</div>
-    <h1 class="kb-h1" style="font-size:48px">设计记忆 <span class="rust">怎么沉淀</span></h1>
-    <p class="kb-sub">每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果 —— 越用越懂你。</p>
+    <h1 class="kb-h1" style="font-size:48px">How design memory <span class="rust">accumulates</span></h1>
+    <p class="kb-sub">Every choice settles into design systems, preferences, and memory, so the next generation lands closer to what you want — it understands you better with use.</p>
     <pre class="kb-codebox"><span class="cm"># skills/design-memory/SKILL.md</span>
 <span class="kw">name</span>: design-memory
 <span class="kw">trigger</span>: <span class="st">"after every generation"</span>
@@ -313,7 +312,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div class="kb-kicker">System Diagram</div>
-    <h1 class="kb-h1" style="font-size:44px">从想法到交付全貌</h1>
+    <h1 class="kb-h1" style="font-size:44px">From idea to delivery, end to end</h1>
     <svg viewBox="0 0 1200 520" style="width:100%;max-width:1200px;margin-top:20px" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
@@ -323,24 +322,24 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
           <path d="M0,0 L10,5 L0,10 z" fill="#B5392A"/>
         </marker>
       </defs>
-      <g font-family="Archivo, 'Noto Sans SC', sans-serif" font-size="16" font-weight="700">
+      <g font-family="Archivo, sans-serif" font-size="16" font-weight="700">
         <!-- boxes -->
         <rect x="40" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
         <text x="140" y="220" text-anchor="middle">Idea</text>
-        <text x="140" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">一句话 · 模板 · plugin</text>
+        <text x="140" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">one sentence · template · plugin</text>
 
         <rect x="300" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
         <text x="400" y="220" text-anchor="middle">Design System</text>
-        <text x="400" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">色板 · 字体 · 间距</text>
+        <text x="400" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">palette · type · spacing</text>
 
         <rect x="560" y="160" width="220" height="160" rx="2" fill="#B5392A" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="670" y="210" text-anchor="middle" fill="#fff" font-size="20">Agent 生成</text>
+        <text x="670" y="210" text-anchor="middle" fill="#fff" font-size="20">Agent generation</text>
         <text x="670" y="240" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">Claude Code · Codex</text>
-        <text x="670" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">沙盒预览 · 即时修改</text>
+        <text x="670" y="262" text-anchor="middle" font-size="12" font-weight="400" fill="rgba(255,255,255,.8)">sandbox preview · live edits</text>
 
         <rect x="840" y="180" width="200" height="120" rx="2" fill="#FBF8F2" stroke="#1a1a1a" stroke-width="2"/>
-        <text x="940" y="220" text-anchor="middle">交付</text>
-        <text x="940" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">原型 · slides · 视频</text>
+        <text x="940" y="220" text-anchor="middle">Deliver</text>
+        <text x="940" y="250" text-anchor="middle" font-size="12" font-weight="400" fill="#4f4b44">prototypes · slides · video</text>
 
         <!-- forward arrows -->
         <line x1="245" y1="240" x2="295" y2="240" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow)"/>
@@ -350,12 +349,12 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         <!-- feedback dashed -->
         <path d="M 940 180 Q 940 80, 670 80 Q 400 80, 400 180" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
         <rect x="580" y="58" width="180" height="30" rx="2" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
-        <text x="670" y="78" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · 偏好沉淀</text>
+        <text x="670" y="78" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · preferences settle</text>
 
         <!-- bottom feedback to sources -->
         <path d="M 940 300 Q 940 420, 670 420 Q 140 420, 140 300" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
         <rect x="560" y="400" width="220" height="30" rx="2" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
-        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · 每次选择成为下次的上下文</text>
+        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">MEMORY · every choice feeds the next run</text>
       </g>
     </svg>
     <div class="kb-footer"><span>Diagram · Feedback Loop</span><span>05 / 08</span></div>
@@ -365,15 +364,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div class="kb-kicker">Community Numbers</div>
-    <h1 class="kb-h1" style="font-size:44px">开源社区 <span class="rust">的数据</span></h1>
+    <h1 class="kb-h1" style="font-size:44px">The open-source community, <span class="rust">in numbers</span></h1>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:24px;margin-top:28px;align-items:center">
-      <div style="text-align:center"><div class="kb-big-num">60K+</div><p style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#4f4b44;margin-top:6px;letter-spacing:.14em;text-transform:uppercase">GitHub Stars · Apache-2.0 开源</p></div>
-      <div class="kb-card"><h4 style="color:var(--kb-rust)">-80%</h4><p>对比 Claude Design 的月成本降幅（$500 → ~$73）</p></div>
-      <div class="kb-card"><h4 style="color:var(--kb-rust)">21</h4><p>接入的 Coding Agent，自动检测，零配置</p></div>
+      <div style="text-align:center"><div class="kb-big-num">60K+</div><p style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#4f4b44;margin-top:6px;letter-spacing:.14em;text-transform:uppercase">GitHub stars · Apache-2.0 open source</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">-80%</h4><p>Monthly cost reduction vs Claude Design ($500 → ~$73)</p></div>
+      <div class="kb-card"><h4 style="color:var(--kb-rust)">21</h4><p>Coding agents supported — auto-detected, zero config</p></div>
     </div>
     <div class="kb-grid-2" style="margin-top:18px">
-      <div class="kb-card"><h4>217+ Plugins · 129 Design Systems</h4><p>原型、Slides、海报、仪表盘、周报；设计系统可从 GitHub / Figma / 本地导入。</p></div>
-      <div class="kb-card"><h4>300+ Contributors</h4><p>Apache-2.0 协议下共建：Fork、自部署、商用全部允许。</p></div>
+      <div class="kb-card"><h4>217+ Plugins · 129 Design Systems</h4><p>Prototypes, slides, posters, dashboards, weekly reports; design systems import from GitHub / Figma / local files.</p></div>
+      <div class="kb-card"><h4>300+ Contributors</h4><p>Built together under Apache-2.0: forking, self-hosting, and commercial use are all allowed.</p></div>
     </div>
     <div class="kb-footer"><span>Content · Stats</span><span>06 / 08</span></div>
   </section>
@@ -382,13 +381,13 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="kb-grid-bg"></div>
     <div class="kb-kicker">Next Step</div>
-    <h1 class="kb-h1" style="font-size:60px">开始你的 <span class="rust">Open Design</span></h1>
-    <p class="kb-sub">无需注册，本地运行，BYOK。接入你电脑上已有的 Coding Agent，今晚就能产出第一个 Artifact。</p>
+    <h1 class="kb-h1" style="font-size:60px">Start your <span class="rust">Open Design</span></h1>
+    <p class="kb-sub">No sign-up, runs locally, BYOK. Plug in the coding agents already on your machine and ship your first artifact tonight.</p>
     <div class="kb-pipeline">
-      <div class="kb-step"><div class="kb-step-num">TONIGHT</div><div class="kb-step-title">下载安装</div><div class="kb-step-body">macOS / Windows，<span style="overflow-wrap:break-word;word-break:keep-all">github.com/<wbr>nexu-io/<wbr>open-design</span></div></div>
-      <div class="kb-step"><div class="kb-step-num">DAY 2</div><div class="kb-step-title">接入 Agent</div><div class="kb-step-body">自动检测 PATH 上的 CLI，零配置</div></div>
-      <div class="kb-step hero"><div class="kb-step-num">DAY 3 · CORE</div><div class="kb-step-title">第一个 Artifact</div><div class="kb-step-body">从一句话到可运行的原型 / Slides / 视频</div></div>
-      <div class="kb-step"><div class="kb-step-num">MONTH 1</div><div class="kb-step-title">越用越懂你</div><div class="kb-step-body">偏好与记忆沉淀，生成越来越准</div></div>
+      <div class="kb-step"><div class="kb-step-num">TONIGHT</div><div class="kb-step-title">Download &amp; install</div><div class="kb-step-body">macOS / Windows, <span style="overflow-wrap:break-word;word-break:keep-all">github.com/<wbr>nexu-io/<wbr>open-design</span></div></div>
+      <div class="kb-step"><div class="kb-step-num">DAY 2</div><div class="kb-step-title">Connect an agent</div><div class="kb-step-body">CLIs on your PATH are auto-detected, zero config</div></div>
+      <div class="kb-step hero"><div class="kb-step-num">DAY 3 · CORE</div><div class="kb-step-title">First artifact</div><div class="kb-step-body">From one sentence to a runnable prototype / slides / video</div></div>
+      <div class="kb-step"><div class="kb-step-num">MONTH 1</div><div class="kb-step-title">Grows to know you</div><div class="kb-step-body">Preferences and memory accumulate; output keeps getting sharper</div></div>
     </div>
     <div class="kb-footer"><span>CTA</span><span>07 / 08</span></div>
   </section>
@@ -398,8 +397,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="kb-grid-bg"></div>
     <div style="margin:auto 0;text-align:center">
       <div class="kb-kicker">Open · Local · Agent-native</div>
-      <h1 class="kb-h1" style="font-size:140px;margin-top:24px">谢谢 <span class="rust">·</span> thanks</h1>
-      <p class="kb-sub" style="margin:0 auto;font-size:22px">让最前沿的 AI 设计能力回到每一个创作者的桌上 —— <b class="nowrap">github.com/nexu-io/open-design</b> · <span class="nowrap">discord.gg/qhbcCH8Am4</span></p>
+      <h1 class="kb-h1" style="font-size:120px;margin-top:24px">thank <span class="rust">·</span> you</h1>
+      <p class="kb-sub" style="margin:0 auto;font-size:22px">Putting frontier AI design capability back on every creator's desk — <b class="nowrap">github.com/nexu-io/open-design</b> · <span class="nowrap">discord.gg/qhbcCH8Am4</span></p>
     </div>
     <div class="kb-footer"><span>End of deck</span><span>08 / 08</span></div>
   </section>

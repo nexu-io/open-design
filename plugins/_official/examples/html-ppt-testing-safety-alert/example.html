@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Design · 本地数据安全简报</title>
+<title>Open Design · Local Data Safety Brief</title>
 <style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
@@ -34,8 +33,8 @@
   --radius-lg: 6px;
   --shadow: none;
   --shadow-lg: none;
-  --font-sans: 'Archivo','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Noto Serif SC',Georgia,serif;
+  --font-sans: 'Archivo',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,serif;
   --font-mono: 'IBM Plex Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
@@ -161,9 +160,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* testing-safety-alert — 工业警示牌风 · 危险条纹 + 红/琥珀/绿 信号体系
-   polish pass: Archivo 替换 Inter；去掉发光阴影/渐变填充卡；半径收紧到 3-6px；
-   checklist 改 hairline 分组；mono 用于 chrome/标签；对比度提到 AA 以上 */
+<style>/* testing-safety-alert — industrial warning-sign style · hazard stripes + red/amber/green signal system
+   polish pass: Archivo replaces Inter; removed glow shadows / gradient-fill cards; radii tightened to 3-6px;
+   checklist switched to hairline groups; mono for chrome/labels; contrast raised above AA */
 .tpl-testing-safety-alert{
   --ts-bg:#f7f5f0;
   --ts-ink:#15151a;
@@ -179,7 +178,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --ts-green-soft:#e7f1e9;
   background:var(--ts-bg);
   color:var(--ts-ink);
-  font-family:'Archivo','Noto Sans SC','PingFang SC',-apple-system,sans-serif;
+  font-family:'Archivo',-apple-system,sans-serif;
 }
 .tpl-testing-safety-alert .slide{background:var(--ts-bg);color:var(--ts-ink);padding:64px 84px}
 .tpl-testing-safety-alert .ts-stripe{position:absolute;top:0;left:0;right:0;height:14px;background:repeating-linear-gradient(45deg,var(--ts-red) 0 18px,#15151a 18px 36px)}
@@ -190,8 +189,8 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-testing-safety-alert .ts-alert-tag.amber{background:var(--ts-amber)}
 .tpl-testing-safety-alert .ts-alert-tag.green{background:var(--ts-green)}
 .tpl-testing-safety-alert .ts-alert-tag.green::before{content:'✓'}
-.tpl-testing-safety-alert .ts-page{font-family:'IBM Plex Mono','Noto Sans SC',monospace;font-size:12.5px;color:var(--ts-muted);letter-spacing:.15em;font-weight:500}
-.tpl-testing-safety-alert .ts-kicker{font-family:'IBM Plex Mono','Noto Sans SC',monospace;font-size:13px;font-weight:600;color:var(--ts-red);letter-spacing:.1em;margin-bottom:10px;text-transform:uppercase}
+.tpl-testing-safety-alert .ts-page{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ts-muted);letter-spacing:.15em;font-weight:500}
+.tpl-testing-safety-alert .ts-kicker{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--ts-red);letter-spacing:.1em;margin-bottom:10px;text-transform:uppercase}
 .tpl-testing-safety-alert .ts-h1{font-size:clamp(56px,9.5vh,72px);font-weight:800;line-height:1.08;letter-spacing:-.028em;margin:8px 0 14px;color:var(--ts-ink)}
 .tpl-testing-safety-alert .ts-h1 .red{color:var(--ts-red)}
 .tpl-testing-safety-alert .ts-h1 .strike{position:relative;display:inline-block}
@@ -209,7 +208,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-testing-safety-alert .ts-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
 .tpl-testing-safety-alert .ts-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px}
 .tpl-testing-safety-alert .ts-card{border:1px solid var(--ts-line);border-radius:4px;padding:22px 24px;background:#fdfcfa}
-.tpl-testing-safety-alert .ts-card .lbl{font-family:'IBM Plex Mono','Noto Sans SC',monospace;font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ts-muted);margin-bottom:8px}
+.tpl-testing-safety-alert .ts-card .lbl{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ts-muted);margin-bottom:8px}
 .tpl-testing-safety-alert .ts-card h4{font-size:25px;font-weight:800;letter-spacing:-.015em;line-height:1.18;margin-bottom:8px}
 .tpl-testing-safety-alert .ts-card p{font-size:14px;color:var(--ts-ink2);line-height:1.55}
 .tpl-testing-safety-alert .ts-checklist{display:flex;flex-direction:column;gap:0;margin-top:20px;max-width:920px;border-top:1.5px solid var(--ts-line-strong)}
@@ -217,7 +216,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-testing-safety-alert .ts-check .box{flex:0 0 30px;height:30px;border-radius:3px;border:2px solid var(--ts-red);display:grid;place-items:center;font-weight:800;color:var(--ts-red);background:var(--ts-red-soft)}
 .tpl-testing-safety-alert .ts-check.ok .box{border-color:var(--ts-green);color:var(--ts-green);background:var(--ts-green-soft)}
 .tpl-testing-safety-alert .ts-check .txt{font-size:17.5px;line-height:1.5;font-weight:500;padding-top:2px}
-.tpl-testing-safety-alert .ts-codebox{background:#15151a;color:#f3efe6;border-radius:4px;padding:14px 22px;font-family:'IBM Plex Mono','Noto Sans SC',monospace;font-size:12px;line-height:1.5;margin-top:14px;border-left:8px solid var(--ts-red);overflow:hidden}
+.tpl-testing-safety-alert .ts-codebox{background:#15151a;color:#f3efe6;border-radius:4px;padding:14px 22px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.5;margin-top:14px;border-left:8px solid var(--ts-red);overflow:hidden}
 .tpl-testing-safety-alert .ts-codebox+.ts-stripe-b{display:block}
 .tpl-testing-safety-alert .slide:has(.ts-codebox) .ts-h2{font-size:44px;margin-bottom:8px}
 .tpl-testing-safety-alert .slide:has(.ts-codebox) .ts-chrome{margin:18px 0 10px}
@@ -225,9 +224,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-testing-safety-alert .ts-codebox .kw{color:#f0a36e}
 .tpl-testing-safety-alert .ts-codebox .st{color:#a9d9b6}
 .tpl-testing-safety-alert .ts-codebox .bad{color:#f08a99;font-weight:700}
-.tpl-testing-safety-alert .ts-footer{position:absolute;left:84px;right:84px;bottom:34px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono','Noto Sans SC',monospace;font-size:11.5px;color:var(--ts-muted);letter-spacing:.08em}
+.tpl-testing-safety-alert .ts-footer{position:absolute;left:84px;right:84px;bottom:34px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ts-muted);letter-spacing:.08em}
 
-/* 入场动效：只动 transform/opacity，错峰 stagger，reduced-motion 降级 */
+/* Entrance motion: transform/opacity only, staggered delays, reduced-motion fallback */
 @keyframes ts-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
 .tpl-testing-safety-alert .slide>*{animation:ts-rise .6s cubic-bezier(.16,1,.3,1) both}
 .tpl-testing-safety-alert .slide>:nth-child(3){animation-delay:.06s}
@@ -253,13 +252,13 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 1. COVER -->
   <section class="slide is-active">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">data safety · 本地优先</span><span class="ts-page">01 / 08</span></div>
-    <div class="ts-kicker">Open Design · 本地数据安全简报</div>
-    <h1 class="ts-h1">别再让设计稿<br><span class="strike">跑别人服务器</span><br><span class="red">数据留在本机</span></h1>
-    <p class="ts-sub">云端 AI 设计工具的代价不只是订阅费 —— 你的提示词、设计稿、品牌资产、API Key，全都要经过别人的服务器。</p>
+    <div class="ts-chrome"><span class="ts-alert-tag">data safety · local-first</span><span class="ts-page">01 / 08</span></div>
+    <div class="ts-kicker">Open Design · Local Data Safety Brief</div>
+    <h1 class="ts-h1" style="font-size:clamp(44px,7.6vh,58px)">Stop sending your designs<br><span class="strike">to someone else's server</span><br><span class="red">Keep data on your machine</span></h1>
+    <p class="ts-sub">The cost of cloud AI design tools isn't just the subscription — your prompts, design files, brand assets, and API keys all pass through someone else's servers.</p>
     <div class="ts-alert-box">
-      <h3>Open Design：数据不出机器</h3>
-      <p>会话、记忆、设计产物全部存在本地 <b>.od/</b> 目录的 SQLite 与文件系统；API Key 只存本地、直连供应商。<br><b>Apache-2.0 开源 · 本地运行 · BYOK · 无需注册</b>。</p>
+      <h3>Open Design: data never leaves your machine</h3>
+      <p>Sessions, memory, and design artifacts all live in SQLite and the filesystem under your local <b>.od/</b> directory; API keys stay local and connect straight to the provider.<br><b>Apache-2.0 open source · Runs locally · BYOK · No sign-up</b>.</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>OPEN DESIGN · DATA SAFETY BRIEF · 2026</span><span>01 / 08</span></div>
@@ -268,11 +267,11 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 2. SECTION -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">section · 数据流向</span><span class="ts-page">02 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">section · data flow</span><span class="ts-page">02 / 08</span></div>
     <div style="margin:auto 0">
       <div class="ts-kicker">Chapter One</div>
-      <h1 class="ts-h1" style="font-size:130px">先看 <span class="red">流向</span></h1>
-      <p class="ts-sub" style="font-size:28px">不是所有 AI 设计工具都同样对待你的数据。<br>先把「数据出机器」和「数据不出机器」分开，再谈选型。</p>
+      <h1 class="ts-h1" style="font-size:110px">Follow the <span class="red">data</span></h1>
+      <p class="ts-sub" style="font-size:28px">Not every AI design tool treats your data the same way.<br>First separate "data leaves the machine" from "data stays" — then pick a tool.</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>section · data flow taxonomy</span><span>02 / 08</span></div>
@@ -281,16 +280,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 3. CONTENT risk levels -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">数据流向 · 3 levels</span><span class="ts-page">03 / 08</span></div>
-    <h2 class="ts-h2">三档流向，三种风险</h2>
+    <div class="ts-chrome"><span class="ts-alert-tag">data flow · 3 levels</span><span class="ts-page">03 / 08</span></div>
+    <h2 class="ts-h2">Three flows, three risk profiles</h2>
     <div class="ts-grid-3">
-      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · 绿色</div><h4>本地优先</h4><p>Open Design：设计稿、记忆、SQLite 全在本地 .od/，BYOK 直连供应商。<br><b style="color:var(--ts-green)">风险：自己掌控</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · 琥珀</div><h4>部分上云</h4><p>云端 SaaS 设计工具：文件存在服务商，导出格式受限，停服即失联。<br><b style="color:var(--ts-amber)">风险：受制于人</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · 红色</div><h4>全量上云</h4><p>闭源云端 AI 设计：提示词、产物、Key 全经第三方，模型锁死单家。<br><b style="color:var(--ts-red)">风险：不可审计</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · Green</div><h4>Local-first</h4><p>Open Design: designs, memory, and SQLite all live in your local .od/; BYOK connects straight to the provider.<br><b style="color:var(--ts-green)">Risk: you're in control</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · Amber</div><h4>Partly in the cloud</h4><p>Cloud SaaS design tools: files live with the vendor, export formats are limited, and a shutdown cuts you off.<br><b style="color:var(--ts-amber)">Risk: at the vendor's mercy</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · Red</div><h4>Fully in the cloud</h4><p>Closed-source cloud AI design: prompts, artifacts, and keys all pass through a third party, model locked to one vendor.<br><b style="color:var(--ts-red)">Risk: unauditable</b></p></div>
     </div>
     <div class="ts-alert-box amber">
-      <h3>API Key 绝不离开你的机器</h3>
-      <p>BYOK 模式下，Key 只存在本地 .od/media-config.json，请求直连模型供应商，不经任何中间服务器。</p>
+      <h3>Your API key never leaves your machine</h3>
+      <p>In BYOK mode, keys live only in your local .od/media-config.json, and requests go straight to the model provider — no intermediary servers.</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>data flow · 3 levels</span><span>03 / 08</span></div>
@@ -300,23 +299,23 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag">privacy as architecture</span><span class="ts-page">04 / 08</span></div>
-    <div class="ts-kicker">别信隐私政策 · 信本地文件系统</div>
-    <h2 class="ts-h2">数据在哪，<br><span class="ts-highlight-red">一眼可查</span></h2>
-    <pre class="ts-codebox"><span class="cm"># .od/ · Open Design 本地数据目录 · 全部留在你的机器</span>
+    <div class="ts-kicker">Don't trust the privacy policy · trust the local filesystem</div>
+    <h2 class="ts-h2">Where your data lives,<br><span class="ts-highlight-red">verifiable at a glance</span></h2>
+    <pre class="ts-codebox"><span class="cm"># .od/ · Open Design local data directory · everything stays on your machine</span>
 <span class="kw">local_data</span>:
-  - <span class="st">app.sqlite</span>          <span class="cm"># 会话、记忆、偏好</span>
-  - <span class="st">projects/&lt;id&gt;/</span>      <span class="cm"># Agent 工作目录</span>
-  - <span class="st">artifacts/</span>          <span class="cm"># 保存的设计产物</span>
-  - <span class="st">media-config.json</span>   <span class="cm"># API Key · 仅本地</span>
+  - <span class="st">app.sqlite</span>          <span class="cm"># sessions, memory, preferences</span>
+  - <span class="st">projects/&lt;id&gt;/</span>      <span class="cm"># agent working directories</span>
+  - <span class="st">artifacts/</span>          <span class="cm"># saved design artifacts</span>
+  - <span class="st">media-config.json</span>   <span class="cm"># API keys · local only</span>
 
 <span class="kw">byok_direct</span>:
   - providers: [<span class="st">anthropic</span>, <span class="st">openai</span>, <span class="st">azure</span>, <span class="st">google</span>]
-    route: <span class="st">本机 → 供应商，无中间服务器</span>
+    route: <span class="st">your machine → provider, no servers in between</span>
 
 <span class="bad">never_uploaded</span>:
-  - <span class="bad">"你的提示词"</span>
-  - <span class="bad">"你的设计稿"</span>
-  - <span class="bad">"你的 API Key"</span></pre>
+  - <span class="bad">"your prompts"</span>
+  - <span class="bad">"your design files"</span>
+  - <span class="bad">"your API keys"</span></pre>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>privacy · filesystem-as-proof</span><span>04 / 08</span></div>
   </section>
@@ -325,28 +324,28 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag amber">cost report · byok</span><span class="ts-page">05 / 08</span></div>
-    <h2 class="ts-h2">同等用量，月成本 <span class="red">-80%</span></h2>
-    <p class="ts-sub">Claude Design 订阅 $500/月；Open Design 全链路 BYOK 直连供应商，约 $73/月。</p>
+    <h2 class="ts-h2">Same usage, monthly cost <span class="red">-80%</span></h2>
+    <p class="ts-sub">A Claude Design subscription runs $500/month; Open Design with end-to-end BYOK direct to providers runs ~$73/month.</p>
     <svg viewBox="0 0 1040 360" style="width:100%;max-width:1040px;margin-top:18px" xmlns="http://www.w3.org/2000/svg">
-      <g font-family="Archivo,'Noto Sans SC',sans-serif" font-size="14" fill="#43434d">
+      <g font-family="Archivo,sans-serif" font-size="14" fill="#43434d">
         <line x1="70" y1="320" x2="1000" y2="320" stroke="#15151a" stroke-opacity=".3" stroke-width="1.5"/>
         <!-- monthly cost columns: Claude Design vs Open Design (BYOK) -->
         <g transform="translate(180,0)">
           <rect x="0" y="70" width="120" height="250" fill="#c11f33"/>
           <text x="60" y="345" text-anchor="middle" font-weight="700">Claude Design</text>
-          <text x="60" y="58" text-anchor="middle" font-weight="800" fill="#15151a">$500 / 月</text>
+          <text x="60" y="58" text-anchor="middle" font-weight="800" fill="#15151a">$500 / mo</text>
         </g>
         <g transform="translate(460,0)">
           <rect x="0" y="284" width="120" height="36" fill="#1a6b45"/>
           <text x="60" y="345" text-anchor="middle" font-weight="700">Open Design</text>
-          <text x="60" y="272" text-anchor="middle" font-weight="800" fill="#15151a">~$73 / 月</text>
+          <text x="60" y="272" text-anchor="middle" font-weight="800" fill="#15151a">~$73 / mo</text>
         </g>
         <!-- legend -->
         <g transform="translate(720,60)">
-          <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">闭源云端订阅 · 固定月费</text>
-          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Open Design · BYOK 按用量</text>
-          <text x="0" y="74" font-size="13" fill="#73737d">软件本体 Apache-2.0，免费开源；</text>
-          <text x="0" y="92" font-size="13" fill="#73737d">只付给模型供应商实际用量，降幅超 80%。</text>
+          <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">Closed cloud subscription · flat fee</text>
+          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Open Design · BYOK pay-per-use</text>
+          <text x="0" y="74" font-size="13" fill="#73737d">The software itself is Apache-2.0, free and open source;</text>
+          <text x="0" y="92" font-size="13" fill="#73737d">you pay only the model provider for actual usage — over 80% less.</text>
         </g>
       </g>
     </svg>
@@ -358,15 +357,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <section class="slide">
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag green">tool-audit checklist</span><span class="ts-page">06 / 08</span></div>
-    <h2 class="ts-h2">选工具前 <span class="red">必过 7 道题</span></h2>
+    <h2 class="ts-h2">7 questions to ask <span class="red">before you choose a tool</span></h2>
     <div class="ts-checklist">
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">设计稿存在哪？能不能 git diff？（Open Design：本地文件系统）</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">API Key 经不经过第三方服务器？（BYOK：只存本地，直连供应商）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">云端工具：提示词和产物会不会被拿去训练？多数条款说不清。</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">断网或服务商停服，历史产物还能不能打开？（本地文件：永远能）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">云端工具：模型锁死单家，换 Agent、自部署、BYOK 全做不到。</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">代码能不能 <b>逐行</b> 审计？（Apache-2.0 全开源，Fork、自部署、商用全允许）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">云端工具：偏好与记忆数据能不能导出、能不能彻底删除？</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Where do design files live? Can you git diff them? (Open Design: local filesystem)</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Does your API key pass through third-party servers? (BYOK: stored locally, direct to provider)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: will your prompts and artifacts be used for training? Most terms won't say.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">If you go offline or the vendor shuts down, can you still open past work? (Local files: always)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: model locked to one vendor — no agent swapping, no self-hosting, no BYOK.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Can you audit the code <b>line by line</b>? (Apache-2.0, fully open — fork, self-host, commercial use all allowed)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: can you export your preference and memory data — and truly delete it?</div></div>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>checklist · before you choose</span><span>06 / 08</span></div>
@@ -375,16 +374,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 7. CTA -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">今晚就能动</span><span class="ts-page">07 / 08</span></div>
-    <h2 class="ts-h2">今晚先做 <span class="ts-highlight-red">三件事</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">do it tonight</span><span class="ts-page">07 / 08</span></div>
+    <h2 class="ts-h2">Three things to do <span class="ts-highlight-red">tonight</span></h2>
     <div class="ts-grid-3">
-      <div class="ts-card"><div class="lbl">1 · 下载</div><h4>装上<br>Open Design</h4><p>macOS / Windows，本地运行，无需注册。Apache-2.0 开源。</p></div>
-      <div class="ts-card"><div class="lbl">2 · 接入 Agent</div><h4>零配置<br>接你手上的 CLI</h4><p>自动检测 PATH 上的 Claude Code / Codex / Cursor 等 21 个 Coding Agent。</p></div>
-      <div class="ts-card"><div class="lbl">3 · BYOK</div><h4>填自己的 Key<br>只存本地</h4><p>Anthropic / OpenAI / Azure / Google 直连，不经任何中间服务器。</p></div>
+      <div class="ts-card"><div class="lbl">1 · Download</div><h4>Install<br>Open Design</h4><p>macOS / Windows, runs locally, no sign-up. Apache-2.0 open source.</p></div>
+      <div class="ts-card"><div class="lbl">2 · Connect an agent</div><h4>Zero-config<br>with the CLIs you own</h4><p>Auto-detects 21 coding agents on your PATH, including Claude Code / Codex / Cursor.</p></div>
+      <div class="ts-card"><div class="lbl">3 · BYOK</div><h4>Bring your own key<br>stored locally only</h4><p>Direct connections to Anthropic / OpenAI / Azure / Google — no servers in between.</p></div>
     </div>
     <div class="ts-alert-box green">
-      <h3>真正的隐私不是承诺，是架构</h3>
-      <p>数据不上传，是因为根本没有上传的链路。—— 把保护放在不可被绕过的一层。</p>
+      <h3>Real privacy isn't a promise — it's architecture</h3>
+      <p>Your data isn't uploaded because there is no upload path at all. Put the protection in a layer that can't be bypassed.</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>cta · tonight</span><span>07 / 08</span></div>
@@ -395,9 +394,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="ts-stripe"></div>
     <div class="ts-chrome"><span class="ts-alert-tag amber">open · local · agent-native</span><span class="ts-page">08 / 08</span></div>
     <div style="margin:auto 0">
-      <div class="ts-kicker">让最前沿的 AI 设计能力回到每一个创作者的桌上</div>
-      <h1 class="ts-h1" style="font-size:140px">谢谢 <span class="red">·</span> thanks</h1>
-      <p class="ts-sub" style="font-size:24px">Download Open Design（macOS / Windows）｜Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
+      <div class="ts-kicker">Bringing frontier AI design power back to every creator's desk</div>
+      <h1 class="ts-h1" style="font-size:140px">thank <span class="red">·</span> you</h1>
+      <p class="ts-sub" style="font-size:24px">Download Open Design (macOS / Windows) | Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>end of brief</span><span>08 / 08</span></div>

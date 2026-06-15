@@ -1,13 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Obsidian × Claude Gradient</title>
 <style>/* html-ppt :: webfonts (only families actually used by this theme) */
 @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
@@ -35,8 +34,8 @@
   --radius-lg: 26px;
   --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
   --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Source Serif 4','Noto Serif SC',Georgia,serif;
+  --font-sans: 'Inter',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Source Serif 4',Georgia,serif;
   --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-serif);
   --letter-tight: -.03em;
@@ -162,7 +161,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* obsidian-claude-gradient — 火山黑曜石暖黑底 + Claude 赤陶余烬渐变（单一暖色立场，serif display） */
+<style>/* obsidian-claude-gradient — warm volcanic-obsidian dark base + Claude terracotta ember gradient (single warm-hue stance, serif display) */
 .tpl-obsidian-claude-gradient{
   --oc-bg:#151210;            /* warm obsidian, never pure black */
   --oc-surface:#1c1815;
@@ -180,12 +179,12 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   --oc-text:#ece5dc;
   --oc-dim:#a99d8f;
   --oc-dimmer:#867967; /* lifted from #6f6457 for AA-adjacent contrast on code comments + badge labels */
-  --oc-serif:'Source Serif 4','Noto Serif SC',Georgia,serif;
+  --oc-serif:'Source Serif 4',Georgia,serif;
   --oc-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --oc-ease:cubic-bezier(.16,1,.3,1);
   background:var(--oc-bg);
   color:var(--oc-text);
-  font-family:'Noto Sans SC','PingFang SC',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
 }
 .tpl-obsidian-claude-gradient .slide{background:var(--oc-bg);color:var(--oc-text);padding:72px 110px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;overflow:hidden}
 /* one quiet ember glow rising from the lower edge — the only gradient surface besides .oc-g text */
@@ -258,13 +257,13 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cbg"></div>
     <div class="oc-cgrid"></div>
     <div class="oc-snum">01 / 08</div>
-    <div class="oc-tag">● OPEN DESIGN · 开源设计平台</div>
-    <h1 class="oc-h1">Open Design<br>设计回到 <span class="oc-g">你的桌面</span></h1>
-    <p class="oc-sub">开源、本地、Agent 驱动的设计平台。<br>从想法到原型、网页、Slides、HTML 视频，<br>产品设计全流程，在你自己的设备上完成。</p>
+    <div class="oc-tag">● OPEN DESIGN · OPEN-SOURCE DESIGN PLATFORM</div>
+    <h1 class="oc-h1">Open Design<br>Design, back on <span class="oc-g">your desktop</span></h1>
+    <p class="oc-sub">An open-source, local, agent-driven design platform.<br>From idea to prototypes, websites, slides, and HTML video —<br>the entire product design workflow, on your own machine.</p>
     <div style="margin-top:32px">
       <span class="oc-pill">📜 Apache-2.0</span>
-      <span class="oc-pill">🖥️ 本地运行</span>
-      <span class="oc-pill">🔑 BYOK · 无需注册</span>
+      <span class="oc-pill">🖥️ Runs locally</span>
+      <span class="oc-pill">🔑 BYOK · No sign-up</span>
     </div>
   </section>
 
@@ -275,7 +274,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-snum">02 / 08</div>
     <div class="oc-tag">● CHAPTER 01</div>
     <h1 class="oc-h1" style="font-size:110px">Why <span class="oc-g">open</span>?</h1>
-    <p class="oc-sub">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计。<br>但它闭源、付费、只跑在云端 —— Open Design 让这套能力变得开放。</p>
+    <p class="oc-sub">In April 2026, Claude Design proved for the first time that LLMs can truly design.<br>But it is closed-source, paid, and cloud-only — Open Design sets that capability free.</p>
   </section>
 
   <!-- 3. CONTENT — compare cards -->
@@ -284,20 +283,20 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cgrid"></div>
     <div class="oc-snum">03 / 08</div>
     <div class="oc-tag">● COMPARE</div>
-    <h2 class="oc-h2">云端闭源 vs <span class="oc-g">Open Design</span> · 谁更懂创作者</h2>
+    <h2 class="oc-h2">Closed cloud tools vs <span class="oc-g">Open Design</span> · Who serves creators</h2>
     <div class="oc-grid-2">
       <div class="oc-card">
-        <span class="oc-badge oc-bb">云端闭源工具</span>
-        <h4 style="font-size:20px;margin-bottom:10px">能力强，但锁死</h4>
-        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">证明了 LLM 能做设计，但是——<br>• 模型锁定单一供应商，不能换 Agent<br>• 只跑云端，不能自部署、不能 BYOK<br>• 闭源付费，能力不属于你</p>
+        <span class="oc-badge oc-bb">CLOSED CLOUD TOOLS</span>
+        <h4 style="font-size:20px;margin-bottom:10px">Powerful, but locked down</h4>
+        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">They proved LLMs can design, but —<br>• Locked to one model vendor; no swapping agents<br>• Cloud-only; no self-hosting, no BYOK<br>• Closed-source and paid — the capability is never yours</p>
       </div>
       <div class="oc-card" style="border-top-color:var(--oc-accent)">
         <span class="oc-badge oc-bp">OPEN DESIGN</span>
-        <h4 style="font-size:20px;margin-bottom:10px">桌面原生 + 接入 Agent</h4>
-        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">对创作者天生友好 ——<br>• 本地文件、Figma 导出、代码仓库直接可读<br>• Claude Code / Codex / Cursor 直接接入<br>• Apache-2.0，可 fork、可自部署、可商用</p>
+        <h4 style="font-size:20px;margin-bottom:10px">Desktop-native + agent-ready</h4>
+        <p style="color:var(--oc-dim);font-size:14px;line-height:1.65">Built for creators from day one —<br>• Reads local files, Figma exports, and code repos directly<br>• Claude Code / Codex / Cursor plug in out of the box<br>• Apache-2.0: fork it, self-host it, ship it commercially</p>
       </div>
     </div>
-    <div class="oc-hl" style="margin-top:26px">💡 <b>关键洞察：</b>让最前沿的 AI 设计能力，回到每一个创作者的桌上。</div>
+    <div class="oc-hl" style="margin-top:26px">💡 <b>Key insight:</b> put frontier AI design capability back on every creator's desk.</div>
   </section>
 
   <!-- 4. STEPS -->
@@ -306,12 +305,12 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cgrid"></div>
     <div class="oc-snum">04 / 08</div>
     <div class="oc-tag">● WORKFLOW · 4 STEPS</div>
-    <h2 class="oc-h2">从想法到交付，一条工作流</h2>
+    <h2 class="oc-h2">From idea to delivery, one workflow</h2>
     <div class="oc-steps">
-      <div class="oc-step"><div class="oc-sn">1</div><div class="oc-sc"><h4>选择起点</h4><p>一句话描述目标，或从模板 / Plugin 直接选起点。</p></div></div>
-      <div class="oc-step"><div class="oc-sn">2</div><div class="oc-sc"><h4>确定视觉方向</h4><p>选定方向后，色板、字体、间距自动带入生成流程。</p></div></div>
-      <div class="oc-step"><div class="oc-sn">3</div><div class="oc-sc"><h4>生成 Artifact</h4><p>Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览和修改。</p></div></div>
-      <div class="oc-step"><div class="oc-sn">4</div><div class="oc-sc"><h4>交付或制作视频，记忆沉淀</h4><p>导出给工程继续开发，或用 HyperFrames 直接转为营销视频；每次选择都成为下次生成的上下文。</p></div></div>
+      <div class="oc-step"><div class="oc-sn">1</div><div class="oc-sc"><h4>Pick a starting point</h4><p>Describe your goal in one sentence, or start straight from a template or plugin.</p></div></div>
+      <div class="oc-step"><div class="oc-sn">2</div><div class="oc-sc"><h4>Lock the visual direction</h4><p>Once a direction is chosen, palette, type, and spacing flow into generation automatically.</p></div></div>
+      <div class="oc-step"><div class="oc-sn">3</div><div class="oc-sc"><h4>Generate artifacts</h4><p>The agent reads the full context and produces real, runnable files — preview and edit instantly in the sandbox.</p></div></div>
+      <div class="oc-step"><div class="oc-sn">4</div><div class="oc-sc"><h4>Ship, or turn it into video — memory compounds</h4><p>Hand off to engineering, or convert to a marketing video with HyperFrames; every choice becomes context for the next generation.</p></div></div>
     </div>
   </section>
 
@@ -321,15 +320,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cgrid"></div>
     <div class="oc-snum">05 / 08</div>
     <div class="oc-tag">● LOCAL DATA</div>
-    <h2 class="oc-h2">你的数据，只在你的机器上</h2>
-    <pre class="oc-code"><span class="cm">// .od/ —— Open Design 的全部运行数据都在这个本地目录</span>
+    <h2 class="oc-h2">Your data stays on your machine</h2>
+    <pre class="oc-code"><span class="cm">// .od/ — all of Open Design's runtime data lives in this local directory</span>
 .od/
-├── <span class="cc">app.sqlite</span>          <span class="cm">// 本地 SQLite，会话与设计记忆</span>
-├── <span class="cc">projects/</span>           <span class="cm">// 每个项目的 Agent 工作目录</span>
-├── <span class="cc">artifacts/</span>          <span class="cm">// 生成的原型 / Slides / 视频产物</span>
-└── <span class="cc">media-config.json</span>   <span class="cm">// BYOK 凭据，<span class="cs">API Key 不出机器</span></span>
+├── <span class="cc">app.sqlite</span>          <span class="cm">// local SQLite: sessions & design memory</span>
+├── <span class="cc">projects/</span>           <span class="cm">// per-project agent working directories</span>
+├── <span class="cc">artifacts/</span>          <span class="cm">// generated prototypes / slides / videos</span>
+└── <span class="cc">media-config.json</span>   <span class="cm">// BYOK credentials, <span class="cs">API keys never leave the machine</span></span>
 </pre>
-    <p class="oc-sub" style="margin-top:18px">无需注册、没有云端同步 —— 可 git、可 diff、可回滚，<b style="color:var(--oc-accent3)">设计产物终于能版本控制</b>。</p>
+    <p class="oc-sub" style="margin-top:18px">No sign-up, no cloud sync — git it, diff it, roll it back. <b style="color:var(--oc-accent3)">Design artifacts are finally version-controlled</b>.</p>
   </section>
 
   <!-- 6. STATS -->
@@ -338,13 +337,13 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cgrid"></div>
     <div class="oc-snum">06 / 08</div>
     <div class="oc-tag">● BY THE NUMBERS</div>
-    <h2 class="oc-h2">一个正在生长的 <span class="oc-g">开源社区</span></h2>
+    <h2 class="oc-h2">An <span class="oc-g">open-source community</span> that keeps growing</h2>
     <div class="oc-grid-3" style="margin-top:28px">
-      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">60K+</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">GitHub Stars · Apache-2.0 开源</p></div>
-      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">217+</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">Plugins · 300+ 贡献者共建</p></div>
-      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">-80%</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">对比 Claude Design 的月成本（$500 → ~$73）</p></div>
+      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">60K+</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">GitHub stars · Apache-2.0 open source</p></div>
+      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">217+</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">Plugins · built with 300+ contributors</p></div>
+      <div class="oc-card"><div class="oc-big oc-g" style="font-size:80px">-80%</div><p style="color:var(--oc-dim);margin-top:14px;font-size:13px">Monthly cost vs Claude Design ($500 → ~$73)</p></div>
     </div>
-    <div class="oc-hl" style="margin-top:26px">129 个 Design System、21 个 Coding Agent 零配置接入 —— 每次选择都沉淀为记忆，越用越懂你。</div>
+    <div class="oc-hl" style="margin-top:26px">129 design systems and 21 coding agents connect with zero config — every choice settles into memory, so it understands you better with use.</div>
   </section>
 
   <!-- 7. QUOTE / CTA -->
@@ -352,10 +351,10 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cbg"></div>
     <div class="oc-cgrid"></div>
     <div class="oc-snum">07 / 08</div>
-    <div class="oc-tag">● CTA · 今晚可以做</div>
+    <div class="oc-tag">● CTA · TRY IT TONIGHT</div>
     <div class="oc-quote">
-      <blockquote>文件系统语义 + 能 git diff 设计产物，<br>终于能 <span class="oc-g">版本控制设计</span> 了。</blockquote>
-      <div class="attr">— 一位独立开发者</div>
+      <blockquote>Filesystem semantics plus git-diffable artifacts —<br>you can finally <span class="oc-g">version-control design</span>.</blockquote>
+      <div class="attr">— An indie developer</div>
     </div>
     <div style="margin-top:36px">
       <span class="oc-pill">⬇ Download · macOS / Windows</span>
@@ -371,7 +370,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="oc-cgrid"></div>
     <div class="oc-snum">08 / 08</div>
     <div class="oc-big oc-g">Thanks.</div>
-    <p class="oc-sub" style="margin-top:26px">Open · Local · Agent-native —— 让最前沿的 AI 设计能力回到每一个创作者的桌上<br><b style="color:var(--oc-accent3)">github.com/nexu-io/open-design</b></p>
+    <p class="oc-sub" style="margin-top:26px">Open · Local · Agent-native — putting frontier AI design capability back on every creator's desk<br><b style="color:var(--oc-accent3)">github.com/nexu-io/open-design</b></p>
   </section>
 
 </div>

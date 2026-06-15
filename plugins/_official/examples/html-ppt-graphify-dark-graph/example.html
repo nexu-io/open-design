@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Graphify Dark Graph</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 /* graphify-dark-graph :: dark ground + force-directed graph signature
    tokens: green-tinted off-black, single emerald accent, hairlines over glass */
@@ -18,9 +18,9 @@
   --line-strong:rgba(238,241,238,.24);
   --accent:#3ecf8e;
   --accent-dim:rgba(62,207,142,.16);
-  --font-display:'Archivo','Noto Sans SC',sans-serif;
-  --font-body:'Noto Sans SC',-apple-system,BlinkMacSystemFont,sans-serif;
-  --font-mono:'JetBrains Mono','Noto Sans SC',SFMono-Regular,Menlo,monospace;
+  --font-display:'Archivo','Inter',sans-serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --ease:cubic-bezier(.16,1,.3,1);
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -78,7 +78,7 @@ img,svg{max-width:100%;display:block}
 /* ============ S1 cover ============ */
 .cover-graph{position:absolute;inset:0;width:100%;height:100%;opacity:.55;pointer-events:none}
 .cover-inner{position:relative;margin-top:auto;padding-bottom:24px}
-.cover .h1{font-size:clamp(64px,7.6vw,96px)}
+.cover .h1{font-size:clamp(54px,5.6vw,72px)}
 
 /* ============ S3 capability grid ============ */
 .cap-grid{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line-strong);
@@ -202,9 +202,9 @@ img,svg{max-width:100%;display:block}
     <div class="snum">01 / 08</div>
     <div class="cover-inner">
       <p class="eyebrow in">Open Source · Apache-2.0</p>
-      <h1 class="h1 in">Open Design<br><span class="ac">开源 · 本地 · Agent 驱动</span></h1>
-      <p class="lede in" style="margin-top:24px">从想法到原型、网页、Slides、HTML 视频 —— <span style="color:var(--text)">产品设计全流程，在你自己的设备上完成。</span></p>
-      <p class="eyebrow quiet in" style="margin:30px 0 0">Apache-2.0 · 本地运行 · BYOK · 无需注册</p>
+      <h1 class="h1 in">Open Design<br><span class="ac">Open · Local · Agent-driven</span></h1>
+      <p class="lede in" style="margin-top:24px">From idea to prototypes, websites, slides, and HTML video — <span style="color:var(--text)">the entire product design workflow, on your own machine.</span></p>
+      <p class="eyebrow quiet in" style="margin:30px 0 0">Apache-2.0 · Runs locally · BYOK · No sign-up</p>
     </div>
   </section>
 
@@ -214,7 +214,7 @@ img,svg{max-width:100%;display:block}
     <div style="margin:auto 0">
       <p class="eyebrow quiet in">Part 01</p>
       <h1 class="h1 in" style="font-size:clamp(88px,10vw,128px)">Why <span class="ac">Open</span>?</h1>
-      <p class="lede in" style="margin-top:24px">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计——但它闭源、付费、只跑云端。Open Design 让这套能力变得开放。</p>
+      <p class="lede in" style="margin-top:24px">In April 2026, Claude Design proved for the first time that LLMs can genuinely design — but it's closed source, paid, and cloud-only. Open Design sets that capability free.</p>
     </div>
   </section>
 
@@ -222,32 +222,32 @@ img,svg{max-width:100%;display:block}
   <section class="slide">
     <div class="snum">03 / 08</div>
     <p class="eyebrow in">Core Capabilities</p>
-    <h2 class="h2 in">一个平台，<span class="ac">四件事</span></h2>
+    <h2 class="h2 in">One platform, <span class="ac">four things</span></h2>
     <div class="cap-grid in">
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.01</span>
-        <h4>桌面端原生</h4>
-        <p>本地文件、Figma 导出、代码仓库直接可读</p>
+        <h4>Desktop-native</h4>
+        <p>Reads local files, Figma exports, and code repos directly</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.02</span>
-        <h4>21 个 Coding Agent</h4>
-        <p>自动检测 PATH 上的 CLI，零配置接入</p>
+        <h4>21 coding agents</h4>
+        <p>Auto-detects CLIs on your PATH — zero config</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.03</span>
-        <h4>129 个 Design System</h4>
-        <p>从 GitHub / Figma / 本地导入</p>
+        <h4>129 design systems</h4>
+        <p>Import from GitHub / Figma / local files</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot"></span>n.04</span>
-        <h4>全链路 BYOK</h4>
-        <p>Anthropic / OpenAI / Azure / Google + 14 家媒体供应商</p>
+        <h4>BYOK end to end</h4>
+        <p>Anthropic / OpenAI / Azure / Google + 14 media providers</p>
       </div>
     </div>
     <div class="callout in">
       <span class="node-dot"></span>
-      <p>它不造 Agent —— 它<span class="ac">把你电脑上的 Claude Code / Codex / Cursor 接进完整设计工作流</span>。</p>
+      <p>It doesn't build an agent — it <span class="ac">wires the Claude Code / Codex / Cursor on your machine into a complete design workflow</span>.</p>
     </div>
   </section>
 
@@ -255,45 +255,45 @@ img,svg{max-width:100%;display:block}
   <section class="slide">
     <div class="snum">04 / 08</div>
     <p class="eyebrow in">Local-first</p>
-    <h2 class="h2 in">数据在本地，<span class="ac">Key 不出机器</span></h2>
+    <h2 class="h2 in">Data stays local, <span class="ac">keys never leave</span></h2>
     <p class="cmd in">$ git clone github.com/nexu-io/open-design</p>
-    <pre class="codebox in"><span class="cm"># .od/ —— 一切运行数据都在你的机器上</span>
+    <pre class="codebox in"><span class="cm"># .od/ — all runtime data lives on your machine</span>
 <span class="kw">.od/</span>
-  <span class="st">app.sqlite</span>          <span class="cm"># 本地 SQLite，无云端依赖</span>
-  <span class="st">projects/</span>           <span class="cm"># Agent 工作目录</span>
-  <span class="st">artifacts/</span>          <span class="cm"># 保存的渲染产物</span>
-  <span class="st">media-config.json</span>   <span class="cm"># BYOK 凭证，永不上传</span>
+  <span class="st">app.sqlite</span>          <span class="cm"># local SQLite, no cloud dependency</span>
+  <span class="st">projects/</span>           <span class="cm"># agent working directories</span>
+  <span class="st">artifacts/</span>          <span class="cm"># saved render artifacts</span>
+  <span class="st">media-config.json</span>   <span class="cm"># BYOK credentials, never uploaded</span>
 
 <span class="kw">byok</span>:
   providers: [<span class="st">anthropic</span>, <span class="st">openai</span>, <span class="st">azure</span>, <span class="st">google</span>]
-  self_host: <span class="fn">true</span>     <span class="cm"># Apache-2.0，自部署随意</span></pre>
+  self_host: <span class="fn">true</span>     <span class="cm"># Apache-2.0, self-host freely</span></pre>
   </section>
 
   <!-- 5. CHART — race diagram -->
   <section class="slide">
     <div class="snum">05 / 08</div>
     <p class="eyebrow in">Cost Race</p>
-    <h2 class="h2 in">闭源云端 vs <span class="ac">开源本地</span></h2>
+    <h2 class="h2 in">Closed cloud vs <span class="ac">open local</span></h2>
     <div class="race in">
       <div class="track closed">
-        <div class="who">闭源<br>云端</div>
+        <div class="who">Closed<br>cloud</div>
         <div class="lane">
           <span class="marker"></span>
-          <span class="lbl">模型锁定 · $500/月 · 数据上云</span>
+          <span class="lbl">Locked model · $500/mo · data in the cloud</span>
         </div>
       </div>
       <div class="track open">
-        <div class="who">开源<br>本地</div>
+        <div class="who">Open<br>local</div>
         <div class="lane">
           <span class="marker"></span>
-          <span class="lbl">任选 Agent · BYOK ~$73/月 · 数据在本地</span>
+          <span class="lbl">Any agent · BYOK ~$73/mo · data stays local</span>
         </div>
       </div>
     </div>
     <div class="stat-board in">
-      <div class="stat"><div class="v">-80%</div><p class="l">月成本降幅（$500 → ~$73）</p></div>
-      <div class="stat"><div class="v">21</div><p class="l">接入的 Coding Agent</p></div>
-      <div class="stat"><div class="v">217+</div><p class="l">Plugins 插件生态</p></div>
+      <div class="stat"><div class="v">-80%</div><p class="l">monthly cost ($500 → ~$73)</p></div>
+      <div class="stat"><div class="v">21</div><p class="l">coding agents connected</p></div>
+      <div class="stat"><div class="v">217+</div><p class="l">plugins in the ecosystem</p></div>
     </div>
   </section>
 
@@ -301,32 +301,32 @@ img,svg{max-width:100%;display:block}
   <section class="slide">
     <div class="snum">06 / 08</div>
     <p class="eyebrow in">Workflow</p>
-    <h2 class="h2 in">从想法到交付，<span class="ac">4 步走</span></h2>
+    <h2 class="h2 in">Idea to delivery in <span class="ac">4 steps</span></h2>
     <div class="pipe in">
       <div class="step">
         <span class="sn">STEP 01</span>
         <h4>Start</h4>
-        <p>一句话 / 模板 / Plugin</p>
+        <p>One sentence / template / plugin</p>
       </div>
       <div class="step">
         <span class="sn">STEP 02</span>
         <h4>Style</h4>
-        <p>色板字体自动带入</p>
+        <p>Palette &amp; fonts auto-applied</p>
       </div>
       <div class="step">
         <span class="sn">STEP 03</span>
         <h4>Generate</h4>
-        <p>沙盒生成 Artifact</p>
+        <p>Artifacts in a live sandbox</p>
       </div>
       <div class="step last">
         <span class="sn">STEP 04</span>
         <h4>Ship</h4>
-        <p>交付工程或转视频</p>
+        <p>Hand off to engineering or render video</p>
       </div>
     </div>
     <div class="callout in">
       <span class="node-dot"></span>
-      <p>每次选择都沉淀为 Design System、偏好和记忆——下次生成更接近你要的结果，越用越精准。</p>
+      <p>Every choice settles into design systems, preferences, and memory — each generation lands closer to what you want.</p>
     </div>
   </section>
 
@@ -334,7 +334,7 @@ img,svg{max-width:100%;display:block}
   <section class="slide">
     <div class="snum">07 / 08</div>
     <p class="eyebrow in">Try it tonight</p>
-    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">让 AI 设计<span class="ac">回到你桌上</span></h2>
+    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">Bring AI design <span class="ac">back to your desk</span></h2>
     <p class="cmd in" style="margin-top:30px">$ git clone github.com/nexu-io/open-design</p>
     <p class="cta-dl in">→ Download Open Design · macOS / Windows</p>
     <div class="tags in">
@@ -351,7 +351,7 @@ img,svg{max-width:100%;display:block}
     <div class="snum">08 / 08</div>
     <div style="margin:auto 0">
       <h1 class="big in">Thanks<span class="ac">.</span></h1>
-      <p class="lede in">github.com/nexu-io/open-design · 欢迎 star / issue / PR</p>
+      <p class="lede in">github.com/nexu-io/open-design · stars, issues, and PRs welcome</p>
     </div>
   </section>
 
