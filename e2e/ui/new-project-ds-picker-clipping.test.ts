@@ -133,6 +133,65 @@ test('[P1] design system dropdown is not clipped by the modal body', async ({ pa
   ).toBeLessThanOrEqual(0);
 });
 
+// Review follow-up (#4346): on a very short window the trigger has little room
+// on *both* sides. A `Math.max(200, ...)` floor on the popover height would
+// still render a 200px box that overflows the viewport; the height must clamp
+// to the available side space and let the list scroll inside it instead.
+test('[P1] design system dropdown stays within a very short viewport (both sides tight)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 360 });
+  await page.goto('/');
+  await openNewProjectPanel(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await expect(page.getByTestId('design-system-trigger')).toBeVisible();
+
+  await page.getByTestId('design-system-trigger').click();
+  const popover = page.locator('.ds-picker-popover');
+  await expect(popover).toBeVisible();
+
+  const geometry = await popover.evaluate((el: Element) => {
+    const trigger = document.querySelector(
+      '[data-testid="design-system-trigger"]',
+    ) as HTMLElement | null;
+    const triggerRect = trigger?.getBoundingClientRect() ?? null;
+    const popRect = el.getBoundingClientRect();
+    const gap = 6;
+    const margin = 12;
+    return {
+      popTop: Math.round(popRect.top),
+      popBottom: Math.round(popRect.bottom),
+      viewportH: window.innerHeight,
+      spaceBelow: triggerRect
+        ? Math.round(window.innerHeight - triggerRect.bottom - gap - margin)
+        : null,
+      spaceAbove: triggerRect ? Math.round(triggerRect.top - gap - margin) : null,
+    };
+  });
+
+  // Confirm this case genuinely exercises the cramped branch the reviewer
+  // flagged: both sides under the 200px preferred minimum.
+  expect(
+    geometry.spaceAbove != null && geometry.spaceAbove < 200,
+    `Expected spaceAbove < 200 to exercise the tight branch; geometry: ${JSON.stringify(geometry)}`,
+  ).toBe(true);
+  expect(
+    geometry.spaceBelow != null && geometry.spaceBelow < 200,
+    `Expected spaceBelow < 200 to exercise the tight branch; geometry: ${JSON.stringify(geometry)}`,
+  ).toBe(true);
+
+  // The popover must stay fully within the viewport (it scrolls internally),
+  // not overflow it.
+  expect(
+    geometry.popBottom,
+    `Popover bottom (${geometry.popBottom}) overflows the short viewport (${geometry.viewportH}). Geometry: ${JSON.stringify(geometry)}`,
+  ).toBeLessThanOrEqual(geometry.viewportH + 1);
+  expect(
+    geometry.popTop,
+    `Popover top (${geometry.popTop}) is above the viewport. Geometry: ${JSON.stringify(geometry)}`,
+  ).toBeGreaterThanOrEqual(-1);
+});
+
 async function openNewProjectPanel(page: Page) {
   if (await page.getByTestId('new-project-panel').isVisible()) return;
   await ensureRailOpen(page);

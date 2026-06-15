@@ -2078,22 +2078,33 @@ function DesignSystemPicker({
       const left = Math.max(8, Math.min(viewport - width - 8, rect.left));
       const gap = 6;
       const margin = 12;
+      const PREFERRED_MIN = 200;
+      const PREFERRED_MAX = 440;
       const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
       const spaceAbove = rect.top - gap - margin;
-      const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+      // Open upward only when there's more room above and below is cramped.
+      // Either way the popover is sized to the room on the chosen side.
+      const openUp = spaceBelow < PREFERRED_MIN + 80 && spaceAbove > spaceBelow;
+      const available = openUp ? spaceAbove : spaceBelow;
+      // Clamp the fixed popover to the side's actual space. The PREFERRED_MIN
+      // is only honored when the side can fit it; when both sides are tighter
+      // than that (a very short window), forcing 200px here would push the
+      // popover past the viewport instead of letting the list scroll inside a
+      // smaller box. Floor at >= 0 so an off-screen trigger can't yield NaN.
+      const maxHeight = Math.max(0, Math.min(PREFERRED_MAX, available));
       if (openUp) {
         setAnchor({
           bottom: window.innerHeight - rect.top + gap,
           left,
           width,
-          maxHeight: Math.max(200, Math.min(440, spaceAbove)),
+          maxHeight,
         });
       } else {
         setAnchor({
           top: rect.bottom + gap,
           left,
           width,
-          maxHeight: Math.max(200, Math.min(440, spaceBelow)),
+          maxHeight,
         });
       }
     }
