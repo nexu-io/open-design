@@ -400,6 +400,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const nextAttachmentOrderRef = useRef(0);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
     const streamingAnnotationSendPendingRef = useRef(false);
+    // Remembers the entry_from that the deferred streaming send must carry once
+    // it flushes. The Mark draw-overlay tags 'mark' synchronously; without this
+    // the flush effect would report the run as the default composer entry.
+    const streamingAnnotationSendEntryFromRef = useRef<ChatSendMeta['entryFrom']>(undefined);
     const [streamingAnnotationSendPending, setStreamingAnnotationSendPendingState] = useState(false);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
     // strip the chip when the user removes the corresponding `@<skill>`
@@ -1500,6 +1504,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             if (detail.action === 'send') {
               if (streaming) {
                 appendAnnotationToComposer();
+                // Carry entry_from='mark' through the deferred send so the
+                // flush effect below reports the run as a Mark annotation
+                // rather than the default composer entry.
+                streamingAnnotationSendEntryFromRef.current = 'mark';
                 setStreamingAnnotationSendPending(true);
                 ack({ ok: true });
                 return;
@@ -1559,7 +1567,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // handler writes draftRef synchronously, so the ref is authoritative even
       // if this effect's render closure predates the last accumulation.
       const prompt = draftRef.current.trim();
-      sendComposedTurn(prompt, staged, currentCommentAttachments(), currentRunContextMeta());
+      // Consume the entry_from captured when the send was deferred (Mark
+      // draw-overlay sets 'mark'); clear it so a later plain send is unaffected.
+      const pendingEntryFrom = streamingAnnotationSendEntryFromRef.current;
+      streamingAnnotationSendEntryFromRef.current = undefined;
+      const baseMeta = currentRunContextMeta();
+      const meta = pendingEntryFrom ? { ...baseMeta, entryFrom: pendingEntryFrom } : baseMeta;
+      sendComposedTurn(prompt, staged, currentCommentAttachments(), meta);
     }, [
       commentAttachments,
       draft,
