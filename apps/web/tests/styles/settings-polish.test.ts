@@ -2,17 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+import { cssBlock } from '../helpers/css-block';
 
 const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
 const expandedIndexCss = readExpandedIndexCss();
 const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
-
-function cssBlock(css: string, selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css);
-  if (!match) throw new Error(`Missing CSS block for ${selector}`);
-  return match[1] ?? '';
-}
 
 function ruleValue(block: string, property: string): string {
   const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(block);
