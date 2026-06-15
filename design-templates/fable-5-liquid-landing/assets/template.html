@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./open-design.png" />
+    <title>{{PRODUCT_NAME}} — {{HEADLINE}}</title>
+    <meta name="description" content="{{META_DESCRIPTION}}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #000;
+        --fg: #fff;
+        --muted: rgba(255, 255, 255, 0.7);
+        --line: rgba(255, 255, 255, 0.12);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.5;
+      }
+      .font-display {
+        font-family: 'Instrument Serif', serif;
+      }
+      .liquid-glass {
+        background: rgba(255, 255, 255, 0.01);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        border-radius: 1rem;
+        box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        position: relative;
+        overflow: hidden;
+      }
+      .liquid-glass::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        padding: 1.4px;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.45) 0%,
+          rgba(255, 255, 255, 0.15) 20%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(255, 255, 255, 0) 60%,
+          rgba(255, 255, 255, 0.15) 80%,
+          rgba(255, 255, 255, 0.45) 100%
+        );
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+      }
+      .bg-grid-faint {
+        background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        background-size: 56px 56px;
+        mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 30%, transparent 75%);
+      }
+      .section-noise {
+        position: relative;
+        overflow: hidden;
+      }
+      .section-noise::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.04;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .section-noise > * {
+        position: relative;
+        z-index: 1;
+      }
+      @keyframes marquee {
+        from {
+          transform: translateX(0);
+        }
+        to {
+          transform: translateX(-50%);
+        }
+      }
+      .marquee-track {
+        display: flex;
+        gap: 1rem;
+        width: max-content;
+        animation: marquee 60s linear infinite;
+      }
+      .marquee-row:hover .marquee-track {
+        animation-play-state: paused;
+      }
+      .marquee-fade {
+        mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      }
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+      }
+      .nav-cta {
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        font-size: 0.875rem;
+        color: var(--fg);
+        text-decoration: none;
+      }
+      .hero {
+        position: relative;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        overflow: hidden;
+      }
+      .hero-video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .hero-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+      }
+      .hero-seam {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 12rem;
+        background: linear-gradient(to bottom, transparent, #000);
+        pointer-events: none;
+      }
+      .hero-content {
+        position: relative;
+        z-index: 2;
+        padding: 6rem 1.5rem 4rem;
+        max-width: 72rem;
+        margin: 0 auto;
+        width: 100%;
+      }
+      .hero h1 {
+        font-size: clamp(2.5rem, 8vw, 5rem);
+        font-style: italic;
+        line-height: 1.05;
+        max-width: 14ch;
+      }
+      .hero p {
+        margin-top: 1rem;
+        max-width: 42rem;
+        color: var(--muted);
+        font-size: 1.125rem;
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        border: none;
+        color: inherit;
+        background: transparent;
+      }
+      section {
+        position: relative;
+        padding: 5rem 1.5rem;
+      }
+      .section-inner {
+        max-width: 72rem;
+        margin: 0 auto;
+      }
+      .section-label {
+        font-size: 0.75rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .section-title {
+        margin-top: 0.75rem;
+        font-size: clamp(2rem, 5vw, 3.25rem);
+        font-style: italic;
+        line-height: 1.1;
+      }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 2.5rem;
+      }
+      .stat-card {
+        padding: 1.5rem;
+        transition: transform 0.25s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-4px);
+      }
+      .stat-value {
+        font-size: 2.5rem;
+        font-style: italic;
+        font-family: 'Instrument Serif', serif;
+      }
+      .stat-label {
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+      .showcase-card {
+        flex: 0 0 280px;
+        border-radius: 1rem;
+        overflow: hidden;
+        border: 1px solid var(--line);
+      }
+      .showcase-card video {
+        width: 100%;
+        aspect-ratio: 16/10;
+        object-fit: cover;
+        display: block;
+      }
+      .showcase-card figcaption {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+      .partner-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 2.5rem;
+      }
+      .partner-card {
+        padding: 1.5rem;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 2rem 1.5rem;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 0.875rem;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="liquid-glass">
+      <span>{{PRODUCT_NAME}}</span>
+      <a class="nav-cta liquid-glass" href="#capabilities">Explore</a>
+    </nav>
+
+    <header class="hero" id="top">
+      <video
+        id="heroVideoA"
+        class="hero-video"
+        muted
+        playsinline
+        autoplay
+        src="{{HERO_VIDEO_URL}}"
+      ></video>
+      <video
+        id="heroVideoB"
+        class="hero-video"
+        muted
+        playsinline
+        style="opacity: 0"
+        src="{{HERO_VIDEO_URL}}"
+      ></video>
+      <div class="hero-overlay"></div>
+      <div class="hero-seam"></div>
+      <div class="hero-content">
+        <p class="section-label">{{PRODUCT_TAGLINE}}</p>
+        <h1 class="font-display">{{HEADLINE}}</h1>
+        <p>{{HERO_SUBCOPY}}</p>
+        <div class="pill-row">
+          <button class="pill liquid-glass" type="button" id="modelIdPill">{{MODEL_ID}}</button>
+          <button class="pill liquid-glass" type="button" data-copy-prompt>
+            Copy site prompt
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <section id="capabilities" class="bg-grid-faint">
+      <div class="section-inner">
+        <p class="section-label">Capabilities</p>
+        <h2 class="section-title font-display">{{CAPABILITIES_HEADLINE}}</h2>
+        <div class="stat-grid">
+          <article class="stat-card liquid-glass">
+            <div class="stat-value">{{STAT_1_VALUE}}</div>
+            <div class="stat-label">{{STAT_1_LABEL}}</div>
+          </article>
+          <article class="stat-card liquid-glass">
+            <div class="stat-value">{{STAT_2_VALUE}}</div>
+            <div class="stat-label">{{STAT_2_LABEL}}</div>
+          </article>
+          <article class="stat-card liquid-glass">
+            <div class="stat-value">{{STAT_3_VALUE}}</div>
+            <div class="stat-label">{{STAT_3_LABEL}}</div>
+          </article>
+          <article class="stat-card liquid-glass">
+            <div class="stat-value">{{STAT_4_VALUE}}</div>
+            <div class="stat-label">{{STAT_4_LABEL}}</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="showcase" class="section-noise">
+      <div class="section-inner">
+        <p class="section-label">Showcase</p>
+        <h2 class="section-title font-display">{{SHOWCASE_HEADLINE}}</h2>
+      </div>
+      <div class="marquee-fade marquee-row" style="margin-top: 2.5rem; overflow: hidden">
+        <div class="marquee-track" id="marqueeTrack">
+          <!-- Duplicate items for seamless loop; customize titles and video URLs -->
+          <figure class="showcase-card">
+            <video muted playsinline loop src="{{SHOWCASE_VIDEO_1}}"></video>
+            <figcaption>{{SHOWCASE_TITLE_1}}</figcaption>
+          </figure>
+          <figure class="showcase-card">
+            <video muted playsinline loop src="{{SHOWCASE_VIDEO_2}}"></video>
+            <figcaption>{{SHOWCASE_TITLE_2}}</figcaption>
+          </figure>
+          <figure class="showcase-card">
+            <video muted playsinline loop src="{{SHOWCASE_VIDEO_3}}"></video>
+            <figcaption>{{SHOWCASE_TITLE_3}}</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="partners">
+      <div class="section-inner">
+        <p class="section-label">Partners</p>
+        <h2 class="section-title font-display">{{PARTNERS_HEADLINE}}</h2>
+        <div class="partner-grid">
+          <article class="partner-card liquid-glass">
+            <strong>{{PARTNER_1_NAME}}</strong>
+            <span class="stat-label">{{PARTNER_1_DESC}}</span>
+          </article>
+          <article class="partner-card liquid-glass">
+            <strong>{{PARTNER_2_NAME}}</strong>
+            <span class="stat-label">{{PARTNER_2_DESC}}</span>
+          </article>
+          <article class="partner-card liquid-glass">
+            <strong>{{PARTNER_3_NAME}}</strong>
+            <span class="stat-label">{{PARTNER_3_DESC}}</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <footer>Designed with Open Design · {{FOOTER_CREDIT}}</footer>
+
+    <!-- Rewrite this block with valid JSON. Use JSON.stringify(sitePrompt) for sitePrompt. -->
+    <script type="application/json" id="seed-data">
+      {
+        "modelId": "{{MODEL_ID}}",
+        "sitePrompt": "Describe your landing brief here."
+      }
+    </script>
+
+    <script>
+      (function () {
+        /* FadingVideo: rAF crossfade loop — no CSS opacity transitions on video */
+        var a = document.getElementById('heroVideoA');
+        var b = document.getElementById('heroVideoB');
+        if (a && b) {
+          var active = a;
+          var idle = b;
+          var fading = false;
+          var fadeStart = 0;
+          var fadeMs = 500;
+          function tick(now) {
+            if (!fading && active.duration && active.currentTime >= active.duration - 0.05) {
+              idle.currentTime = 0;
+              idle.play().catch(function () {});
+              fading = true;
+              fadeStart = now;
+            }
+            if (fading) {
+              var t = Math.min(1, (now - fadeStart) / fadeMs);
+              active.style.opacity = String(1 - t);
+              idle.style.opacity = String(t);
+              if (t >= 1) {
+                var swap = active;
+                active = idle;
+                idle = swap;
+                idle.style.opacity = '0';
+                idle.pause();
+                fading = false;
+              }
+            }
+            requestAnimationFrame(tick);
+          }
+          a.play().catch(function () {});
+          requestAnimationFrame(tick);
+        }
+
+        /* Duplicate marquee items for seamless -50% loop */
+        var track = document.getElementById('marqueeTrack');
+        if (track) {
+          track.innerHTML += track.innerHTML;
+          track.querySelectorAll('video').forEach(function (v) {
+            v.play().catch(function () {});
+          });
+        }
+
+        /* Sandbox-safe copy buttons — values read from #seed-data JSON */
+        var seed = { modelId: '', sitePrompt: '' };
+        var seedEl = document.getElementById('seed-data');
+        if (seedEl) {
+          try {
+            seed = JSON.parse(seedEl.textContent || '{}');
+          } catch (e) {
+            /* invalid JSON after placeholder substitution */
+          }
+        }
+        var modelBtn = document.getElementById('modelIdPill');
+        if (modelBtn) {
+          modelBtn.addEventListener('click', function () {
+            var text = String(seed.modelId || '');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).catch(function () {});
+            }
+          });
+        }
+        var promptBtn = document.querySelector('[data-copy-prompt]');
+        if (promptBtn) {
+          promptBtn.addEventListener('click', function () {
+            var text = String(seed.sitePrompt || '');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).catch(function () {});
+            }
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
