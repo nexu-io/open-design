@@ -2473,9 +2473,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               invalid={workingDirMissing}
               recentDirs={recentDirs}
               onOpen={() => void checkWorkingDir()}
-              onPickDirectory={() => void handlePickWorkingDir()}
-              onSelectRecent={(dir) => void setWorkingDirFolder(dir)}
-              onClear={() => void clearWorkingDir()}
+              onPickDirectory={() => {
+                // Fire on the click itself (intent), matching the home
+                // composer's working_dir* elements so one dashboard counts the
+                // action across both surfaces.
+                trackComposerBar({ element: 'working_dir' });
+                void handlePickWorkingDir();
+              }}
+              onSelectRecent={(dir) => {
+                trackComposerBar({ element: 'working_dir_recent' });
+                void setWorkingDirFolder(dir);
+              }}
+              onClear={() => {
+                trackComposerBar({ element: 'working_dir_clear' });
+                void clearWorkingDir();
+              }}
             />
           </div>
         ) : null}
