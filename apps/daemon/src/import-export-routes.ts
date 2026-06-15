@@ -9,6 +9,7 @@ import {
   type InlineAssetReader,
 } from './inline-assets.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
+import { resolveViteDistHtmlEntry } from './html-export-source.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
@@ -687,15 +688,17 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         };
       };
 
-      const exportSource = await resolveHtmlExportSource({
+      const html = file.buffer.toString('utf8');
+      const exportSource = await resolveViteDistHtmlEntry({
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
         relPath,
-        html: file.buffer.toString('utf8'),
+        html,
+        maxOwnerBytes: MAX_INLINE_OWNER_BYTES,
         metadata: project?.metadata,
         readProjectFile,
         resolveProjectFilePath,
-      });
+      }) ?? { html, relPath };
       const rendered = await inlineRelativeAssets(
         exportSource.html,
         exportSource.relPath,
@@ -724,53 +727,6 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     }
   });
 
-}
-
-async function resolveHtmlExportSource({
-  projectId,
-  projectsRoot,
-  relPath,
-  html,
-  metadata,
-  readProjectFile,
-  resolveProjectFilePath,
-}: {
-  projectId: string;
-  projectsRoot: string;
-  relPath: string;
-  html: string;
-  metadata: unknown;
-  readProjectFile: (projectsRoot: string, projectId: string, relPath: string, metadata?: unknown) => Promise<{ buffer: Buffer }>;
-  resolveProjectFilePath: (projectsRoot: string, projectId: string, relPath: string, metadata?: unknown) => Promise<{ size: number; mime: string }>;
-}): Promise<{ html: string; relPath: string }> {
-  if (!isViteDevHtmlEntry(html)) return { html, relPath };
-
-  const ownerDir = nodePath.posix.dirname(relPath);
-  const distRelPath = ownerDir === '.' ? 'dist/index.html' : `${ownerDir}/dist/index.html`;
-  try {
-    const distMeta = await resolveProjectFilePath(projectsRoot, projectId, distRelPath, metadata);
-    if (distMeta.size > MAX_INLINE_OWNER_BYTES || !distMeta.mime.startsWith('text/html')) {
-      return { html, relPath };
-    }
-    const distFile = await readProjectFile(projectsRoot, projectId, distRelPath, metadata);
-    return {
-      html: rewriteViteDistRootAssetUrls(distFile.buffer.toString('utf8')),
-      relPath: distRelPath,
-    };
-  } catch {
-    return { html, relPath };
-  }
-}
-
-function isViteDevHtmlEntry(html: string): boolean {
-  return /<script\b[^>]*\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']\/src\/[^"']+["'][^>]*>\s*<\/script>/i.test(html);
-}
-
-function rewriteViteDistRootAssetUrls(html: string): string {
-  return html.replace(
-    /\b(href|src)\s*=\s*(["'])\/assets\//gi,
-    (_match, attr: string, quote: string) => `${attr}=${quote}assets/`,
-  );
 }
 
 function buildProjectExportManifestResponse({

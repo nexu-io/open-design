@@ -2,7 +2,8 @@ import path from 'node:path';
 
 import type { DesktopExportPdfInput } from '@open-design/sidecar-proto';
 
-import { readProjectFile } from './projects.js';
+import { resolveViteDistHtmlEntry } from './html-export-source.js';
+import { readProjectFile, resolveProjectFilePath } from './projects.js';
 
 export interface BuildDesktopPdfExportInputOptions {
   daemonUrl: string;
@@ -17,14 +18,34 @@ export async function buildDesktopPdfExportInput(
   options: BuildDesktopPdfExportInputOptions,
 ): Promise<DesktopExportPdfInput> {
   const file = await readProjectFile(options.projectsRoot, options.projectId, options.fileName);
+  const exportSource = await resolvePdfExportSource(
+    options,
+    file.buffer.toString('utf8'),
+  );
   const title = displayTitle(options.title, options.fileName);
   return {
-    baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
+    baseHref: rawBaseHref(options.daemonUrl, options.projectId, exportSource.fileName),
     deck: options.deck === true,
     defaultFilename: `${safeFilename(title, 'artifact')}.pdf`,
-    html: file.buffer.toString('utf8'),
+    html: exportSource.html,
     title,
   };
+}
+
+async function resolvePdfExportSource(
+  options: BuildDesktopPdfExportInputOptions,
+  html: string,
+): Promise<{ html: string; fileName: string }> {
+  const viteDistEntry = await resolveViteDistHtmlEntry({
+    html,
+    projectId: options.projectId,
+    projectsRoot: options.projectsRoot,
+    readProjectFile,
+    relPath: options.fileName,
+    resolveProjectFilePath,
+  });
+  if (!viteDistEntry) return { html, fileName: options.fileName };
+  return { html: viteDistEntry.html, fileName: viteDistEntry.relPath };
 }
 
 function displayTitle(title: string | undefined, fileName: string): string {

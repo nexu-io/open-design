@@ -55,6 +55,86 @@ describe('buildDesktopPdfExportInput', () => {
     expect(input.title).toBe('index');
     expect(input.defaultFilename).toBe('index.pdf');
   });
+
+  it('keeps a successfully loaded empty HTML file exportable', async () => {
+    await writeFile(path.join(projectsRoot, projectId, 'empty.html'), '');
+
+    const input = await buildDesktopPdfExportInput({
+      daemonUrl: 'http://127.0.0.1:7456',
+      fileName: 'empty.html',
+      projectId,
+      projectsRoot,
+      title: 'Empty Export',
+    });
+
+    expect(input.baseHref).toBe('http://127.0.0.1:7456/api/projects/proj-pdf-test/raw/');
+    expect(input.html).toBe('');
+    expect(input.defaultFilename).toBe('Empty-Export.pdf');
+  });
+
+  it('uses the built dist HTML when a Vite dev entry is exported as PDF', async () => {
+    await mkdir(path.join(projectsRoot, projectId, 'dist', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(projectsRoot, projectId, 'vite-entry.html'),
+      '<!doctype html><html><head><script type="module" src="/src/main.tsx"></script></head><body><div id="root"></div></body></html>',
+    );
+    await writeFile(
+      path.join(projectsRoot, projectId, 'dist', 'index.html'),
+      '<!doctype html><html><head>' +
+        '<script type="module" crossorigin src="/assets/app.js"></script>' +
+        '<link rel="stylesheet" crossorigin href="/assets/app.css">' +
+        '</head><body><div id="root">Built app</div></body></html>',
+    );
+    await writeFile(path.join(projectsRoot, projectId, 'dist', 'assets', 'app.js'), 'window.READY = true;');
+    await writeFile(path.join(projectsRoot, projectId, 'dist', 'assets', 'app.css'), 'body{background:#123456}');
+
+    const input = await buildDesktopPdfExportInput({
+      daemonUrl: 'http://127.0.0.1:7456',
+      fileName: 'vite-entry.html',
+      projectId,
+      projectsRoot,
+      title: 'Vite Export',
+    });
+
+    expect(input.baseHref).toBe('http://127.0.0.1:7456/api/projects/proj-pdf-test/raw/dist/');
+    expect(input.html).toContain('Built app');
+    expect(input.html).toContain('src="assets/app.js"');
+    expect(input.html).toContain('href="assets/app.css"');
+    expect(input.html).not.toContain('/src/main.tsx');
+    expect(input.html).not.toContain('/assets/app.js');
+    expect(input.html).not.toContain('/assets/app.css');
+  });
+
+  it('uses a nested built dist HTML base when a nested Vite dev entry is exported as PDF', async () => {
+    await mkdir(path.join(projectsRoot, projectId, 'pages', 'dist', 'assets'), { recursive: true });
+    await writeFile(
+      path.join(projectsRoot, projectId, 'pages', 'vite-entry.html'),
+      '<!doctype html><html><head><script type="module" src="/src/main.tsx"></script></head><body><div id="root"></div></body></html>',
+    );
+    await writeFile(
+      path.join(projectsRoot, projectId, 'pages', 'dist', 'index.html'),
+      '<!doctype html><html><head>' +
+        '<script type="module" crossorigin src="/assets/nested.js"></script>' +
+        '<link rel="stylesheet" crossorigin href="/assets/nested.css">' +
+        '</head><body><div id="root">Nested built app</div></body></html>',
+    );
+
+    const input = await buildDesktopPdfExportInput({
+      daemonUrl: 'http://127.0.0.1:7456',
+      fileName: 'pages/vite-entry.html',
+      projectId,
+      projectsRoot,
+      title: 'Nested Vite Export',
+    });
+
+    expect(input.baseHref).toBe('http://127.0.0.1:7456/api/projects/proj-pdf-test/raw/pages/dist/');
+    expect(input.html).toContain('Nested built app');
+    expect(input.html).toContain('src="assets/nested.js"');
+    expect(input.html).toContain('href="assets/nested.css"');
+    expect(input.html).not.toContain('/src/main.tsx');
+    expect(input.html).not.toContain('/assets/nested.js');
+    expect(input.html).not.toContain('/assets/nested.css');
+  });
 });
 
 describe('POST /api/projects/:id/export/pdf', () => {
