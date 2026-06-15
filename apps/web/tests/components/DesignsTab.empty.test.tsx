@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignsTab } from '../../src/components/DesignsTab';
+import { installLocalStorageStub } from '../helpers/localStorage-stub';
 
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(),
@@ -17,17 +18,7 @@ vi.mock('../../src/providers/registry', () => ({
 
 describe('DesignsTab empty state', () => {
   beforeAll(() => {
-    if (window.localStorage) return;
-    const store = new Map<string, string>();
-    Object.defineProperty(window, 'localStorage', {
-      configurable: true,
-      value: {
-        clear: () => store.clear(),
-        getItem: (key: string) => store.get(key) ?? null,
-        removeItem: (key: string) => store.delete(key),
-        setItem: (key: string, value: string) => store.set(key, value),
-      },
-    });
+    installLocalStorageStub();
   });
 
   beforeEach(() => {

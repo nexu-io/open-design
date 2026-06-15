@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { en } from '../../src/i18n/locales/en';
+import { installLocalStorageStub } from '../helpers/localStorage-stub';
 
 const {
   playSoundMock,
@@ -3254,9 +3255,24 @@ describe('SettingsDialog MCP server interactions', () => {
 });
 
 describe('SettingsDialog language interactions', () => {
+  // vitest 4.1.6's jsdom environment ships `window.localStorage` as an
+  // empty `{}` with no methods, so the production code's `try { ... }`
+  // catch in i18n/index.tsx silently no-ops on setItem/getItem and the
+  // test's afterEach + assertions blow up with `removeItem is not a
+  // function`. Same `// @vitest-environment jsdom` setup as several
+  // other tests in this directory (e.g. AmrGuidance, AssistantMessage);
+  // they all install the same Map-backed stub in beforeAll.
+beforeAll(() => {
+  installLocalStorageStub();
+});
+
   afterEach(() => {
     cleanup();
-    window.localStorage.removeItem('open-design:locale');
+    // clear() instead of removeItem() so the locale-source marker
+    // (open-design:locale-source) also gets wiped. setLocale() in
+    // i18n/index.tsx writes both keys; a targeted remove would leak
+    // the source tag and cause order-dependent test results.
+    window.localStorage.clear();
     document.documentElement.removeAttribute('lang');
     document.documentElement.removeAttribute('dir');
   });
