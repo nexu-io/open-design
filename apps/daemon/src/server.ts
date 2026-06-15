@@ -259,7 +259,7 @@ import {
 import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
-  countNewHtmlArtifacts,
+  countNewArtifacts,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from './run-artifacts.js';
@@ -2192,7 +2192,7 @@ function scanRunEventsForRetrySideEffects(events) {
     }
   }
   if (
-    countNewHtmlArtifacts(events) > 0 ||
+    countNewArtifacts(events) > 0 ||
     didRunCreateDesignSystemFile(events) ||
     countDesignSystemPreviewModules(events) > 0
   ) {
@@ -13462,7 +13462,7 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewHtmlArtifacts(run.events);
+        const artifactCount = countNewArtifacts(run.events);
         const designSystemCreated = didRunCreateDesignSystemFile(run.events);
         const previewModuleCount = countDesignSystemPreviewModules(run.events);
         const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
