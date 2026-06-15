@@ -1879,8 +1879,14 @@ export interface ArtifactToolbarClickProps {
     | 'reload'
     | 'preview'
     | 'source'
+    // Copies a screenshot of the current preview to the clipboard (does not
+    // start a run). Tracked so the preview-export tool's usage is measurable.
+    | 'screenshot'
     | 'tweaks'
-    | 'draw'
+    // The Mark (mark-pen) annotation tool. Renamed from `draw` to match the
+    // product label users see; the draw-overlay sub-toolbar keeps area
+    // `draw_toolbar`.
+    | 'mark'
     | 'comment'
     | 'pods'
     | 'inspect'
@@ -2537,6 +2543,10 @@ export interface RunCreatedProps {
   entry_from?:
     | 'new_project'
     | 'chat_composer'
+    // Preview-annotation entries: `comment` (comment/board pin flow) and
+    // `mark` (Mark draw-overlay flow). Both run against an existing artifact.
+    | 'comment'
+    | 'mark'
     | TrackingDesignSystemRunEntryFrom;
   project_source?: TrackingProjectSource;
   project_id: string;

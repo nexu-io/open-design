@@ -43,6 +43,7 @@ import type { AppConfig, ChatAttachment, ChatCommentAttachment, Project, Project
 import type {
   ContextItem,
   AppliedPluginSnapshot,
+  ChatAnalyticsEntryFrom,
   ChatSessionMode,
   ConnectorDetail,
   InstalledPluginRecord,
@@ -308,6 +309,10 @@ export interface ChatSendMeta {
   // for this run only is composed with the extra skill bodies, without
   // touching the project's persistent `skillId`.
   skillIds?: string[];
+  /** Overrides the run_created / run_finished `entry_from` analytics prop for
+   *  this send (e.g. 'mark' when the turn is sent from the Mark draw overlay).
+   *  Behavior never depends on it; it only shapes PostHog props. */
+  entryFrom?: ChatAnalyticsEntryFrom;
 }
 
 /**
@@ -1485,7 +1490,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
               const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
               const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, queueMeta(currentRunContextMeta()));
+              // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
+              // separates annotation-driven runs from plain composer sends.
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...queueMeta(currentRunContextMeta()), entryFrom: 'mark' });
               ack({ ok: true });
               return;
             }
@@ -1505,7 +1512,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const prompt = [draft.trim(), detail.note].filter(Boolean).join('\n');
               const attachments = sortChatAttachmentsByOrder([...staged, ...uploaded]);
               const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
-              sendComposedTurn(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
+              // Mark draw-overlay → run: tag entry_from='mark' so the dashboard
+              // separates annotation-driven runs from plain composer sends.
+              sendComposedTurn(prompt, attachments, nextCommentAttachments, { ...currentRunContextMeta(), entryFrom: 'mark' });
               ack({ ok: true });
               return;
             }

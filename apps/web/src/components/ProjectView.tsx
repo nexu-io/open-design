@@ -4142,18 +4142,20 @@ export function ProjectView({
         uploaded = result.uploaded;
       }
       if (commentAttachments.length === 0) {
-        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true });
+        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true, entryFrom: 'comment' });
         return true;
       }
       for (let i = 0; i < commentAttachments.length; i++) {
         const commentAttachment = commentAttachments[i]!;
         const savedImages = chatAttachmentsFromPreviewCommentImages(commentAttachment.imageAttachments);
         const prompt = commentTaskQuery(commentAttachment);
+        // Comment/board pin → run: tag entry_from='comment' so the dashboard
+        // separates annotation-driven runs from plain composer sends.
         await handleSend(
           prompt,
           mergeChatAttachments(i === 0 ? uploaded : [], savedImages),
           [commentTaskContextAttachment(commentAttachment)],
-          { queueOnly: true },
+          { queueOnly: true, entryFrom: 'comment' },
         );
       }
       return true;

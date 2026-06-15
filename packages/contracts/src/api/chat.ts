@@ -77,7 +77,13 @@ export type ChatAnalyticsEntryFrom =
   // A turn started by the "Continue the run" affordance on a resumable failed
   // run. Lets run_created / run_finished isolate resume-continuations so the
   // recovery mechanism's usage and success rate are measurable.
-  | 'resume_continue';
+  | 'resume_continue'
+  // A turn started from a preview annotation: `comment` is the comment/board
+  // pin flow (chat-new-line tool), `mark` is the Mark draw-overlay flow
+  // (mark-pen tool). Both edit an existing artifact, so isolating them lets the
+  // dashboard separate annotation-driven runs from plain composer sends.
+  | 'comment'
+  | 'mark';
 
 export type ChatAnalyticsLengthBucket =
   | '0'
