@@ -6,6 +6,7 @@
  * breadcrumb and `active="plugins"` for the nav highlight.
  */
 import Layout from '../../../_components/sub-page-layout.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import { getCraftRecords } from '../../../_lib/catalog';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
@@ -30,19 +31,17 @@ const jsonLd = {
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pcopy.tileCraft}</span>
-  </nav>
-
   <header class="catalog-head">
-    <span class="label">{pcopy.craftLabel}</span>
+    <nav class="label detail-crumb" aria-label="Breadcrumb">
+      <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+      <span class="crumb-sep" aria-hidden="true">·</span>
+      <span aria-current="page">{pcopy.tileCraft}</span>
+    </nav>
     <h1 class="display">{pcopy.craftHeading(craft.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.craftLead}</p>
   </header>
+
+  <PluginContribute />
 
   <section class="catalog-grid" aria-label={ui.catalog.craft.allAria}>
     <ol>
@@ -60,4 +59,19 @@ const jsonLd = {
       ))}
     </ol>
   </section>
+
+  <style>
+    .detail-crumb a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .detail-crumb a:hover {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+    }
+    .detail-crumb .crumb-sep {
+      margin: 0 0.45em;
+      opacity: 0.55;
+    }
+  </style>
 </Layout>

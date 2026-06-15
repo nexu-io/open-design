@@ -13,7 +13,9 @@
  */
 import type { SystemRecord } from '../_lib/catalog';
 import { detailHrefForSystemSlug } from '../_lib/bundled-plugins';
+import { getPluginsCopy } from '../_lib/plugins-i18n';
 import { localeFromPath, localizedHref } from '../i18n';
+import SystemPreview from './system-preview.astro';
 
 export interface Props {
   system: SystemRecord;
@@ -21,6 +23,7 @@ export interface Props {
 
 const { system } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
+const pcopy = getPluginsCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 // The bundled-plugin detail page is canonical-only (no locale prefix); only
 // the `/plugins/systems/` index fallback has localized variants to link to.
@@ -29,17 +32,34 @@ const detailHref = detailHrefForSystemSlug(system.slug) ?? href('/plugins/system
 
 <li class="system-card">
   <a href={detailHref}>
-    <div class="system-swatches" aria-hidden="true">
+    <div class="system-cover">
       {system.palette.length > 0 ? (
-        system.palette.slice(0, 4).map((hex) => (
-          <span class="swatch" style={`background:${hex}`} />
-        ))
+        <SystemPreview system={system} compact />
       ) : (
-        <span class="swatch placeholder" />
+        <div class="system-swatches" aria-hidden="true">
+          <span class="swatch placeholder" />
+        </div>
       )}
     </div>
     <span class="system-name">{system.name}</span>
     <span class="system-cat">{system.categoryLabel}</span>
     {system.tagline && <p class="system-tagline">{system.tagline}</p>}
+    <span class="system-cta">{pcopy.systemCardCta}</span>
   </a>
 </li>
+
+<style>
+  .system-card .system-cover {
+    margin-bottom: 18px;
+  }
+  .system-card .system-cta {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink, #262626);
+  }
+  .system-card a:hover .system-cta {
+    text-decoration: underline;
+  }
+</style>

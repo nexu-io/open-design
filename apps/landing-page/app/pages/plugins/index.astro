@@ -15,6 +15,7 @@
  * stay where they are; the hub is purely a discovery surface.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import PluginContribute from '../../_components/plugin-contribute.astro';
 import { getCraftRecords, getSystemRecords } from '../../_lib/catalog';
 import { getBundledPlugins } from '../../_lib/bundled-plugins';
 import { categorizePlugin, bundledRecordOf } from '../../_lib/plugin-facets';
@@ -86,6 +87,8 @@ const tiles = [
     </h1>
     <p class="lead">{pcopy.hubLead}</p>
   </header>
+
+  <PluginContribute />
 
   <section class="plugins-tile-grid" aria-label={pcopy.hubLabel}>
     {tiles.map((tile) => (
