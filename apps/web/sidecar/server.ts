@@ -10,7 +10,7 @@ import { request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
+import { createConnection, createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,6 +42,8 @@ const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
 const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
 const SHUTDOWN_TIMEOUT_MS = 3000;
+const STANDALONE_READINESS_POLL_MS = 150;
+const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
 const require = createRequire(import.meta.url);
 
 type NextApp = {
@@ -521,7 +523,15 @@ async function stopStandaloneChild(child: ChildProcess): Promise<void> {
   }
 }
 
-async function probeStandaloneBackend(origin: string): Promise<boolean> {
+type StandaloneBackendProbeResult = "http" | "tcp" | null;
+
+async function probeStandaloneBackend(origin: string): Promise<StandaloneBackendProbeResult> {
+  if (await probeStandaloneBackendPort(origin)) return "tcp";
+  if (await probeStandaloneBackendHttp(origin)) return "http";
+  return null;
+}
+
+async function probeStandaloneBackendHttp(origin: string): Promise<boolean> {
   return await new Promise<boolean>((resolveProbe) => {
     const request = createHttpRequest(new URL("/", origin), { method: "HEAD", timeout: 800 }, (response) => {
       response.resume();
@@ -536,6 +546,64 @@ async function probeStandaloneBackend(origin: string): Promise<boolean> {
   });
 }
 
+async function probeStandaloneBackendPort(origin: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  const port = Number(parsed.port || defaultPortForProtocol(parsed.protocol));
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return false;
+  const host = parsed.hostname.replace(/^\[(.*)\]$/, "$1");
+
+  return await new Promise<boolean>((resolveProbe) => {
+    const socket = createConnection({ host, port });
+    let settled = false;
+    const settle = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolveProbe(ready);
+    };
+    socket.setTimeout(800, () => settle(false));
+    socket.once("connect", () => settle(true));
+    socket.once("error", () => settle(false));
+  });
+}
+
+function createStandaloneChildExitError(child: ChildProcess, startedAt: number): Error {
+  const elapsedMs = Date.now() - startedAt;
+  const likelyPortRace = elapsedMs <= 200;
+  return new Error(
+    `standalone Next.js server exited before readiness after ${elapsedMs}ms: code=${child.exitCode} signal=${child.signalCode}`
+    + (likelyPortRace
+      ? "; the reserved startup port may have been claimed before the child process bound it, retry the launch"
+      : ""),
+  );
+}
+
+function throwIfStandaloneChildExited(child: ChildProcess, startedAt: number): void {
+  if (child.exitCode == null && child.signalCode == null) return;
+  throw createStandaloneChildExitError(child, startedAt);
+}
+
+async function waitForStandaloneTcpReadinessGrace(child: ChildProcess): Promise<void> {
+  if (child.exitCode != null || child.signalCode != null) return;
+
+  await new Promise<void>((resolveWait) => {
+    let timeout: NodeJS.Timeout | undefined;
+    const finish = () => {
+      if (timeout != null) clearTimeout(timeout);
+      child.off("exit", finish);
+      resolveWait();
+    };
+    timeout = setTimeout(finish, STANDALONE_TCP_READINESS_GRACE_MS);
+    timeout.unref();
+    child.once("exit", finish);
+  });
+}
+
 async function waitForStandaloneBackendReady(
   child: ChildProcess,
   origin: string,
@@ -544,18 +612,16 @@ async function waitForStandaloneBackendReady(
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
-    if (child.exitCode != null || child.signalCode != null) {
-      const elapsedMs = Date.now() - startedAt;
-      const likelyPortRace = elapsedMs <= 200;
-      throw new Error(
-        `standalone Next.js server exited before readiness after ${elapsedMs}ms: code=${child.exitCode} signal=${child.signalCode}`
-        + (likelyPortRace
-          ? "; the reserved startup port may have been claimed before the child process bound it, retry the launch"
-          : ""),
-      );
+    throwIfStandaloneChildExited(child, startedAt);
+    const readiness = await probeStandaloneBackend(origin);
+    if (readiness != null) {
+      if (readiness === "tcp") {
+        await waitForStandaloneTcpReadinessGrace(child);
+      }
+      throwIfStandaloneChildExited(child, startedAt);
+      return;
     }
-    if (await probeStandaloneBackend(origin)) return;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+    await new Promise((resolveWait) => setTimeout(resolveWait, STANDALONE_READINESS_POLL_MS));
   }
 
   throw new Error(`timed out after ${timeoutMs}ms waiting for standalone Next.js server at ${origin}; override with ${STANDALONE_STARTUP_TIMEOUT_ENV}`);
