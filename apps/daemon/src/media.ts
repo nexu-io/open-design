@@ -2769,7 +2769,21 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
     response_format: 'base64',
   };
 
-  const resp = await fetch(`${baseUrl}/image_generation`, withMediaRequestInit(ctx, {
+  const url = `${baseUrl}/image_generation`;
+  // Diagnostic: log the exact request we're about to send so when
+  // the upstream returns a 404 / base_resp error we can tell
+  // whether the daemon sent the right path, host, model, and key
+  // (and whether `credentials.baseUrl` overrode our default). Logs
+  // go to daemon stderr, which the desktop package streams to the
+  // user's terminal or the activity log.
+  try {
+    console.error(
+      `[minimax image] POST ${url} model=${wireModel} aspect=${aspect} key=${credentials.apiKey ? credentials.apiKey.slice(0, 6) + '…' : '<missing>'}`,
+    );
+  } catch {
+    // best-effort logging only
+  }
+  const resp = await fetch(url, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${credentials.apiKey}`,
@@ -2779,7 +2793,23 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   }));
   const respText = await resp.text();
   if (!resp.ok) {
-    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+    // Real HTTP non-200 (most commonly 404 "page not found" when
+    // the model or endpoint isn't enabled on the user's account).
+    // Surface the path we hit so the user can paste it into the
+    // MiniMax dashboard / docs to confirm it's the expected one.
+    try {
+      console.error(
+        `[minimax image] HTTP ${resp.status} from ${url} body=${truncate(respText, 480)}`,
+      );
+    } catch {
+      // ignore
+    }
+    throw new Error(
+      `minimax image HTTP ${resp.status} from ${url}: ${truncate(respText, 240)}. `
+      + `If this is HTTP 404 "page not found", the model name "${wireModel}" `
+      + `or the image endpoint may not be enabled on your MiniMax account — `
+      + `check platform.minimax.io for image-generation access, or try a different model id.`,
+    );
   }
   let data: any;
   try {
@@ -2792,6 +2822,13 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   // present AND signals an error. Missing base_resp is fine and
   // means success.
   if (data?.base_resp && data.base_resp.status_code !== 0) {
+    try {
+      console.error(
+        `[minimax image] base_resp error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+      );
+    } catch {
+      // ignore
+    }
     throw new Error(
       `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
     );
