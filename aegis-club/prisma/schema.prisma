@@ -1,0 +1,477 @@
+// Aegis Club — schema de dados
+// Plataforma competitiva da comunidade de Dota 2.
+//
+// Convenção: nomes de modelos em inglês (idioma do código);
+// a interface para o usuário é em português (BR).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────────────────────
+// Identidade e perfil
+// ──────────────────────────────────────────────────────────────
+
+enum Role {
+  PLAYER
+  ORGANIZER
+  ADMIN
+}
+
+enum DotaRole {
+  CARRY // posição 1
+  MID // posição 2
+  OFFLANE // posição 3
+  SOFT_SUPPORT // posição 4
+  HARD_SUPPORT // posição 5
+}
+
+enum Region {
+  SA // América do Sul
+  NA // América do Norte
+  EU // Europa
+  CIS
+  SEA // Sudeste Asiático
+  CHINA
+}
+
+model User {
+  id        String   @id @default(cuid())
+  // SteamID64 — identificador único da conta Steam
+  steamId   String?  @unique
+  nickname  String
+  email     String?  @unique
+  avatarUrl String?
+  role      Role     @default(PLAYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile Profile?
+
+  // Matchmaking
+  queueEntries QueueEntry[]
+  matchPlayers MatchPlayer[]
+
+  // Reputação
+  commendsGiven    Commend[] @relation("CommendFrom")
+  commendsReceived Commend[] @relation("CommendTo")
+  reportsMade      Report[]  @relation("ReportFrom")
+  reportsReceived  Report[]  @relation("ReportTo")
+
+  // Conexões sociais
+  friendshipsSent     Friendship[] @relation("FriendshipRequester")
+  friendshipsReceived Friendship[] @relation("FriendshipAddressee")
+
+  // Tutoriais e votos
+  tutorialsAuthored Tutorial[]     @relation("TutorialAuthor")
+  tutorialVotes     TutorialVote[]
+
+  // Torneios
+  tournamentsOrganized Tournament[] @relation("TournamentOrganizer")
+  teamsCaptained       Team[]       @relation("TeamCaptain")
+  teamMemberships      TeamMember[]
+
+  @@index([role])
+}
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio       String?  @db.Text
+  country    String? // ISO-3166 alpha-2, ex: "BR"
+  region    Region   @default(SA)
+  mainRoles DotaRole[]
+
+  // Skill / ranking interno da plataforma (separado do MMR oficial da Valve)
+  rankPoints Int @default(1000) // ponto de partida ~ "Guardião"
+  // MMR público informado/importado (OpenDota), apenas exibição
+  publicMmr  Int?
+
+  // Reputação / comportamento (0–10000, começa em 7500 ~ "neutro/bom")
+  behaviorScore Int @default(7500)
+
+  // Estatísticas agregadas (atualizadas ao fim de cada partida)
+  matchesPlayed Int @default(0)
+  wins          Int @default(0)
+  losses        Int @default(0)
+  abandons      Int @default(0)
+
+  // Heróis favoritos (IDs de Hero) — exibidos no perfil
+  favoriteHeroIds Int[]
+
+  // Links sociais
+  discord String?
+  twitch  String?
+  youtube String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rankPoints])
+  @@index([behaviorScore])
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Matchmaking competitivo
+// ──────────────────────────────────────────────────────────────
+
+enum QueueMode {
+  RANKED_5V5 // partida ranqueada padrão
+  UNRANKED_5V5 // casual
+}
+
+enum QueueStatus {
+  WAITING // procurando partida
+  MATCHED // alocado em uma partida
+  CANCELLED // saiu da fila
+}
+
+model QueueEntry {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode      QueueMode   @default(RANKED_5V5)
+  region    Region      @default(SA)
+  status    QueueStatus @default(WAITING)
+  // "instantâneo" de rankPoints/behaviorScore no momento da entrada na fila
+  rankPoints    Int
+  behaviorScore Int
+  preferredRoles DotaRole[]
+  matchId   String?
+  match     Match?      @relation(fields: [matchId], references: [id])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([status, mode, region])
+  @@index([userId])
+}
+
+enum MatchStatus {
+  DRAFTING // ready-check / formando lobby
+  LIVE // em andamento
+  COMPLETED // finalizada com resultado
+  CANCELLED // cancelada (ex: alguém não deu ready)
+}
+
+enum MatchSide {
+  RADIANT
+  DIRE
+}
+
+model Match {
+  id          String      @id @default(cuid())
+  mode        QueueMode   @default(RANKED_5V5)
+  region      Region      @default(SA)
+  status      MatchStatus @default(DRAFTING)
+  // ID do lobby no cliente do Dota 2 (preenchido manualmente pelo host) + senha
+  lobbyName     String?
+  lobbyPassword String?
+  // Resultado
+  radiantWin    Boolean?
+  // Média de rankPoints da partida (para balanceamento/relatórios)
+  averageRank   Int       @default(1000)
+
+  createdAt DateTime  @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  players      MatchPlayer[]
+  queueEntries QueueEntry[]
+  commends     Commend[]
+  reports      Report[]
+
+  @@index([status, region])
+}
+
+model MatchPlayer {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  team       MatchSide
+  // 0–4 dentro do time
+  slot       Int
+  ready      Boolean   @default(false)
+  abandoned  Boolean   @default(false)
+  heroId     Int?
+  // Pós-partida
+  won        Boolean?
+  rankDelta  Int? // variação de rankPoints aplicada ao fim
+  kills      Int?
+  deaths     Int?
+  assists    Int?
+
+  @@unique([matchId, userId])
+  @@unique([matchId, team, slot])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Reputação / anti-toxicidade
+// ──────────────────────────────────────────────────────────────
+
+enum CommendCategory {
+  FRIENDLY // amigável
+  FORGIVING // tolerante
+  TEACHING // ensina/comunica bem
+  LEADERSHIP // boa liderança/shotcalling
+}
+
+model Commend {
+  id        String          @id @default(cuid())
+  matchId   String?
+  match     Match?          @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  fromId    String
+  toId      String
+  from      User            @relation("CommendFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        User            @relation("CommendTo", fields: [toId], references: [id], onDelete: Cascade)
+  category  CommendCategory
+  createdAt DateTime        @default(now())
+
+  // Um elogio por categoria, por par de jogadores, por partida
+  @@unique([matchId, fromId, toId, category])
+  @@index([toId])
+}
+
+enum ReportCategory {
+  TOXIC_CHAT // comunicação abusiva
+  INTENTIONAL_FEEDING // feeding intencional
+  GRIEFING // sabotagem
+  ABANDON // abandono
+  HATE_SPEECH // discurso de ódio
+  CHEATING // trapaça/scripts
+  SMURFING // conta secundária
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED_VALID
+  REVIEWED_INVALID
+}
+
+model Report {
+  id        String         @id @default(cuid())
+  matchId   String?
+  match     Match?         @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  fromId    String
+  toId      String
+  from      User           @relation("ReportFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        User           @relation("ReportTo", fields: [toId], references: [id], onDelete: Cascade)
+  category  ReportCategory
+  comment   String?        @db.Text
+  status    ReportStatus   @default(OPEN)
+  createdAt DateTime       @default(now())
+
+  // Uma denúncia por par de jogadores, por partida
+  @@unique([matchId, fromId, toId])
+  @@index([toId, status])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Heróis e tutoriais
+// ──────────────────────────────────────────────────────────────
+
+enum PrimaryAttribute {
+  STRENGTH
+  AGILITY
+  INTELLIGENCE
+  UNIVERSAL
+}
+
+model Hero {
+  // ID oficial do herói no Dota 2 (mesmo da OpenDota)
+  id            Int              @id
+  name          String           @unique // ex: "npc_dota_hero_juggernaut"
+  localizedName String // ex: "Juggernaut"
+  slug          String           @unique // ex: "juggernaut"
+  primaryAttr   PrimaryAttribute
+  // Papéis sugeridos (texto livre do dataset oficial), ex: ["Carry","Pusher"]
+  roles         String[]
+  // Complexidade 1–3 (estrelas no cliente do jogo)
+  complexity    Int              @default(1)
+  imageUrl      String?
+  iconUrl       String?
+
+  tutorials Tutorial[]
+
+  @@index([primaryAttr])
+}
+
+enum TutorialLevel {
+  BEGINNER // iniciante
+  INTERMEDIATE // intermediário
+  ADVANCED // avançado
+}
+
+model Tutorial {
+  id        String        @id @default(cuid())
+  heroId    Int
+  hero      Hero          @relation(fields: [heroId], references: [id], onDelete: Cascade)
+  title     String
+  // ID do vídeo do YouTube (ex: "dQw4w9WgXcQ"), extraído de qualquer URL
+  youtubeId String
+  level     TutorialLevel @default(BEGINNER)
+  language  String        @default("pt-BR")
+  authorId  String?
+  author    User?         @relation("TutorialAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  // votos agregados (denormalizado para ordenação rápida)
+  score     Int           @default(0)
+  approved  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  votes TutorialVote[]
+
+  @@index([heroId, level])
+  @@index([score])
+}
+
+model TutorialVote {
+  id         String   @id @default(cuid())
+  tutorialId String
+  tutorial   Tutorial @relation(fields: [tutorialId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  value      Int // +1 ou -1
+  createdAt  DateTime @default(now())
+
+  @@unique([tutorialId, userId])
+}
+
+// ──────────────────────────────────────────────────────────────
+// Torneios
+// ──────────────────────────────────────────────────────────────
+
+enum TournamentFormat {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+}
+
+enum TournamentStatus {
+  DRAFT // criado, ainda não publicado
+  REGISTRATION // inscrições abertas
+  LIVE // em andamento
+  COMPLETED // finalizado
+  CANCELLED
+}
+
+model Tournament {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  description String?          @db.Text
+  format      TournamentFormat @default(SINGLE_ELIMINATION)
+  status      TournamentStatus @default(DRAFT)
+  region      Region           @default(SA)
+  maxTeams    Int              @default(8)
+  prizePool   String? // texto livre, ex: "R$ 500"
+  bannerUrl   String?
+
+  organizerId String
+  organizer   User   @relation("TournamentOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+
+  registrationEndsAt DateTime?
+  startsAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  teams   Team[]
+  matches TournamentMatch[]
+
+  @@index([status, region])
+}
+
+model Team {
+  id           String      @id @default(cuid())
+  tournamentId String?
+  tournament   Tournament? @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  name         String
+  tag          String // ex: "AEG"
+  logoUrl      String?
+  captainId    String
+  captain      User        @relation("TeamCaptain", fields: [captainId], references: [id], onDelete: Cascade)
+  // Posição/seed na chave
+  seed         Int?
+  eliminated   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+
+  members    TeamMember[]
+  homeMatches TournamentMatch[] @relation("MatchTeamA")
+  awayMatches TournamentMatch[] @relation("MatchTeamB")
+  wonMatches  TournamentMatch[] @relation("MatchWinner")
+
+  @@index([tournamentId])
+}
+
+model TeamMember {
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   DotaRole?
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model TournamentMatch {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  // Rodada (1 = primeira fase). Para single-elim, cresce até a final.
+  round        Int
+  // Posição da partida dentro da rodada (0-indexed)
+  position     Int
+  bracket      String     @default("WINNERS") // WINNERS | LOSERS | GRAND_FINAL
+
+  teamAId String?
+  teamA   Team?   @relation("MatchTeamA", fields: [teamAId], references: [id], onDelete: SetNull)
+  teamBId String?
+  teamB   Team?   @relation("MatchTeamB", fields: [teamBId], references: [id], onDelete: SetNull)
+
+  scoreA   Int     @default(0)
+  scoreB   Int     @default(0)
+  winnerId String?
+  winner   Team?   @relation("MatchWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+
+  // Melhor de N (1, 3, 5)
+  bestOf    Int       @default(1)
+  scheduledAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([tournamentId, round, position, bracket])
+  @@index([tournamentId, round])
+}
