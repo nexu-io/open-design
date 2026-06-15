@@ -60,6 +60,43 @@ describe('server route inventory', () => {
       'GET /api/runs/:runId/devloop-iterations',
       'POST /api/runs/:runId/replay',
     ];
+    const liveArtifactRouteKeys = [
+      'GET /api/live-artifacts',
+      'OPTIONS /api/live-artifacts/:artifactId/preview',
+      'GET /api/live-artifacts/:artifactId/preview',
+      'GET /api/live-artifacts/:artifactId',
+      'GET /api/live-artifacts/:artifactId/refreshes',
+      'POST /api/tools/live-artifacts/create',
+      'GET /api/tools/live-artifacts/list',
+      'POST /api/tools/live-artifacts/update',
+      'POST /api/tools/live-artifacts/refresh',
+      'PATCH /api/live-artifacts/:artifactId',
+      'DELETE /api/live-artifacts/:artifactId',
+      'OPTIONS /api/live-artifacts/:artifactId/refresh',
+      'POST /api/live-artifacts/:artifactId/refresh',
+    ];
+    const deployRouteKeys = [
+      'GET /api/deploy/config',
+      'PUT /api/deploy/config',
+      'GET /api/deploy/cloudflare-pages/zones',
+      'GET /api/projects/:id/deployments',
+      'POST /api/projects/:id/deploy',
+      'POST /api/projects/:id/deploy/preflight',
+    ];
+    const deploymentCheckRouteKeys = [
+      'POST /api/projects/:id/deployments/:deploymentId/check-link',
+    ];
+    const projectFileStringRouteKeys = [
+      'GET /api/projects/:id/files',
+      'GET /api/projects/:id/search',
+      'GET /api/projects/:id/files/:name/preview',
+      'POST /api/projects/:id/files',
+      'DELETE /api/projects/:id/files/:name',
+    ];
+    const projectArchiveRouteKeys = [
+      'GET /api/projects/:id/archive',
+      'POST /api/projects/:id/archive/batch',
+    ];
 
     expect(routeKeys).toEqual(expect.arrayContaining([
       'GET /api/health',
@@ -75,12 +112,20 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => automationRouteKeys.includes(key))).toEqual(automationRouteKeys);
     expect(routeKeys.filter((key) => velaRouteKeys.includes(key))).toEqual(velaRouteKeys);
     expect(routeKeys.filter((key) => genuiRouteKeys.includes(key))).toEqual(genuiRouteKeys);
+    expect(routeKeys.filter((key) => liveArtifactRouteKeys.includes(key))).toEqual(liveArtifactRouteKeys);
+    expect(routeKeys.filter((key) => deployRouteKeys.includes(key))).toEqual(deployRouteKeys);
+    expect(routeKeys.filter((key) => deploymentCheckRouteKeys.includes(key))).toEqual(deploymentCheckRouteKeys);
+    expect(routeKeys.filter((key) => projectFileStringRouteKeys.includes(key))).toEqual(projectFileStringRouteKeys);
+    expect(routeKeys.filter((key) => projectArchiveRouteKeys.includes(key))).toEqual(projectArchiveRouteKeys);
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);
     expect(routeKeys.indexOf('GET /api/automation-source-packets')).toBeLessThan(
       routeKeys.indexOf('GET /api/skills'),
     );
+    expect(routeKeys.indexOf('USE /artifacts')).toBeLessThan(routeKeys.indexOf('USE /frames'));
+    expect(routeKeys.filter((key) => key === 'USE /artifacts')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'USE /frames')).toHaveLength(1);
     for (const [index, key] of routeKeys.entries()) {
       if (key.includes(' /api/')) {
         expect(index, `${key} should register before SPA fallback`).toBeLessThan(fallbackIndex);
