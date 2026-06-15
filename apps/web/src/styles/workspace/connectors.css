@@ -137,6 +137,23 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* Portalled variant (New Project design-system picker). Rendered into
+   document.body and positioned from the trigger's viewport rect, so it escapes
+   the modal's `.newproj-body { overflow-y: auto }` clip box that truncated the
+   list (issue #4303). `position: fixed` + the inline top/bottom/left/width/
+   max-height drive placement; the list flexes inside the bounded height and
+   scrolls instead of overflowing past the modal edge. z-index clears the New
+   Project modal backdrop (920). */
+.ds-picker-popover-portal {
+  position: fixed;
+  right: auto;
+  z-index: 1000;
+}
+.ds-picker-popover-portal .ds-picker-list {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .ds-picker-head {
   display: flex;
   align-items: center;
