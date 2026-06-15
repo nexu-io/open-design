@@ -2725,6 +2725,17 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 
 const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
 
+// Map our generic catalogue ids onto MiniMax's actual model ids. The
+// `minimax-image-01` slot in src/media/models.ts is shorthand for
+// "their image-01 model"; we substitute the real wire name so MiniMax
+// accepts the request without exposing the user to their internal
+// naming. (Confirmed against
+// https://platform.minimax.io/docs/api-reference/image-generation-t2i
+// which enumerates `image-01` as the sole valid model value.)
+const MINIMAX_IMAGE_MODEL_MAP = {
+  'minimax-image-01': 'image-01',
+} as Record<string, string>;
+
 function minimaxImageAspect(aspect?: string): string {
   // The MiniMax docs only explicitly list "16:9", but the standard
   // MEDIA_ASPECTS vocabulary (1:1 / 16:9 / 9:16 / 4:3 / 3:4) maps
@@ -2754,11 +2765,14 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
     '',
   );
   // Wire-name precedence mirrors renderMinimaxTTS: an explicit alias
-  // from issue #1277 wins, otherwise the catalog id is the wire name.
-  // The `minimax-image-01` catalog slot maps 1:1 to MiniMax's
-  // `image-01` model name; we still send `ctx.wireModel` so user
-  // aliases reach the wire cleanly.
-  const wireModel = ctx.wireModel || ctx.model;
+  // from issue #1277 wins, otherwise the catalog id is the wire
+  // name. The `minimax-image-01` catalog slot maps 1:1 to MiniMax's
+  // `image-01` model name via MINIMAX_IMAGE_MODEL_MAP below; sending
+  // the catalog id verbatim makes MiniMax return `base_resp`
+  // status_code 2013 "unsupported model".
+  const wireModel = ctx.wireModel !== ctx.model
+    ? ctx.wireModel
+    : (MINIMAX_IMAGE_MODEL_MAP[ctx.model] || ctx.model);
   const aspect = minimaxImageAspect(ctx.aspect);
   const prompt = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
 
