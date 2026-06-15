@@ -1,0 +1,40 @@
+{
+  "candidateId": "4b001d14-9a8a-4404-8611-89618c476dbe",
+  "projectId": "ds-name-design-system",
+  "runId": "37c29f62-63cd-4f4d-af13-ffc612e35844",
+  "conversationId": "5c0b4395-b19e-4530-af18-0e88ed25e01a",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md, ui_kits/app/README.md, context/source-context.md after a successful run.",
+    "detectedAt": 1781504283341
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 21913,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 15336,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 2998,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 16242,
+      "copied": true
+    }
+  ]
+}
