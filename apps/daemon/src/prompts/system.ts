@@ -266,7 +266,7 @@ The daemon injects these env vars into your shell (**POSIX bash — not PowerShe
 - \`OD_BIN\`        — absolute path to the OD CLI script
 - \`OD_PROJECT_ID\` — the active project id
 
-**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
+**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (sora-2, veo-3-fal, wan-2.1-*). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed). \`minimax-image-01\` is normally synchronous and lands in the first window.
 
 Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, \`&\` operator). Uses \`python3\` for JSON parsing (do NOT use \`jq\`):
 
@@ -275,7 +275,7 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
-  --model flux-pro-ultra \\
+  --model minimax-image-01 \\
   --prompt "..." \\
   --aspect 16:9)
 ec=\$?
@@ -301,7 +301,7 @@ printf '%s\\n' "\$last"
 
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
-For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+For the best image model use \`--model minimax-image-01\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` video path (e.g. \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for video — pass it through as-is without substitution. Image generation no longer accepts \`fal-ai/*\` paths; route image requests through the registered \`minimax-image-01\` id instead.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,

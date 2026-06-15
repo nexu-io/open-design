@@ -37,6 +37,12 @@
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
+//   * provider 'minimax'    → MiniMax platform: synchronous
+//                              /v1/image_generation for image-01, plus
+//                              /t2a_v2 for speech-02-turbo TTS. Image
+//                              generation moved off fal.ai on 2026-06-15;
+//                              fal's queue renderer now covers video only
+//                              (Veo / Sora / Wan / Seedance / Kling).
 //
 // The fallback stub handlers are gated behind OD_MEDIA_ALLOW_STUBS=1; in
 // release builds they throw StubProviderDisabledError (mapped to HTTP
@@ -342,22 +348,34 @@ export async function generateMedia(args: {
       `unsupported audioKind: ${audioKind}. Allowed: music | speech | sfx.`,
     );
   }
-  // Arbitrary fal.ai model paths (e.g. "fal-ai/flux/dev") bypass the
-  // catalog so users can reach any model on fal without waiting for a
-  // catalog entry. Surface comes from the caller; no cross-surface guard
-  // is needed because the fal renderer reads ctx.surface directly.
+  // Arbitrary fal.ai model paths (e.g. "fal-ai/wan-i2v") bypass the
+  // catalog so users can reach any video model on fal without waiting
+  // for a catalog entry. Image generation moved off fal.ai to MiniMax
+  // (image-01) on 2026-06-15; `fal-ai/*` image paths are therefore
+  // rejected with a pointer to the new wire so users don't silently
+  // route through the removed renderer.
   let def = findMediaModel(model);
   let isFalCustomPath = false;
   let isCatalogBypass = false;
   if (!def) {
     if (/^fal-ai\//.test(model)) {
+      if (surface === 'image') {
+        throw new Error(
+          `fal-ai/* custom paths no longer cover image generation. `
+          + `Pass --model minimax-image-01 (or a registered catalog id) for the image surface.`,
+        );
+      }
       isFalCustomPath = true;
       def = {
         id: model,
         label: model,
         hint: 'Fal.ai',
         provider: 'fal',
-        caps: surface === 'image' ? ['t2i'] : surface === 'video' ? ['t2v'] : [],
+        // `surface === 'image'` was already rejected above, so the
+        // remaining union is 'video' | 'audio'. The fal custom-path
+        // passthrough only covers video; audio paths fall through to
+        // the registered-list error below.
+        caps: surface === 'video' ? ['t2v'] : [],
       };
     } else if (/^aihubmix-/.test(model)) {
       // AIHubMix image/audio models are discovered live from its catalogue
@@ -650,6 +668,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'minimax' && surface === 'audio') {
       const result = await renderMinimaxTTS(ctx, credentials);
       bytes = result.bytes;
@@ -667,11 +690,6 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fishaudio' && surface === 'audio') {
       const result = await renderFishAudioTTS(ctx, credentials);
-      bytes = result.bytes;
-      providerNote = result.providerNote;
-      suggestedExt = result.suggestedExt;
-    } else if (def.provider === 'fal' && surface === 'image') {
-      const result = await renderFalImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -2675,6 +2693,119 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 }
 
 // ---------------------------------------------------------------------------
+// Provider: MiniMax — image-01 text-to-image (synchronous).
+//
+// Docs: https://platform.minimaxi.com — POST /v1/image_generation with a
+// JSON body describing the model + prompt + aspect ratio. The response
+// embeds one or more image URLs under `image_urls` (or, when
+// `response_format: 'base64'`, under `data.image_base64`), wrapped in the
+// same `base_resp` envelope used by the TTS path — an HTTP 200 can still
+// encode a logical failure (`status_code !== 0`).
+//
+// We default to `response_format: 'url'` so the dispatched bytes mirror
+// how the rest of the renderer fleet fetches remote media: a single GET
+// against the returned URL. Switching to base64 is a one-line change
+// (`response_format: 'base64'`) and removes one network hop.
+// ---------------------------------------------------------------------------
+
+function minimaxImageAspect(aspect?: string): string {
+  // MiniMax's image-01 accepts the standard aspect ratios our MEDIA_ASPECTS
+  // vocabulary already speaks. Pass known values through, fall back to
+  // '1:1' (the gateway default) for anything else so a hallucinated
+  // "21:9" string doesn't get rejected upstream.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return '1:1';
+}
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  // Wire-name precedence mirrors renderMinimaxTTS: an explicit alias from
+  // issue #1277 wins, otherwise the catalog id is the wire name. The
+  // `minimax-image-01` catalog slot maps 1:1 to MiniMax's `image-01`
+  // model name; we still send `ctx.wireModel` so user aliases reach the
+  // wire cleanly.
+  const wireModel = ctx.wireModel || ctx.model;
+  const aspect = minimaxImageAspect(ctx.aspect);
+  const prompt = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt,
+    aspect_ratio: aspect,
+    response_format: 'url',
+    n: 1,
+  };
+
+  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // Mirror the TTS base_resp check: HTTP 200 can still encode a logical
+  // failure, so surface the upstream message verbatim.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  // `response_format: 'url'` puts links under `image_urls`; the alternate
+  // `response_format: 'base64'` path is left wired in for parity with
+  // MiniMax's other surfaces, so accept either shape.
+  const imageUrl: string | undefined =
+    (Array.isArray(data?.image_urls) ? data.image_urls[0] : null)
+    ?? (Array.isArray(data?.data?.image_urls) ? data.data.image_urls[0] : null)
+    ?? undefined;
+  if (!imageUrl) {
+    throw new Error(
+      `minimax image response missing image_urls[0]: ${truncate(respText, 200)}`,
+    );
+  }
+  const dlResp = await fetch(imageUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) {
+    throw new Error(`minimax image download ${dlResp.status}`);
+  }
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('minimax image downloaded zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${aspect} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Provider: SenseAudio — senseaudio-tts-1.5 text-to-speech (synchronous).
 //
 // Docs: https://docs.senseaudio.cn — POST /v1/t2a_v2 with a JSON body
@@ -3276,14 +3407,17 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
 }
 
 // ---------------------------------------------------------------------------
-// Provider: Fal.ai — generic queue-based renderer for image + video.
+// Provider: Fal.ai — generic queue-based renderer for video only.
+//
+// Image generation moved to MiniMax (image-01) on 2026-06-15; the fal.ai
+// queue is reserved for video endpoints (Veo / Sora / Wan / Seedance /
+// Kling) which have no equivalent in the MiniMax image catalogue.
 //
 // Queue protocol (raw HTTP, no SDK):
 //   POST https://queue.fal.run/{endpoint}          body: flat model input (no wrapper)
 //   GET  {status_url}?logs=0                       → { status: QUEUED|IN_PROGRESS|COMPLETED|FAILED }
 //   GET  {response_url}                            → result payload
 //
-// Image result shape: { images: [{ url, content_type }] }
 // Video result shape: { video: { url } } or { videos: [{ url }] }
 //
 // Endpoint resolution: FAL_ENDPOINTS maps catalogue IDs to their fal-ai/*
@@ -3292,12 +3426,6 @@ async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig
 // ---------------------------------------------------------------------------
 
 const FAL_ENDPOINTS: Record<string, string> = {
-  'sd-3.5':              'fal-ai/stable-diffusion-v35-large',
-  'flux-pro-ultra':      'fal-ai/flux-pro/v1.1-ultra',
-  'flux-dev-fal':        'fal-ai/flux/dev',
-  'flux-schnell-fal':    'fal-ai/flux/schnell',
-  'ideogram-v3-fal':     'fal-ai/ideogram/v3',
-  'recraft-v3-fal':      'fal-ai/recraft-v3',
   'sora-2':              'fal-ai/sora',
   'sora-2-pro':          'fal-ai/sora',
   'veo-3-fal':           'fal-ai/veo3',
@@ -3306,21 +3434,6 @@ const FAL_ENDPOINTS: Record<string, string> = {
   'wan-2.1-i2v':         'fal-ai/wan-i2v',
   'seedance-1-pro-fal':  'fal-ai/bytedance/seedance-1-pro',
   'kling-2.1-t2v-fal':   'fal-ai/kling-video/v2.1/master/text-to-video',
-};
-
-// Image models that expect `aspect_ratio` (e.g. "16:9") instead of the
-// named `image_size` enum ("landscape_16_9") used by FLUX Dev/Schnell/SD.
-const FAL_IMAGE_USES_ASPECT_RATIO = new Set([
-  'fal-ai/flux-pro/v1.1-ultra',
-  'fal-ai/flux-pro/v1.1',
-]);
-
-const FAL_IMAGE_SIZES: Record<string, string> = {
-  '1:1':  'square_hd',
-  '16:9': 'landscape_16_9',
-  '9:16': 'portrait_16_9',
-  '4:3':  'landscape_4_3',
-  '3:4':  'portrait_4_3',
 };
 
 // Video models that do not accept a duration field at all.
@@ -3435,47 +3548,6 @@ function falQueueBase(baseUrl: string): string {
   // Replace only the exact host to avoid mangling custom base URLs that
   // happen to contain "fal.run" as a substring.
   return baseUrl.replace(/^https:\/\/fal\.run/, 'https://queue.fal.run');
-}
-
-async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
-  if (!credentials.apiKey) {
-    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
-  }
-  const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
-  const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
-  const aspectRatio = ctx.aspect ?? '1:1';
-
-  const input: Record<string, unknown> = {
-    prompt: ctx.prompt || 'A high-quality image.',
-    num_images: 1,
-  };
-  // flux-pro-ultra and similar pro variants expect `aspect_ratio` as a
-  // ratio string; most other fal image models use a named `image_size`.
-  if (FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint)) {
-    input.aspect_ratio = aspectRatio;
-  } else {
-    input.image_size = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
-  }
-  if (ctx.imageRef?.dataUrl) {
-    input.image_url = ctx.imageRef.dataUrl;
-  }
-
-  const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, input, falMaxPollMs(5 * 60 * 1000));
-
-  const imageEntry = Array.isArray(result?.images) ? result.images[0] : null;
-  if (!imageEntry?.url) {
-    throw new Error(`fal image missing images[0].url: ${truncate(JSON.stringify(result), 200)}`);
-  }
-  const dlResp = await fetch(imageEntry.url);
-  if (!dlResp.ok) throw new Error(`fal image download ${dlResp.status}`);
-  const bytes = Buffer.from(await dlResp.arrayBuffer());
-  const sizeLabel = FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint) ? aspectRatio : (FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd');
-
-  return {
-    bytes,
-    providerNote: `fal/${endpoint} · ${sizeLabel} · ${bytes.length} bytes`,
-    suggestedExt: sniffImageExt(bytes),
-  };
 }
 
 async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {

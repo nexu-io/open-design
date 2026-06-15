@@ -245,9 +245,11 @@ the same turn.
 
 ### All slow renders: generate → wait loop
 
-Any model whose generation takes longer than ~25s — including **fal flux-pro-ultra,
-fal Veo, fal Sora, Volcengine i2v, hyperframes-html, and anything else with a
+Any model whose generation takes longer than ~25s — including **fal Veo, fal Sora,
+fal Wan, fal Seedance, Volcengine i2v, hyperframes-html, and anything else with a
 multi-minute pipeline** — will not complete within the initial \`media generate\` call.
+\`minimax-image-01\` is normally synchronous; if a particular call exceeds 25s the
+\`media wait\` handoff still applies.
 
 \`media generate\` dispatches the task daemon-side and polls for up to ~25s. It
 always exits 0 — either with \`{"file":{...}}\` if the render finished within that
@@ -268,7 +270,7 @@ The pattern in your shell tool (uses python3 to parse JSON — do NOT use jq, it
 may not be installed):
 
 \`\`\`bash
-out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model flux-pro-ultra --prompt "…")
+out=\$("$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model minimax-image-01 --prompt "…")
 ec=\$?
 if [ "\$ec" -ne 0 ]; then
   echo "\$out" >&2; exit "\$ec"
@@ -299,8 +301,9 @@ they arrive, so the user sees live status in chat throughout the loop instead of
 waiting silently for a single multi-minute call.
 
 **Always write your shell invocation as the full generate+wait loop above**, even
-for image models. \`flux-pro-ultra\` routinely takes 60–180s; \`sora-2\` and
-\`veo-3-fal\` take longer. In the wait loop, exit 2 means "keep polling, not an error."
+for image models. \`sora-2\` and \`veo-3-fal\` routinely take several minutes; the
+\`media wait\` handoff also covers any \`minimax-image-01\` run that exceeds 25s.
+In the wait loop, exit 2 means "keep polling, not an error."
 
 A note on \`fetch failed\` to \`127.0.0.1\`. The OD daemon runs on
 loopback in the same machine that spawned you, so it is essentially
@@ -336,13 +339,14 @@ not start with \`fal-ai/\`, surface a warning in your reply and either
 metadata's default model and explain the substitution. Do not silently
 fall back.
 
-Exception — **fal-ai/\* custom paths**: any model ID that begins with
-\`fal-ai/\` (e.g. \`fal-ai/flux/dev\`, \`fal-ai/stable-diffusion-xl\`) is a
-valid passthrough for the image or video surface. Pass it to
+Exception — **fal-ai/\* custom paths** (video only): any model ID that
+begins with \`fal-ai/\` (e.g. \`fal-ai/wan-i2v\`, \`fal-ai/sora-2\`) is a
+valid passthrough for the **video** surface. Pass it to
 \`"$OD_NODE_BIN" "$OD_BIN" media generate\` as-is via \`--model <id>\`;
 the daemon routes it directly to the fal queue without a catalog entry.
 Do **not** warn the user or substitute the default when a \`fal-ai/\`
-path is given.
+video path is given. Image generation moved off fal.ai on 2026-06-15;
+\`fal-ai/*\` image paths are rejected with a pointer to \`minimax-image-01\`.
 
 ### Workflow rules
 
@@ -373,7 +377,8 @@ path is given.
    Default model selection (use these when \`imageModel\`/\`videoModel\` is unknown
    or the user asks for "best"):
    - **Image, best quality (user says "best", "highest quality", "most realistic")**:
-     use \`flux-pro-ultra\` — but tell the user it takes 60–180s
+     use \`minimax-image-01\` — synchronous in most cases, so the wait loop is
+     usually a no-op
    - **Image, default / no preference stated**: use the project metadata's
      \`imageModel\` if set; otherwise use \`gpt-image-2\`
    - **Video, best quality**: use project metadata \`videoModel\` if set; otherwise
