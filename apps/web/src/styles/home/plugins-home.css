@@ -539,6 +539,23 @@
 .plugins-home__card--gallery:hover .plugins-home__html-iframe {
   top: -404px;
 }
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport. The tall
+   scroll-preview viewport above would letterbox that stage, leaving a dark
+   --stage-bg band above/below the slide. Give deck tiles a 16:9 frame and let
+   the iframe fill it natively (no transform), so the stage fits edge-to-edge
+   with no band, and skip the scroll-pan (there is nothing below to reveal). */
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-frame {
+  flex: none;
+  aspect-ratio: 16 / 9;
+}
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
+.plugins-home__card--gallery[data-od-mode="deck"]:hover .plugins-home__html-iframe {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  transition: none;
+}
 
 /* ---------- Hero preview surface ---------- */
 .plugins-home__preview {

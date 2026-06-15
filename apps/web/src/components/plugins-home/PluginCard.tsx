@@ -98,6 +98,10 @@ export function PluginCard({
     // iframe. The whole tile opens the detail surface; the ↗ link opens
     // the real page in a new tab.
     const previewSrc = preview.kind === 'html' ? preview.src : null;
+    // Decks render a fixed 16:9 stage; tag them so the gallery preview uses a
+    // 16:9 frame instead of the tall scroll-preview viewport (which would
+    // letterbox the stage and show a dark band above/below the slide).
+    const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
     return (
       <article
         role="listitem"
@@ -112,6 +116,7 @@ export function PluginCard({
           .join(' ')}
         data-plugin-id={record.id}
         data-preview-kind={preview.kind}
+        {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
         {...(isFeatured ? { 'data-featured': 'true' } : {})}
         // Mouse convenience: clicking anywhere on the tile opens details.
         // Keyboard/AT users get a real, announced control via the title
