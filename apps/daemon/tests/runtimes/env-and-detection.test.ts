@@ -1330,3 +1330,35 @@ test('spawnEnvForAgent does not mutate the input env', () => {
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
 });
+
+test('spawnEnvForAgent applies OpenCode env hardening to mimo (its fork)', () => {
+  const opencodeEnv = spawnEnvForAgent('opencode', {
+    OPENCODE_PID: '1234',
+    OPENCODE_RUN_ID: 'run-1',
+    OPENCODE_SERVER_PASSWORD: 'secret',
+    PATH: '/usr/bin',
+  });
+  assert.equal('OPENCODE_PID' in opencodeEnv, false, 'opencode: strips OPENCODE_PID');
+  assert.equal('OPENCODE_RUN_ID' in opencodeEnv, false, 'opencode: strips OPENCODE_RUN_ID');
+  assert.equal('OPENCODE_SERVER_PASSWORD' in opencodeEnv, false, 'opencode: strips OPENCODE_SERVER_PASSWORD');
+  assert.equal(opencodeEnv.OPENCODE_DISABLE_PROJECT_CONFIG, 'true', 'opencode: forces DISABLE_PROJECT_CONFIG');
+
+  const mimoEnv = spawnEnvForAgent('mimo', {
+    OPENCODE_PID: '5678',
+    OPENCODE_RUN_ID: 'run-2',
+    OPENCODE_SERVER_PASSWORD: 'secret2',
+    PATH: '/usr/bin',
+  });
+  assert.equal('OPENCODE_PID' in mimoEnv, false, 'mimo: strips OPENCODE_PID');
+  assert.equal('OPENCODE_RUN_ID' in mimoEnv, false, 'mimo: strips OPENCODE_RUN_ID');
+  assert.equal('OPENCODE_SERVER_PASSWORD' in mimoEnv, false, 'mimo: strips OPENCODE_SERVER_PASSWORD');
+  assert.equal(mimoEnv.OPENCODE_DISABLE_PROJECT_CONFIG, 'true', 'mimo: forces DISABLE_PROJECT_CONFIG');
+});
+
+test('spawnEnvForAgent preserves OPENCODE_DISABLE_PROJECT_CONFIG when mimo already set it', () => {
+  const env = spawnEnvForAgent('mimo', {
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'false',
+    PATH: '/usr/bin',
+  });
+  assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, 'false');
+});

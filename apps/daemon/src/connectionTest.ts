@@ -2323,38 +2323,56 @@ async function testAgentConnectionInternal(
     ]);
 
     if (winner.kind === 'text') {
-      // Early-exit optimisation: receiving assistant text proves the CLI
-      // started, the LLM provider connected, and the model started
-      // responding — that's all the connection test needs.  Killing the
-      // child here shaves off the remaining LLM generation time (typically
-      // 5–8 s for a trivial "ok" prompt) and the natural-exit overhead.
-      if (child && !childClosed) {
-        child.kill('SIGTERM');
+      if (input.agentId === 'opencode' || input.agentId === 'mimo') {
+        // Early-exit optimisation: receiving assistant text proves the CLI
+        // started, the LLM provider connected, and the model started
+        // responding — that's all the connection test needs.  Killing the
+        // child here shaves off the remaining LLM generation time (typically
+        // 5–8 s for a trivial "ok" prompt) and the natural-exit overhead.
+        if (child && !childClosed) {
+          child.kill('SIGTERM');
+        }
+        // We already have the text sample — short-circuit to success
+        // without routing through resultFromChildExit, which would
+        // misinterpret the forced SIGTERM exit as a failure.
+        const latencyMs = Date.now() - start;
+        const rawSample = truncateSample(winner.text);
+        const sample = redactSecrets(rawSample);
+        if (!isSmokeOkReply(winner.text)) {
+          console.warn(
+            `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
+          );
+        }
+        console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+        return {
+          ok: true,
+          kind: 'success',
+          latencyMs,
+          model,
+          agentName: def.name,
+          sample,
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: 0,
+          }),
+        };
       }
-      // We already have the text sample — short-circuit to success
-      // without routing through resultFromChildExit, which would
-      // misinterpret the forced SIGTERM exit as a failure.
-      const latencyMs = Date.now() - start;
-      const rawSample = truncateSample(winner.text);
-      const sample = redactSecrets(rawSample);
-      if (!isSmokeOkReply(winner.text)) {
-        console.warn(
-          `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
-        );
+      // Non-OpenCode agents: wait for stream error, child exit, or
+      // cancellation before declaring success, so a CLI that emits one
+      // text chunk and then fails is still caught as a failure rather
+      // than producing a false-positive `ok: true`.
+      const completion = await Promise.race([
+        streamError,
+        childExit,
+        cancellationPromise,
+      ]);
+      if (completion.kind === 'streamError') {
+        return resultFromStreamError(completion.error);
       }
-      console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
-      return {
-        ok: true,
-        kind: 'success',
-        latencyMs,
-        model,
-        agentName: def.name,
-        sample,
-        diagnostics: buildDiagnostics({
-          phase: 'connection_smoke_test',
-          exitCode: 0,
-        }),
-      };
+      if (completion.kind === 'timeout' || completion.kind === 'aborted') {
+        return resultFromCancellation(completion.kind);
+      }
+      return await resultFromChildExit(completion);
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);

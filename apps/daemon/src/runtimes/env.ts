@@ -146,7 +146,7 @@ export function spawnEnvForAgent(
     ]);
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
-  if (agentId === 'opencode') {
+  if (agentId === 'opencode' || agentId === 'mimo') {
     stripKeysCaseInsensitive(env, [
       'OPENCODE',
       'OPENCODE_PID',
