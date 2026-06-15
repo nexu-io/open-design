@@ -5205,9 +5205,10 @@ function HtmlViewer({
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
     if (!source) return false;
-    return /class\s*=\s*['"][^'"]*\bslide\b/i.test(source);
+    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
+  const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
   const livePreviewSource = inlinedSource ?? source;
   // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
   // source rewrite during edit (1.5s debounced set-style patches) stays
@@ -8023,7 +8024,7 @@ function HtmlViewer({
               />
             </>
           ) : null}
-          {showPreviewToolbarControls && effectiveDeck ? (
+          {showPreviewToolbarControls && showDeckNavigation ? (
             <span
               className="deck-nav"
               role="group"

@@ -786,6 +786,38 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
+  it('does not treat slide-prefixed helper classes as deck slides', () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml={
+          '<html><body><div class="slide-meta">1 / 12</div><div class="slide-number">1</div></body></html>'
+        }
+      />,
+    );
+
+    expect(markup).toContain('data-testid="artifact-preview-frame"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
+    expect(markup).not.toContain('class="deck-nav"');
+  });
+
   it('reloads a URL-loaded HTML preview with a new cache key without replacing the iframe', () => {
     const file = baseFile({
       name: 'page.html',
