@@ -624,7 +624,7 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
-                hideRecoveredHtmlFallback={message.agentId === "grok-build" && !streaming}
+                hideRecoveredHtmlFallback={(message.agentId === "grok-build" || message.agentId === "claude") && !streaming}
                 assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}

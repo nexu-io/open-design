@@ -305,6 +305,18 @@ printf '%s\\n' "\$last"
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
+const CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE = `
+
+---
+
+## Claude Code filesystem handoff
+
+You are running as Claude Code with filesystem tools. When you write or edit an HTML file in the project folder with Write/Edit, that file is already visible in the user's file panel and preview.
+
+- Do not output the full same HTML again in a \`<artifact type="text/html">...</artifact>\` block after writing it to disk.
+- After the final self-check, briefly name the written file and summarize the result instead.
+- Only emit a full HTML \`<artifact>\` block if you could not write the project file through the filesystem tools.`;
+
 export function buildExamplePromptOverride(
   title?: string | null,
   brief?: Record<string, string> | null,
@@ -823,6 +835,10 @@ export function composeSystemPrompt({
     parts.push(
       "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an Open Design instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
     );
+  }
+
+  if (agentId === 'claude') {
+    parts.push(CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as

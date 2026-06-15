@@ -13761,7 +13761,7 @@ export async function startServer({
         try {
           applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
-      });
+      }, { suppressHtmlArtifactsAfterFileWrite: def.id === 'claude' });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {

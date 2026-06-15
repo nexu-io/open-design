@@ -2785,12 +2785,18 @@ export function ProjectView({
                   ? parsedArtifact
                   : artifactFromStandaloneHtml(replayedContent);
                 if (artifactToPersist?.html) {
+                  const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
                   recoveredExistingArtifact = findExistingArtifactProjectFile(
                     artifactToPersist,
                     nextFiles,
                     { minMtime: runStartedAt },
-                  );
+                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
+                    artifactHtml: artifactToPersist.html,
+                    producedFiles: producedBeforeFallback,
+                    readProjectHtml,
+                    allowAnyHtmlWrite: message.agentId === 'claude',
+                  });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
@@ -2925,6 +2931,7 @@ export function ProjectView({
     clearActiveRunRefs,
     clearCurrentRunStreamingMarker,
     refreshProjectFiles,
+    readProjectHtml,
     persistArtifact,
     requestOpenFile,
     onProjectsRefresh,
@@ -3529,8 +3536,20 @@ export function ProjectView({
               ? parsedArtifact
               : artifactFromStandaloneHtml(finalText);
             if (artifactToPersist?.html) {
-              await persistArtifact(artifactToPersist, nextFiles, finalText);
-              nextFiles = await refreshProjectFiles();
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
+                artifactHtml: artifactToPersist.html,
+                producedFiles: producedBeforeFallback,
+                readProjectHtml,
+                allowAnyHtmlWrite: assistantAgentId === 'claude',
+              });
+              if (sameTurnHtmlWrite) {
+                savedArtifactRef.current = sameTurnHtmlWrite.name;
+                requestOpenFile(sameTurnHtmlWrite.name);
+              } else {
+                await persistArtifact(artifactToPersist, nextFiles, finalText);
+                nextFiles = await refreshProjectFiles();
+              }
             }
             const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
@@ -3834,6 +3853,7 @@ export function ProjectView({
       projectFiles,
       refreshProjectFiles,
       refreshLiveArtifacts,
+      readProjectHtml,
       requestOpenFile,
       persistMessage,
       persistMessageById,
@@ -6304,6 +6324,42 @@ export function mergeRecoveredArtifact(
   if (!recovered) return [...diff];
   if (diff.some((f) => f.name === recovered.name)) return [...diff];
   return [...diff, recovered];
+}
+
+export async function findSameTurnHtmlWriteForRecoveredArtifact({
+  artifactHtml,
+  producedFiles,
+  readProjectHtml,
+  allowAnyHtmlWrite = false,
+}: {
+  artifactHtml: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectHtml: (name: string) => Promise<string | null>;
+  allowAnyHtmlWrite?: boolean;
+}): Promise<ProjectFile | null> {
+  const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
+  if (!recovered) return null;
+  const candidates = producedFiles.filter(isHtmlProjectFile);
+  for (const file of candidates) {
+    const text = await readProjectHtml(file.name);
+    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
+      return file;
+    }
+  }
+  if (allowAnyHtmlWrite) return candidates[0] ?? null;
+  return null;
+}
+
+function isHtmlProjectFile(file: ProjectFile): boolean {
+  const name = (file.path || file.name).toLowerCase();
+  return file.kind === 'html' || /\.(?:html?|xhtml)$/u.test(name);
+}
+
+function normalizeHtmlForRecoveredArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
 }
 
 export function clearStreamingConversationMarker(
