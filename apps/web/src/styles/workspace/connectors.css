@@ -137,6 +137,26 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* Portaled variant — rendered into `document.body` by `DsPickerPopover` so the
+   New Project modal pickers escape the `.newproj-body` scroll clip and the
+   per-`.newproj-section` stacking contexts. `position`, `left/top/bottom`,
+   `width` and `max-height` are supplied by the trigger-anchored inline style;
+   the z-index must clear the modal backdrop (`new-project-modal.css`, z 920). */
+.ds-picker-popover--portal {
+  position: fixed;
+  z-index: 1000;
+}
+/* The popover height is viewport-bounded by the inline `max-height`, so the
+   inner list fills the remaining space and scrolls rather than relying on its
+   own fixed 320px cap (which could overflow a short popover near the edge). */
+.ds-picker-popover--portal .ds-picker-head {
+  flex: 0 0 auto;
+}
+.ds-picker-popover--portal .ds-picker-list {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .ds-picker-head {
   display: flex;
   align-items: center;

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
+import { DsPickerPopover } from './DsPickerPopover';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -1132,7 +1133,7 @@ function PlatformPicker({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = useId();
 
   function togglePlatform(next: NewProjectPlatform) {
@@ -1143,39 +1144,16 @@ function PlatformPicker({
     onChange(updated.length > 0 ? updated : ['responsive']);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    // Defer listener registration by a tick so the very click that opened
-    // the popover doesn't get re-interpreted as an outside-click on the
-    // mousedown that follows in the same event cycle.
-    const tid = window.setTimeout(() => {
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      window.clearTimeout(tid);
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   const primary = DESIGN_PLATFORMS.find((o) => o.value === value[0]) ?? null;
   const extraCount = Math.max(0, value.length - 1);
 
   return (
     <div
       className={`newproj-section ds-picker platform-picker${open ? ' open' : ''}`}
-      ref={wrapRef}
     >
       <label className="newproj-label">Target platforms</label>
       <button
+        ref={triggerRef}
         type="button"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
         onClick={() => setOpen((v) => !v)}
@@ -1198,16 +1176,17 @@ function PlatformPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div
-          className="ds-picker-popover"
-          id={listboxId}
-          role="listbox"
-          aria-label="Target platforms"
-          aria-multiselectable="true"
-        >
-          <div className="ds-picker-list">
-            {DESIGN_PLATFORMS.map((option) => {
+      <DsPickerPopover
+        open={open}
+        triggerRef={triggerRef}
+        onRequestClose={() => setOpen(false)}
+        id={listboxId}
+        role="listbox"
+        ariaLabel="Target platforms"
+        ariaMultiselectable
+      >
+        <div className="ds-picker-list">
+          {DESIGN_PLATFORMS.map((option) => {
               const active = value.includes(option.value);
               return (
                 <button
@@ -1231,9 +1210,8 @@ function PlatformPicker({
                 </button>
               );
             })}
-          </div>
         </div>
-      ) : null}
+      </DsPickerPopover>
     </div>
   );
 }
@@ -1667,7 +1645,7 @@ function PromptTemplatePicker({
   // soon as a pick succeeds or the user picks a different template.
   const [lastFailedPick, setLastFailedPick] =
     useState<PromptTemplateSummary | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const surfaceScoped = useMemo(
@@ -1692,26 +1670,6 @@ function PromptTemplatePicker({
     if (!open) return;
     const id = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(id);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    const id = window.setTimeout(() => {
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
   }, [open]);
 
   async function pickTemplate(summary: PromptTemplateSummary) {
@@ -1754,9 +1712,10 @@ function PromptTemplatePicker({
     : t('newproj.promptTemplateNoneSub');
 
   return (
-    <div className="newproj-section ds-picker prompt-template-picker" ref={wrapRef}>
+    <div className="newproj-section ds-picker prompt-template-picker">
       <label className="newproj-label">{t('newproj.promptTemplateLabel')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="prompt-template-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${value ? '' : ' empty'}`}
@@ -1776,8 +1735,12 @@ function PromptTemplatePicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      <DsPickerPopover
+        open={open}
+        triggerRef={triggerRef}
+        onRequestClose={() => setOpen(false)}
+        role="listbox"
+      >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -1848,8 +1811,7 @@ function PromptTemplatePicker({
               })
             )}
           </div>
-        </div>
-      ) : null}
+      </DsPickerPopover>
       {error ? (
         <div
           className="prompt-template-error"
@@ -1998,7 +1960,7 @@ function DesignSystemPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const byId = useMemo(() => {
@@ -2046,29 +2008,6 @@ function DesignSystemPicker({
     return () => window.clearTimeout(t);
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    // Defer listener registration by a tick so the very click that opened
-    // the popover doesn't get re-interpreted as an outside-click on the
-    // mousedown that follows in the same event cycle (StrictMode also
-    // double-invokes the effect, which can race the same event).
-    const t = window.setTimeout(() => {
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      window.clearTimeout(t);
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   function toggle(id: string) {
     if (multi) {
@@ -2109,10 +2048,10 @@ function DesignSystemPicker({
     <div
       className={`newproj-section ds-picker${open ? ' open' : ''}`}
       data-testid="design-system-picker"
-      ref={wrapRef}
     >
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2143,8 +2082,12 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      <DsPickerPopover
+        open={open}
+        triggerRef={triggerRef}
+        onRequestClose={() => setOpen(false)}
+        role="listbox"
+      >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2236,8 +2179,7 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
-      ) : null}
+      </DsPickerPopover>
     </div>
   );
 }
@@ -2502,7 +2444,7 @@ function MediaModelCards({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   // Group models by provider once. The trigger row needs the same provider
@@ -2588,25 +2530,6 @@ function MediaModelCards({
     return () => window.clearTimeout(id);
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: MouseEvent) {
-      if (wrapRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    const id = window.setTimeout(() => {
-      document.addEventListener('mousedown', onPointer);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   function pick(modelId: string) {
     onChange(modelId);
@@ -2626,9 +2549,10 @@ function MediaModelCards({
     : t('newproj.modelMissingSub');
 
   return (
-    <div className="newproj-section ds-picker model-picker" ref={wrapRef}>
+    <div className="newproj-section ds-picker model-picker">
       <label className="newproj-label">{label}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="model-picker-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${selected ? '' : ' empty'}`}
@@ -2647,8 +2571,12 @@ function MediaModelCards({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      <DsPickerPopover
+        open={open}
+        triggerRef={triggerRef}
+        onRequestClose={() => setOpen(false)}
+        role="listbox"
+      >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2705,8 +2633,7 @@ function MediaModelCards({
               ))
             )}
           </div>
-        </div>
-      ) : null}
+      </DsPickerPopover>
     </div>
   );
 }
