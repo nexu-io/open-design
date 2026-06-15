@@ -417,15 +417,30 @@ when a natural French equivalent exists:
 - `Skill` stays `Skill` when it names the Open Design/Claude skill format.
   Translate only generic prose such as "ability" or "capability" as
   `capacité`.
+- `fork` stays `fork` when it names the Open Design conversation-fork feature
+  or related product/CLI wording. Translate Git branches as `branche`, but do
+  not rewrite the product action itself as a branch.
 - `Design System` may stay `Design System` when referring to the product
   registry/object name. In explanatory prose, `système de design` is also
   acceptable when it improves readability.
+- `Craft` stays `Craft` when it refers to the repository's `craft/` extension
+  point or the matching UI label. Do not translate that feature name as a
+  generic polish/finishing pass.
+- `SOTA Harness` and `Harness` stay in English when they name the Open Design
+  product/runtime harness concept or matching marketing label.
+- Motion-design jargon such as `motion`, `timing`, `easing`, `fallback`, and
+  `timeline` may stay in English for compact UI labels or agent-workflow
+  prompts where those terms are the design-domain vocabulary.
 - `runtime` stays `runtime` as a noun. Labels like "execution mode" can still
   use `mode d’exécution`.
 - `source` can stay `source` for provenance labels, but translate ordinary
   "data source" as `source de données`.
 - Do not translate command output or examples that users should see exactly in
   their terminal.
+- Do not translate copy-paste-safe parser tokens or operators inside UI input
+  hints. Keep literals such as `kind`, `limit`, `scale`, `selector`,
+  `columns`, `maxWidth`, and `gap` exactly when users may paste them into a
+  field.
 
 ### zh-CN ↔ zh-TW Glossary
 

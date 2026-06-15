@@ -43,6 +43,11 @@ export type RuntimeContext = {
   // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
   // so unit assertions against buildArgs do not touch the real home dir.
   antigravitySettingsPath?: string;
+  // Daemon-owned path to a temp file containing the composed prompt.
+  // Adapters with `promptViaFile: true` read this instead of receiving
+  // the prompt via argv or stdin. The daemon creates the file before
+  // buildArgs and removes it after the child exits.
+  promptFilePath?: string;
   // Resume-capable adapters (resumesSessionViaCli) read these to decide
   // whether to continue the CLI's own session. `resumeSessionId` is the
   // stored id for this (conversation, agent) when a prior session exists;
@@ -103,6 +108,11 @@ export type RuntimeAgentDef = {
   versionProbeTimeoutMs?: number;
   helpArgs?: string[];
   capabilityFlags?: Record<string, string>;
+  // Adapter reads the composed prompt from a daemon-created temp file.
+  // This is intentionally opt-in: stdin-capable adapters keep using
+  // `promptViaStdin`, and argv-only adapters keep their argv budget guard
+  // unless their CLI exposes an explicit prompt-file flag.
+  promptViaFile?: boolean;
   promptViaStdin?: boolean;
   // Format for the user prompt fed via stdin. Default is plain text (the
   // entire prompt buffer goes in raw, then stdin is closed). When set to
@@ -174,6 +184,14 @@ export type RuntimeAgentDef = {
   // present in the daemon's `process.env`; Settings-UI per-agent env
   // values only reach the spawned child and are NOT consulted here.
   defaultModelEnvVar?: string;
+  // Agent-recommended override for the chat-run inactivity watchdog.
+  // The watchdog observes child stdout/stderr/SSE activity, not real
+  // CPU progress, so agents whose CLIs go silent for long stretches
+  // during legitimate work (e.g. Copilot's deck-generation thinking
+  // phase from #2467) need a longer ceiling than the 10-minute global
+  // default. Operators can still override per-process via
+  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
+  inactivityTimeoutMs?: number;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous
@@ -186,6 +204,13 @@ export type RuntimeAgentDef = {
     args: string[];
     timeoutMs?: number;
   };
+  // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
+  // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,
+  // Kilo, Kiro, Vibe, and Devin.  `'map'` emits `{"KEY": "val"}` — used
+  // by reasonix ≥ 1.0 (Go) whose ACP implementation expects the standard
+  // MCP `map[string]string` shape. Leave `undefined` (defaults to 'array')
+  // for all other agents — the existing behavior is unchanged.
+  acpMcpEnvFormat?: 'array' | 'map';
 };
 
 export type DetectedAgent = Omit<
@@ -200,6 +225,13 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
+  // `inactivityTimeoutMs` is a spawn-time-only hint consumed by the
+  // chat-run watchdog. It is not part of the public `/api/agents`
+  // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
+  // omitting it here keeps the daemon response aligned with that
+  // shared web/CLI shape — agents pick it up by reading the runtime
+  // def directly, the registry payload stays unchanged.
+  | 'inactivityTimeoutMs'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];

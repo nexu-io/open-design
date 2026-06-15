@@ -8,11 +8,14 @@ import type {
   // page_view / surface_view
   PageViewProps,
   HelpPopoverSurfaceViewProps,
+  SettingsPopoverSurfaceViewProps,
   NewProjectModalSurfaceViewProps,
   PluginReplacementModalSurfaceViewProps,
   PluginDetailModalSurfaceViewProps,
+  PluginImportModalSurfaceViewProps,
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
+  QuestionsFormSurfaceViewProps,
   // ui_click
   HomeNavClickProps,
   HelpPopoverClickProps,
@@ -37,13 +40,17 @@ import type {
   PluginsTemplatesDropdownClickProps,
   PluginsAvailableTabClickProps,
   PluginsSourcesTabClickProps,
+  PluginImportModalClickProps,
   PluginDetailClickProps,
   PluginLoopClickProps,
   CommunityGalleryClickProps,
+  PluginDetailModalClickProps,
+  PluginDetailModalSharePopoverClickProps,
   DesignSystemsTopClickProps,
   DesignSystemsTemplateCardClickProps,
   DesignSystemsTemplatesModalClickProps,
   DesignSystemsTemplatesModalSharePopoverClickProps,
+  DesignSystemsCreateClickProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -54,13 +61,19 @@ import type {
   ComposerBarClickProps,
   DesignToolboxClickProps,
   NextStepActionClickProps,
+  QuestionsFormClickProps,
   RunFailedToastClickProps,
+  AmrAuthResultProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
+  ChatPanelMessageQueueClickProps,
   FileManagerClickProps,
   TabLauncherClickProps,
+  ReferenceBoardClickProps,
+  ReferenceBoardSurfaceViewProps,
   ArtifactToolbarClickProps,
+  DrawToolbarClickProps,
   TweaksPopoverClickProps,
   CommentPopoverClickProps,
   ArtifactHeaderClickProps,
@@ -85,9 +98,12 @@ import type {
   SettingsNotificationsClickProps,
   SettingsPetsClickProps,
   SettingsPrivacyClickProps,
+  SettingsDesignReviewClickProps,
+  SettingsExternalMcpClickProps,
   // Result events
   ProjectCreateResultProps,
   PluginReplacementResultProps,
+  PluginImportResultProps,
   RunCreatedProps,
   RunFinishedProps,
   FileUploadResultProps,
@@ -144,6 +160,13 @@ export function trackHelpPopoverSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackSettingsPopoverSurfaceView(
+  track: Track,
+  props: SettingsPopoverSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackNewProjectModalSurfaceView(
   track: Track,
   props: NewProjectModalSurfaceViewProps,
@@ -172,6 +195,13 @@ export function trackPluginDetailModalSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackPluginImportModalSurfaceView(
+  track: Track,
+  props: PluginImportModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackAssistantFeedbackReasonPanelSurfaceView(
   track: Track,
   props: AssistantFeedbackReasonPanelSurfaceViewProps,
@@ -182,6 +212,13 @@ export function trackAssistantFeedbackReasonPanelSurfaceView(
 export function trackRunFailedToastSurfaceView(
   track: Track,
   props: RunFailedToastSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackQuestionsFormSurfaceView(
+  track: Track,
+  props: QuestionsFormSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -198,6 +235,17 @@ export function trackAmrEntryClick(
   props: AmrEntryClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+// Fired exactly once per AMR sign-in attempt when the login poll settles.
+// Call sites go through analytics/amr-auth.ts, which owns the
+// begin/resolve dedupe — do not call this wrapper directly from
+// components, or concurrent pollers will double-report one attempt.
+export function trackAmrAuthResult(
+  track: Track,
+  props: AmrAuthResultProps,
+): void {
+  send(track, 'amr_auth_result', props);
 }
 
 // ---- ui_click (home) -----------------------------------------------------
@@ -368,6 +416,13 @@ export function trackPluginsSourcesTabClick(
   send(track, 'ui_click', props);
 }
 
+export function trackPluginImportModalClick(
+  track: Track,
+  props: PluginImportModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackPluginDetailClick(
   track: Track,
   props: PluginDetailClickProps,
@@ -385,6 +440,20 @@ export function trackPluginLoopClick(
 export function trackCommunityGalleryClick(
   track: Track,
   props: CommunityGalleryClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackPluginDetailModalClick(
+  track: Track,
+  props: PluginDetailModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackPluginDetailModalSharePopoverClick(
+  track: Track,
+  props: PluginDetailModalSharePopoverClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -413,6 +482,13 @@ export function trackDesignSystemsTemplatesModalClick(
 export function trackDesignSystemsTemplatesModalSharePopoverClick(
   track: Track,
   props: DesignSystemsTemplatesModalSharePopoverClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsCreateClick(
+  track: Track,
+  props: DesignSystemsCreateClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -489,9 +565,23 @@ export function trackNextStepActionClick(
   send(track, 'ui_click', props);
 }
 
+export function trackQuestionsFormClick(
+  track: Track,
+  props: QuestionsFormClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackChatPanelResourcesPopoverClick(
   track: Track,
   props: ChatPanelResourcesPopoverClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackMessageQueueClick(
+  track: Track,
+  props: ChatPanelMessageQueueClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -512,9 +602,30 @@ export function trackTabLauncherClick(
   send(track, 'ui_click', props);
 }
 
+export function trackReferenceBoardSurfaceView(
+  track: Track,
+  props: ReferenceBoardSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackReferenceBoardClick(
+  track: Track,
+  props: ReferenceBoardClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackArtifactToolbarClick(
   track: Track,
   props: ArtifactToolbarClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDrawToolbarClick(
+  track: Track,
+  props: DrawToolbarClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -665,6 +776,20 @@ export function trackSettingsPrivacyClick(
   send(track, 'ui_click', props);
 }
 
+export function trackSettingsDesignReviewClick(
+  track: Track,
+  props: SettingsDesignReviewClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackSettingsExternalMcpClick(
+  track: Track,
+  props: SettingsExternalMcpClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 // ---- Result events -------------------------------------------------------
 
 export function trackProjectCreateResult(
@@ -681,6 +806,14 @@ export function trackPluginReplacementResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'plugin_replacement_result', props, options);
+}
+
+export function trackPluginImportResult(
+  track: Track,
+  props: PluginImportResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'plugin_import_result', props, options);
 }
 
 export function trackRunCreated(

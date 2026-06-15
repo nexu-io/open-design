@@ -549,7 +549,9 @@ These were originally spec §18 open questions; they are now resolved and propag
 v1 ships when **all** of the following pass on a clean Linux CI container without electron. Each row links to the daemon / e2e test path that asserts it.
 
 - [x] **e2e-1 cold install** — `od plugin install ./fixtures/sample-plugin` →
-  - `<OD_DATA_DIR>/plugins/sample-plugin/` exists.
+  - daemon-managed plugin storage contains the sample plugin. This plan MUST
+    NOT define daemon data paths; read root `AGENTS.md` → **Daemon data
+    directory contract** before documenting storage.
   - `installed_plugins` has one row with `trust='restricted'`, `source_kind='local'`.
   - Test path: `apps/daemon/tests/plugins-e2e-fixture.test.ts`
 - [x] **e2e-2 pure apply** — two consecutive applies share `manifestSourceDigest`; the project cwd byte size is unchanged; `applied_plugin_snapshots` is not written by `applyPlugin()` itself (the resolver is the writer).

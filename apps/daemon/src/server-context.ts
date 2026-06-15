@@ -5,6 +5,7 @@ import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
+  getPublicBaseUrl?: (...args: any[]) => string;
   isLocalSameOrigin: (...args: any[]) => boolean;
   requireLocalDaemonRequest: (...args: any[]) => any;
   resolvedPortRef: { current: number };
@@ -59,7 +60,16 @@ export interface ProjectPreviewScopeDeps {
 }
 
 export interface TelemetryDeps {
-  reportFinalizedMessage: (saved: any, body?: any) => void;
+  reportFinalizedMessage: (
+    saved: any,
+    body?: any,
+    options?: {
+      analyticsContext?: any;
+      projectId?: string;
+      conversationId?: string;
+      reportTrigger?: 'final_message' | 'terminal_fallback';
+    },
+  ) => void;
   /**
    * Best-effort Langfuse score emission for assistant-turn user ratings.
    * Returns the categorical outcome so the API surface in chat-routes can

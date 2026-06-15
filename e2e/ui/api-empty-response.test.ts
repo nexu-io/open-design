@@ -49,7 +49,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P0] API empty stream shows No output instead of Done', async ({ page }) => {
+test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
   await page.route('**/api/proxy/openai/stream', async (route) => {
     await route.fulfill({
       status: 200,

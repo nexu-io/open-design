@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Input } from '@open-design/components';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  Button,
+  Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '@open-design/components';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import { readDefaultSketchToolColor } from './sketch-colors';
@@ -36,6 +44,7 @@ export function SketchEditor({
   fileName,
 }: Props) {
   const t = useT();
+  const textModalTitleId = useId();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<Tool>('pen');
@@ -282,11 +291,17 @@ export function SketchEditor({
         />
       </div>
       {textModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true">
-            <div className="modal-head">
-              <h2>{t('sketch.textModalTitle')}</h2>
-            </div>
+        <Dialog
+          onClose={cancelTextModal}
+          closeOnBackdrop={false}
+          closeOnEscape
+          layout="sectioned"
+          ariaLabelledBy={textModalTitleId}
+        >
+          <DialogHeader>
+            <DialogTitle id={textModalTitleId}>{t('sketch.textModalTitle')}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
             <label>
               <span>{t('sketch.textPrompt')}</span>
               <Input
@@ -298,27 +313,24 @@ export function SketchEditor({
                   if (e.key === 'Enter' && textModalValue.trim()) {
                     e.preventDefault();
                     submitTextModal();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelTextModal();
                   }
                 }}
               />
             </label>
-            <div className="modal-foot">
-              <Button variant="ghost" onClick={cancelTextModal}>
-                {t('common.cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={!textModalValue.trim()}
-                onClick={submitTextModal}
-              >
-                {t('common.save')}
-              </Button>
-            </div>
-          </div>
-        </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={cancelTextModal}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!textModalValue.trim()}
+              onClick={submitTextModal}
+            >
+              {t('common.save')}
+            </Button>
+          </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );

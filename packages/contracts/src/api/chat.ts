@@ -73,7 +73,11 @@ export type ChatAnalyticsEntryFrom =
   | 'chat_composer'
   | 'design_system_create'
   | 'onboarding_design_system'
-  | 'regenerate_from_review';
+  | 'regenerate_from_review'
+  // A turn started by the "Continue the run" affordance on a resumable failed
+  // run. Lets run_created / run_finished isolate resume-continuations so the
+  // recovery mechanism's usage and success rate are measurable.
+  | 'resume_continue';
 
 export type ChatAnalyticsLengthBucket =
   | '0'
@@ -146,6 +150,32 @@ export interface RunScopedToolBundleSummary {
   }>;
 }
 
+export type BrowserUseUnavailableReason = 'no-matching-browser-backend';
+
+export type BrowserUseProbeFailureCategory =
+  | 'not-probed'
+  | 'registry-missing'
+  | 'registry-unreadable';
+
+export interface BrowserUseDiscoveryFacts {
+  registryPath: string;
+  registryExists: boolean;
+  socketCount: number;
+  candidateCount: number;
+  staleCount: number;
+  currentSessionIdPresent: boolean | null;
+  probeFailureCategory: BrowserUseProbeFailureCategory;
+  newestSocketAgeMs?: number;
+  staleThresholdMs: number;
+}
+
+export interface BrowserUseRunState {
+  requested: boolean;
+  available: boolean;
+  reason?: BrowserUseUnavailableReason;
+  diagnostics: BrowserUseDiscoveryFacts;
+}
+
 export interface ChatRunCreateRequest extends ChatRequest {
   projectId: string;
   conversationId: string;
@@ -171,7 +201,15 @@ export interface McpRunCreateRequest {
   toolBundle?: RunScopedToolBundle;
 }
 
-export type ChatRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export const CHAT_RUN_STATUSES = [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'canceled',
+] as const;
+
+export type ChatRunStatus = (typeof CHAT_RUN_STATUSES)[number];
 
 export type ChatMessageFeedbackRating = 'positive' | 'negative';
 
@@ -248,10 +286,22 @@ export interface ChatRunStatusResponse {
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
+  cancelRequested?: boolean;
+  childPid?: number | null;
+  processGroupId?: number | null;
+  childExited?: boolean;
+  childExitObservedAt?: number | null;
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** True when this terminal failure can be recovered by resuming the agent's
+   *  existing CLI session (a transient upstream drop / inactivity timeout on a
+   *  session-resuming runtime), rather than only restarting from scratch. The
+   *  chat uses it to offer a Continue affordance; the next turn in the same
+   *  conversation resumes the persisted session. Absent/false on success,
+   *  non-resumable failures, and runtimes without CLI session resume. */
+  resumable?: boolean;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */
@@ -260,6 +310,8 @@ export interface ChatRunStatusResponse {
   mediaExecution?: MediaExecutionPolicy;
   /** Run-scoped tool bundle summary with secrets and command details redacted. */
   toolBundle?: RunScopedToolBundleSummary;
+  /** Browser Use availability for runs that requested in-app browser automation. */
+  browserUse?: BrowserUseRunState;
 }
 
 export interface ChatRunListResponse {
@@ -268,6 +320,7 @@ export interface ChatRunListResponse {
 
 export interface ChatRunCancelResponse {
   ok: true;
+  run?: ChatRunStatusResponse;
 }
 
 export interface ChatAttachment {
@@ -357,6 +410,11 @@ export interface ChatMessage {
   createdAt?: number;
   runId?: string;
   runStatus?: ChatRunStatus;
+  /** True when this message's failed run can be recovered by resuming the
+   *  agent's CLI session (transient upstream drop / inactivity on a
+   *  session-resuming runtime). Drives the chat's Continue affordance; mirrors
+   *  ChatRunStatusResponse.resumable. */
+  resumable?: boolean;
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;

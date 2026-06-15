@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
+  findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
 import type { ChatMessage } from '../../src/types';
@@ -197,6 +198,58 @@ describe('mergeRecoveredArtifact', () => {
   it('returns the diff unchanged when no artifact was recovered', () => {
     const merged = mergeRecoveredArtifact([fileA] as never, null);
     expect(merged.map((f) => f.name)).toEqual(['helper.txt']);
+  });
+});
+
+describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
+  const html = '<!doctype html><html><head><title>Demo</title></head><body><main><h1>Demo</h1></main></body></html>';
+
+  it('returns the same-turn HTML file when fallback content matches a Write output', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const readProjectHtml = vi.fn(async (name: string) =>
+      name === 'index.html' ? `\uFEFF${html}\r\n` : null,
+    );
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: `\n${html}\n`,
+      producedFiles: [indexFile] as never,
+      readProjectHtml,
+    })).resolves.toBe(indexFile);
+  });
+
+  it('does not treat different same-turn HTML files as duplicates', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
+    })).resolves.toBeNull();
+  });
+
+  it('ignores non-HTML same-turn files', async () => {
+    const readProjectHtml = vi.fn(async () => html);
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [{ name: 'notes.md', path: 'notes.md', kind: 'text' }] as never,
+      readProjectHtml,
+    })).resolves.toBeNull();
+    expect(readProjectHtml).not.toHaveBeenCalled();
   });
 });
 

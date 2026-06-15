@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
 import {
@@ -7,7 +8,8 @@ import {
   inlineRelativeAssets,
   type InlineAssetReader,
 } from './inline-assets.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
+import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
+import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
@@ -30,11 +32,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
-  const rejectSandboxFolderImport = () =>
-    isSandboxModeEnabled(process.env)
-      ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
-      : null;
-
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -110,14 +107,21 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
-      const { baseDir } = req.body || {};
+      const { baseDir, orchestratorWorkspace } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const sandboxReason = rejectSandboxFolderImport();
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+      const parsedOrchestratorWorkspace =
+        parseOrchestratorWorkspace(orchestratorWorkspace);
+      if (!parsedOrchestratorWorkspace.ok) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          parsedOrchestratorWorkspace.message,
+        );
       }
+      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -185,15 +189,26 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
       }
+      const sandboxReason = normalizedOrchestratorWorkspace
+        ? null
+        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+      }
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
+      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
+        existingMeta;
       const nextMeta = {
-        ...existingMeta,
+        ...preservedMeta,
         kind: existingMeta.kind ?? 'prototype',
         baseDir: normalizedPath,
         importedFrom: 'folder' as const,
         entryFile,
+        ...(normalizedOrchestratorWorkspace
+          ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
+          : {}),
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
       const updated = updateProject(db, projectId, { metadata: nextMeta });
@@ -208,20 +223,27 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
   app.post('/api/import/folder', async (req, res) => {
     try {
-      const { baseDir, name, skillId, designSystemId } = req.body || {};
+      const { baseDir, name, skillId, designSystemId, orchestratorWorkspace } = req.body || {};
       if (typeof baseDir !== 'string' || !baseDir.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
       }
-      const sandboxReason = rejectSandboxFolderImport();
-      if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+      const parsedOrchestratorWorkspace =
+        parseOrchestratorWorkspace(orchestratorWorkspace);
+      if (!parsedOrchestratorWorkspace.ok) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          parsedOrchestratorWorkspace.message,
+        );
       }
+      const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
         const secret = desktopAuthSecret();
@@ -301,6 +323,12 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       ) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
       }
+      const sandboxReason = normalizedOrchestratorWorkspace
+        ? null
+        : sandboxImportedProjectRootUnavailableReason(normalizedPath);
+      if (sandboxReason) {
+        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+      }
 
       const id = randomId();
       const now = Date.now();
@@ -318,7 +346,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           designSystemValidation.message,
         );
       }
-
       const project = insertProject(db, {
         id,
         name: projectName,
@@ -330,6 +357,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           baseDir: normalizedPath,
           importedFrom: 'folder',
           entryFile,
+          ...(normalizedOrchestratorWorkspace
+            ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
+            : {}),
           ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
         },
         createdAt: now,
@@ -352,7 +382,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
 
@@ -825,7 +855,7 @@ function buildProjectExportManifestResponse({
   note(entryFile, 'project-entry-file');
 
   return {
-    schema: 'open-design.project-export-manifest.v1',
+    schema: PROJECT_EXPORT_MANIFEST_SCHEMA,
     projectId,
     projectName: typeof project?.name === 'string' ? project.name : null,
     generatedAt: new Date().toISOString(),

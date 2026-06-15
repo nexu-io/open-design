@@ -6,6 +6,7 @@ import type { ComponentProps } from 'react';
 import type { ProjectFile } from '../../src/types';
 
 const {
+  captureHostIframeSnapshotMock,
   downloadImageDataUrlMock,
   exportImagePptxFromSnapshotsMock,
   imageDataUrlToBlobMock,
@@ -13,6 +14,7 @@ const {
   requestPreviewSnapshotMock,
   saveImageBlobMock,
 } = vi.hoisted(() => ({
+  captureHostIframeSnapshotMock: vi.fn(),
   downloadImageDataUrlMock: vi.fn(),
   exportImagePptxFromSnapshotsMock: vi.fn(),
   imageDataUrlToBlobMock: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('../../src/runtime/exports', async () => {
   );
   return {
     ...actual,
+    captureHostIframeSnapshot: captureHostIframeSnapshotMock,
     downloadImageDataUrl: downloadImageDataUrlMock,
     exportImagePptxFromSnapshots: exportImagePptxFromSnapshotsMock,
     imageDataUrlToBlob: imageDataUrlToBlobMock,
@@ -95,10 +98,10 @@ function renderHtmlPreview(file: ProjectFile = htmlFile(), props: Partial<Compon
   return { ...view, activeFrame, srcDocFrame: srcDocFrame as HTMLIFrameElement };
 }
 
-function openImageExportDialog() {
+async function openImageExportDialog() {
   fireEvent.click(screen.getByRole('button', { name: /download/i }));
   fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
-  expect(screen.getByRole('dialog', { name: /export as image/i })).toBeTruthy();
+  expect(await screen.findByRole('dialog', { name: /export as image/i })).toBeTruthy();
 }
 
 async function waitForSaveButton() {
@@ -124,7 +127,7 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
 
     const { container } = renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     const backdrop = document.body.querySelector('.viewer-modal-backdrop');
     expect(backdrop).toBeTruthy();
@@ -133,6 +136,33 @@ describe('FileViewer image export', () => {
     expect(container.querySelector('.viewer-modal-backdrop')).toBeNull();
     await waitFor(() => {
       expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,ok', 'png');
+    });
+  });
+
+  it('waits for the download menu to close before capturing host pixels', async () => {
+    captureHostIframeSnapshotMock.mockImplementationOnce(async () => {
+      expect(screen.queryByRole('menu')).toBeNull();
+      return {
+        dataUrl: 'data:image/png;base64,host',
+        w: 800,
+        h: 600,
+      };
+    });
+    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['png'], { type: 'image/png' }));
+
+    renderHtmlPreview();
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    expect(screen.getByRole('menu')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /export as image/i }));
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(captureHostIframeSnapshotMock).not.toHaveBeenCalled();
+
+    expect(await screen.findByRole('dialog', { name: /export as image/i })).toBeTruthy();
+    await waitFor(() => {
+      expect(captureHostIframeSnapshotMock).toHaveBeenCalledTimes(1);
+      expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,host', 'png');
     });
   });
 
@@ -155,7 +185,7 @@ describe('FileViewer image export', () => {
     });
 
     const { activeFrame } = renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
     expect(screen.getByRole('radio', { name: 'PNG' })).toBeTruthy();
 
     await waitFor(() => {
@@ -195,7 +225,7 @@ describe('FileViewer image export', () => {
       }));
 
     renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     await waitForSaveButton();
 
@@ -228,7 +258,7 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
 
     const { srcDocFrame } = renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     await waitFor(() => {
       expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcDocFrame, 1500);
@@ -252,7 +282,7 @@ describe('FileViewer image export', () => {
     imageDataUrlToBlobMock.mockResolvedValueOnce(pngBlob);
 
     const { activeFrame, srcDocFrame } = renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     await waitFor(() => {
       expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(activeFrame, 1500);
@@ -277,7 +307,7 @@ describe('FileViewer image export', () => {
     });
 
     renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
     fireEvent.click(await waitForSaveButton());
 
     await waitFor(() => {
@@ -297,7 +327,7 @@ describe('FileViewer image export', () => {
     });
 
     renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(
@@ -324,7 +354,7 @@ describe('FileViewer image export', () => {
     });
 
     renderHtmlPreview();
-    openImageExportDialog();
+    await openImageExportDialog();
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(

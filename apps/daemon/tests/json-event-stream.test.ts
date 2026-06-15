@@ -197,6 +197,67 @@ test('gemini stream emits init text and usage events', () => {
   ]);
 });
 
+test('kimi stream emits OpenAI-style tool calls, tool results, and assistant text', () => {
+  const { events, handler } = collectEvents('kimi');
+
+  handler.feed(
+    JSON.stringify({
+      role: 'assistant',
+      tool_calls: [
+        {
+          type: 'function',
+          id: 'tool-1',
+          function: {
+            name: 'Write',
+            arguments: '{"path":"index.html","content":"<html></html>"}',
+          },
+        },
+      ],
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'tool',
+      tool_call_id: 'tool-1',
+      content: 'Wrote 13 bytes to index.html',
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'assistant',
+      content: 'Done.',
+    }) +
+    '\n' +
+    JSON.stringify({
+      role: 'meta',
+      type: 'session.resume_hint',
+      session_id: 'session-1',
+      content: 'To resume this session: kimi -r session-1',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'tool-1',
+      name: 'Write',
+      input: {
+        path: 'index.html',
+        content: '<html></html>',
+      },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'tool-1',
+      content: 'Wrote 13 bytes to index.html',
+      isError: false,
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.',
+    },
+  ]);
+});
+
 test('gemini stream handles real stream-json user, tool, and error frames', () => {
   const { events, handler } = collectEvents('gemini');
 
@@ -238,6 +299,343 @@ test('gemini stream handles real stream-json user, tool, and error frames', () =
     { type: 'tool_result', toolUseId: 'tool-1', content: 'wrote timeline.json', isError: false },
     { type: 'status', label: 'warning', detail: 'Agent execution blocked: retrying without shell' },
     { type: 'error', message: 'Authentication failed', raw: JSON.stringify(fatalResult) },
+  ]);
+});
+
+test('gemini stream emits TodoWrite from native write_todos tool', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_todos',
+      tool_id: 'write_todos__1',
+      parameters: {
+        todos: [
+          { description: 'Inspect context', status: 'in_progress' },
+          { description: 'Answer user', status: 'pending' },
+          { description: 'Wait for input', status: 'blocked' },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_todos__1:todo-native',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect context', status: 'in_progress' },
+          { content: 'Answer user', status: 'pending' },
+          { content: 'Wait for input', status: 'stopped' },
+        ],
+      },
+    },
+  ]);
+});
+
+test('gemini stream normalizes suffixed native todo statuses', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_todos',
+      tool_id: 'write_todos__extra',
+      parameters: {
+        todos: [
+          { description: 'Bind tokens', status: 'in_progressExtra' },
+          { description: 'Write page', status: 'pendingExtra' },
+          { description: 'Ship page', status: 'completedExtra' },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events[0], {
+    type: 'tool_use',
+    id: 'write_todos__extra:todo-native',
+    name: 'TodoWrite',
+    input: {
+      todos: [
+        { content: 'Bind tokens', status: 'in_progress' },
+        { content: 'Write page', status: 'pending' },
+        { content: 'Ship page', status: 'completed' },
+      ],
+    },
+  });
+});
+
+test('gemini stream suppresses duplicate artifact text after file writes', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+  ]);
+});
+
+test('gemini stream suppresses duplicate artifact text split across chunks', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n<',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: 'Tail',
+    },
+  ]);
+});
+
+test('gemini stream preserves later artifact text after plain prose clears file-write suppression', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done.\\n\\n',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: '<artifact identifier="page" type="text/html">\\n<!doctype html><html></html>\\n</artifact>Tail',
+    },
+  ]);
+});
+
+test('gemini stream emits prose immediately after file write when no artifact follows', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done, preview ready.',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done, preview ready.',
+    },
+  ]);
+});
+
+test('gemini stream flushes trailing partial artifact opener as prose', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Done <art',
+    }) +
+    '\n',
+  );
+  handler.flush();
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'index.html',
+        content: '<!doctype html><html></html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Done ',
+    },
+    {
+      type: 'text_delta',
+      delta: '<art',
+    },
+  ]);
+});
+
+test('gemini stream preserves later artifact text after suppressing immediate file-write echo', () => {
+  const { events, handler } = collectEvents('gemini');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'tool_use',
+      tool_name: 'write_file',
+      tool_id: 'write_file__1',
+      parameters: {
+        file_path: 'helper.html',
+        content: '<!doctype html><html>helper</html>',
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Helper written.\\n\\n<artifact identifier="helper" type="text/html">\\n<!doctype html><html>helper</html>\\n</artifact>',
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'message',
+      role: 'assistant',
+      content: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'write_file__1',
+      name: 'write_file',
+      input: {
+        file_path: 'helper.html',
+        content: '<!doctype html><html>helper</html>',
+      },
+    },
+    {
+      type: 'text_delta',
+      delta: 'Helper written.\\n\\n',
+    },
+    {
+      type: 'text_delta',
+      delta: 'Final artifact:\\n\\n<artifact identifier="final" type="text/html">\\n<!doctype html><html>final</html>\\n</artifact>',
+    },
   ]);
 });
 
@@ -339,9 +737,15 @@ test('cursor stream emits suffix when final assistant extends partial text', () 
   ]);
 });
 
-test('cursor stream de-duplicates cumulative timestamped assistant chunks', () => {
+test('cursor stream concatenates independent timestamped fragments verbatim', () => {
   const { events, handler } = collectEvents('cursor-agent');
 
+  // cursor-agent --stream-partial-output sends timestamped assistant events
+  // (without model_call_id) as INDEPENDENT incremental fragments — each
+  // carries only the new text and the turn text is their in-order
+  // concatenation. They must be emitted verbatim, including a fragment that
+  // repeats earlier text; content-based equality/prefix dedup would silently
+  // drop real output.
   handler.feed(
     JSON.stringify({
       type: 'assistant',
@@ -352,13 +756,329 @@ test('cursor stream de-duplicates cumulative timestamped assistant chunks', () =
     JSON.stringify({
       type: 'assistant',
       timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n' +
+    // A legitimately repeated fragment — must NOT be deduped away.
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: ' world' },
+  ]);
+});
+
+test('cursor stream skips model_call_id replay to avoid duplicate content', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Cursor sends incremental deltas as independent fragments, then a
+  // final assistant message with model_call_id that replays the full
+  // accumulated text. The replay must be skipped to avoid duplication.
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n' +
+    // Full replay with model_call_id — should be skipped
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    // New turn starts with fresh incremental deltas
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 5,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' turn' }] },
+    }) +
+    '\n' +
+    // Full replay of second turn — should also be skipped
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 6,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
+test('cursor stream emits missing suffix from model_call_id replay when chunks are dropped', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Only partial fragments arrive — the last chunk is dropped
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // " world" chunk was dropped / never received
+    // Full replay arrives with model_call_id — should emit the missing suffix
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+  ]);
+});
+
+test('cursor stream emits missing suffix from model_call_id replay in second turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1: all chunks arrive, replay matches
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
       message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
     }) +
     '\n' +
     JSON.stringify({
       type: 'assistant',
-      timestamp_ms: 3,
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
       message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  // Turn 2: "second" arrives but " turn" is dropped
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    // Replay contains "second turn" — should emit missing " turn"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
+test('cursor stream recovers dropped chunk via model_call_id after fallback-terminated turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1 ends via the non-model_call_id fallback path (no timestamp)
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // Final replay without model_call_id — fallback path
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  // Turn 2: "second" arrives but " turn" is dropped, then model_call_id
+  // replay recovers the missing suffix. Without the cursorTurnStart
+  // advancement in the fallback path, turnLength would be computed from
+  // position 0 (including turn 1's text), making the replay length
+  // appear shorter than what was already emitted — losing " turn".
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
+test('cursor stream does not duplicate output across two fallback-terminated turns', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Both turns end via the non-model_call_id fallback replay path. The
+  // terminal replay must reconcile against the CURRENT turn's emitted text
+  // (cursorTextSoFar.slice(cursorTurnStart)), not the whole cross-turn
+  // buffer. Otherwise turn 2's replay "second turn" is compared against
+  // "hello worldsecond", misses the current-turn prefix, and re-appends the
+  // whole replay — yielding duplicated output "secondsecond turn".
+  handler.feed(
+    // Turn 1: streamed "hello", fallback replay "hello world"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    // Turn 2: streamed "second", fallback replay "second turn"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
+test('cursor stream preserves repeated real deltas on a later turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1 completes (delta "hi" + its model_call_id replay). Turn 2 streams
+  // two legitimately identical real deltas "ha" + "ha" (turn text "haha"),
+  // then the buffered model_call_id replay "haha". Both timestamped deltas
+  // must be emitted (they are real content, not duplicates), and only the
+  // replay is suppressed. A content equality/prefix check on the timestamped
+  // path would wrongly drop the second "ha" and lose output.
+  handler.feed(
+    // Turn 1
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    }) +
+    '\n' +
+    // Turn 2: two identical real deltas, then the buffered replay
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ha' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ha' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 5,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'haha' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hi' },
+    { type: 'text_delta', delta: 'ha' },
+    { type: 'text_delta', delta: 'ha' },
+  ]);
+});
+
+test('cursor stream does not duplicate output when emitted text is not a replay prefix', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // A middle fragment (" brave") is dropped while a later fragment (" world")
+  // still arrives, so the emitted turn text "hello world" is NOT a prefix of
+  // the buffered replay "hello brave world". The replay is reconciled against
+  // the emitted turn text: since it is not a verified prefix, the append-only
+  // stream is left untouched rather than re-emitting an already-shown suffix
+  // (which would yield "hello world world").
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // " brave" fragment dropped; " world" still arrives
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: ' world' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello brave world' }] },
     }) +
     '\n',
   );
@@ -522,6 +1242,62 @@ test('codex json stream emits command execution tool events', () => {
       toolUseId: 'item-1',
       content: 'hello-from-codex\n',
       isError: false,
+    },
+  ]);
+});
+
+test('codex json stream emits TodoWrite events from todo_list items', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({
+      type: 'item.started',
+      item: {
+        id: 'item-0',
+        type: 'todo_list',
+        items: [
+          { text: 'Inspect workspace', completed: false },
+          { text: 'Write prototype', completed: false },
+        ],
+      },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'item.updated',
+      item: {
+        id: 'item-0',
+        type: 'todo_list',
+        items: [
+          { text: 'Inspect workspace', completed: true },
+          { text: 'Write prototype', completed: false },
+        ],
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item-0',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect workspace', status: 'pending' },
+          { content: 'Write prototype', status: 'pending' },
+        ],
+      },
+    },
+    {
+      type: 'tool_use',
+      id: 'item-0',
+      name: 'TodoWrite',
+      input: {
+        todos: [
+          { content: 'Inspect workspace', status: 'completed' },
+          { content: 'Write prototype', status: 'pending' },
+        ],
+      },
     },
   ]);
 });

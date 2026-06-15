@@ -464,6 +464,13 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg) 90%, transparent);
   color: var(--text-soft);
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.db-browser-use-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .db-browser-use-search input {
   min-width: 0;
@@ -474,6 +481,10 @@
   font: inherit;
   font-size: 12px;
   line-height: 1.2;
+}
+.db-browser-use-search input:focus {
+  border: 0;
+  box-shadow: none;
 }
 .db-browser-use-search input::placeholder {
   color: var(--text-faint);

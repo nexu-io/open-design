@@ -926,6 +926,7 @@ export function wellKnownUserToolchainBins(
   dirs.push(
     join(home, ".local", "bin"),
     join(home, ".vite-plus", "bin"),
+    join(home, ".kimi-code", "bin"),
     join(home, ".opencode", "bin"),
     join(home, ".bun", "bin"),
     join(home, ".volta", "bin"),

@@ -8,7 +8,7 @@ Accepted
 
 The `od` CLI serves two different roles: it can start the local daemon, and it can act as a thin client for commands such as `od media generate`. Client commands should talk to an already-running daemon and should not evaluate daemon startup code.
 
-Previously, `apps/daemon/src/cli.ts` statically imported `server.ts`. Because ES modules execute top-level code during import, client-only commands also evaluated daemon startup globals, including `OD_DATA_DIR` resolution. A bad runtime data directory could therefore fail media generation before the CLI even sent its HTTP request.
+Previously, `apps/daemon/src/cli.ts` statically imported `server.ts`. Because ES modules execute top-level code during import, client-only commands also evaluated daemon startup globals, including daemon data directory resolution. A bad runtime data directory could therefore fail media generation before the CLI even sent its HTTP request. Current daemon data-path rules live only in root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**; this ADR MUST NOT restate them.
 
 The daemon sidecar also started the server directly, so startup behavior was split between the human CLI path and the sidecar path.
 

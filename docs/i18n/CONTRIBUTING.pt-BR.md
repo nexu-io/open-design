@@ -242,7 +242,7 @@ Além disso:
 ## Commits & pull requests
 
 - **Uma preocupação por PR.** Adicionar uma skill + refatorar o parser + bumpar uma dep são três PRs.
-- **Título é imperativo + escopo.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+- **Título é imperativo + escopo.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
 - **Use o template de PR.** Preencha cada seção de [`.github/pull_request_template.md`](../../.github/pull_request_template.md) — Why, What users will see, Surface area, Screenshots (se UI), Bug fix verification (se correção de bug), Validation. Seções vazias ganham um comentário "please fill in".
 - **Corpo explica o porquê.** "O que isso faz" geralmente é óbvio do diff; "por que isso precisa existir" raramente é.
 - **Referencie uma issue** se houver. Se não houver e o PR for não-trivial, abra uma antes para combinarmos que a mudança é desejada antes de você gastar o tempo.

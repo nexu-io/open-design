@@ -3,8 +3,12 @@ const AGENT_INSTALL_LINKS: Record<
   string,
   { installUrl?: string; docsUrl?: string }
 > = {
+  amp: {
+    installUrl: 'https://ampcode.com/manual#install',
+    docsUrl: 'https://ampcode.com/manual',
+  },
   amr: {
-    installUrl: 'https://github.com/nexu-io/vela',
+    installUrl: 'https://open-design.ai/amr',
     docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
   },
   claude: {
@@ -37,7 +41,7 @@ const AGENT_INSTALL_LINKS: Record<
   },
   kimi: {
     installUrl: 'https://github.com/MoonshotAI/kimi-cli',
-    docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html',
+    docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
   },
   'cursor-agent': {
     installUrl: 'https://cursor.com/docs/cli/overview',
@@ -74,6 +78,10 @@ const AGENT_INSTALL_LINKS: Record<
   deepseek: {
     installUrl: 'https://github.com/Hmbown/CodeWhale',
     docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
+  },
+  codebuddy: {
+    installUrl: 'https://www.codebuddy.cn',
+    docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
   },
 };
 

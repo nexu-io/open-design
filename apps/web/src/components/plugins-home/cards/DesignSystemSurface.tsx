@@ -7,6 +7,7 @@
 // uses native lazy loading so off-screen cards do not eagerly render.
 
 import { useEffect, useState } from 'react';
+import { isVisualStabilityMode } from '../../../utils/visualStability';
 import type { DesignPreviewSpec } from '../preview';
 
 interface Props {
@@ -15,10 +16,14 @@ interface Props {
 }
 
 export function DesignSystemSurface({ preview, inView }: Props) {
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(() => isVisualStabilityMode());
 
   useEffect(() => {
     if (!preview.designSystemId) return;
+    if (isVisualStabilityMode()) {
+      setReady(true);
+      return;
+    }
     if (!inView) {
       setReady(false);
       return;

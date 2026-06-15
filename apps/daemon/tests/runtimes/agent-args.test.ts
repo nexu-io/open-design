@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
@@ -700,6 +700,32 @@ test('kilo args use acp subcommand for json-rpc streaming', () => {
   assert.equal(kilo.streamFormat, 'acp-json-rpc');
 });
 
+test('kimi args use prompt-mode JSONL instead of ACP', () => {
+  const prompt = 'design a page';
+  const args = kimi.buildArgs(prompt, [], [], {});
+
+  assert.deepEqual(args, ['-p', prompt, '--output-format', 'stream-json']);
+  assert.equal(args.includes('acp'), false);
+  assert.equal(args.includes('--yolo'), false);
+  assert.equal(kimi.streamFormat, 'json-event-stream');
+  assert.equal(kimi.eventParser, 'kimi');
+  assert.equal(kimi.mcpDiscovery, undefined);
+  assert.equal(kimi.externalMcpInjection, undefined);
+});
+
+test('kimi args pass explicit model selections through prompt mode', () => {
+  const args = kimi.buildArgs('hello', [], [], { model: 'moonshot-v1-32k' });
+
+  assert.deepEqual(args, [
+    '-p',
+    'hello',
+    '--output-format',
+    'stream-json',
+    '--model',
+    'moonshot-v1-32k',
+  ]);
+});
+
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
   assert.ok(kilo.fetchModels, 'kilo must define fetchModels');
   const result = await kilo.fetchModels('/nonexistent/kilo', {}).catch(() => null);
@@ -777,27 +803,56 @@ test('codex buildArgs omits model_reasoning_effort when reasoning is "default"',
   );
 });
 
-test('grok-build inlines the prompt as -p <value> and never falls back to stdin sentinels', () => {
+test('grok-build uses --prompt-file and never embeds the prompt in argv or stdin', () => {
   const prompt = 'summarize the current page layout';
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
   const args = grokBuild.buildArgs(
     prompt,
     [],
     [],
     { model: 'grok-4.3', reasoning: 'high' },
-    { cwd: '/tmp/od-project' },
+    { cwd: '/tmp/od-project', promptFilePath },
   );
 
+  assert.equal(grokBuild.promptViaFile, true);
   assert.equal(grokBuild.promptViaStdin, false);
   assert.deepEqual(args, [
-    '-p',
-    prompt,
+    '--prompt-file',
+    promptFilePath,
     '--model',
     'grok-4.3',
+  ]);
+  assert.equal(args.includes(prompt), false);
+  assert.equal(args.includes('-'), false);
+  assert.equal(args.includes('-p'), false);
+  assert.equal(args.includes('--single'), false);
+  assert.equal(args.filter((entry) => entry === '--prompt-file').length, 1);
+});
+
+test('grok-build omits effort for default/build models but keeps it for reasoning models', () => {
+  const promptFilePath = '/tmp/od-grok-prompt/prompt.md';
+  const defaultArgs = grokBuild.buildArgs('', [], [], { model: 'default', reasoning: 'high' }, { promptFilePath });
+  assert.equal(defaultArgs.includes('--effort'), false);
+
+  const buildArgs = grokBuild.buildArgs('', [], [], { model: 'grok-build', reasoning: 'high' }, { promptFilePath });
+  assert.equal(buildArgs.includes('--effort'), false);
+
+  const reasoningArgs = grokBuild.buildArgs('', [], [], { model: 'grok-4.20-reasoning', reasoning: 'high' }, { promptFilePath });
+  assert.deepEqual(reasoningArgs, [
+    '--prompt-file',
+    promptFilePath,
+    '--model',
+    'grok-4.20-reasoning',
     '--effort',
     'high',
   ]);
-  assert.equal(args.includes('-'), false);
-  assert.equal(args.filter((entry) => entry === '-p').length, 1);
+});
+
+test('grok-build requires a daemon-provided prompt file path', () => {
+  assert.throws(
+    () => grokBuild.buildArgs('hi', [], [], {}, { cwd: '/tmp/od-project' }),
+    /promptFilePath/,
+  );
 });
 
 test('claude flags promptViaStdin and never embeds the prompt in argv', () => {

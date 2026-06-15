@@ -69,7 +69,9 @@ export function PluginCard({
 }: Props) {
   const { locale } = useI18n();
   const [useMenuOpen, setUseMenuOpen] = useState(false);
-  const preview = useMemo(() => inferPluginPreview(record), [record]);
+  // Tiles prefer the cheap pre-baked hover-pan clip; the detail modal still
+  // opens the live interactive page (it calls inferPluginPreview without this).
+  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
   const title = localizePluginTitle(locale, record);
   const description = localizePluginDescription(locale, record);
   const tags = useMemo(

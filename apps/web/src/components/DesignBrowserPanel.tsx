@@ -14,6 +14,12 @@ import {
   clearHostBrowserData,
   isOpenDesignHostAvailable,
 } from '@open-design/host';
+import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackReferenceBoardClick,
+  trackReferenceBoardSurfaceView,
+} from '../analytics/events';
 import {
   openExternalUrl,
   projectRawUrl,
@@ -949,6 +955,25 @@ export function DesignBrowserPanel({
     if (nextUrl !== EMPTY_URL) loadWebviewUrl(nextUrl);
   }, [commitHistory, loadWebviewUrl, recordNavigation]);
 
+  const syncFromFallbackFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    if (!frame || loadUrl === EMPTY_URL) return;
+    let nextUrl = loadUrl;
+    let nextTitle = '';
+    try {
+      nextUrl = frame.contentWindow?.location.href || loadUrl;
+      nextTitle = frame.contentDocument?.title?.trim() || '';
+    } catch {
+      // Cross-origin iframe content is expected to reject here. Keep the URL
+      // context and let the display fall back to labelFromUrl().
+    }
+    setCurrentUrl(nextUrl);
+    if (!addressEditing) setAddressValue(nextUrl);
+    commitHistory(nextUrl, { title: nextTitle }, { countVisit: false });
+    recordNavigation(nextUrl, nextTitle, { replacePendingTarget: true });
+    updateCurrentNavigationTitle(nextTitle);
+    setIsLoading(false);
+  }, [addressEditing, commitHistory, loadUrl, recordNavigation, updateCurrentNavigationTitle]);
+
   const updateLoadingState = useCallback((node: WebviewElement | null = webviewNode) => {
     if (!node) {
       setIsLoading(false);
@@ -1114,11 +1139,6 @@ export function DesignBrowserPanel({
       return;
     }
 
-    const commentTargets = visibleComments.map((comment) => ({
-      elementId: comment.elementId,
-      key: `comment:${comment.id}`,
-      selector: comment.selector,
-    }));
     const activeTarget = activeCommentTarget
       ? [{
           elementId: activeCommentTarget.elementId,
@@ -1126,7 +1146,7 @@ export function DesignBrowserPanel({
           selector: activeCommentTarget.selector,
         }]
       : [];
-    const targets = [...commentTargets, ...activeTarget].filter((target) => target.elementId && target.selector);
+    const targets = activeTarget.filter((target) => target.elementId && target.selector);
     if (targets.length === 0) {
       setBrowserLiveCommentTargets((current) => (current.size > 0 ? new Map() : current));
       return;
@@ -1183,7 +1203,7 @@ export function DesignBrowserPanel({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeTool, browserFilePath, isBlank, visibleComments, webviewNode]);
+  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeTool, browserFilePath, isBlank, webviewNode]);
 
   useEffect(() => {
     const next = browserImages.map((file) => ({ file, url: URL.createObjectURL(file) }));
@@ -1863,29 +1883,6 @@ export function DesignBrowserPanel({
               <RemixIcon name="screenshot-2-line" size={15} />
             </IconTooltipButton>
           ) : null}
-          {desktopHostAvailable ? (
-            <IconTooltipButton
-              label={t('fileViewer.mark')}
-              wrapperClassName="db-action-item db-action-mark"
-              disabled={isBlank}
-              className={drawOverlayOpen ? 'is-active' : ''}
-              onClick={() => {
-                clearBrowserTool();
-                setDrawOverlayOpen((open) => !open);
-              }}
-            >
-              <RemixIcon name="mark-pen-line" size={15} />
-            </IconTooltipButton>
-          ) : null}
-          <IconTooltipButton
-            label={t('fileViewer.comment')}
-            wrapperClassName="db-action-item db-action-primary db-action-comment"
-            disabled={isBlank || !desktopHostAvailable}
-            className={activeTool === 'comment' ? 'is-active' : ''}
-            onClick={() => toggleBrowserTool('comment')}
-          >
-            <Icon name="comment" size={15} />
-          </IconTooltipButton>
           <IconTooltipButton
             label={t('browserUse.title')}
             wrapperClassName="db-action-item db-action-browser-use"
@@ -1922,58 +1919,6 @@ export function DesignBrowserPanel({
           </IconTooltipButton>
           {menuOpen ? (
             <div className="db-menu" role="menu">
-              {desktopHostAvailable ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    clearBrowserTool();
-                    setDrawOverlayOpen((open) => !open);
-                  }}
-                  disabled={isBlank}
-                >
-                  <RemixIcon name="mark-pen-line" size={14} />
-                  {t('fileViewer.mark')}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('comment');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <Icon name="comment" size={14} />
-                {t('fileViewer.comment')}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('inspect');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <RemixIcon name="contrast-drop-line" size={14} />
-                Tune Element
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  toggleBrowserTool('edit');
-                }}
-                disabled={isBlank || !desktopHostAvailable}
-              >
-                <Icon name="edit" size={14} />
-                {editableProjectHtml ? 'Edit HTML' : 'Edit Live DOM'}
-              </button>
-              <span className="db-menu-separator" />
               <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || savingAction != null}>
                 <Icon name="image" size={14} />
                 Copy Screenshot
@@ -2033,6 +1978,7 @@ export function DesignBrowserPanel({
             {isBlank ? (
               <DesignBrowserStart
                 onNavigate={navigateTo}
+                projectId={projectId}
               />
             ) : desktopHostAvailable ? (
               <webview
@@ -2044,27 +1990,13 @@ export function DesignBrowserPanel({
               />
             ) : (
               <div className="db-fallback">
-                <iframe title={pageTitle} src={loadUrl} />
+                <iframe
+                  title={pageTitle}
+                  src={loadUrl}
+                  onLoad={(event) => syncFromFallbackFrame(event.currentTarget)}
+                />
               </div>
             )}
-            {!isBlank && desktopHostAvailable ? (
-              <BrowserCommentMarkers
-                comments={visibleComments}
-                liveTargets={browserLiveCommentTargets}
-                activeCommentId={activePreviewCommentId}
-                onOpen={(comment) => {
-                  const snapshot = browserLiveCommentTargets.get(`comment:${comment.id}`)
-                    ?? browserSnapshotFromComment(comment, browserFilePath);
-                  setActiveTool('comment');
-                  setActiveCommentTarget(snapshot);
-                  setActivePreviewCommentId(comment.id);
-                  setCommentDraft(comment.note);
-                  setQueuedCommentNotes([]);
-                  setTextDraft(snapshot.text);
-                  setDrawOverlayOpen(false);
-                }}
-              />
-            ) : null}
             {commentComposer}
             {(activeTool === 'inspect' || activeTool === 'edit') && activeCommentTarget ? (
               <BrowserInspectPanel
@@ -2684,12 +2616,23 @@ const REFERENCE_ALL_CATEGORY = 'all';
 
 function DesignBrowserStart({
   onNavigate,
+  projectId,
 }: {
   onNavigate: (url: string) => void;
+  projectId?: string;
 }) {
+  const analytics = useAnalytics();
   const [activeCategory, setActiveCategory] = useState<string>(REFERENCE_ALL_CATEGORY);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    trackReferenceBoardSurfaceView(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+  }, [analytics.track, projectId]);
 
   const visibleGroups = useMemo(
     () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query),
@@ -2702,6 +2645,28 @@ function DesignBrowserStart({
     setQuery('');
     setActiveCategory(REFERENCE_ALL_CATEGORY);
     searchRef.current?.focus();
+  };
+
+  const selectCategory = (categoryId: string) => {
+    setActiveCategory(categoryId);
+    trackReferenceBoardClick(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      element: 'category_chip',
+      category_id: categoryId as TrackingReferenceBoardCategory,
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+  };
+
+  const openSite = (site: ReferenceSite) => {
+    trackReferenceBoardClick(analytics.track, {
+      page_name: 'file_manager',
+      area: 'reference_board',
+      element: 'open_site',
+      site_id: referenceSiteId(site.url),
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+    onNavigate(site.url);
   };
 
   return (
@@ -2729,7 +2694,7 @@ function DesignBrowserStart({
             role="tab"
             aria-selected={activeCategory === REFERENCE_ALL_CATEGORY}
             className={`db-reference-chip${activeCategory === REFERENCE_ALL_CATEGORY ? ' is-active' : ''}`}
-            onClick={() => setActiveCategory(REFERENCE_ALL_CATEGORY)}
+            onClick={() => selectCategory(REFERENCE_ALL_CATEGORY)}
           >
             All
             <span className="db-reference-chip-count">{REFERENCE_TOTAL}</span>
@@ -2741,7 +2706,7 @@ function DesignBrowserStart({
               role="tab"
               aria-selected={activeCategory === group.id}
               className={`db-reference-chip${activeCategory === group.id ? ' is-active' : ''}`}
-              onClick={() => setActiveCategory(group.id)}
+              onClick={() => selectCategory(group.id)}
             >
               {group.title}
               <span className="db-reference-chip-count">{group.sites.length}</span>
@@ -2757,6 +2722,16 @@ function DesignBrowserStart({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => {
+              // Tracked on focus rather than every keystroke so each
+              // engagement counts once.
+              trackReferenceBoardClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'reference_board',
+                element: 'search_input',
+                ...(projectId ? { project_id: projectId } : {}),
+              });
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Escape' && query) {
                 event.preventDefault();
@@ -2811,7 +2786,7 @@ function DesignBrowserStart({
                     className="db-reference-card"
                     onPointerEnter={() => warmBrowserOrigin(site.url)}
                   >
-                    <button type="button" onClick={() => onNavigate(site.url)}>
+                    <button type="button" onClick={() => openSite(site)}>
                       <BrowserSiteIcon
                         className="db-reference-icon"
                         fallback="globe"
@@ -2824,7 +2799,7 @@ function DesignBrowserStart({
                     </button>
                     <p>{site.detail}</p>
                     <div className="db-reference-actions">
-                      <button type="button" onClick={() => onNavigate(site.url)}>
+                      <button type="button" onClick={() => openSite(site)}>
                         <Icon name="globe" size={13} />
                         Open
                       </button>
@@ -2940,7 +2915,7 @@ export function formatAddressDisplayParts(url: string, title?: string): AddressD
   if (!cleanTitle) return { url };
   const fallback = labelFromUrl(url);
   if (cleanTitle === fallback || cleanTitle === url) return { url };
-  return { url, title: cleanTitle };
+  return { url: url.replace(/\/+$/, ''), title: cleanTitle };
 }
 
 export function formatAddressDisplay(url: string, title?: string): string {
@@ -2956,6 +2931,19 @@ export function hostnameFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+// Slugs a reference site URL into the snake_case `site_id` reported by
+// reference-board analytics: hostname minus the TLD, non-alphanumerics
+// folded into underscores (`land-book.com` → `land_book`,
+// `fonts.google.com` → `fonts_google`).
+function referenceSiteId(url: string): string {
+  const labels = hostnameFromUrl(url).toLowerCase().split('.');
+  const slug = (labels.length > 1 ? labels.slice(0, -1) : labels)
+    .join('_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug || 'unknown';
 }
 
 export function faviconUrl(url: string): string | undefined {

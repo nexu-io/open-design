@@ -1,9 +1,13 @@
 ---
 import { posthogHeadHtml } from '../_lib/posthog-analytics';
+import { pageNameFromPath } from '../i18n';
 
 const apiKey = import.meta.env.PUBLIC_POSTHOG_KEY;
 const host = import.meta.env.PUBLIC_POSTHOG_HOST;
-const headHtml = posthogHeadHtml(apiKey, host);
+// Derive page_name server-side from the route so the tracker reports the real
+// page instead of a hardcoded value — it is injected on every landing page.
+const pageName = pageNameFromPath(Astro.url.pathname);
+const headHtml = posthogHeadHtml(apiKey, host, pageName);
 ---
 
 <Fragment set:html={headHtml} />

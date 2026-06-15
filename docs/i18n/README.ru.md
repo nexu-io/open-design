@@ -1,6 +1,8 @@
 <h1 align="center">Open Design: открытая альтернатива Claude Design</h1>
 
-> 🔥 **Open Design 0.9.0 уже здесь: создавайте без настройки.** [официальный Model Router](https://open-design.ai/amr) встроен прямо в приложение — никакой дополнительной конфигурации, никакого CLI для установки, никакого API-ключа заранее. Просто откройте приложение, войдите в систему и сразу начинайте проектировать и творить. [Скачать 0.9.0](https://github.com/nexu-io/open-design/releases) · [Присоединиться к обсуждению](https://github.com/nexu-io/open-design/discussions/3524)
+> 🔥 **Open Design 0.10.0 уже здесь: универсальное Agentic-рабочее пространство для дизайна.** Всё ремесло теперь живёт в одном окне — от смутной идеи к поиску референсов, сбору материала, интерактивному редактированию, очереди комментариев, полировке анимаций и передаче результата редактору или Code Agent — не покидая приложение. С параллельными сессиями это уже не один ассистент, а целая локальная команда дизайнеров, работающая на вас. [Скачать 0.10.0](https://github.com/nexu-io/open-design/releases) · [Присоединиться к обсуждению](https://github.com/nexu-io/open-design/discussions/4153)
+>
+> ⚡ **Open Design AMR (Agentic Model Router) — официальный сервис моделей.** Одно пополнение — и GPT, Claude, Gemini и DeepSeek доступны прямо в Open Design: 20+ флагманских моделей, ноль настройки, оплата по реальному расходу токенов. [Попробовать AMR](https://open-design.ai/amr/)
 >
 > 🏅 **Программа Open Design Fellow теперь открыта.** Если вы тоже верите, что дизайн должен быть открытым — станьте Open Design Fellow, формируйте продукт вместе с основной командой и помогайте большему числу людей участвовать в определении будущего дизайна. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -11,6 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Сайт</a> ·
   <a href="https://open-design.ai/">Скачать</a> ·
+  <a href="https://open-design.ai/amr/">Model Router</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">Подписаться @nexudotio</a>
 </p>
@@ -116,13 +119,13 @@ Open Design — это то, что получается, когда **аген�
 | [Cursor](https://www.cursor.com/cli) | ✅ Поддерживается | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Поддерживается | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Поддерживается | `od mcp install copilot` |
-| Gemini CLI | ✅ Поддерживается | `od mcp install gemini` |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Поддерживается | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Поддерживается | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Поддерживается | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Поддерживается | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Поддерживается | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Поддерживается | `od mcp install trae` |
-| Kimi CLI | ✅ Поддерживается | `od mcp install kimi` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Поддерживается | `od mcp install kimi` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Поддерживается | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Поддерживается | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Поддерживается | `od mcp install hermes` |
@@ -261,7 +264,7 @@ Open Design (OD) — это открытая альтернатива. Тот ж
 
 - 🤖 **Агентно-нативный, не зависящий от модели.** Мы не поставляем агента. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, уже находящиеся в вашем `PATH`, — это дизайн-движок. Переключайтесь одним кликом.
 - 🧠 **Брендовый уровень по умолчанию.** Каждый рендер читает активный `DESIGN.md` — схему из 9 разделов, охватывающую палитру, типографику, отступы, движение, голос, антипаттерны. 150 систем поставляются с репозиторием (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Положите папку — и выбор её найдёт.
-- 🖥️ **Локальный по умолчанию, BYOK на каждом уровне.** Нативные десктопные приложения для macOS (Apple Silicon + Intel) и Windows (x64). Linux AppImage на опциональной линии релизов. SQLite в `.od/app.sqlite`, файлы в `.od/projects/<id>/`, без телеметрии, без обращений в облако.
+- 🖥️ **Локальный по умолчанию, BYOK на каждом уровне.** Нативные десктопные приложения остаются локальными, без обращений в облако. Перед описанием путей данных демона необходимо прочитать корневой `AGENTS.md`, раздел **Daemon data directory contract**.
 - 🌍 **Компонуемый в трёх плоскостях.** **Плагины** несут запускаемые рабочие процессы · **навыки** несут дизайнерский вкус агента · **дизайн-системы** несут бренд. Все три — это обычные файлы, которые кто угодно может создавать, версионировать и публиковать.
 - 🔁 **Обновляйте существующую кодовую базу.** Передайте `git`-репозиторий + `DESIGN.md` агенту, и он отрефакторит ваши реальные компоненты под спецификацию бренда. Специальные плагины мигрируют рабочие процессы Figma / Pencil в код React / Next.js / Vue.
 - 🔒 **Конфиденциальность по убеждению.** Всё работает там, где живут ваши данные — ваш ноутбук, сервер вашей команды, ваш проект на Vercel. Когда нужна сеть, BYOK-прокси защищён от SSRF.
@@ -533,7 +536,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -547,7 +550,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | Фронтенд | Next.js 16 App Router + React 18 + TypeScript |
 | Демон | Node 24 · Express · SSE-стриминг · `better-sqlite3` |
-| Хранилище | Файлы в `.od/projects/<id>/` + SQLite в `.od/app.sqlite` + `media-config.json` (gitignored, создаётся автоматически). `OD_DATA_DIR` перемещает всё. |
+| Хранилище | Перед изменением или документированием путей хранения демона необходимо прочитать корневой `AGENTS.md`, раздел **Daemon data directory contract**. Этот README НЕ ДОЛЖЕН пересказывать его. |
 | Предпросмотр | Изолированный iframe `srcdoc` + стриминговый парсер `<artifact>` |
 | Экспорт | HTML (встроенный) · PDF (печать из браузера) · PPTX (управляемый агентом) · ZIP · Markdown · MP4 (HyperFrames) |
 | Десктоп | Electron-оболочка + изолированный рендерер + sidecar IPC (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |

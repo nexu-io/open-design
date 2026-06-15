@@ -13,10 +13,11 @@
 
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { openSettingsDialog as openEntrySettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents } from '../lib/playwright/mock-factory.js';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -35,21 +36,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openSettingsDialog(page: Page) {
-  await waitForLoadingToClear(page);
-  // The entry "Open settings" button may either:
-  //   (a) open a popover menu containing a "Settings" item that opens the
-  //       dialog (older UI), or
-  //   (b) open the Settings dialog directly (current UI as of this PR).
-  // Try the menu-first path, fall through to the direct dialog if no
-  // menu materialises within a short window.
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
-  return dialog;
+  return openEntrySettingsDialog(page);
 }
 
 interface VelaMockState {
@@ -64,30 +51,24 @@ async function wireDaemonMocks(page: Page, state: VelaMockState) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    // Only AMR present — keeps the card layout deterministic regardless
-    // of whatever else `runtimes/registry.ts` later adds.
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'amr',
-            name: 'AMR (vela)',
-            bin: 'vela',
-            versionArgs: ['--version'],
-            available: true,
-            authStatus: null,
-            modelsSource: 'fallback',
-            models: [
-              { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini (openrouter · default)' },
-            ],
-            path: '/usr/local/bin/vela',
-            version: null,
-          },
-        ],
-      },
-    });
-  });
+  // Only AMR present — keeps the card layout deterministic regardless
+  // of whatever else `runtimes/registry.ts` later adds.
+  await routeAgents(page, [
+    {
+      id: 'amr',
+      name: 'AMR (vela)',
+      bin: 'vela',
+      versionArgs: ['--version'],
+      available: true,
+      authStatus: null,
+      modelsSource: 'fallback',
+      models: [
+        { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini (openrouter · default)' },
+      ],
+      path: '/usr/local/bin/vela',
+      version: null,
+    },
+  ]);
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     state.statusRequests += 1;

@@ -1,11 +1,16 @@
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
-import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
+import {
+  DEFAULT_MODEL_OPTION,
+  getRememberedLiveModels,
+  rememberLiveModels,
+} from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
+import { resolveAmrProfile } from '../integrations/vela.js';
 import {
   buildAuthDiagnostic,
   buildExecutableDiagnostic,
@@ -25,6 +30,21 @@ type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
   source: RuntimeModelSource;
 };
+
+function amrModelScopeFromEnv(env: NodeJS.ProcessEnv): string {
+  return resolveAmrProfile(env);
+}
+
+function withRememberedAmrModels(
+  def: RuntimeAgentDef,
+  env: NodeJS.ProcessEnv,
+  modelResult: FetchedRuntimeModels,
+): FetchedRuntimeModels {
+  if (def.id !== 'amr' || modelResult.models.length > 0) return modelResult;
+  const rememberedModels = getRememberedLiveModels(def.id, amrModelScopeFromEnv(env));
+  if (rememberedModels.length === 0) return modelResult;
+  return { models: rememberedModels, source: 'live' };
+}
 
 async function fetchModels(
   def: RuntimeAgentDef,
@@ -213,14 +233,15 @@ async function probe(
     fetchModels(def, launch.launchPath, probeEnv),
     probeAgentAuthStatus(def, launch.launchPath, probeEnv),
   ]);
+  const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
   const authDiagnostic = auth ? buildAuthDiagnostic(def, auth) : null;
   return {
     ...stripFns(def),
-    models: modelResult.models,
-    modelsSource: modelResult.source,
+    models: surfacedModelResult.models,
+    modelsSource: surfacedModelResult.source,
     available: true,
     path: launch.selectedPath,
     version: outcome.version,
@@ -244,6 +265,9 @@ function stripFns(
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
   // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
   // metadata and shouldn't bleed into the API response either.
+  // `inactivityTimeoutMs` is a spawn-time hint for the chat-run watchdog
+  // and is not part of the public AgentInfo contract — strip it here so
+  // the runtime registry stays the only consumer.
   const {
     buildArgs,
     listModels,
@@ -255,6 +279,7 @@ function stripFns(
     versionProbeTimeoutMs,
     maxPromptArgBytes,
     env,
+    inactivityTimeoutMs,
     authProbe,
     ...rest
   } = def;
@@ -279,6 +304,22 @@ async function safeProbe(
   }
 }
 
+function rememberDetectedLiveModels(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string>,
+  agent: DetectedAgent,
+): void {
+  if (def.id === 'amr' && agent.models.length === 0) return;
+  const scope = def.id === 'amr'
+    ? amrModelScopeFromEnv({
+        ...process.env,
+        ...(def.env || {}),
+        ...configuredEnv,
+      })
+    : null;
+  rememberLiveModels(agent.id, agent.models, scope);
+}
+
 export async function detectAgents(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
 ) {
@@ -288,8 +329,10 @@ export async function detectAgents(
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
   // including ones that only showed up after a CLI re-auth.
-  for (const agent of results) {
-    rememberLiveModels(agent.id, agent.models);
+  for (const [index, agent] of results.entries()) {
+    const def = AGENT_DEFS[index];
+    if (!def) continue;
+    rememberDetectedLiveModels(def, configuredEnvByAgent?.[def.id] ?? {}, agent);
   }
   return results;
 }
@@ -305,7 +348,7 @@ export async function* detectAgentsStream(
 ): AsyncGenerator<DetectedAgent> {
   const tagged = AGENT_DEFS.map((def, index) =>
     safeProbe(def, configuredEnvByAgent?.[def.id] ?? {}).then((agent) => {
-      rememberLiveModels(agent.id, agent.models);
+      rememberDetectedLiveModels(def, configuredEnvByAgent?.[def.id] ?? {}, agent);
       return { index, agent };
     }),
   );

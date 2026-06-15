@@ -1,3 +1,20 @@
+import type { VelaLoginStatus } from './integrations/vela.js';
+
+// AMR account id stamp for daemon-emitted run events. Browser captures get
+// `user_id` from the PostHog super-property register (analytics/client.ts);
+// daemon-side run_created/run_finished must stamp it at capture time or the
+// highest-value generation events stay unjoinable against the AMR project's
+// `app_user_id`. Env-configured auth (VELA_RUNTIME_KEY/VELA_LINK_URL) is
+// authorized but carries no profile, so it yields no stamp — only
+// file-backed sign-in knows the account id.
+export function amrUserIdForRunAnalytics(
+  status: VelaLoginStatus | null,
+): Record<string, string> {
+  if (status?.loggedIn !== true) return {};
+  const id = status.user?.id?.trim() ?? '';
+  return id ? { user_id: id } : {};
+}
+
 export interface RunEventForAnalyticsObservability {
   id?: number;
   event: string;

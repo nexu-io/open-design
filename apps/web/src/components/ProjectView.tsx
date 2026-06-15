@@ -14,6 +14,7 @@ import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
+import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import {
   findFirstQuestionForm,
@@ -98,6 +99,7 @@ import { randomUUID } from '../utils/uuid';
 import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
@@ -126,7 +128,7 @@ import {
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
-import type { AppliedPluginSnapshot, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -169,7 +171,6 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { ChatPane } from './ChatPane';
 import type { QuestionFormOpenRequest } from './AssistantMessage';
-import { WorkingDirPill } from './WorkingDirPill';
 import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
@@ -216,12 +217,55 @@ type ProjectChatSendMeta = ChatSendMeta & {
   queueOnly?: boolean;
   retryOfAssistantId?: string;
   sessionMode?: ChatSessionMode;
+  /** Overrides the run_created / run_finished `entry_from` analytics prop for
+   *  this send (e.g. 'resume_continue' from the resumable-failure Continue
+   *  action). Behavior never depends on it; it only shapes PostHog props. */
+  entryFrom?: ChatAnalyticsEntryFrom;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
   const existingIndex = current.findIndex((comment) => comment.id === saved.id);
   if (existingIndex < 0) return [...current, saved];
   return current.map((comment, index) => (index === existingIndex ? saved : comment));
+}
+
+function mergeServerMessageWithLocal(server: ChatMessage, local?: ChatMessage): ChatMessage {
+  if (!local) return server;
+  const merged: ChatMessage = { ...server };
+  if (!server.producedFiles?.length && local.producedFiles?.length) {
+    merged.producedFiles = local.producedFiles;
+  }
+  if (!server.preTurnFileNames?.length && local.preTurnFileNames?.length) {
+    merged.preTurnFileNames = local.preTurnFileNames;
+  }
+  if (!server.lastRunEventId && local.lastRunEventId) {
+    merged.lastRunEventId = local.lastRunEventId;
+  }
+  if (!server.startedAt && local.startedAt) {
+    merged.startedAt = local.startedAt;
+  }
+  if (!server.endedAt && local.endedAt) {
+    merged.endedAt = local.endedAt;
+  }
+  if (!server.runStatus && local.runStatus) {
+    merged.runStatus = local.runStatus;
+  }
+  return merged;
+}
+
+export function mergeServerMessagesIntoConversation(
+  current: ChatMessage[],
+  serverMessages: ChatMessage[],
+): ChatMessage[] {
+  const currentById = new Map(current.map((message) => [message.id, message]));
+  const serverIds = new Set(serverMessages.map((message) => message.id));
+  const merged = serverMessages.map((message) =>
+    mergeServerMessageWithLocal(message, currentById.get(message.id)),
+  );
+  for (const message of current) {
+    if (!serverIds.has(message.id)) merged.push(message);
+  }
+  return merged;
 }
 
 interface Props {
@@ -260,6 +304,7 @@ interface Props {
     id: string,
     choice: { model?: string; reasoning?: string },
   ) => void;
+  onApiModelChange?: (model: string) => void;
   onRefreshAgents: () => void;
   onThemeChange?: (theme: AppConfig['theme']) => void;
   onOpenSettings: (section?: SettingsSection) => void;
@@ -761,6 +806,7 @@ export function ProjectView({
   onModeChange,
   onAgentChange,
   onAgentModelChange,
+  onApiModelChange,
   onRefreshAgents,
   onThemeChange,
   onOpenSettings,
@@ -853,6 +899,12 @@ export function ProjectView({
   // attach the runId to.
   const [messagesInitialized, setMessagesInitialized] = useState(false);
   const [previewComments, setPreviewComments] = useState<PreviewComment[]>([]);
+  // Mirror so the send-now interrupt path can read the current statuses
+  // synchronously without re-creating its callback on every comment change.
+  const previewCommentsRef = useRef<PreviewComment[]>([]);
+  useEffect(() => {
+    previewCommentsRef.current = previewComments;
+  }, [previewComments]);
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
@@ -868,7 +920,6 @@ export function ProjectView({
   // True while a working-dir replace is reindexing the new folder. Surfaced
   // to the Design Files panel so the file list shows a loading state instead
   // of silently sitting on the old tree for the few seconds the scan takes.
-  const [workingDirReplacing, setWorkingDirReplacing] = useState(false);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
@@ -993,6 +1044,8 @@ export function ProjectView({
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
   const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
+  // Parallel to shareRequest, but opens the workspace's Download/Export menu.
+  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
   // deck preview to the slide its marked element lives on, so the user watches
   // the edit land in context instead of staying parked on slide 1. Mirrors the
@@ -1003,6 +1056,13 @@ export function ProjectView({
   >(null);
   const abortRef = useRef<AbortController | null>(null);
   const cancelRef = useRef<AbortController | null>(null);
+  // Runs explicitly superseded by a "send now" interrupt. Their abort
+  // controller is recorded here synchronously — before handleStop() clears the
+  // active refs — so the run's late terminal callbacks (which the daemon still
+  // delivers for a canceled run) can be recognized as stale and skip every
+  // current-run side effect, independent of abortRef churn. A WeakSet so a
+  // finished run's controller is collected once nothing else references it.
+  const supersededRunsRef = useRef<WeakSet<AbortController>>(new WeakSet());
   const streamingConversationIdRef = useRef<string | null>(null);
   const [queuedChatSends, setQueuedChatSends] = useState<QueuedChatSend[]>([]);
   const queuedChatSendsRef = useRef<QueuedChatSend[]>([]);
@@ -1201,14 +1261,27 @@ export function ProjectView({
   }, [messages]);
   const openQuestionsTab = useCallback((request?: QuestionFormOpenRequest) => {
     if (request) {
-      setManualQuestionFormRequest({
-        ...request,
-        submittedAnswers:
-          request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
-      });
+      const opensCurrentLiveForm =
+        request.messageId === lastAssistantMessageId
+        && questionForm?.id === request.form.id
+        && questionFormSubmittedAnswers === undefined;
+      if (opensCurrentLiveForm) {
+        setManualQuestionFormRequest(null);
+      } else {
+        setManualQuestionFormRequest({
+          ...request,
+          submittedAnswers:
+            request.submittedAnswers ?? submittedAnswersForQuestionFormRequest(request) ?? undefined,
+        });
+      }
     }
     setQuestionsFocusNonce((n) => n + 1);
-  }, [submittedAnswersForQuestionFormRequest]);
+  }, [
+    lastAssistantMessageId,
+    questionForm,
+    questionFormSubmittedAnswers,
+    submittedAnswersForQuestionFormRequest,
+  ]);
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
@@ -1662,7 +1735,13 @@ export function ProjectView({
   }, []);
 
   const persistArtifact = useCallback(
-    async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
+    async (art: Artifact, projectFilesSnapshot?: ProjectFile[], sourceText?: string) => {
+      const recoveredHtml = recoverHtmlArtifactFromPrecedingDocument({
+        artifactHtml: art.html,
+        identifier: art.identifier,
+        sourceText,
+      });
+      const artifactToPersist = recoveredHtml ? { ...art, html: recoveredHtml } : art;
       const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
       // Pick a name that doesn't collide with an existing project file.
@@ -1678,7 +1757,7 @@ export function ProjectView({
       }
       if (ext === '.html') {
         const pointerTarget = resolveHtmlPointerArtifactTarget({
-          content: art.html,
+          content: artifactToPersist.html,
           candidateFileName: fileName,
           projectFiles: currentProjectFiles,
         });
@@ -1695,7 +1774,7 @@ export function ProjectView({
       // when only Edit-tool changes happened this turn. Without this guard,
       // such content lands as a phantom HTML file in the project panel.
       if (ext === '.html') {
-        const validation = validateHtmlArtifact(art.html);
+        const validation = validateHtmlArtifact(artifactToPersist.html);
         if (!validation.ok) {
           setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
           return;
@@ -1727,7 +1806,7 @@ export function ProjectView({
                 designSystemId: project.designSystemId,
               },
             });
-      const file = await writeProjectTextFile(project.id, fileName, art.html, {
+      const file = await writeProjectTextFile(project.id, fileName, artifactToPersist.html, {
         artifactManifest: manifest ?? undefined,
       });
       if (file) {
@@ -1763,6 +1842,18 @@ export function ProjectView({
     },
     [project.id, project.designSystemId, project.skillId, requestOpenFile],
   );
+
+  const artifactFromStandaloneHtml = useCallback((sourceText: string): Artifact | null => {
+    const html = recoverStandaloneHtmlDocument(sourceText)
+      ?? recoverHtmlDocumentFromMarkdownFence(sourceText);
+    if (!html) return null;
+    return {
+      identifier: 'response',
+      artifactType: 'text/html',
+      title: 'Response',
+      html,
+    };
+  }, []);
 
   // Set of project file names that the chat surface uses to decide whether
   // a tool card's path is openable as a tab. Recomputed on every file-list
@@ -2073,13 +2164,11 @@ export function ProjectView({
       sessionMode: sessionModeOverride,
       locale,
       userInstructions: config.customInstructions,
-      projectInstructions: project.customInstructions,
     });
   }, [
     project.skillId,
     project.designSystemId,
     project.metadata,
-    project.customInstructions,
     skills,
     designTemplates,
     designSystems,
@@ -2184,6 +2273,32 @@ export function ProjectView({
     [activeConversationId, project.id],
   );
 
+  const refreshConversationMessagesFromServer = useCallback(
+    async (conversationId: string) => {
+      if (messagesConversationIdRef.current !== conversationId) return;
+      try {
+        const serverMessages = await listMessages(project.id, conversationId);
+        if (messagesConversationIdRef.current !== conversationId) return;
+        setMessages((current) => mergeServerMessagesIntoConversation(current, serverMessages));
+        setMessagesInitialized(true);
+        setMessagesConversationId(conversationId);
+        setFailedMessagesConversationId(null);
+      } catch (err) {
+        console.warn('Failed to refresh conversation messages after run completion', err);
+      }
+    },
+    [project.id],
+  );
+
+  const scheduleConversationMessageRefresh = useCallback(
+    (conversationId: string) => {
+      window.setTimeout(() => {
+        void refreshConversationMessagesFromServer(conversationId);
+      }, 150);
+    },
+    [refreshConversationMessagesFromServer],
+  );
+
   const markStreamingConversation = useCallback((conversationId: string) => {
     streamingConversationIdRef.current = conversationId;
     setStreaming(true);
@@ -2207,11 +2322,25 @@ export function ProjectView({
     cancelController: AbortController,
   ) => {
     if (!shouldClearActiveRunRefs(streamingConversationIdRef.current, conversationId)) {
-      return;
+      return false;
     }
-    if (abortRef.current === controller) abortRef.current = null;
-    if (cancelRef.current === cancelController) cancelRef.current = null;
+    if (abortRef.current !== controller || cancelRef.current !== cancelController) {
+      return false;
+    }
+    abortRef.current = null;
+    cancelRef.current = null;
+    return true;
   }, []);
+
+  const clearCurrentRunStreamingMarker = useCallback((
+    conversationId: string,
+    controller: AbortController,
+    cancelController: AbortController,
+  ) => {
+    if (!clearActiveRunRefs(conversationId, controller, cancelController)) return false;
+    clearStreamingMarker(conversationId);
+    return true;
+  }, [clearActiveRunRefs, clearStreamingMarker]);
 
   const handleAssistantFeedback = useCallback(
     (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => {
@@ -2488,7 +2617,11 @@ export function ProjectView({
         }
         updateMessageById(
           message.id,
-          (prev) => ({ ...prev, runStatus: status.status }),
+          (prev) => ({
+            ...prev,
+            runStatus: status.status,
+            ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
+          }),
           true,
         );
 
@@ -2599,9 +2732,22 @@ export function ProjectView({
               textBuffer.appendEvent(ev);
             },
             onDone: () => {
-              textBuffer.flush();
+              // A reattached run interrupted by a "send now" still receives a
+              // late onDone from the daemon. Decide ownership first, then bail
+              // BEFORE any current-run side effect (committing buffered text,
+              // repainting the artifact preview via setArtifact, re-finalizing
+              // the message) — only release this run's bookkeeping. See the
+              // streamViaDaemon onDone for the ownership rationale.
+              const runMayFinalize =
+                !supersededRunsRef.current.has(controller);
+              if (runMayFinalize) textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
+              completedReattachRunsRef.current.add(runId);
+              reattachControllersRef.current.delete(runId);
+              reattachCancelControllersRef.current.delete(runId);
+              clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
+              if (!runMayFinalize) return;
               for (const ev of parser.flush()) {
                 if (ev.type === 'artifact:end') {
                   parsedArtifact = parsedArtifact
@@ -2626,11 +2772,6 @@ export function ProjectView({
                 true,
                 { telemetryFinalized: true },
               );
-              completedReattachRunsRef.current.add(runId);
-              reattachControllersRef.current.delete(runId);
-              reattachCancelControllersRef.current.delete(runId);
-              clearActiveRunRefs(reattachConversationId, controller, cancelController);
-              clearStreamingMarker(reattachConversationId);
               void (async () => {
                 const preTurn = message.preTurnFileNames;
                 let nextFiles = await refreshProjectFiles();
@@ -2639,18 +2780,27 @@ export function ProjectView({
                 // fall back to the current list for legacy messages.
                 const beforeFileNames = new Set(preTurn ?? nextFiles.map((f) => f.name));
                 let recoveredExistingArtifact: ProjectFile | null = null;
-                if (parsedArtifact?.html) {
+                const artifactToPersist = parsedArtifact?.html
+                  ? parsedArtifact
+                  : artifactFromStandaloneHtml(replayedContent);
+                if (artifactToPersist?.html) {
+                  const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
                   recoveredExistingArtifact = findExistingArtifactProjectFile(
-                    parsedArtifact,
+                    artifactToPersist,
                     nextFiles,
                     { minMtime: runStartedAt },
-                  );
+                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
+                    artifactHtml: artifactToPersist.html,
+                    producedFiles: producedBeforeFallback,
+                    readProjectHtml,
+                    allowAnyHtmlWrite: message.agentId === 'claude',
+                  });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
                   } else {
-                    await persistArtifact(parsedArtifact, nextFiles);
+                    await persistArtifact(artifactToPersist, nextFiles, replayedContent);
                     nextFiles = await refreshProjectFiles();
                   }
                 }
@@ -2672,25 +2822,32 @@ export function ProjectView({
             },
             onError: (err) => {
               const errorCode = (err as Error & { code?: string }).code;
+              const resumable = (err as Error & { resumable?: boolean }).resumable === true;
+              // A superseded reattached run must not paint a global failure
+              // banner or re-finalize its message over the replacement run.
+              const runMayFinalize =
+                !supersededRunsRef.current.has(controller);
               textBuffer.flush();
               textBuffer.cancel();
               unregisterTextBuffer();
-              setError(err.message);
-              appendAssistantErrorEvent(message.id, err.message, errorCode);
-              updateMessageById(
-                message.id,
-                (prev) => ({
-                  ...prev,
-                  runStatus: 'failed',
-                  endedAt: prev.endedAt ?? Date.now(),
-                }),
-                true,
-              );
+              if (runMayFinalize) {
+                setError(err.message);
+                appendAssistantErrorEvent(message.id, err.message, errorCode);
+                updateMessageById(
+                  message.id,
+                  (prev) => ({
+                    ...prev,
+                    runStatus: 'failed',
+                    endedAt: prev.endedAt ?? Date.now(),
+                    resumable,
+                  }),
+                  true,
+                );
+              }
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
-              clearActiveRunRefs(reattachConversationId, controller, cancelController);
-              clearStreamingMarker(reattachConversationId);
+              clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               persistNow({ telemetryFinalized: true });
             },
           },
@@ -2711,9 +2868,11 @@ export function ProjectView({
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
-              clearActiveRunRefs(reattachConversationId, controller, cancelController);
-              clearStreamingMarker(reattachConversationId);
+              clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               persistNow({ telemetryFinalized: true });
+            }
+            if (isTerminalRunStatus(runStatus)) {
+              scheduleConversationMessageRefresh(reattachConversationId);
             }
           },
           onRunEventId: (lastRunEventId) => {
@@ -2723,7 +2882,12 @@ export function ProjectView({
           },
         })
           .catch((err) => {
-            if ((err as Error).name !== 'AbortError') {
+            // Skip AbortError (expected on interrupt) and any error from a run
+            // that was tagged superseded by a send-now interrupt — it must not
+            // surface a global failure over the replacement.
+            const runMayFinalize =
+              !supersededRunsRef.current.has(controller);
+            if ((err as Error).name !== 'AbortError' && runMayFinalize) {
               const msg = err instanceof Error ? err.message : String(err);
               setError(msg);
               appendAssistantErrorEvent(message.id, msg);
@@ -2764,10 +2928,13 @@ export function ProjectView({
     markStreamingConversation,
     clearStreamingMarker,
     clearActiveRunRefs,
+    clearCurrentRunStreamingMarker,
     refreshProjectFiles,
+    readProjectHtml,
     persistArtifact,
     requestOpenFile,
     onProjectsRefresh,
+    scheduleConversationMessageRefresh,
   ]);
 
   const commitQueuedChatSends = useCallback((next: QueuedChatSend[]) => {
@@ -3273,6 +3440,20 @@ export function ProjectView({
           }));
         },
         onDone: (fullText = '') => {
+          // The daemon delivers onDone even for a canceled run, so a run
+          // superseded by a "send now" interrupt can still land here and must
+          // not apply its completion side effects over the replacement. A run
+          // may finalize unless it was tagged superseded at interrupt time
+          // (recorded before handleStop cleared the refs), which is reliable
+          // even before the replacement send attaches — unlike abortRef, whose
+          // terminal onRunStatus / handleStop churn make it ambiguous here.
+          const runMayFinalize =
+            !supersededRunsRef.current.has(controller);
+          if (!runMayFinalize) {
+            textBuffer.cancel();
+            cancelSendTextBuffer();
+            return;
+          }
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
@@ -3314,9 +3495,12 @@ export function ProjectView({
             if (runCommentAttachments.length > 0) {
               void patchAttachedStatuses(runCommentAttachments, 'failed');
             }
-            clearActiveRunRefs(runConversationId, controller, cancelController);
-            clearStreamingMarker(runConversationId);
-            updateConversationLatestRun('failed', endedAt);
+            const ownsCurrentRun = clearCurrentRunStreamingMarker(
+              runConversationId,
+              controller,
+              cancelController,
+            );
+            if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
             void refreshProjectFiles();
             onProjectsRefresh();
             return;
@@ -3334,18 +3518,37 @@ export function ProjectView({
           if (runCommentAttachments.length > 0) {
             void patchAttachedStatuses(runCommentAttachments, 'needs_review');
           }
-          clearActiveRunRefs(runConversationId, controller, cancelController);
-          clearStreamingMarker(runConversationId);
-          updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
+          const ownsCurrentRun = clearCurrentRunStreamingMarker(
+            runConversationId,
+            controller,
+            cancelController,
+          );
+          if (ownsCurrentRun) updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
           // Refetch the file list directly (rather than just bumping the
           // refresh signal) so we can diff against the pre-turn snapshot
           // and attach the new files to the assistant message as download
           // chips.
           void (async () => {
             let nextFiles = await refreshProjectFiles();
-            if (parsedArtifact?.html) {
-              await persistArtifact(parsedArtifact, nextFiles);
-              nextFiles = await refreshProjectFiles();
+            const finalText = streamedText || fullText;
+            const artifactToPersist = parsedArtifact?.html
+              ? parsedArtifact
+              : artifactFromStandaloneHtml(finalText);
+            if (artifactToPersist?.html) {
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
+                artifactHtml: artifactToPersist.html,
+                producedFiles: producedBeforeFallback,
+                readProjectHtml,
+                allowAnyHtmlWrite: assistantAgentId === 'claude',
+              });
+              if (sameTurnHtmlWrite) {
+                savedArtifactRef.current = sameTurnHtmlWrite.name;
+                requestOpenFile(sameTurnHtmlWrite.name);
+              } else {
+                await persistArtifact(artifactToPersist, nextFiles, finalText);
+                nextFiles = await refreshProjectFiles();
+              }
             }
             const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
@@ -3367,24 +3570,38 @@ export function ProjectView({
         onError: (err: Error) => {
           const endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
+          const resumable = (err as Error & { resumable?: boolean }).resumable === true;
+          // A run superseded by a "send now" interrupt can still surface a
+          // late disconnect error (e.g. a canceled stream that lost its
+          // terminal SSE). It must not paint a global failure banner or
+          // re-finalize its already-canceled assistant message once it was
+          // tagged superseded. See the onDone above for the ownership rationale.
+          const runMayFinalize =
+            !supersededRunsRef.current.has(controller);
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
-          setError(err.message);
-          appendAssistantErrorEvent(assistantId, err.message, errorCode);
-          updateAssistant((prev) => ({
-            ...prev,
-            endedAt,
-            runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
-              ? 'failed'
-              : prev.runStatus,
-          }));
-          if (runCommentAttachments.length > 0) {
-            void patchAttachedStatuses(runCommentAttachments, 'failed');
+          if (runMayFinalize) {
+            setError(err.message);
+            appendAssistantErrorEvent(assistantId, err.message, errorCode);
+            updateAssistant((prev) => ({
+              ...prev,
+              endedAt,
+              runStatus: config.mode === 'api' || prev.runId || isActiveRunStatus(prev.runStatus)
+                ? 'failed'
+                : prev.runStatus,
+              resumable,
+            }));
+            if (runCommentAttachments.length > 0) {
+              void patchAttachedStatuses(runCommentAttachments, 'failed');
+            }
           }
-          clearActiveRunRefs(runConversationId, controller, cancelController);
-          clearStreamingMarker(runConversationId);
-          updateConversationLatestRun('failed', endedAt);
+          const ownsCurrentRun = clearCurrentRunStreamingMarker(
+            runConversationId,
+            controller,
+            cancelController,
+          );
+          if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
             if (finalized) persistMessage(finalized, { telemetryFinalized: true });
@@ -3429,6 +3646,13 @@ export function ProjectView({
               },
             }
           : undefined;
+        // A caller-supplied entry_from (e.g. 'resume_continue' from the
+        // resumable-failure Continue action) overrides the DS default so the
+        // run is attributed to the affordance that started it.
+        const runAnalyticsHints =
+          meta?.entryFrom
+            ? { ...(dsAnalyticsHints ?? {}), entryFrom: meta.entryFrom }
+            : dsAnalyticsHints;
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -3453,7 +3677,7 @@ export function ProjectView({
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
           locale,
-          ...(dsAnalyticsHints ? { analyticsHints: dsAnalyticsHints } : {}),
+          ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
             const pinnedAssistant = {
               ...latestAssistantMsg,
@@ -3468,6 +3692,8 @@ export function ProjectView({
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
+            const runMayFinalize =
+              !supersededRunsRef.current.has(controller);
             updateMessageById(
               assistantId,
               (prev) => ({
@@ -3478,10 +3704,11 @@ export function ProjectView({
               true,
               runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
             );
+            if (!runMayFinalize) return;
             updateConversationLatestRun(runStatus, endedAt);
             if (isTerminalRunStatus(runStatus)) {
-              clearActiveRunRefs(runConversationId, controller, cancelController);
-              clearStreamingMarker(runConversationId);
+              clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
+              scheduleConversationMessageRefresh(runConversationId);
             }
           },
           onRunEventId: (lastRunEventId) => {
@@ -3625,6 +3852,7 @@ export function ProjectView({
       projectFiles,
       refreshProjectFiles,
       refreshLiveArtifacts,
+      readProjectHtml,
       requestOpenFile,
       persistMessage,
       persistMessageById,
@@ -3633,11 +3861,43 @@ export function ProjectView({
       updateMessageById,
       markStreamingConversation,
       clearStreamingMarker,
-      clearActiveRunRefs,
+      clearCurrentRunStreamingMarker,
+      scheduleConversationMessageRefresh,
       onProjectsRefresh,
       onProjectChange,
     ],
   );
+
+  // Cancel every in-flight run for the current conversation (the user's own
+  // streaming turn plus any reattached runs), mark their assistant messages
+  // canceled, and drop the streaming state. Defined here — ahead of the
+  // queued-send handlers — because "send now" interrupts the active run to
+  // make room for the prioritized send.
+  const handleStop = useCallback(() => {
+    const stoppedAt = Date.now();
+    cancelSendTextBuffer(true);
+    cancelReattachTextBuffers(true);
+    cancelRef.current?.abort();
+    cancelRef.current = null;
+    for (const controller of reattachCancelControllersRef.current.values()) {
+      controller.abort();
+    }
+    reattachCancelControllersRef.current.clear();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    for (const controller of reattachControllersRef.current.values()) {
+      controller.abort();
+    }
+    reattachControllersRef.current.clear();
+    setStreaming(false);
+    streamingConversationIdRef.current = null;
+    setStreamingConversationId(null);
+    setMessages((curr) => {
+      const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
+      for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
+      return next;
+    });
+  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   // Flip the deck preview to the slide a queued send's marked element lives on
   // the moment that send starts processing. No-op for plain prompts or marks
@@ -3653,7 +3913,53 @@ export function ProjectView({
     const item = queuedChatSendsRef.current.find((candidate) => candidate.id === id);
     if (!item) return;
     if (currentConversationBusy) {
+      // "Send now" while the agent is still working: the user has explicitly
+      // chosen this turn over the in-flight one, so interrupt the running run
+      // and move this item to the front. Stopping flips the conversation out
+      // of its busy state, and the auto-start effect below then flushes the
+      // now-first queued send — reusing the same path as a natural completion,
+      // so runs never overlap.
+      //
+      // Record the runs we're superseding BEFORE handleStop() clears the active
+      // refs. The daemon still delivers a late terminal callback for the
+      // canceled run; tagging its controller here lets those callbacks be
+      // recognized as stale and skip every current-run side effect, even if the
+      // replacement send hasn't attached yet.
+      if (abortRef.current) supersededRunsRef.current.add(abortRef.current);
+      for (const controller of reattachControllersRef.current.values()) {
+        supersededRunsRef.current.add(controller);
+      }
+      // The interrupted turn moved its preview-comment attachments to
+      // 'applying' when it started; since we now suppress its terminal
+      // callbacks, reset them to 'open' so they don't stay stuck mid-apply.
+      // Reset ONLY the in-flight run's comments: queued sends (including the
+      // one being prioritized) also hold their attachments in 'applying', and
+      // those must stay reserved — the replacement run re-applies them. The
+      // in-flight run's comments are exactly the 'applying' ones not owned by
+      // any queued send.
+      const queuedCommentIds = new Set(
+        queuedChatSendsRef.current.flatMap((send) =>
+          send.commentAttachments.map((attachment) => attachment.id),
+        ),
+      );
+      const stuckApplying = previewCommentsRef.current.filter(
+        (comment) => comment.status === 'applying' && !queuedCommentIds.has(comment.id),
+      );
+      if (stuckApplying.length > 0) {
+        const resetIds = new Set(stuckApplying.map((comment) => comment.id));
+        setPreviewComments((current) =>
+          current.map((comment) =>
+            resetIds.has(comment.id) ? { ...comment, status: 'open' } : comment,
+          ),
+        );
+        void Promise.all(
+          stuckApplying.map((comment) =>
+            patchPreviewCommentStatus(project.id, comment.conversationId, comment.id, 'open'),
+          ),
+        ).catch(() => {});
+      }
       prioritizeQueuedChatSend(id);
+      handleStop();
       return;
     }
     void (async () => {
@@ -3666,7 +3972,7 @@ export function ProjectView({
       );
       if (started) removeQueuedChatSend(id);
     })();
-  }, [armSlideNavForQueuedSend, currentConversationBusy, handleSend, prioritizeQueuedChatSend, removeQueuedChatSend]);
+  }, [armSlideNavForQueuedSend, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend]);
 
   useEffect(() => {
     if (currentConversationBusy) {
@@ -3716,6 +4022,22 @@ export function ProjectView({
     (assistantMessage: ChatMessage) => {
       if (currentConversationActionDisabled) return;
       void handleSend('', [], [], { retryOfAssistantId: assistantMessage.id });
+    },
+    [currentConversationActionDisabled, handleSend],
+  );
+
+  // "Continue" on a resumable failed run: send a fresh turn in the same
+  // conversation. For a session-resuming runtime (Claude) the daemon persisted
+  // the failed run's CLI session, so this turn resumes it (`--resume`) and the
+  // agent continues from its committed work instead of restarting. Mirrors the
+  // "Continue remaining tasks" affordance; unlike Retry it does not replay the
+  // prior turn from scratch. Tagged `entryFrom: 'resume_continue'` so
+  // run_created / run_finished can quantify how often resume fires and whether
+  // it recovers (the whole point is to show the mechanism lowers failure rate).
+  const handleResumeRun = useCallback(
+    (_assistantMessage: ChatMessage) => {
+      if (currentConversationActionDisabled) return;
+      void handleSend(RESUME_CONTINUE_PROMPT, [], [], { entryFrom: 'resume_continue' });
     },
     [currentConversationActionDisabled, handleSend],
   );
@@ -4129,18 +4451,28 @@ export function ProjectView({
   // "Share to Open Design" — kicks off the bundled `od-share-to-community`
   // scenario in the active conversation. We just inject the trigger prompt
   // through the standard chat-send path; the agent then loads SKILL.md and
-  // drives the rest. Busy flag debounces the double-click while the send
-  // request is in flight (handleSend is async).
-  const [shareToOpenDesignBusy, setShareToOpenDesignBusy] = useState(false);
-  const shareToOpenDesignBusyRef = useRef(false);
-  const handleShareToOpenDesign = useCallback(() => {
-    if (currentConversationActionDisabled || shareToOpenDesignBusyRef.current) return;
-    shareToOpenDesignBusyRef.current = true;
-    setShareToOpenDesignBusy(true);
+  // drives the rest. Keep this preparing state alive for the resulting chat
+  // run so the action reads as async packaging instead of instant sharing.
+  const [shareToOpenDesignBusyMessageId, setShareToOpenDesignBusyMessageId] = useState<string | null>(null);
+  const shareToOpenDesignBusyMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!shareToOpenDesignBusyMessageIdRef.current || currentConversationBusy) return;
+    shareToOpenDesignBusyMessageIdRef.current = null;
+    setShareToOpenDesignBusyMessageId(null);
+  }, [currentConversationBusy]);
+  const handleShareToOpenDesign = useCallback((assistantMessageId: string) => {
+    if (currentConversationActionDisabled || shareToOpenDesignBusyMessageIdRef.current) return;
+    shareToOpenDesignBusyMessageIdRef.current = assistantMessageId;
+    setShareToOpenDesignBusyMessageId(assistantMessageId);
     void Promise.resolve(handleSend(SHARE_TO_COMMUNITY_PROMPT, [], []))
-      .finally(() => {
-        shareToOpenDesignBusyRef.current = false;
-        setShareToOpenDesignBusy(false);
+      .then((started) => {
+        if (started) return;
+        shareToOpenDesignBusyMessageIdRef.current = null;
+        setShareToOpenDesignBusyMessageId(null);
+      })
+      .catch(() => {
+        shareToOpenDesignBusyMessageIdRef.current = null;
+        setShareToOpenDesignBusyMessageId(null);
       });
   }, [currentConversationActionDisabled, handleSend]);
 
@@ -4163,6 +4495,7 @@ export function ProjectView({
     onProjectChange({ ...project, metadata });
     void patchProject(project.id, { metadata });
   }, [onProjectChange, project]);
+
   const sendDesignSystemFeedback = useCallback((
     sectionTitle: string,
     feedback: string,
@@ -4251,31 +4584,6 @@ export function ProjectView({
     projectFiles,
   ]);
 
-  const handleStop = useCallback(() => {
-    const stoppedAt = Date.now();
-    cancelSendTextBuffer(true);
-    cancelReattachTextBuffers(true);
-    cancelRef.current?.abort();
-    cancelRef.current = null;
-    for (const controller of reattachCancelControllersRef.current.values()) {
-      controller.abort();
-    }
-    reattachCancelControllersRef.current.clear();
-    abortRef.current?.abort();
-    abortRef.current = null;
-    for (const controller of reattachControllersRef.current.values()) {
-      controller.abort();
-    }
-    reattachControllersRef.current.clear();
-    setStreaming(false);
-    streamingConversationIdRef.current = null;
-    setStreamingConversationId(null);
-    setMessages((curr) => {
-      const { messages: next, finalized } = finalizeActiveAssistantMessagesOnStop(curr, stoppedAt);
-      for (const message of finalized) persistMessage(message, { telemetryFinalized: true });
-      return next;
-    });
-  }, [cancelSendTextBuffer, cancelReattachTextBuffers, persistMessage]);
 
   const handleNewConversation = useCallback(async () => {
     if (creatingConversationRef.current) return;
@@ -4536,10 +4844,6 @@ export function ProjectView({
             onSend: handleSend,
             onRetry: handleRetry,
             onStop: handleStop,
-            onSubmitForm: (text: string) => {
-              if (currentConversationActionDisabled) return;
-              void handleSend(text, [], []);
-            },
             onRemoveQueuedSend: removeQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
@@ -4721,19 +5025,22 @@ export function ProjectView({
   }, [githubConnected, onOpenSettings, designSystemProject, projectFiles]);
 
   // "Next step" affordance handlers (shown under the last assistant message
-  // once it produced a previewable HTML artifact). Recommended-direction chips
-  // prefill the composer (not auto-send) so the user reviews before sending;
-  // Share reuses the preview workspace's existing Share/Export menu. There is
-  // deliberately no generic "continue editing" / "optimize visuals" action —
-  // free-form follow-ups belong in the composer and the visual directions are
-  // already covered by the concrete chips, so vague catch-alls only added noise.
-  const handleArtifactChip = useCallback((_fileName: string, prompt: string) => {
-    setComposerDraftSignal({ text: prompt, nonce: Date.now() });
-  }, []);
+  // once it produced a previewable HTML artifact). Share reuses the preview
+  // workspace's existing Share/Export menu. The featured design-toolbox rows are
+  // driven by ChatPane's composer ref, so ProjectView no longer wires them here.
   const handleArtifactShare = useCallback(
     (fileName: string) => {
       requestOpenFile(fileName);
       setShareRequest({ name: fileName, nonce: Date.now() });
+    },
+    [requestOpenFile],
+  );
+  // Mirrors share, but opens the workspace's Download/Export menu (PDF / image /
+  // zip / standalone HTML / save-as-template) instead of a bare file download.
+  const handleArtifactDownload = useCallback(
+    (fileName: string) => {
+      requestOpenFile(fileName);
+      setDownloadRequest({ name: fileName, nonce: Date.now() });
     },
     [requestOpenFile],
   );
@@ -5247,9 +5554,18 @@ export function ProjectView({
         });
         onAgentModelChange(agentId, choice);
       }}
+      onApiModelChange={(model) => {
+        trackComposerBarClick(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'agent_model_select',
+          model_id: model,
+          ...(project?.id ? { project_id: project.id } : {}),
+        });
+        onApiModelChange?.(model);
+      }}
       onOpenSettings={onOpenSettings}
       onRefreshAgents={onRefreshAgents}
-      onBack={onBack}
       placement="up"
     />
   );
@@ -5309,6 +5625,7 @@ export function ProjectView({
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
               onSend={handleSend}
               onRetry={handleRetry}
+              onResumeRun={handleResumeRun}
               onStop={handleStop}
               onRemoveQueuedSend={removeQueuedChatSend}
               onUpdateQueuedSend={updateQueuedChatSend}
@@ -5321,18 +5638,14 @@ export function ProjectView({
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
               onShareToOpenDesign={handleShareToOpenDesign}
-              shareToOpenDesignBusy={shareToOpenDesignBusy}
+              shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
-              onSubmitForm={(text) => {
-                if (currentConversationActionDisabled) return;
-                void handleSend(text, [], []);
-              }}
               onOpenQuestions={openQuestionsTab}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}
               onArtifactShare={handleArtifactShare}
-              onArtifactChip={handleArtifactChip}
+              onArtifactDownload={handleArtifactDownload}
               onForkFromMessage={handleForkFromMessage}
               forkingMessageId={forkingMessageId}
               onNewConversation={handleNewConversation}
@@ -5342,6 +5655,7 @@ export function ProjectView({
               messagesConversationId={messagesConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
+              config={config}
               onOpenSettings={onOpenSettings}
               showByokRecoveryAction={
                 config.mode === 'api' &&
@@ -5401,28 +5715,6 @@ export function ProjectView({
               onBack={onBack}
               backLabel={t('project.backToProjects')}
               composerFooterAccessory={executionControls}
-              composerLeadingAccessory={(
-                <WorkingDirPill
-                  projectId={project.id}
-                  resolvedDir={projectDetail.resolvedDir}
-                  onReplaced={({ project: updated }) => {
-                    if (updated) onProjectChange(updated);
-                    // The new working dir has a different file tree, so the
-                    // current listing, breadcrumb nav, and open tabs are all
-                    // stale. Refetch files; DesignFilesPanel's self-heal then
-                    // drops the now-unmatched currentDir back to root.
-                    // projectDetail.refresh() repulls resolvedDir so the
-                    // breadcrumb root + pill show the new folder name even on
-                    // the Electron path, which reports no updated project.
-                    setWorkingDirReplacing(true);
-                    refreshFilesAndDesignMd();
-                    void Promise.all([
-                      refreshWorkspaceItems(),
-                      projectDetail.refresh(),
-                    ]).finally(() => setWorkingDirReplacing(false));
-                  }}
-                />
-              )}
               projectHeader={(
                 <span className="chat-project-title-line">
                   <span
@@ -5492,7 +5784,7 @@ export function ProjectView({
               ? baseDir.split(/[/\\]/).filter(Boolean).pop()
               : undefined;
           })()}
-          reloading={workingDirReplacing}
+          reloading={false}
           resolvedDir={projectDetail.resolvedDir}
           files={projectFiles}
           liveArtifacts={liveArtifacts}
@@ -5506,6 +5798,7 @@ export function ProjectView({
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
           shareRequest={shareRequest}
+          downloadRequest={downloadRequest}
           slideNavRequest={slideNavRequest}
           liveArtifactEvents={liveArtifactEvents}
           designSystemActivityEvents={designSystemActivityEvents}
@@ -5567,6 +5860,7 @@ export function ProjectView({
                 config={config}
                 onThemeChange={handleThemeChange}
                 onOpenSettings={onOpenSettings}
+                trackingPageName="artifact"
                 onTrackTriggerClick={() => {
                   // Spec row 52: the settings gear in the artifact header.
                   // Carry the active artifact so settings slices line up with
@@ -5601,6 +5895,7 @@ export function ProjectView({
           onClose={() => setContextPluginDetails(null)}
           onUse={() => setContextPluginDetails(null)}
           isApplying={false}
+          hideUseAction
         />
       ) : null}
       {contextDesignSystemDetails ? (
@@ -6014,6 +6309,42 @@ export function mergeRecoveredArtifact(
   if (!recovered) return [...diff];
   if (diff.some((f) => f.name === recovered.name)) return [...diff];
   return [...diff, recovered];
+}
+
+export async function findSameTurnHtmlWriteForRecoveredArtifact({
+  artifactHtml,
+  producedFiles,
+  readProjectHtml,
+  allowAnyHtmlWrite = false,
+}: {
+  artifactHtml: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectHtml: (name: string) => Promise<string | null>;
+  allowAnyHtmlWrite?: boolean;
+}): Promise<ProjectFile | null> {
+  const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
+  if (!recovered) return null;
+  const candidates = producedFiles.filter(isHtmlProjectFile);
+  for (const file of candidates) {
+    const text = await readProjectHtml(file.name);
+    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
+      return file;
+    }
+  }
+  if (allowAnyHtmlWrite) return candidates[0] ?? null;
+  return null;
+}
+
+function isHtmlProjectFile(file: ProjectFile): boolean {
+  const name = (file.path || file.name).toLowerCase();
+  return file.kind === 'html' || /\.(?:html?|xhtml)$/u.test(name);
+}
+
+function normalizeHtmlForRecoveredArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
 }
 
 export function clearStreamingConversationMarker(

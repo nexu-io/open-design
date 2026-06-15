@@ -104,12 +104,17 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
   // for the empty-agents / partial-config inputs so a future caller
   // can't silently skip the gate again.
 
-  it('reports unavailable / local_cli when daemon mode is pinned but no agents are loaded yet', () => {
+  it('reports unavailable / none when daemon mode is pinned but no agents are loaded yet', () => {
+    // Pre-amr_auth_result, the daemon branch hardcoded 'local_cli', which
+    // made 'none' unreachable on desktop. The type now follows the actual
+    // configured state; App.tsx's agentsLoading gate still keeps the boot
+    // 'unknown' in place until the probe lands, so this input shape only
+    // reaches the helper for machines that genuinely have no CLI.
     expect(
       deriveConfigureGlobals({ mode: 'daemon', agentId: 'claude', agents: [] }),
     ).toEqual({
       has_available_configure_cli: false,
-      configure_type: 'local_cli',
+      configure_type: 'none',
       configure_availability: 'unavailable',
     });
   });
@@ -158,6 +163,67 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
       has_available_configure_cli: true,
       configure_type: 'local_cli',
       configure_availability: 'unavailable',
+    });
+  });
+});
+
+describe('deriveConfigureGlobals — AMR', () => {
+  // AMR ships with the app, so its agent row counting as a "local CLI"
+  // would put every install in the local_cli bucket and make the
+  // amr/none buckets unreachable. Sign-in (`amrAuthorized`) is AMR's
+  // configured signal.
+  it('does not count the bundled amr agent as an available local CLI', () => {
+    expect(
+      deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: 'amr',
+        agents: [{ id: 'amr', available: true }],
+      }),
+    ).toEqual({
+      has_available_configure_cli: false,
+      configure_type: 'none',
+      configure_availability: 'available',
+    });
+  });
+
+  it('reports amr when sign-in is the only configured path', () => {
+    expect(
+      deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: 'amr',
+        agents: [{ id: 'amr', available: true }],
+        amrAuthorized: true,
+      }),
+    ).toEqual({
+      has_available_configure_cli: false,
+      configure_type: 'amr',
+      configure_availability: 'available',
+    });
+  });
+
+  it('keeps local_cli precedence when a real CLI is installed alongside AMR auth', () => {
+    expect(
+      deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: 'claude',
+        agents: [
+          { id: 'claude', available: true },
+          { id: 'amr', available: true },
+        ],
+        amrAuthorized: true,
+      }),
+    ).toMatchObject({
+      has_available_configure_cli: true,
+      configure_type: 'local_cli',
+    });
+  });
+
+  it('reports amr / available with no mode pinned when only AMR is authorized', () => {
+    expect(
+      deriveConfigureGlobals({ amrAuthorized: true })).toEqual({
+      has_available_configure_cli: false,
+      configure_type: 'amr',
+      configure_availability: 'available',
     });
   });
 });

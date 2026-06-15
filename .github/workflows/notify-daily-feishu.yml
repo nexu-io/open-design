@@ -3,8 +3,9 @@ name: notify-daily-feishu
 # Every morning (09:00 Asia/Shanghai) build a beta package off the currently
 # active release branch (highest-semver release/vX.Y.Z) by reusing release-beta,
 # then post a Feishu card with download links and the changelog since the
-# previously published beta — to a separate Feishu group from the per-push
-# release stream (which builds the heavier nightly channel).
+# previously published beta — to the SAME Feishu bot as the per-push release
+# stream (FEISHU_RELEASE_WEBHOOK). The two streams share one group; their cards
+# stay distinguishable via CHANNEL_LABEL (Beta vs Nightly) and STREAM_LABEL.
 #
 # NOTE: schedule triggers only fire from the default branch (main), so this file
 # must live on main to run on its cron.
@@ -108,8 +109,11 @@ jobs:
 
       - name: Post Feishu card
         env:
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_DAILY_WEBHOOK }}
-          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_DAILY_SIGN_SECRET }}
+          # Daily and release-push streams share one Feishu bot; both post to
+          # FEISHU_RELEASE_WEBHOOK. CHANNEL_LABEL/STREAM_LABEL still distinguish
+          # the two card types within that single group.
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
           CHANNEL_LABEL: "Beta"
           VERSION: ${{ needs.build.outputs.beta_version }}
           BRANCH: ${{ needs.build.outputs.branch }}

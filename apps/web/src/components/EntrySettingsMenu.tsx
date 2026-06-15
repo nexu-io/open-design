@@ -17,6 +17,11 @@ import {
   useT,
   type Locale,
 } from '../i18n';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackSettingsPopoverClick,
+  trackSettingsPopoverSurfaceView,
+} from '../analytics/events';
 import { createSocialSharePayload } from '../providers/registry';
 import type { AppConfig, AppTheme } from '../types';
 import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPresence';
@@ -61,6 +66,9 @@ interface Props {
   // emit the `artifact_header` / `settings` ui_click; the home/entry shell
   // leaves it undefined so that context is not mislabelled as `artifact`.
   onTrackTriggerClick?: () => void;
+  // The popover is mounted both on the home header and the in-project
+  // artifact header; defaults to 'home' so existing call sites stay correct.
+  trackingPageName?: 'home' | 'artifact';
 }
 
 export function EntrySettingsMenu({
@@ -68,7 +76,10 @@ export function EntrySettingsMenu({
   onThemeChange,
   onOpenSettings,
   onTrackTriggerClick,
+  trackingPageName,
 }: Props) {
+  const pageName = trackingPageName ?? 'home';
+  const analytics = useAnalytics();
   const t = useT();
   const { locale, setLocale } = useI18n();
   const discordPresence = useDiscordPresence();
@@ -135,6 +146,16 @@ export function EntrySettingsMenu({
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  // surface_view — fire once each time the settings popover opens so the
+  // share / language / appearance funnels have a denominator.
+  useEffect(() => {
+    if (!open) return;
+    trackSettingsPopoverSurfaceView(analytics.track, {
+      page_name: pageName,
+      area: 'settings_popover',
+    });
+  }, [open, analytics.track, pageName]);
 
   useEffect(() => {
     if (!open) return;
@@ -226,6 +247,13 @@ export function EntrySettingsMenu({
                             active ? ' is-active' : ''
                           }`}
                           onClick={() => {
+                            trackSettingsPopoverClick(analytics.track, {
+                              page_name: pageName,
+                              area: 'settings_popover',
+                              element: 'language_select',
+                              // kebab-case locales (zh-CN) → snake_case (zh_cn).
+                              value: code.toLowerCase().replace(/-/g, '_'),
+                            });
                             setLocale(code as Locale);
                             setLangOpen(false);
                             setOpen(false);
@@ -268,6 +296,12 @@ export function EntrySettingsMenu({
                       active ? ' is-active' : ''
                     }`}
                     onClick={() => {
+                      trackSettingsPopoverClick(analytics.track, {
+                        page_name: pageName,
+                        area: 'settings_popover',
+                        element: 'appearance',
+                        value: option.value,
+                      });
                       onThemeChange(option.value);
                       setOpen(false);
                     }}
@@ -288,6 +322,14 @@ export function EntrySettingsMenu({
             <SocialShareGrid
               share={openDesignShare ?? fallbackOpenDesignShare}
               className="entry-settings-social-share"
+              onShare={(platform) => {
+                trackSettingsPopoverClick(analytics.track, {
+                  page_name: pageName,
+                  area: 'settings_popover',
+                  element: 'share_channel',
+                  channel: platform,
+                });
+              }}
               onAfterShare={() => setOpen(false)}
             />
           </section>
@@ -300,7 +342,14 @@ export function EntrySettingsMenu({
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'join_discord',
+              });
+              setOpen(false);
+            }}
           >
             <span className="entry-settings-menu__item-icon" aria-hidden>
               <Icon name="discord" size={14} />
@@ -319,7 +368,14 @@ export function EntrySettingsMenu({
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'follow_x',
+              });
+              setOpen(false);
+            }}
           >
             <span
               className="entry-settings-menu__item-icon entry-settings-menu__x-mark"
@@ -339,6 +395,11 @@ export function EntrySettingsMenu({
             data-testid="entry-settings-open-details"
             role="menuitem"
             onClick={() => {
+              trackSettingsPopoverClick(analytics.track, {
+                page_name: pageName,
+                area: 'settings_popover',
+                element: 'open_settings',
+              });
               setOpen(false);
               onOpenSettings();
             }}

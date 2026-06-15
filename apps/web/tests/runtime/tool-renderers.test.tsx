@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ToolCard, StreamingAskUserQuestionCard } from '../../src/components/ToolCard';
+import { ToolCard } from '../../src/components/ToolCard';
 import {
   clearToolRenderers,
   deriveToolStatus,
@@ -126,6 +126,45 @@ describe('ToolCard dispatch', () => {
     expect(markup).toContain('Q3 revenue');
   });
 
+  it('renders a persisted AskUserQuestion turn as a read-only summary with the answer, not raw JSON', () => {
+    // Legacy AUQ tool_use events survive in upgraded chat history. They must
+    // render the model-authored question text AND the persisted answer, not
+    // the `{"questions":[...]}` protocol blob GenericCard would surface.
+    const input = {
+      questions: [
+        {
+          question: 'Which framework should we target?',
+          header: 'Framework',
+          options: [{ label: 'React Native' }, { label: 'Flutter' }],
+        },
+      ],
+    };
+    // Persisted answer format: `${question}\n${answer}`.
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use(input, 'AskUserQuestion')}
+        result={ok('Which framework should we target?\nReact Native')}
+        runStreaming={false}
+        runSucceeded={true}
+      />,
+    );
+    expect(markup).toContain('Framework');
+    expect(markup).toContain('Which framework should we target?');
+    // The persisted answer is surfaced so history stays auditable.
+    expect(markup).toContain('React Native');
+    // The raw JSON payload must not leak into the card.
+    expect(markup).not.toContain('&quot;questions&quot;');
+    expect(markup).not.toContain('"questions"');
+  });
+
+  it('falls back to the generic card for an unparseable AskUserQuestion payload', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard use={use({ junk: true }, 'ask_user_question')} runStreaming={false} runSucceeded={true} />,
+    );
+    expect(markup).toContain('op-generic');
+    expect(markup).toContain('AskUserQuestion');
+  });
+
   it('passes the result content through as the `result` prop on completion', () => {
     registerToolRenderer('render_chart', ({ status, result }) => (
       <span data-testid="custom-chart" data-status={status}>
@@ -223,27 +262,5 @@ describe('ToolCard dispatch', () => {
 
     expect(markup).toContain('C:\\repo\\canvas2-nodes.jsx');
     expect(markup).toContain('String to replace was not found');
-  });
-});
-
-describe('StreamingAskUserQuestionCard', () => {
-  it('renders partial questions read-only from a truncated raw JSON prefix', () => {
-    // Mid-stream: prompt + one option arrived, object not yet closed.
-    const raw = '{"questions":[{"header":"DB","question":"Which database?","options":[{"label":"Postgres"}';
-    const markup = renderToStaticMarkup(<StreamingAskUserQuestionCard raw={raw} />);
-    expect(markup).toContain('op-ask-question-streaming');
-    expect(markup).toContain('Which database?');
-    expect(markup).toContain('Postgres');
-    // Read-only: options are disabled and there is no submit affordance.
-    expect(markup).toContain('disabled=""');
-    expect(markup).not.toContain('op-ask-question-submit');
-    expect(markup).toContain('op-ask-question-typing');
-  });
-
-  it('shows a frame-only card before any question prompt has arrived', () => {
-    const markup = renderToStaticMarkup(<StreamingAskUserQuestionCard raw={'{"questions":[{'} />);
-    expect(markup).toContain('op-ask-question-streaming');
-    expect(markup).toContain('op-ask-question-typing');
-    expect(markup).not.toContain('op-ask-question-field');
   });
 });

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="fonts.css" />
+<meta charset="UTF-8" />
+<title>Build Minimal · Luxury Whitespace</title>
+
+<style>
+  /*
+   * frame-build-minimal — luxury-minimal whitespace hero.
+   * Visual style distilled from huashu-design "Build Studio" philosophy (MIT, © alchaincyf).
+   * Rebuilt as a self-contained CSS @keyframes timeline for html-video / Hyperframes.
+   * Timeline (5s @ 60fps): corner marks draw -> eyebrow fades -> hero word reveals letter
+   * by letter -> gold line extends -> description fades -> thin indicators rise & breathe.
+   */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px; overflow: hidden;
+    background: #FAFAF8; color: #1A1A18;
+    font-family: 'Inter', sans-serif; position: relative;
+  }
+
+  /* warm radial wash */
+  .wash { position: absolute; inset: 0; z-index: 0;
+    background: radial-gradient(ellipse 1300px 700px at 32% 42%, rgba(212,165,116,0.07) 0%, transparent 70%);
+    opacity: 0; animation: washIn 1.4s ease-out forwards; }
+  @keyframes washIn { to { opacity: 1; } }
+
+  /* corner marks (draw in) */
+  .corner { position: absolute; z-index: 2; opacity: 0; animation: cornerIn 0.8s ease-out 0.2s forwards; }
+  .corner-tl { top: 72px; left: 72px; }
+  .corner-br { bottom: 72px; right: 72px; transform: rotate(180deg); }
+  @keyframes cornerIn { to { opacity: 1; } }
+
+  /* side labels */
+  .side-label { position: absolute; font-weight: 400; font-size: 12px; letter-spacing: 6px;
+    text-transform: uppercase; color: #CBC7C0; z-index: 2; opacity: 0; animation: fade 1s ease-out 1.8s forwards; }
+  .side-left  { left: 72px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: center; }
+  .side-right { right: 72px; top: 50%; transform: translateY(-50%) rotate(90deg); transform-origin: center; }
+  @keyframes fade { to { opacity: 1; } }
+
+  /* center stack */
+  .center { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; margin-top: -40px; z-index: 1; }
+  .eyebrow { font-weight: 400; font-size: 15px; letter-spacing: 9px; text-transform: uppercase;
+    color: #B0ACA4; margin-bottom: 40px; opacity: 0; animation: fadeUp 0.9s ease-out 0.5s forwards; }
+  .hero { font-weight: 200; font-size: 220px; letter-spacing: -7px; color: #1A1A18; line-height: 1; }
+  .hero .ch { display: inline-block; opacity: 0; transform: translateY(30px);
+    animation: chReveal 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes chReveal { to { opacity: 1; transform: translateY(0); } }
+  .gold-line { width: 0; height: 1px; background: #D4A574; margin: 48px auto 44px; opacity: 0.8;
+    animation: goldGrow 1s cubic-bezier(0.16,1,0.3,1) 1.9s forwards; }
+  @keyframes goldGrow { to { width: 88px; } }
+  .desc { font-weight: 300; font-size: 21px; color: #A8A4A0; letter-spacing: 0.3px; line-height: 2;
+    max-width: 640px; text-align: center; opacity: 0; animation: fadeUp 1s ease-out 2.2s forwards; }
+  @keyframes fadeUp { 0%{opacity:0;transform:translateY(22px)} 100%{opacity:1;transform:translateY(0)} }
+
+  /* thin indicators (rise + slow breathe) */
+  .indicators { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 26px; align-items: flex-end; z-index: 2; }
+  .ind { width: 1.5px; background: #D8D4CE; transform: scaleY(0); transform-origin: bottom;
+    animation: indRise 0.6s cubic-bezier(0.16,1,0.3,1) forwards, breathe 4s ease-in-out 3s infinite; }
+  .ind.gold { background: #D4A574; width: 2px; opacity: 0.85; }
+  @keyframes indRise { to { transform: scaleY(1); } }
+  @keyframes breathe { 0%,100%{opacity:1} 50%{opacity:0.45} }
+
+  .whisper { position: absolute; top: 72px; right: 132px; font-weight: 200; font-size: 30px;
+    color: #D4A574; opacity: 0; z-index: 2; animation: fade 1.2s ease-out 2.6s forwards; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    .wash,.corner,.side-label,.eyebrow,.desc,.whisper{opacity:1}
+    .hero .ch{opacity:1;transform:none}.gold-line{width:88px}.ind{transform:scaleY(1)}
+  }
+</style>
+</head>
+<body>
+  <div class="wash"></div>
+
+  <svg class="corner corner-tl" width="26" height="26" viewBox="0 0 26 26" fill="none">
+    <path d="M0 0L0 26" stroke="#D4A574" stroke-width="0.6" opacity="0.45"/>
+    <path d="M0 0L26 0" stroke="#D4A574" stroke-width="0.6" opacity="0.45"/>
+  </svg>
+  <svg class="corner corner-br" width="26" height="26" viewBox="0 0 26 26" fill="none">
+    <path d="M0 0L0 26" stroke="#D4A574" stroke-width="0.6" opacity="0.45"/>
+    <path d="M0 0L26 0" stroke="#D4A574" stroke-width="0.6" opacity="0.45"/>
+  </svg>
+
+  <div class="side-label side-left">Open Design</div>
+  <div class="side-label side-right">Self-Evolving</div>
+  <div class="whisper">◇</div>
+
+  <div class="center">
+    <div class="eyebrow">Design Agent</div>
+    <!-- .ch spans are revealed one by one; staggered via inline animation-delay -->
+    <div class="hero" id="hero">
+      <span class="ch" style="animation-delay:.6s">A</span><span class="ch" style="animation-delay:.68s">g</span><span class="ch" style="animation-delay:.76s">e</span><span class="ch" style="animation-delay:.84s">n</span><span class="ch" style="animation-delay:.92s">t</span>
+    </div>
+    <div class="gold-line"></div>
+    <div class="desc">Every use is an evolution.<br>From craft, to assist, to self-evolving.</div>
+  </div>
+
+  <div class="indicators">
+    <div class="ind"      style="height:24px;animation-delay:2.4s,3.0s"></div>
+    <div class="ind"      style="height:34px;animation-delay:2.46s,3.1s"></div>
+    <div class="ind gold" style="height:44px;animation-delay:2.52s,3.2s"></div>
+    <div class="ind"      style="height:28px;animation-delay:2.58s,3.3s"></div>
+    <div class="ind"      style="height:38px;animation-delay:2.64s,3.4s"></div>
+    <div class="ind gold" style="height:48px;animation-delay:2.7s,3.5s"></div>
+    <div class="ind"      style="height:30px;animation-delay:2.76s,3.6s"></div>
+  </div>
+</body>
+</html>

@@ -110,7 +110,16 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Most-recently-used local working directories the user granted the agent
+  // read access to from the Home composer. Become a project's
+  // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
+  // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
+  recentLinkedDirs?: string[];
 }
+
+// Cap on how many recent working directories we remember. Keeps the picker's
+// "Recent" submenu short and the config file bounded.
+export const RECENT_LINKED_DIRS_MAX = 5;
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'onboardingCompleted',
@@ -128,10 +137,20 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'recentLinkedDirs',
 ] as const);
 
 function configFile(dataDir: string): string {
   return path.join(dataDir, 'app-config.json');
+}
+
+export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env.OD_DATA_DIR;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return path.join(projectRoot, '.od');
+  }
+  const expanded = expandHomePrefix(raw.trim());
+  return path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
 }
 
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
@@ -157,6 +176,7 @@ function validateTelemetry(raw: unknown): TelemetryPrefs | undefined {
 const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['amr', new Set([
     'VELA_BIN',
+    'VELA_API_URL',
     'VELA_LINK_URL',
     'VELA_RUNTIME_KEY',
     'VELA_OPENCODE_BIN',
@@ -402,6 +422,29 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'recentLinkedDirs') {
+    if (Array.isArray(value)) {
+      // Keep non-empty strings, trim, de-dupe preserving most-recent-first
+      // order, and cap the list. Path existence/safety is enforced later by
+      // validateLinkedDirs when the dir is actually attached to a project, so
+      // a folder that was since deleted simply drops out at use time rather
+      // than corrupting the whole config write here.
+      const seen = new Set<string>();
+      const cleaned: string[] = [];
+      for (const entry of value) {
+        if (typeof entry !== 'string') continue;
+        const trimmed = entry.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        cleaned.push(trimmed);
+        if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
+      }
+      target[key] = cleaned;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
 }
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
@@ -428,7 +471,7 @@ function applyTelemetryDefaults(prefs: AppConfigPrefs): AppConfigPrefs {
   if (prefs.telemetry === undefined) {
     return {
       ...prefs,
-      telemetry: { metrics: true, content: true, artifactManifest: false },
+      telemetry: { metrics: true, content: true },
     };
   }
   return prefs;

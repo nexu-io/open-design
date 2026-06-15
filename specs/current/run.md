@@ -35,7 +35,9 @@ The recovery path follows the user-visible hierarchy: open a project, load a con
 A project is the design workspace. It provides:
 
 - project metadata, such as skill, design system, and fidelity;
-- the daemon working directory, usually `.od/projects/<projectId>/`;
+- the daemon-managed project working directory. This spec MUST NOT define
+  daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data
+  directory contract** before documenting storage;
 - artifact ownership;
 - the top-level scope for conversations and runs.
 

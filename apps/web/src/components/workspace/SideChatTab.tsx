@@ -37,7 +37,6 @@ export interface ActiveConversationChatState {
   ) => void;
   onRetry?: (assistantMessage: ChatMessage) => void;
   onStop: () => void;
-  onSubmitForm?: (text: string) => void;
   onRemoveQueuedSend?: (id: string) => void;
   // Editing a queued send replaces its full payload (prompt + attachments +
   // comment attachments + meta), matching ChatPane's QueuedSendUpdate, not just
@@ -132,10 +131,10 @@ export function SideChatTab({
       </div>
       <div className={styles.pane}>
         <ChatPane
-	          messages={controlledChat?.messages ?? chat.messages}
-	          streaming={controlledChat?.streaming ?? chat.streaming}
-	          loading={controlledChat?.loading ?? chat.loading}
-	          sendDisabled={controlledChat?.sendDisabled}
+          messages={controlledChat?.messages ?? chat.messages}
+          streaming={controlledChat?.streaming ?? chat.streaming}
+          loading={controlledChat?.loading ?? chat.loading}
+          sendDisabled={controlledChat?.sendDisabled}
           queuedItems={controlledChat?.queuedItems}
           onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
@@ -151,10 +150,6 @@ export function SideChatTab({
           onSend={controlledChat?.onSend ?? chat.onSend}
           onRetry={controlledChat?.onRetry ?? chat.onRetry}
           onStop={controlledChat?.onStop ?? chat.onStop}
-          onSubmitForm={(text) => {
-            if (controlledChat?.onSubmitForm) controlledChat.onSubmitForm(text);
-            else chat.onSend(text, [], []);
-          }}
           onAssistantFeedback={controlledChat?.onAssistantFeedback}
           onRequestOpenFile={onRequestOpenFile}
           conversations={conversations}
@@ -167,6 +162,7 @@ export function SideChatTab({
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}
           researchAvailable={config.mode === 'daemon'}
+          config={config}
         />
       </div>
     </div>

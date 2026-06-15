@@ -956,7 +956,7 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
           WIN_X64_RESULT: ${{ needs.build_win_x64.result }}
-        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-beta-metadata.ts
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/publish-metadata.ts
 
       - name: Read metadata outputs
         id: outputs
@@ -976,16 +976,18 @@ jobs:
           LINUX_X64_RESULT: ${{ needs.build_linux_x64.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
+          RELEASE_CHANNEL: beta
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           WIN_X64_RESULT: ${{ needs.build_win_x64.result }}
-        run: node --experimental-strip-types .github/workflow/scripts/release/storage/verify-beta-metadata.ts
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/verify-metadata.ts
 
       - name: Write beta metadata summary
         env:
+          RELEASE_CHANNEL: beta
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-metadata/summary.md
-        run: node --experimental-strip-types .github/workflow/scripts/release/storage/summary-beta.ts
+        run: node --experimental-strip-types .github/workflow/scripts/release/storage/summary-metadata.ts
 
       - name: Publish summary
         run: cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"

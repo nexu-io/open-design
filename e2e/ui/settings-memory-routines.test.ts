@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
+import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -40,22 +41,16 @@ async function seedSettingsBase(page: Page) {
     });
   });
 
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'codex',
-            name: 'Codex CLI',
-            bin: 'codex',
-            available: true,
-            version: '0.130.0',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
+  await routeAgents(page, [
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '0.130.0',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+  ]);
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -74,14 +69,7 @@ async function gotoEntryHome(page: Page) {
 
 async function openSettings(page: Page) {
   await gotoEntryHome(page);
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  if (await menu.isVisible().catch(() => false)) {
-    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
-  }
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  return dialog;
+  return openSettingsDialog(page);
 }
 
 async function openMemorySettings(page: Page) {
