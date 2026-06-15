@@ -8,6 +8,7 @@
 // per-event prop types below.
 
 import type {
+  AnalyticsConfigureGlobals,
   TrackingConfigureAvailability,
   TrackingConfigureType,
 } from './public-params.js';
@@ -3298,11 +3299,7 @@ export interface DeriveConfigureGlobalsInput {
 
 export function deriveConfigureGlobals(
   input: DeriveConfigureGlobalsInput,
-): {
-  has_available_configure_cli: boolean;
-  configure_type: TrackingConfigureType;
-  configure_availability: TrackingConfigureAvailability;
-} {
+): AnalyticsConfigureGlobals {
   const agents = input.agents ?? [];
   // The AMR runtime is bundled with the app, so its agent row must not
   // count as a user-configured local CLI: with it included every install
@@ -3353,6 +3350,14 @@ export function deriveConfigureGlobals(
     has_available_configure_cli: hasAvailableCli,
     configure_type: configureType,
     configure_availability: configureAvailability,
+    // Independent per-path runnable flags (no cascade masking — see
+    // AnalyticsConfigureGlobals). `cli_runnable` mirrors
+    // `has_available_configure_cli`; `byok_runnable` uses the actually-saved
+    // key signal (not the `mode === 'api'` fallback, which can be true with no
+    // key yet); `amr_runnable` is sign-in.
+    cli_runnable: hasAvailableCli,
+    byok_runnable: byokConfigured,
+    amr_runnable: amrAuthorized,
   };
 }
 
