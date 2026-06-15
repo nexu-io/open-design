@@ -260,7 +260,7 @@ describe('ChatComposer /search command', () => {
       'please update this spot',
       [{ path: 'uploads/drawing.png', name: 'drawing.png', kind: 'image', order: 0 }],
       [],
-      undefined,
+      { entryFrom: 'mark' },
     );
   });
 
