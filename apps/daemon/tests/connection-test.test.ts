@@ -149,6 +149,10 @@ async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promi
   return withFakeAgent('deepseek', script, run);
 }
 
+async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('kimi', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -2849,6 +2853,67 @@ process.stdin.on('end', () => {
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('launches Kimi connection tests without the legacy acp positional arg', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeKimi(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+if (args.includes('acp')) {
+  console.error('error: too many arguments. Expected 0 arguments but got 1.');
+  process.exit(1);
+}
+const promptIndex = args.indexOf('-p');
+if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
+  console.error('missing connection-test prompt');
+  process.exit(1);
+}
+const outputFormatIndex = args.indexOf('--output-format');
+if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
+  console.error('missing --output-format stream-json');
+  process.exit(1);
+}
+console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'kimi',
+              model: 'moonshot-v1-32k',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Kimi CLI',
+            model: 'moonshot-v1-32k',
+            sample: 'ok',
+          });
+
+          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
+            JSON.stringify([
+              '-p',
+              'Reply with only: ok',
+              '--output-format',
+              'stream-json',
+              '--model',
+              'moonshot-v1-32k',
+            ]),
+          );
         },
       );
     } finally {
