@@ -2547,7 +2547,22 @@ export interface RunCreatedProps {
     // `mark` (Mark draw-overlay flow). Both run against an existing artifact.
     | 'comment'
     | 'mark'
+    // `next_step`: composer seeded by a guided Next-step action (best-effort,
+    // tagged on the following send). `question_answer`: submitting answers to
+    // an inline `<question-form>` clarification.
+    | 'next_step'
+    | 'question_answer'
     | TrackingDesignSystemRunEntryFrom;
+  // Session-dimension run context (0-based `turn_index` within the browser
+  // analytics session, `is_first_run` === turn_index 0). Lets the dashboard
+  // sequence a session's runs and read "did this session reach an artifact,
+  // and on which turn?". Optional: omitted when the client could not compute
+  // them (e.g. storage unavailable).
+  turn_index?: number;
+  is_first_run?: boolean;
+  // True when the project already had a generated artifact when this run
+  // started (project-scoped) — i.e. the run is an edit, not a first creation.
+  has_existing_artifact?: boolean;
   project_source?: TrackingProjectSource;
   project_id: string;
   conversation_id: string | null;

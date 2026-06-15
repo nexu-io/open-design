@@ -53,6 +53,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
+import { claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
@@ -3650,10 +3651,24 @@ export function ProjectView({
         // A caller-supplied entry_from (e.g. 'resume_continue' from the
         // resumable-failure Continue action) overrides the DS default so the
         // run is attributed to the affordance that started it.
-        const runAnalyticsHints =
-          meta?.entryFrom
-            ? { ...(dsAnalyticsHints ?? {}), entryFrom: meta.entryFrom }
-            : dsAnalyticsHints;
+        //
+        // Session-dimension hints are stamped on every real run creation (this
+        // path only runs for non-queued sends): claim the next 0-based turn
+        // index for this browser session, and flag whether the project already
+        // had a generated artifact (project-scoped) so the run reads as an edit
+        // rather than a first creation.
+        const sessionTurn = claimRunTurnIndex();
+        const hasExistingArtifact = projectFilesRef.current.some(
+          (file) => Boolean(file.artifactManifest),
+        );
+        const runAnalyticsHints = {
+          ...(dsAnalyticsHints ?? {}),
+          ...(meta?.entryFrom ? { entryFrom: meta.entryFrom } : {}),
+          ...(sessionTurn
+            ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
+            : {}),
+          hasExistingArtifact,
+        };
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -5902,7 +5917,9 @@ export function ProjectView({
           focusQuestionsRequest={focusQuestionsRequest}
           onSubmitQuestionForm={(text) => {
             if (currentConversationActionDisabled) return;
-            void handleSend(text, [], []);
+            // Submitting question-form answers is a clarification turn, not a
+            // fresh create/edit — tag entry_from so the dashboard can separate it.
+            void handleSend(text, [], [], { entryFrom: 'question_answer' });
           }}
         />
       </div>

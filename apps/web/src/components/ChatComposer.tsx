@@ -480,6 +480,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const applyDesignToolboxActionRef = useRef<(action: DesignToolboxAction) => void>(() => {});
     // Same latest-closure trick for picking a skill by id from the next-step card.
     const applyDesignToolboxSkillByIdRef = useRef<(skillId: string) => void>(() => {});
+    // Best-effort entry_from carried from a guided Next-step action: the card
+    // only seeds the composer, so the tag is stashed here and consumed by the
+    // next `sendComposedTurn` (then cleared). An explicit meta.entryFrom always
+    // wins over this pending value.
+    const pendingEntryFromRef = useRef<ChatAnalyticsEntryFrom | null>(null);
     const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     // The project's working directory: the local folder the agent can read
@@ -945,9 +950,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         applyDesignToolboxAction: (id: DesignToolboxActionId) => {
           const action = getDesignToolboxAction(id);
           if (!action) return;
+          pendingEntryFromRef.current = 'next_step';
           applyDesignToolboxActionRef.current(action);
         },
         applyDesignToolboxSkill: (skillId: string) => {
+          pendingEntryFromRef.current = 'next_step';
           applyDesignToolboxSkillByIdRef.current(skillId);
         },
         openDesignToolbox: () => {
@@ -1039,7 +1046,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ...attachments,
             ]
           : attachments;
-      onSend(prompt, nextAttachments, nextCommentAttachments, meta);
+      // Apply a pending Next-step tag if the caller didn't set its own
+      // entry_from, then clear it so it only colours the immediate next send.
+      const pendingEntryFrom = pendingEntryFromRef.current;
+      pendingEntryFromRef.current = null;
+      const effectiveMeta: ChatSendMeta | undefined =
+        pendingEntryFrom && !meta?.entryFrom
+          ? { ...(meta ?? {}), entryFrom: pendingEntryFrom }
+          : meta;
+      onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta);
       reset();
       return true;
     }
