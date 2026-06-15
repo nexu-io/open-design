@@ -69,7 +69,7 @@ export async function createProject(input: {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
-}): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string } | null> {
+}): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`
     // when `crypto.randomUUID` is unavailable. Open Design served over
@@ -83,14 +83,31 @@ export async function createProject(input: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...input }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      let message = 'Could not create project';
+      try {
+        const body = await resp.json() as { error?: unknown };
+        if (
+          body.error &&
+          typeof body.error === 'object' &&
+          'message' in body.error &&
+          typeof body.error.message === 'string' &&
+          body.error.message.trim()
+        ) {
+          message = body.error.message;
+        }
+      } catch {
+        // Keep the generic fallback when the error body is absent or invalid.
+      }
+      throw new Error(message);
+    }
     return (await resp.json()) as {
       project: Project;
       conversationId: string;
       appliedPluginSnapshotId?: string;
     };
-  } catch {
-    return null;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Could not create project');
   }
 }
 

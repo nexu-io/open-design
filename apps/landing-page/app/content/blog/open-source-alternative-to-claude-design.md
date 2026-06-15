@@ -29,7 +29,7 @@ i18n:
       <p><strong>账单是一份订阅。</strong>每个席位每月 20 至 200 美元,对一名独立设计师来说还行,对一个二十人的团队来说就很肉疼,而对那十几位本来可能会采用同一套工作流的开源贡献者来说,则根本无从谈起。</p>
       <p>这些都不是 Claude Design 的 bug。它们是一个托管产品的固有形态。Anthropic 是为中位数的 Pro 订阅用户做的优化。而我们不是那个中位数的 Pro 订阅用户。</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="一块黑色多面体云朵实心被一条虚线拴在一个小小的地面锚点和服务器方块上,置于一块暖色调的编辑风研究图版上" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="一块黑色多面体云朵实心被一条虚线拴在一个小小的地面锚点和服务器方块上,置于一块暖色调的编辑风研究图版上" />
         <figcaption>默认托管:你的提示词、设计系统和代码库上下文都会被传到别人的服务器上。</figcaption>
       </figure>
       <h2>开源替代方案</h2>
@@ -45,7 +45,7 @@ i18n:
       </ul>
       <p>这个心智模型是:Claude Design 是一个产品。Open Design 是一个层。</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="三块黑色多面体置于一条带刻度的基线上,只有一块卡进了一个支架框中,其余两块松散地搁着,置于一块暖色调的编辑风研究图版上" />
+        <img src="/blog/plate-20-model-lock.webp" alt="三块黑色多面体置于一条带刻度的基线上,只有一块卡进了一个支架框中,其余两块松散地搁着,置于一块暖色调的编辑风研究图版上" />
         <figcaption>Claude Design 固定了模型。开源路线让你带上你已经在付费的那一个。</figcaption>
       </figure>
       <h2>逐项对比</h2>
@@ -112,7 +112,7 @@ i18n:
       </table>
       <p>诚实的总结:Claude Design 拥有最打磨过的单一产品体验。Open Design 用这种打磨过的单一产品表面,换来了一座库——更多 skill、更多系统、更多 agent,设计用来与你笔记本上已有的那个 agent 组合协作。</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="三块薄薄的黑色板材以可见的间隙等距堆叠,如同一摞分层,刻度标记着这些间隙,顶上放着一片橄榄叶,置于一块暖色调的编辑风研究图版上" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="三块薄薄的黑色板材以可见的间隙等距堆叠,如同一摞分层,刻度标记着这些间隙,顶上放着一片橄榄叶,置于一块暖色调的编辑风研究图版上" />
         <figcaption>一个产品和一个层——Open Design 处在你的 agent 与设计工作之间。</figcaption>
       </figure>
       <h2>谁该选哪个</h2>
@@ -188,7 +188,7 @@ i18n:
       <p><strong>帳單是訂閱制。</strong>每席每月 20 至 200 美元,對單人設計師沒問題,對二十人的團隊就很痛,對於原本會採用同一套工作流程的十幾位開源貢獻者來說則根本行不通。</p>
       <p>這些都不是 Claude Design 的 bug。它們是託管產品的形態。Anthropic 是為中位數的 Pro 訂閱者做最佳化。我們不是中位數的 Pro 訂閱者。</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="一個黑色多面體雲團，以一條虛線繫在一個小小的地面錨點和伺服器方塊上，置於暖色調的編輯式研究底版上" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="一個黑色多面體雲團，以一條虛線繫在一個小小的地面錨點和伺服器方塊上，置於暖色調的編輯式研究底版上" />
         <figcaption>預設託管：你的提示詞、設計系統和程式碼庫上下文，都傳到別人的伺服器上。</figcaption>
       </figure>
       <h2>開源替代方案</h2>
@@ -204,7 +204,7 @@ i18n:
       </ul>
       <p>心智模型：Claude Design 是一個產品。Open Design 是一個層。</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="三個黑色多面體立於一條量好的基準線上，只有一個嵌進了支架框中，其餘的則鬆散擺放，置於暖色調的編輯式研究底版上" />
+        <img src="/blog/plate-20-model-lock.webp" alt="三個黑色多面體立於一條量好的基準線上，只有一個嵌進了支架框中，其餘的則鬆散擺放，置於暖色調的編輯式研究底版上" />
         <figcaption>Claude Design 把模型固定死。開源路線讓你帶上你已經在付費的那一個。</figcaption>
       </figure>
       <h2>並排對照</h2>
@@ -271,7 +271,7 @@ i18n:
       </table>
       <p>誠實的總結：Claude Design 擁有最精緻的單一產品體驗。Open Design 用精緻的單一產品表層,換來一座資料庫——更多 skills、更多 systems、更多 agents,設計上就是要跟你筆電上已有的 agent 組合在一起。</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="三片薄薄的黑色板塊以可見的間隙等距堆疊，像一個分層堆疊，尺寸刻度標記著那些間隙，最上方放著一片橄欖葉，置於暖色調的編輯式研究底版上" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="三片薄薄的黑色板塊以可見的間隙等距堆疊，像一個分層堆疊，尺寸刻度標記著那些間隙，最上方放著一片橄欖葉，置於暖色調的編輯式研究底版上" />
         <figcaption>一個產品和一個層——Open Design 坐落在你的 agent 與設計工作之間。</figcaption>
       </figure>
       <h2>誰該選哪一個</h2>
@@ -347,7 +347,7 @@ i18n:
       <p><strong>請求はサブスクリプション。</strong>1 シートあたり月額 20〜200 ドルは、ソロデザイナーには問題ありませんが、20 人のチームには痛く、同じワークフローを採用しようとするオープンソースの十数人の貢献者には論外です。</p>
       <p>これらはどれも Claude Design のバグではありません。ホスト型製品の形そのものです。Anthropic は中央値の Pro サブスクライバーに最適化しました。私たちは中央値の Pro サブスクライバーではありません。</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="黒いファセットの雲の立体が、破線で小さな地面のアンカーとサーバーブロックに繋ぎ止められている、暖色系のエディトリアルな習作プレート" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="黒いファセットの雲の立体が、破線で小さな地面のアンカーとサーバーブロックに繋ぎ止められている、暖色系のエディトリアルな習作プレート" />
         <figcaption>デフォルトでホスト型——あなたのプロンプト、デザインシステム、コードベースのコンテキストは、誰か他人のサーバーへ渡ります。</figcaption>
       </figure>
       <h2>オープンソースの代替</h2>
@@ -363,7 +363,7 @@ i18n:
       </ul>
       <p>メンタルモデル：Claude Design は製品。Open Design はレイヤー。</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="計測された基準線の上に黒いファセットの多面体が 3 つ、1 つだけがブラケットフレームにはめ込まれ、残りはゆるく置かれている、暖色系のエディトリアルな習作プレート" />
+        <img src="/blog/plate-20-model-lock.webp" alt="計測された基準線の上に黒いファセットの多面体が 3 つ、1 つだけがブラケットフレームにはめ込まれ、残りはゆるく置かれている、暖色系のエディトリアルな習作プレート" />
         <figcaption>Claude Design はモデルを固定します。オープンな道は、あなたがすでに支払っているモデルを持ち込ませてくれます。</figcaption>
       </figure>
       <h2>並べて比較</h2>
@@ -430,7 +430,7 @@ i18n:
       </table>
       <p>率直なまとめ：Claude Design は最も洗練された単一製品の体験を持っています。Open Design はその洗練された単一製品の表面を、ライブラリと引き換えにします——より多くのスキル、より多くのシステム、より多くのエージェント、あなたのラップトップにすでにあるエージェントと組み合わせて使えるように設計されています。</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="薄い黒のスラブが 3 枚、レイヤースタックのように隙間を見せてアイソメトリックに積み重なり、隙間を寸法目盛りが示し、上にオリーブの葉、暖色系のエディトリアルな習作プレート" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="薄い黒のスラブが 3 枚、レイヤースタックのように隙間を見せてアイソメトリックに積み重なり、隙間を寸法目盛りが示し、上にオリーブの葉、暖色系のエディトリアルな習作プレート" />
         <figcaption>製品とレイヤー——Open Design はあなたのエージェントとデザイン作業の間に位置します。</figcaption>
       </figure>
       <h2>誰が何を選ぶべきか</h2>
@@ -506,7 +506,7 @@ i18n:
       <p><strong>청구서가 구독입니다.</strong> 좌석당 월 $20–$200는 단독 디자이너에게는 괜찮고, 스무 명 규모의 팀에게는 부담스러우며, 그렇지 않았다면 동일한 워크플로를 채택했을 십수 명의 오픈소스 기여자에게는 시작조차 불가능합니다.</p>
       <p>이들 중 어느 것도 Claude Design의 버그가 아닙니다. 그것은 호스팅 제품의 형태입니다. Anthropic은 중간값 Pro 구독자에 맞춰 최적화했습니다. 우리는 중간값 Pro 구독자가 아닙니다.</p>
       <figure>
-      <img src="/blog/plate-19-hosted-cloud.png" alt="작은 지면 앵커와 서버 블록에 점선으로 묶여 있는 검은 다면체 구름 입체, 따뜻한 편집풍 스터디 플레이트 위에" />
+      <img src="/blog/plate-19-hosted-cloud.webp" alt="작은 지면 앵커와 서버 블록에 점선으로 묶여 있는 검은 다면체 구름 입체, 따뜻한 편집풍 스터디 플레이트 위에" />
       <figcaption>기본적으로 호스팅됨: 당신의 프롬프트, 디자인 시스템, 코드베이스 컨텍스트가 다른 누군가의 서버로 이동합니다.</figcaption>
       </figure>
       <h2>오픈소스 대안</h2>
@@ -522,7 +522,7 @@ i18n:
       </ul>
       <p>멘탈 모델: Claude Design은 제품입니다. Open Design은 레이어입니다.</p>
       <figure>
-      <img src="/blog/plate-20-model-lock.png" alt="측정된 베이스라인 위의 세 개의 검은 다면체, 하나만 브래킷 프레임에 끼워져 있고 나머지는 느슨하게 놓여 있는, 따뜻한 편집풍 스터디 플레이트 위에" />
+      <img src="/blog/plate-20-model-lock.webp" alt="측정된 베이스라인 위의 세 개의 검은 다면체, 하나만 브래킷 프레임에 끼워져 있고 나머지는 느슨하게 놓여 있는, 따뜻한 편집풍 스터디 플레이트 위에" />
       <figcaption>Claude Design은 모델을 고정합니다. 오픈 경로는 이미 비용을 지불하고 있는 모델을 가져올 수 있게 합니다.</figcaption>
       </figure>
       <h2>나란히 비교</h2>
@@ -589,7 +589,7 @@ i18n:
       </table>
       <p>솔직한 요약: Claude Design은 가장 다듬어진 단일 제품 경험을 가지고 있습니다. Open Design은 다듬어진 단일 제품 표면을 라이브러리와 맞바꿉니다 — 더 많은 스킬, 더 많은 시스템, 더 많은 에이전트, 이미 노트북에 있는 에이전트와 조합되도록 설계되었습니다.</p>
       <figure>
-      <img src="/blog/plate-21-layer-stack.png" alt="아이소메트릭으로 레이어 스택처럼 보이는 간격을 두고 쌓인 세 개의 얇은 검은 판, 간격을 표시하는 치수 눈금, 맨 위에 올리브 잎, 따뜻한 편집풍 스터디 플레이트 위에" />
+      <img src="/blog/plate-21-layer-stack.webp" alt="아이소메트릭으로 레이어 스택처럼 보이는 간격을 두고 쌓인 세 개의 얇은 검은 판, 간격을 표시하는 치수 눈금, 맨 위에 올리브 잎, 따뜻한 편집풍 스터디 플레이트 위에" />
       <figcaption>제품과 레이어 — Open Design은 당신의 에이전트와 디자인 작업 사이에 자리합니다.</figcaption>
       </figure>
       <h2>누가 무엇을 선택해야 하는가</h2>
@@ -665,7 +665,7 @@ i18n:
       <p><strong>Die Rechnung ist ein Abonnement.</strong> 20–200 $/Monat pro Platz ist in Ordnung für eine Solo-Designerin, schmerzhaft für ein Team von zwanzig und ein No-Go für das Dutzend Open-Source-Beitragender, die andernfalls denselben Workflow aufgreifen würden.</p>
       <p>Nichts davon sind Bugs in Claude Design. Es ist die Form eines gehosteten Produkts. Anthropic hat für den durchschnittlichen Pro-Abonnenten optimiert. Wir sind nicht der durchschnittliche Pro-Abonnent.</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Ein schwarzer facettierter Wolkenkörper, der über eine gestrichelte Linie an einem kleinen Bodenanker und Serverblock befestigt ist, auf einer warmen, redaktionellen Studienplatte" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Ein schwarzer facettierter Wolkenkörper, der über eine gestrichelte Linie an einem kleinen Bodenanker und Serverblock befestigt ist, auf einer warmen, redaktionellen Studienplatte" />
         <figcaption>Standardmäßig gehostet: Deine Prompts, dein Designsystem und dein Codebasis-Kontext wandern auf die Server von jemand anderem.</figcaption>
       </figure>
       <h2>Die Open-Source-Alternative</h2>
@@ -681,7 +681,7 @@ i18n:
       </ul>
       <p>Das mentale Modell: Claude Design ist ein Produkt. Open Design ist eine Schicht.</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Drei schwarze facettierte Polyeder auf einer abgemessenen Grundlinie, nur eines in einen Halterungsrahmen eingesetzt, während die anderen lose liegen, auf einer warmen, redaktionellen Studienplatte" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Drei schwarze facettierte Polyeder auf einer abgemessenen Grundlinie, nur eines in einen Halterungsrahmen eingesetzt, während die anderen lose liegen, auf einer warmen, redaktionellen Studienplatte" />
         <figcaption>Claude Design legt das Modell fest. Der offene Weg lässt dich das mitbringen, für das du ohnehin schon bezahlst.</figcaption>
       </figure>
       <h2>Im direkten Vergleich</h2>
@@ -704,7 +704,7 @@ i18n:
       </table>
       <p>Die ehrliche Zusammenfassung: Claude Design bietet die ausgefeilteste Einzelprodukt-Erfahrung. Open Design tauscht die ausgefeilte Einzelprodukt-Oberfläche gegen eine Bibliothek – mehr Skills, mehr Systeme, mehr Agenten, darauf ausgelegt, sich mit dem Agenten zu kombinieren, der bereits auf deinem Laptop ist.</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Drei dünne schwarze Platten mit sichtbaren Lücken übereinandergestapelt wie ein Schichtstapel in isometrischer Darstellung, Maßstriche markieren die Lücken, ein Olivenblatt obenauf, auf einer warmen, redaktionellen Studienplatte" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Drei dünne schwarze Platten mit sichtbaren Lücken übereinandergestapelt wie ein Schichtstapel in isometrischer Darstellung, Maßstriche markieren die Lücken, ein Olivenblatt obenauf, auf einer warmen, redaktionellen Studienplatte" />
         <figcaption>Ein Produkt und eine Schicht – Open Design sitzt zwischen deinem Agenten und der Designarbeit.</figcaption>
       </figure>
       <h2>Wer was wählen sollte</h2>
@@ -770,7 +770,7 @@ i18n:
       <p>Aucun de ces points n'est un bug de Claude Design. C'est la forme d'un produit hébergé. Anthropic a optimisé pour l'abonné Pro médian. Nous ne sommes pas l'abonné Pro médian.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Un solide nuageux noir à facettes relié par une ligne en pointillés à un petit ancrage au sol et un bloc serveur, sur une planche d'étude éditoriale aux tons chauds" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Un solide nuageux noir à facettes relié par une ligne en pointillés à un petit ancrage au sol et un bloc serveur, sur une planche d'étude éditoriale aux tons chauds" />
         <figcaption>Hébergé par défaut : vos prompts, votre design system et le contexte de votre base de code voyagent vers les serveurs de quelqu'un d'autre.</figcaption>
       </figure>
 
@@ -792,7 +792,7 @@ i18n:
       <p>Le modèle mental : Claude Design est un produit. Open Design est une couche.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Trois polyèdres noirs à facettes sur une ligne de base mesurée, un seul logé dans un cadre à équerre tandis que les autres reposent librement, sur une planche d'étude éditoriale aux tons chauds" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Trois polyèdres noirs à facettes sur une ligne de base mesurée, un seul logé dans un cadre à équerre tandis que les autres reposent librement, sur une planche d'étude éditoriale aux tons chauds" />
         <figcaption>Claude Design fige le modèle. La voie ouverte vous laisse apporter celui que vous payez déjà.</figcaption>
       </figure>
 
@@ -819,7 +819,7 @@ i18n:
       <p>Le résumé honnête : Claude Design offre l'expérience mono-produit la plus aboutie. Open Design échange cette surface mono-produit soignée contre une bibliothèque — plus de skills, plus de systems, plus d'agents, conçus pour se composer avec l'agent déjà présent sur votre ordinateur portable.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Trois fines dalles noires empilées avec des espaces visibles comme une pile de couches en isométrie, des repères de cote marquant les espaces, une feuille d'olivier au sommet, sur une planche d'étude éditoriale aux tons chauds" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Trois fines dalles noires empilées avec des espaces visibles comme une pile de couches en isométrie, des repères de cote marquant les espaces, une feuille d'olivier au sommet, sur une planche d'étude éditoriale aux tons chauds" />
         <figcaption>Un produit et une couche — Open Design se place entre votre agent et le travail de design.</figcaption>
       </figure>
 
@@ -893,7 +893,7 @@ i18n:
       <p>Ничто из этого не является багами Claude Design. Это форма облачного продукта. Anthropic оптимизировала под среднего подписчика Pro. Мы не средний подписчик Pro.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Чёрное гранёное облако-тело, привязанное пунктирной линией к небольшому наземному якорю и блоку сервера, на тёплой редакторской иллюстрации" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Чёрное гранёное облако-тело, привязанное пунктирной линией к небольшому наземному якорю и блоку сервера, на тёплой редакторской иллюстрации" />
         <figcaption>Облако по умолчанию: ваши промпты, дизайн-система и контекст кодовой базы уходят на чужие серверы.</figcaption>
       </figure>
 
@@ -915,7 +915,7 @@ i18n:
       <p>Ментальная модель: Claude Design — это продукт. Open Design — это слой.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Три чёрных гранёных многогранника на размеченной базовой линии, только один вставлен в рамку-держатель, остальные лежат свободно, на тёплой редакторской иллюстрации" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Три чёрных гранёных многогранника на размеченной базовой линии, только один вставлен в рамку-держатель, остальные лежат свободно, на тёплой редакторской иллюстрации" />
         <figcaption>Claude Design фиксирует модель. Открытый путь позволяет привести ту, за которую вы уже платите.</figcaption>
       </figure>
 
@@ -986,7 +986,7 @@ i18n:
       <p>Честное резюме: у Claude Design самый отполированный опыт единого продукта. Open Design меняет отполированную поверхность единого продукта на библиотеку — больше скиллов, больше систем, больше агентов, спроектированных так, чтобы компоноваться с агентом, который уже стоит на вашем ноутбуке.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Три тонкие чёрные плиты, сложенные с видимыми зазорами как стек слоёв в изометрии, размерные риски отмечают зазоры, оливковый лист сверху, на тёплой редакторской иллюстрации" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Три тонкие чёрные плиты, сложенные с видимыми зазорами как стек слоёв в изометрии, размерные риски отмечают зазоры, оливковый лист сверху, на тёплой редакторской иллюстрации" />
         <figcaption>Продукт и слой — Open Design располагается между вашим агентом и дизайнерской работой.</figcaption>
       </figure>
 
@@ -1084,7 +1084,7 @@ i18n:
       <p>Ninguno de estos es un fallo de Claude Design. Son la forma de un producto alojado. Anthropic optimizó para el suscriptor Pro medio. Nosotros no somos el suscriptor Pro medio.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Un sólido de nube negra facetada atado por una línea discontinua a un pequeño ancla de suelo y un bloque de servidor, sobre una lámina de estudio editorial cálida" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Un sólido de nube negra facetada atado por una línea discontinua a un pequeño ancla de suelo y un bloque de servidor, sobre una lámina de estudio editorial cálida" />
         <figcaption>Alojado por defecto: tus instrucciones, tu sistema de diseño y el contexto de tu código base viajan a los servidores de otra persona.</figcaption>
       </figure>
 
@@ -1106,7 +1106,7 @@ i18n:
       <p>El modelo mental: Claude Design es un producto. Open Design es una capa.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Tres poliedros negros facetados sobre una línea base medida, solo uno encajado en un marco de soporte mientras los otros quedan sueltos, sobre una lámina de estudio editorial cálida" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Tres poliedros negros facetados sobre una línea base medida, solo uno encajado en un marco de soporte mientras los otros quedan sueltos, sobre una lámina de estudio editorial cálida" />
         <figcaption>Claude Design fija el modelo. El camino abierto te deja traer el que ya pagas.</figcaption>
       </figure>
 
@@ -1133,7 +1133,7 @@ i18n:
       <p>El resumen honesto: Claude Design tiene la experiencia de producto único más pulida. Open Design cambia esa superficie de producto único pulida por una biblioteca: más skills, más sistemas, más agentes, diseñados para componerse con el agente que ya tienes en tu portátil.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Tres losas negras finas apiladas con huecos visibles como una pila de capas en isométrico, marcas de dimensión señalando los huecos, una hoja de olivo encima, sobre una lámina de estudio editorial cálida" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Tres losas negras finas apiladas con huecos visibles como una pila de capas en isométrico, marcas de dimensión señalando los huecos, una hoja de olivo encima, sobre una lámina de estudio editorial cálida" />
         <figcaption>Un producto y una capa: Open Design se sitúa entre tu agente y el trabajo de diseño.</figcaption>
       </figure>
 
@@ -1193,7 +1193,7 @@ i18n:
       <p><strong>A conta é uma assinatura.</strong> US$ 20–US$ 200/mês por assento é tranquilo para um designer solo, doloroso para um time de vinte pessoas e inviável para a dúzia de contribuidores de código aberto que, de outra forma, adotariam o mesmo fluxo de trabalho.</p>
       <p>Nenhum desses é um bug no Claude Design. Eles são o formato de um produto hospedado. A Anthropic otimizou para o assinante Pro mediano. Nós não somos o assinante Pro mediano.</p>
       <figure>
-      <img src="/blog/plate-19-hosted-cloud.png" alt="Um sólido de nuvem facetada preta amarrado por uma linha tracejada a uma pequena âncora de chão e um bloco de servidor, em uma placa de estudo editorial em tom quente" />
+      <img src="/blog/plate-19-hosted-cloud.webp" alt="Um sólido de nuvem facetada preta amarrado por uma linha tracejada a uma pequena âncora de chão e um bloco de servidor, em uma placa de estudo editorial em tom quente" />
       <figcaption>Hospedado por padrão: seus prompts, design system e contexto da base de código viajam para os servidores de outra pessoa.</figcaption>
       </figure>
       <h2>A alternativa de código aberto</h2>
@@ -1209,7 +1209,7 @@ i18n:
       </ul>
       <p>O modelo mental: o Claude Design é um produto. O Open Design é uma camada.</p>
       <figure>
-      <img src="/blog/plate-20-model-lock.png" alt="Três poliedros facetados pretos sobre uma linha de base medida, apenas um encaixado em uma moldura de suporte enquanto os outros estão soltos, em uma placa de estudo editorial em tom quente" />
+      <img src="/blog/plate-20-model-lock.webp" alt="Três poliedros facetados pretos sobre uma linha de base medida, apenas um encaixado em uma moldura de suporte enquanto os outros estão soltos, em uma placa de estudo editorial em tom quente" />
       <figcaption>O Claude Design fixa o modelo. O caminho aberto deixa você trazer aquele que você já paga.</figcaption>
       </figure>
       <h2>Lado a lado</h2>
@@ -1276,7 +1276,7 @@ i18n:
       </table>
       <p>O resumo honesto: o Claude Design tem a experiência de produto único mais polida. O Open Design troca a superfície polida de produto único por uma biblioteca — mais skills, mais systems, mais agentes, projetada para compor com o agente que já está no seu notebook.</p>
       <figure>
-      <img src="/blog/plate-21-layer-stack.png" alt="Três finas lajes pretas empilhadas com lacunas visíveis como uma pilha de camadas em isométrico, marcações de dimensão indicando as lacunas, uma folha de oliveira no topo, em uma placa de estudo editorial em tom quente" />
+      <img src="/blog/plate-21-layer-stack.webp" alt="Três finas lajes pretas empilhadas com lacunas visíveis como uma pilha de camadas em isométrico, marcações de dimensão indicando as lacunas, uma folha de oliveira no topo, em uma placa de estudo editorial em tom quente" />
       <figcaption>Um produto e uma camada — o Open Design fica entre o seu agente e o trabalho de design.</figcaption>
       </figure>
       <h2>Quem deve escolher o quê</h2>
@@ -1352,7 +1352,7 @@ i18n:
       <p><strong>La fattura è un abbonamento.</strong> $20–$200/mese per postazione va bene per un designer in solitaria, è doloroso per un team di venti persone ed è un non-partente per la dozzina di contributor open-source che altrimenti adotterebbero lo stesso flusso di lavoro.</p>
       <p>Nessuno di questi è un bug in Claude Design. Sono la forma di un prodotto in hosting. Anthropic ha ottimizzato per l'abbonato Pro mediano. Noi non siamo l'abbonato Pro mediano.</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Un solido a nuvola sfaccettata nera ancorato da una linea tratteggiata a un piccolo ancoraggio a terra e a un blocco server, su una tavola di studio editoriale dai toni caldi" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Un solido a nuvola sfaccettata nera ancorato da una linea tratteggiata a un piccolo ancoraggio a terra e a un blocco server, su una tavola di studio editoriale dai toni caldi" />
         <figcaption>In hosting per impostazione predefinita: i tuoi prompt, il design system e il contesto della codebase viaggiano verso i server di qualcun altro.</figcaption>
       </figure>
       <h2>L'alternativa open-source</h2>
@@ -1368,7 +1368,7 @@ i18n:
       </ul>
       <p>Il modello mentale: Claude Design è un prodotto. Open Design è uno strato.</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Tre poliedri sfaccettati neri su una linea di base misurata, solo uno incastrato in una cornice a staffa mentre gli altri stanno liberi, su una tavola di studio editoriale dai toni caldi" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Tre poliedri sfaccettati neri su una linea di base misurata, solo uno incastrato in una cornice a staffa mentre gli altri stanno liberi, su una tavola di studio editoriale dai toni caldi" />
         <figcaption>Claude Design fissa il modello. La strada aperta ti lascia portare quello che già paghi.</figcaption>
       </figure>
       <h2>Confronto fianco a fianco</h2>
@@ -1391,7 +1391,7 @@ i18n:
       </table>
       <p>Il riepilogo onesto: Claude Design ha l'esperienza a prodotto singolo più rifinita. Open Design scambia la superficie rifinita a prodotto singolo con una libreria — più skill, più sistemi, più agent, progettati per comporsi con l'agent che è già sul tuo laptop.</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Tre lastre sottili nere impilate con spazi visibili come uno stack di strati in isometria, tacche dimensionali a segnare gli spazi, una foglia d'ulivo in cima, su una tavola di studio editoriale dai toni caldi" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Tre lastre sottili nere impilate con spazi visibili come uno stack di strati in isometria, tacche dimensionali a segnare gli spazi, una foglia d'ulivo in cima, su una tavola di studio editoriale dai toni caldi" />
         <figcaption>Un prodotto e uno strato — Open Design si colloca tra il tuo agent e il lavoro di design.</figcaption>
       </figure>
       <h2>Chi dovrebbe scegliere cosa</h2>
@@ -1443,7 +1443,7 @@ i18n:
       <p><strong>Hóa đơn là một gói đăng ký.</strong> 20–200 đô-la/tháng cho mỗi chỗ ngồi thì ổn với một nhà thiết kế đơn lẻ, đau đớn với một đội hai mươi người, và là điều bất khả thi với cả tá người đóng góp mã nguồn mở mà lẽ ra sẽ tiếp nhận cùng quy trình đó.</p>
       <p>Không cái nào trong số này là lỗi của Claude Design. Chúng là hình hài của một sản phẩm được host. Anthropic tối ưu cho người đăng ký Pro trung vị. Chúng tôi không phải người đăng ký Pro trung vị.</p>
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Một khối đám mây đen nhiều mặt được buộc bằng một đường nét đứt vào một mỏ neo nhỏ trên mặt đất và một khối máy chủ, trên một bản nghiên cứu kiểu biên tập tông ấm" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Một khối đám mây đen nhiều mặt được buộc bằng một đường nét đứt vào một mỏ neo nhỏ trên mặt đất và một khối máy chủ, trên một bản nghiên cứu kiểu biên tập tông ấm" />
         <figcaption>Được host theo mặc định: prompt, hệ thống thiết kế, và bối cảnh codebase của bạn đi đến máy chủ của người khác.</figcaption>
       </figure>
       <h2>Giải pháp mã nguồn mở thay thế</h2>
@@ -1459,7 +1459,7 @@ i18n:
       </ul>
       <p>Mô hình tư duy: Claude Design là một sản phẩm. Open Design là một lớp.</p>
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Ba khối đa diện đen nhiều mặt trên một đường nền được đo đạc, chỉ một khối được lắp vào khung ngoặc trong khi các khối khác nằm rời, trên một bản nghiên cứu kiểu biên tập tông ấm" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Ba khối đa diện đen nhiều mặt trên một đường nền được đo đạc, chỉ một khối được lắp vào khung ngoặc trong khi các khối khác nằm rời, trên một bản nghiên cứu kiểu biên tập tông ấm" />
         <figcaption>Claude Design cố định mô hình. Con đường mở cho phép bạn mang theo mô hình mà bạn đã trả tiền.</figcaption>
       </figure>
       <h2>So sánh trực tiếp</h2>
@@ -1526,7 +1526,7 @@ i18n:
       </table>
       <p>Tóm tắt thẳng thắn: Claude Design có trải nghiệm sản phẩm-đơn-nhất được trau chuốt nhất. Open Design đánh đổi bề mặt sản phẩm-đơn-nhất trau chuốt để lấy một thư viện — nhiều skill hơn, nhiều hệ thống hơn, nhiều tác tử hơn, được thiết kế để kết hợp với tác tử đã có trên laptop của bạn.</p>
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Ba phiến đen mỏng xếp chồng với khoảng hở thấy rõ như một ngăn xếp lớp ở góc nhìn isometric, các vạch kích thước đánh dấu các khoảng hở, một chiếc lá ô liu trên cùng, trên một bản nghiên cứu kiểu biên tập tông ấm" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Ba phiến đen mỏng xếp chồng với khoảng hở thấy rõ như một ngăn xếp lớp ở góc nhìn isometric, các vạch kích thước đánh dấu các khoảng hở, một chiếc lá ô liu trên cùng, trên một bản nghiên cứu kiểu biên tập tông ấm" />
         <figcaption>Một sản phẩm và một lớp — Open Design nằm giữa tác tử của bạn và công việc thiết kế.</figcaption>
       </figure>
       <h2>Ai nên chọn gì</h2>
@@ -1616,7 +1616,7 @@ i18n:
       <p>Żaden z tych elementów nie jest błędem w Claude Design. To kształt produktu hostowanego. Anthropic zoptymalizował pod medianowego subskrybenta Pro. My nie jesteśmy medianowym subskrybentem Pro.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Czarna fasetowana bryła chmury przymocowana przerywaną linią do małej kotwicy w gruncie i bloku serwera, na ciepłej, redakcyjnej planszy poglądowej" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Czarna fasetowana bryła chmury przymocowana przerywaną linią do małej kotwicy w gruncie i bloku serwera, na ciepłej, redakcyjnej planszy poglądowej" />
         <figcaption>Domyślnie w chmurze: twoje prompty, system projektowy i kontekst bazy kodu podróżują na cudze serwery.</figcaption>
       </figure>
 
@@ -1638,7 +1638,7 @@ i18n:
       <p>Model myślowy: Claude Design to produkt. Open Design to warstwa.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Trzy czarne fasetowane wielościany na wymierzonej linii bazowej, tylko jeden wpasowany w ramę uchwytu, podczas gdy pozostałe leżą luźno, na ciepłej, redakcyjnej planszy poglądowej" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Trzy czarne fasetowane wielościany na wymierzonej linii bazowej, tylko jeden wpasowany w ramę uchwytu, podczas gdy pozostałe leżą luźno, na ciepłej, redakcyjnej planszy poglądowej" />
         <figcaption>Claude Design ustala model na stałe. Otwarta droga pozwala ci przynieść ten, za który już płacisz.</figcaption>
       </figure>
 
@@ -1665,7 +1665,7 @@ i18n:
       <p>Uczciwe podsumowanie: Claude Design oferuje najbardziej dopracowane doświadczenie pojedynczego produktu. Open Design wymienia dopracowaną powierzchnię pojedynczego produktu na bibliotekę — więcej skilli, więcej systemów, więcej agentów, zaprojektowaną tak, by komponować się z agentem już obecnym na twoim laptopie.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Trzy cienkie czarne płyty ułożone z widocznymi przerwami niczym stos warstw w rzucie izometrycznym, znaczniki wymiarów wyznaczają przerwy, liść oliwny na szczycie, na ciepłej, redakcyjnej planszy poglądowej" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Trzy cienkie czarne płyty ułożone z widocznymi przerwami niczym stos warstw w rzucie izometrycznym, znaczniki wymiarów wyznaczają przerwy, liść oliwny na szczycie, na ciepłej, redakcyjnej planszy poglądowej" />
         <figcaption>Produkt i warstwa — Open Design siedzi pomiędzy twoim agentem a pracą projektową.</figcaption>
       </figure>
 
@@ -1739,7 +1739,7 @@ i18n:
       <p>Tidak satu pun dari ini adalah bug di Claude Design. Inilah bentuk dari sebuah produk hosted. Anthropic mengoptimalkan untuk pelanggan Pro rata-rata. Kami bukan pelanggan Pro rata-rata.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Sebuah awan padat berfaset hitam yang ditambatkan oleh garis putus-putus ke jangkar tanah kecil dan blok server, di atas plat studi editorial bernuansa hangat" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Sebuah awan padat berfaset hitam yang ditambatkan oleh garis putus-putus ke jangkar tanah kecil dan blok server, di atas plat studi editorial bernuansa hangat" />
         <figcaption>Hosted secara bawaan: prompt Anda, design system, dan konteks codebase berjalan ke server milik orang lain.</figcaption>
       </figure>
 
@@ -1761,7 +1761,7 @@ i18n:
       <p>Model mentalnya: Claude Design adalah sebuah produk. Open Design adalah sebuah lapisan.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Tiga polihedron berfaset hitam pada garis dasar terukur, hanya satu yang terpasang ke bingkai braket sementara yang lain duduk lepas, di atas plat studi editorial bernuansa hangat" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Tiga polihedron berfaset hitam pada garis dasar terukur, hanya satu yang terpasang ke bingkai braket sementara yang lain duduk lepas, di atas plat studi editorial bernuansa hangat" />
         <figcaption>Claude Design menetapkan modelnya. Jalur terbuka membiarkan Anda membawa model yang sudah Anda bayar.</figcaption>
       </figure>
 
@@ -1788,7 +1788,7 @@ i18n:
       <p>Ringkasan jujurnya: Claude Design punya pengalaman produk-tunggal yang paling halus. Open Design menukar permukaan produk-tunggal yang halus itu dengan sebuah pustaka — lebih banyak skill, lebih banyak system, lebih banyak agent, dirancang untuk dipadukan dengan agent yang sudah ada di laptop Anda.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Tiga lempeng hitam tipis ditumpuk dengan celah terlihat seperti tumpukan lapisan secara isometrik, garis dimensi menandai celahnya, sehelai daun zaitun di atasnya, di atas plat studi editorial bernuansa hangat" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Tiga lempeng hitam tipis ditumpuk dengan celah terlihat seperti tumpukan lapisan secara isometrik, garis dimensi menandai celahnya, sehelai daun zaitun di atasnya, di atas plat studi editorial bernuansa hangat" />
         <figcaption>Sebuah produk dan sebuah lapisan — Open Design duduk di antara agent Anda dan pekerjaan desainnya.</figcaption>
       </figure>
 
@@ -1862,7 +1862,7 @@ i18n:
       <p>Geen van deze zijn bugs in Claude Design. Ze zijn de vorm van een gehost product. Anthropic optimaliseerde voor de mediane Pro-abonnee. Wij zijn niet de mediane Pro-abonnee.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Een zwart gefacetteerd wolkenlichaam, vastgemaakt met een stippellijn aan een klein grondanker en serverblok, op een warme redactionele studieplaat" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Een zwart gefacetteerd wolkenlichaam, vastgemaakt met een stippellijn aan een klein grondanker en serverblok, op een warme redactionele studieplaat" />
         <figcaption>Standaard gehost: jouw prompts, design system en codebase-context reizen naar de servers van iemand anders.</figcaption>
       </figure>
 
@@ -1884,7 +1884,7 @@ i18n:
       <p>Het mentale model: Claude Design is een product. Open Design is een laag.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Drie zwarte gefacetteerde veelvlakken op een gemeten basislijn, slechts één in een beugelframe geschoven terwijl de andere los zitten, op een warme redactionele studieplaat" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Drie zwarte gefacetteerde veelvlakken op een gemeten basislijn, slechts één in een beugelframe geschoven terwijl de andere los zitten, op een warme redactionele studieplaat" />
         <figcaption>Claude Design legt het model vast. Het open pad laat je het meenemen waarvoor je al betaalt.</figcaption>
       </figure>
 
@@ -1911,7 +1911,7 @@ i18n:
       <p>De eerlijke samenvatting: Claude Design heeft de meest gepolijste enkelvoudige-productervaring. Open Design ruilt het gepolijste enkelvoudige-productoppervlak in voor een bibliotheek — meer skills, meer systems, meer agents, ontworpen om te combineren met de agent die al op jouw laptop staat.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Drie dunne zwarte platen gestapeld met zichtbare tussenruimtes als een laagstapel in isometrie, maatstreepjes die de tussenruimtes markeren, een olijfblad bovenop, op een warme redactionele studieplaat" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Drie dunne zwarte platen gestapeld met zichtbare tussenruimtes als een laagstapel in isometrie, maatstreepjes die de tussenruimtes markeren, een olijfblad bovenop, op een warme redactionele studieplaat" />
         <figcaption>Een product en een laag — Open Design zit tussen jouw agent en het designwerk.</figcaption>
       </figure>
 
@@ -1985,7 +1985,7 @@ i18n:
       <p>لا شيء من هذا يُعدّ عيبًا في Claude Design. هذه هي طبيعة منتج مُستضاف. لقد حسّنت Anthropic للمشترك الوسطي في خطة Pro. ونحن لسنا المشترك الوسطي في خطة Pro.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="سحابة صلبة سوداء متعددة الأوجه مربوطة بخط متقطع إلى مرساة أرضية صغيرة وكتلة خادم، على لوحة دراسة تحريرية بلون دافئ" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="سحابة صلبة سوداء متعددة الأوجه مربوطة بخط متقطع إلى مرساة أرضية صغيرة وكتلة خادم، على لوحة دراسة تحريرية بلون دافئ" />
         <figcaption>مُستضاف افتراضيًا: مطالباتك، ونظام تصميمك، وسياق قاعدة شيفرتك تنتقل إلى خوادم شخص آخر.</figcaption>
       </figure>
 
@@ -2007,7 +2007,7 @@ i18n:
       <p>النموذج الذهني: Claude Design منتج. Open Design طبقة.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="ثلاثة مجسّمات سوداء متعددة الأوجه على خط أساس مقاس، واحد منها فقط مثبَّت داخل إطار حاضن بينما يجلس الآخران بحرّية، على لوحة دراسة تحريرية بلون دافئ" />
+        <img src="/blog/plate-20-model-lock.webp" alt="ثلاثة مجسّمات سوداء متعددة الأوجه على خط أساس مقاس، واحد منها فقط مثبَّت داخل إطار حاضن بينما يجلس الآخران بحرّية، على لوحة دراسة تحريرية بلون دافئ" />
         <figcaption>Claude Design تثبّت النموذج. المسار المفتوح يتيح لك إحضار النموذج الذي تدفع ثمنه أصلًا.</figcaption>
       </figure>
 
@@ -2078,7 +2078,7 @@ i18n:
       <p>الخلاصة الصادقة: تمتلك Claude Design التجربة الأكثر صقلًا كمنتج واحد. أما Open Design فتقايض السطح المصقول لمنتج واحد بمكتبة — مهارات أكثر، وأنظمة أكثر، ووكلاء أكثر، مصمَّمة لتتركّب مع الوكيل الموجود أصلًا على حاسوبك المحمول.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="ثلاثة ألواح سوداء رفيعة مكدّسة بفجوات ظاهرة مثل حزمة طبقات بإسقاط متساوي القياس (isometric)، مع علامات أبعاد تحدّد الفجوات، وورقة زيتون في الأعلى، على لوحة دراسة تحريرية بلون دافئ" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="ثلاثة ألواح سوداء رفيعة مكدّسة بفجوات ظاهرة مثل حزمة طبقات بإسقاط متساوي القياس (isometric)، مع علامات أبعاد تحدّد الفجوات، وورقة زيتون في الأعلى، على لوحة دراسة تحريرية بلون دافئ" />
         <figcaption>منتج وطبقة — تقع Open Design بين وكيلك وأعمال التصميم.</figcaption>
       </figure>
 
@@ -2176,7 +2176,7 @@ i18n:
       <p>Bunların hiçbiri Claude Design'da bir hata değil. Bunlar barındırılan bir ürünün biçimidir. Anthropic, ortalama Pro abonesi için optimize etti. Biz ortalama Pro abonesi değiliz.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Sıcak, editöryel bir çalışma plakası üzerinde, kesik çizgili bir hatla küçük bir yer çapasına ve sunucu bloğuna bağlanmış, siyah, çok yüzeyli katı bir bulut" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Sıcak, editöryel bir çalışma plakası üzerinde, kesik çizgili bir hatla küçük bir yer çapasına ve sunucu bloğuna bağlanmış, siyah, çok yüzeyli katı bir bulut" />
         <figcaption>Varsayılan olarak barındırılan: istemleriniz, tasarım sisteminiz ve kod tabanı bağlamınız bir başkasının sunucularına gider.</figcaption>
       </figure>
 
@@ -2198,7 +2198,7 @@ i18n:
       <p>Zihinsel model: Claude Design bir üründür. Open Design bir katmandır.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Sıcak, editöryel bir çalışma plakası üzerinde, ölçülü bir temel hat üzerinde üç siyah, çok yüzeyli çokyüzlü; yalnızca biri bir braket çerçevesine yerleştirilmiş, diğerleri serbest duruyor" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Sıcak, editöryel bir çalışma plakası üzerinde, ölçülü bir temel hat üzerinde üç siyah, çok yüzeyli çokyüzlü; yalnızca biri bir braket çerçevesine yerleştirilmiş, diğerleri serbest duruyor" />
         <figcaption>Claude Design modeli sabitler. Açık yol, zaten parasını ödediğinizi getirmenize izin verir.</figcaption>
       </figure>
 
@@ -2269,7 +2269,7 @@ i18n:
       <p>Dürüst özet: Claude Design, en cilalı tek ürün deneyimine sahiptir. Open Design, cilalı tek ürün yüzeyini bir kütüphane karşılığında takas eder — daha fazla skill, daha fazla sistem, daha fazla ajan; zaten dizüstü bilgisayarınızdaki ajanla birleşecek şekilde tasarlanmıştır.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Sıcak, editöryel bir çalışma plakası üzerinde, izometrik olarak görünür boşluklarla bir katman yığını gibi üst üste dizilmiş üç ince siyah levha; boşlukları işaretleyen boyut çentikleri ve en üstte bir zeytin yaprağı" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Sıcak, editöryel bir çalışma plakası üzerinde, izometrik olarak görünür boşluklarla bir katman yığını gibi üst üste dizilmiş üç ince siyah levha; boşlukları işaretleyen boyut çentikleri ve en üstte bir zeytin yaprağı" />
         <figcaption>Bir ürün ve bir katman — Open Design, ajanınızla tasarım işi arasında durur.</figcaption>
       </figure>
 
@@ -2367,7 +2367,7 @@ i18n:
       <p>Жодна з цих речей не є вадою Claude Design. Це форма хмарного продукту. Anthropic оптимізували під медіанного підписника Pro. Ми не медіанний підписник Pro.</p>
 
       <figure>
-        <img src="/blog/plate-19-hosted-cloud.png" alt="Чорна грановита хмара-тіло, прив'язана пунктирною лінією до невеликого наземного якоря та серверного блоку, на теплій редакційній планшетній ілюстрації" />
+        <img src="/blog/plate-19-hosted-cloud.webp" alt="Чорна грановита хмара-тіло, прив'язана пунктирною лінією до невеликого наземного якоря та серверного блоку, на теплій редакційній планшетній ілюстрації" />
         <figcaption>За замовчуванням у хмарі: ваші промпти, дизайн-система та контекст кодової бази мандрують на чужі сервери.</figcaption>
       </figure>
 
@@ -2389,7 +2389,7 @@ i18n:
       <p>Ментальна модель: Claude Design — це продукт. Open Design — це шар.</p>
 
       <figure>
-        <img src="/blog/plate-20-model-lock.png" alt="Три чорні грановані багатогранники на виміряній базовій лінії, лише один вставлений у скобу-рамку, тоді як інші лежать вільно, на теплій редакційній планшетній ілюстрації" />
+        <img src="/blog/plate-20-model-lock.webp" alt="Три чорні грановані багатогранники на виміряній базовій лінії, лише один вставлений у скобу-рамку, тоді як інші лежать вільно, на теплій редакційній планшетній ілюстрації" />
         <figcaption>Claude Design фіксує модель. Відкритий шлях дозволяє принести ту, за яку ви вже платите.</figcaption>
       </figure>
 
@@ -2416,7 +2416,7 @@ i18n:
       <p>Чесне резюме: Claude Design має найвідшліфованіший досвід єдиного продукту. Open Design обмінює відшліфовану поверхню єдиного продукту на бібліотеку — більше навичок, більше систем, більше агентів, спроєктованих так, щоб компонуватися з агентом, який уже є на вашому ноутбуці.</p>
 
       <figure>
-        <img src="/blog/plate-21-layer-stack.png" alt="Три тонкі чорні плити, складені з помітними зазорами, наче стек шарів в ізометрії, мітки розмірів позначають зазори, оливкове листя зверху, на теплій редакційній планшетній ілюстрації" />
+        <img src="/blog/plate-21-layer-stack.webp" alt="Три тонкі чорні плити, складені з помітними зазорами, наче стек шарів в ізометрії, мітки розмірів позначають зазори, оливкове листя зверху, на теплій редакційній планшетній ілюстрації" />
         <figcaption>Продукт і шар — Open Design розташований між вашим агентом і дизайнерською роботою.</figcaption>
       </figure>
 
@@ -2486,7 +2486,7 @@ Claude Design carries four pieces of lock-in worth naming upfront, because the m
 None of these are bugs in Claude Design. They are the shape of a hosted product. Anthropic optimised for the median Pro subscriber. We're not the median Pro subscriber.
 
 <figure>
-  <img src="/blog/plate-19-hosted-cloud.png" alt="A black faceted cloud solid tethered by a dashed line to a small ground anchor and server block, on a warm editorial study plate" />
+  <img src="/blog/plate-19-hosted-cloud.webp" alt="A black faceted cloud solid tethered by a dashed line to a small ground anchor and server block, on a warm editorial study plate" />
   <figcaption>Hosted by default: your prompts, design system, and codebase context travel to someone else's servers.</figcaption>
 </figure>
 
@@ -2506,7 +2506,7 @@ What ships in the box today:
 The mental model: Claude Design is a product. Open Design is a layer.
 
 <figure>
-  <img src="/blog/plate-20-model-lock.png" alt="Three black faceted polyhedra on a measured baseline, only one slotted into a bracket frame while the others sit loose, on a warm editorial study plate" />
+  <img src="/blog/plate-20-model-lock.webp" alt="Three black faceted polyhedra on a measured baseline, only one slotted into a bracket frame while the others sit loose, on a warm editorial study plate" />
   <figcaption>Claude Design fixes the model. The open path lets you bring the one you already pay for.</figcaption>
 </figure>
 
@@ -2528,7 +2528,7 @@ The mental model: Claude Design is a product. Open Design is a layer.
 The honest summary: Claude Design has the most polished single-product experience. Open Design trades the polished single-product surface for a library — more skills, more systems, more agents, designed to compose with the agent already on your laptop.
 
 <figure>
-  <img src="/blog/plate-21-layer-stack.png" alt="Three thin black slabs stacked with visible gaps like a layer stack in isometric, dimension ticks marking the gaps, an olive leaf on top, on a warm editorial study plate" />
+  <img src="/blog/plate-21-layer-stack.webp" alt="Three thin black slabs stacked with visible gaps like a layer stack in isometric, dimension ticks marking the gaps, an olive leaf on top, on a warm editorial study plate" />
   <figcaption>A product and a layer — Open Design sits between your agent and the design work.</figcaption>
 </figure>
 

@@ -13,10 +13,12 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
+  bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
   resolveGrantedCodexImagegenOverride,
   resolveCodexGeneratedImagesDir,
@@ -61,7 +63,27 @@ async function withFakeAgent<T>(
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+function killProcessesUsingPath(pathFragment: string): void {
+  if (process.platform === 'win32') return;
+  let output = '';
+  try {
+    output = execFileSync('pgrep', ['-f', pathFragment], { encoding: 'utf8' });
+  } catch {
+    return;
+  }
+  for (const line of output.split('\n')) {
+    const pid = Number(line.trim());
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+    }
   }
 }
 
@@ -216,6 +238,117 @@ process.exit(0);
         });
       },
     );
+  });
+
+  it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-config-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+    const cwdFile = join(markerDir, 'cwd.txt');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'OpenCode cwd permission fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  fs.writeFileSync(${JSON.stringify(cwdFile)}, process.cwd());
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'cwd-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'hello',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('cwd-permission-ok');
+
+        const effectiveCwd = (await fsp.readFile(cwdFile, 'utf8')).trim();
+        const raw = await fsp.readFile(envFile, 'utf8');
+        const parsed = JSON.parse(raw) as {
+          permission?: {
+            external_directory?: Record<string, string>;
+          };
+        };
+
+        expect(parsed.permission?.external_directory).toMatchObject({
+          [effectiveCwd]: 'allow',
+          [`${effectiveCwd}/*`]: 'allow',
+          [`${effectiveCwd}/**`]: 'allow',
+        });
+      },
+    );
+  });
+
+  it('strips inherited OpenCode server auth env before spawning the opencode CLI', async () => {
+    const inheritedPassword = process.env.OPENCODE_SERVER_PASSWORD;
+    process.env.OPENCODE_SERVER_PASSWORD = 'test-parent-server-password';
+
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-env-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-server-password.txt');
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_SERVER_PASSWORD || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'opencode-env-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: 'hello',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('opencode-env-ok');
+          expect(await fsp.readFile(envFile, 'utf8')).toBe('');
+        },
+      );
+    } finally {
+      if (inheritedPassword == null) {
+        delete process.env.OPENCODE_SERVER_PASSWORD;
+      } else {
+        process.env.OPENCODE_SERVER_PASSWORD = inheritedPassword;
+      }
+    }
   });
 
 
@@ -1844,6 +1977,181 @@ process.exit(0);
         expect(statusBody.status).toBe('failed');
       },
     );
+  });
+
+  it('parses successful Antigravity Gemini JSONL output instead of forwarding raw stdout', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5, cached: 0, duration_ms: 25 } }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"text_delta","delta":"Hello from Antigravity."');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(eventsBody).not.toContain('"role":"assistant"');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  it('forwards Antigravity plain stdout JSONL when it lacks the Gemini init marker', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'error', message: 'requested JSONL output' }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'return JSONL',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: stdout');
+        expect(eventsBody).toContain('requested JSONL output');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
+    await withFakeAgent(
+      'agy',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.107.0-test');
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
+process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0, cached: 0, duration_ms: 25 } }) + '\\n');
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'antigravity',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'Agent completed without producing any output');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('event: agent');
+        expect(eventsBody).toContain('"type":"usage"');
+        expect(eventsBody).toContain('event: error');
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).not.toContain('event: stdout');
+        expect(statusBody.status).toBe('failed');
+      },
+    );
+  });
+
+  it('preserves the first buffered stdout timestamp for Antigravity Gemini assistant text', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
+      [{
+        receivedAt: 1_234,
+        text: [
+          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
+          JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }),
+          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } }),
+        ].join('\n'),
+      }],
+    );
+
+    expect(timestamp).toBe(1_234);
+  });
+
+  it('stamps Antigravity Gemini assistant text from the chunk that completes the first assistant message', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt([
+      {
+        receivedAt: 1_234,
+        text: `${JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' })}\n`,
+      },
+      {
+        receivedAt: 5_678,
+        text: `${JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true })}\n`,
+      },
+      {
+        receivedAt: 9_999,
+        text: `${JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } })}\n`,
+      },
+    ]);
+
+    expect(timestamp).toBe(5_678);
+  });
+
+  it('does not stamp a first token timestamp for Antigravity Gemini streams without assistant text', () => {
+    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
+      [{
+        receivedAt: 1_234,
+        text: [
+          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
+          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0 } }),
+        ].join('\n'),
+      }],
+    );
+
+    expect(timestamp).toBeNull();
   });
 
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {

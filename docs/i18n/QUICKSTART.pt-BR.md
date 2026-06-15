@@ -45,7 +45,7 @@ Para a shell desktop e todos os sidecars gerenciados em background:
 pnpm tools-dev # starts daemon + web + desktop in the background
 ```
 
-No primeiro carregamento, o app detecta o CLI de agente instalado (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen), seleciona automaticamente e usa por padrão o skill `web-prototype` + design system `Neutral Modern`. Digite um prompt e clique em **Send**. O agente faz streaming no painel da esquerda; a tag `<artifact>` é parseada e o HTML é renderizado ao vivo na direita. Ao terminar, clique em **Save to disk** para persistir o artifact em `./.od/artifacts/<timestamp>-<slug>/index.html`.
+No primeiro carregamento, o app detecta o CLI de agente instalado (Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen), seleciona automaticamente e usa por padrão o skill `web-prototype` + design system `Neutral Modern`. Digite um prompt e clique em **Send**. O agente faz streaming no painel da esquerda; a tag `<artifact>` é parseada e o HTML é renderizado ao vivo na direita. Ao terminar, clique em **Save to disk** para persistir o artifact. Antes de documentar ou alterar qualquer caminho de armazenamento de artifact, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
 
 O dropdown **Design system** vem com **129 design systems** — 2 starters escritos à mão (Neutral Modern, Warm Editorial), 70 sistemas de produto bundled e 57 design skills vindos de [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills). Escolha um para vestir cada protótipo na estética daquela marca.
 
@@ -196,25 +196,9 @@ OD_API_TOKEN=
 
 ## Armazenamento persistente
 
-O Open Design armazena projetos e dados SQLite dentro de um volume Docker:
-
-```text
-open_design_data
-```
-
-O volume é montado em:
-
-```text
-/app/.od
-```
-
-Os dados persistem entre reinicializações de contêineres e atualizações de imagem.
-
-Inspecione o volume:
-
-```bash
-docker volume inspect open-design_open_design_data
-```
+Antes de documentar, alterar ou escolher qualquer caminho persistente de armazenamento do daemon,
+você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+Este Quickstart NÃO DEVE repetir esse contrato nem definir caminhos de armazenamento.
 
 ---
 
@@ -353,10 +337,6 @@ open-design/
 │   └── …129 systems           # 2 starters · 70 product systems · 57 design skills
 ├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
 ├── docs/                      # product vision + spec
-├── .od/                       # runtime data (gitignored, auto-created)
-│   ├── app.sqlite              #   projects / conversations / messages / tabs
-│   ├── artifacts/              #   one-off "Save to disk" renders
-│   └── projects/<id>/          #   per-project working dir + agent cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # root quality scripts + `od` bin
 ```

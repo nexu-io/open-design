@@ -76,8 +76,8 @@
    focus box-shadow). We override every property the parent pill
    already provides so the focus halo only paints once, on the
    pill-shaped container, and the input renders flush inside it. */
-.plugins-home__search-input,
-.plugins-home__search-input:focus {
+.plugins-home__search .plugins-home__search-input,
+.plugins-home__search .plugins-home__search-input:focus {
   appearance: none;
   width: 100%;
   border: 0;
@@ -110,11 +110,8 @@
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 0;
   border-radius: 50%;
-  background: var(--bg-subtle);
   color: var(--text-muted);
-  cursor: pointer;
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .plugins-home__search-clear:hover {
@@ -1127,7 +1124,7 @@ button.plugins-home__use-menu-item:focus-visible {
 /* Bottom hint — pinned to the very bottom of the viewport, intentionally
    faint so it sits at the edge of attention. An up arrow bobs gently to
    suggest the scroll-up gesture without pulling focus from the hero. */
-.home-templates-reveal__hint {
+button.home-templates-reveal__hint {
   position: fixed;
   left: 50%;
   bottom: 18px;
@@ -1136,24 +1133,20 @@ button.plugins-home__use-menu-item:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 12px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: transparent;
   color: var(--text-faint);
   font-size: 12px;
   letter-spacing: 0.01em;
-  cursor: pointer;
   opacity: 0.7;
-  transition:
-    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.home-templates-reveal__hint:hover {
+button.home-templates-reveal__hint:hover {
+  background: transparent;
   opacity: 1;
   color: var(--text-muted);
 }
-.home-templates-reveal__hint:focus-visible {
+button.home-templates-reveal__hint:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   opacity: 1;
@@ -1193,7 +1186,7 @@ button.plugins-home__use-menu-item:focus-visible {
 /* Collapse control — pinned to the bottom of the viewport (mirroring the
    hint slot) so it's always reachable while the gallery is open, instead of
    being stranded far below the fold. Reversible: folds the gallery away. */
-.home-templates-reveal__collapse {
+button.home-templates-reveal__collapse {
   position: fixed;
   left: 50%;
   bottom: 18px;
@@ -1201,27 +1194,13 @@ button.plugins-home__use-menu-item:focus-visible {
   z-index: 5;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 7px 15px;
-  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
   font-size: 12px;
-  cursor: pointer;
   box-shadow: var(--shadow-sm, 0 4px 14px rgba(0, 0, 0, 0.08));
   animation: home-templates-fade-in 220ms cubic-bezier(0.23, 1, 0.32, 1);
-  transition:
-    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.home-templates-reveal__collapse:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-strong, #111);
-}
-.home-templates-reveal__collapse:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 @keyframes home-templates-fade-in {
   from {

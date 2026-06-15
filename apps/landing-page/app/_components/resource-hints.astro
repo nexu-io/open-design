@@ -19,3 +19,19 @@
 ---
 
 <link rel='preconnect' href='https://api.github.com' crossorigin />
+
+<!--
+  Preload the primary above-the-fold typeface (Albert Sans, woff2 ≈50KB) so the
+  LCP heading/body text swaps to the brand face without a late round-trip.
+  Paired with `font-display: swap` this keeps text painting immediately while
+  the brand font streams in at high priority. `crossorigin` is required for font
+  preloads even same-origin, or the browser opens a second connection and the
+  preload is wasted.
+-->
+<link
+  rel='preload'
+  href='/skill-assets/AlbertSans-VariableFont_wght.woff2'
+  as='font'
+  type='font/woff2'
+  crossorigin
+/>

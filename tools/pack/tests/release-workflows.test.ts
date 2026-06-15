@@ -150,6 +150,29 @@ describe("release workflows", () => {
     expect(stable).toContain(".github\\workflow\\scripts\\release\\prepare-platform-assets.ps1");
     expect(countOccurrences(stable, ".github/workflow/scripts/release/storage/publish-platform.ts")).toBeGreaterThanOrEqual(4);
     expect(stable).toContain(".github/workflow/scripts/release/storage/publish-metadata.ts");
+    // The stable promotion gate (scripts/release-stable.ts) validates the
+    // nightly's metadata.github.{commit,branch,repository,workflow}; the publish
+    // step must therefore pass the RELEASE_* attribution env. #3995 unified the
+    // publisher but left these unset for release-stable, so github.* shipped
+    // empty and no nightly could be promoted.
+    expect(stable).toContain("RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}");
+    expect(stable).toContain("RELEASE_REPOSITORY: ${{ github.repository }}");
+    expect(stable).toContain("RELEASE_WORKFLOW: ${{ github.workflow }}");
+    // publish-metadata.ts refuses a platform manifest whose github.{runId,commit}
+    // disagree with the publish step's. RELEASE_COMMIT must therefore reach every
+    // publish step (4 platforms + the metadata step), and RELEASE_RUN_ID must be
+    // workflow-wide so the platform build jobs stamp the same runId the metadata
+    // step validates against — otherwise publish fails with
+    // "refusing stale <target> platform manifest ...: github.runId=0".
+    expect(countOccurrences(stable, "RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}")).toBeGreaterThanOrEqual(5);
+    expect(stable).toContain("RELEASE_RUN_ID: ${{ github.run_id }}");
+    // RELEASE_BRANCH must be the resolved needs.metadata.outputs.branch on every
+    // publish step (not github.ref_name): under workflow_call / inputs.ref the
+    // caller ref differs from the built ref, so a workflow-wide github.ref_name
+    // would make the per-platform manifests' github.branch disagree with the
+    // aggregate metadata the metadata job stamps.
+    expect(countOccurrences(stable, "RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}")).toBeGreaterThanOrEqual(5);
+    expect(stable).not.toContain("RELEASE_BRANCH: ${{ github.ref_name }}");
     expect(stable).toContain(".github/workflow/scripts/release/storage/verify-metadata.ts");
     expect(stable).toContain(".github/workflow/scripts/release/storage/summary-metadata.ts");
     expect(stable).toContain("open-design-release-mac-arm64-publish-manifest");

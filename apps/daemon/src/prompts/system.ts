@@ -30,7 +30,8 @@
  * the Anthropic path sends as `system`.
  */
 import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
-import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
+import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.js';
+import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
 import { IMAGE_MODELS } from '../media-models.js';
@@ -303,6 +304,18 @@ printf '%s\\n' "\$last"
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+
+const CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE = `
+
+---
+
+## Claude Code filesystem handoff
+
+You are running as Claude Code with filesystem tools. When you write or edit an HTML file in the project folder with Write/Edit, that file is already visible in the user's file panel and preview.
+
+- Do not output the full same HTML again in a \`<artifact type="text/html">...</artifact>\` block after writing it to disk.
+- After the final self-check, briefly name the written file and summarize the result instead.
+- Only emit a full HTML \`<artifact>\` block if you could not write the project file through the filesystem tools.`;
 
 export function buildExamplePromptOverride(
   title?: string | null,
@@ -590,6 +603,30 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+    // Direction library is only useful when the agent must pick a visual
+    // direction itself. When an active design system is present it is the
+    // visual direction (see ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE
+    // below), so the ~6.7KB direction-card catalogue would just be dead
+    // weight the model is told to ignore. Gate it on the composer-visible
+    // active-DS signal (stable for the whole session, so the stable-prompt
+    // fingerprint stays cacheable).
+    if (!activeDesignSystemBody) {
+      parts.push(renderDirectionSpecBlock(), '\n\n---\n\n');
+    }
+    // Shared device-frame catalogue only applies to multi-device /
+    // multi-target projects (same product across desktop+tablet+phone, or
+    // multiple app screens side-by-side). A single-surface prototype never
+    // uses it. Gate on the composer-visible platform signal (set at project
+    // creation, stable for the session → fingerprint stays cacheable). The
+    // per-platform contracts themselves stay in DISCOVERY_AND_PHILOSOPHY so
+    // a single-platform prototype keeps the contract for its own platform.
+    const isMultiTargetProject =
+      metadata?.platform === 'responsive' ||
+      metadata?.platformTargets?.includes('responsive') ||
+      (metadata?.platformTargets?.length ?? 0) > 1;
+    if (isMultiTargetProject) {
+      parts.push(renderSharedFramesBlock(), '\n\n---\n\n');
+    }
   }
 
   parts.push(
@@ -798,6 +835,10 @@ export function composeSystemPrompt({
     parts.push(
       "\n\n---\n\n## Gemini todo tool mapping\n\nWhen an Open Design instruction says to call `TodoWrite`, use Gemini CLI's native `write_todos` tool only if it is present in the current tool list. Pass the full task list as `todos`, with each item using `description` for the task text and `status` set to `pending`, `in_progress`, `completed`, `cancelled`, or `blocked`.\n\nIf `write_todos` is not present, do not simulate it with markdown, plan-mode files, JSON files, TODO files, or shell commands. Continue the work normally without a todo tool.",
     );
+  }
+
+  if (agentId === 'claude') {
+    parts.push(CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE);
   }
 
   // Mid-conversation clarification reuses the same `<question-form>` flow as
@@ -1042,7 +1083,7 @@ function renderMetadataBlock(
   }
   if (metadata.platform === 'responsive' || metadata.platformTargets?.includes('responsive')) {
     lines.push(
-      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
+      '- **responsive web contract**: `responsive` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid `clamp()` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 600px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.',
     );
   }
   if ((metadata.platformTargets?.length ?? 0) > 1) {

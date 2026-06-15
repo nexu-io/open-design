@@ -1,5 +1,14 @@
 /* -------- Design system picker (custom popover dropdown) ------------ */
 .ds-picker { position: relative; }
+/* While its popover is open, the picker must paint above its sibling
+   sections. Each `.newproj-section` keeps a transform applied after the
+   entrance animation (`od-fade-slide-up ... both` in entrance.css), which
+   makes every section its own stacking context — the popover's z-index
+   alone can't escape its section, so later siblings (Target platforms,
+   model picker, toggles, …) would cover the open list. Raising the open
+   picker's section above its `z-index: auto` siblings restores the
+   expected "dropdown on top" order. */
+.ds-picker:has(.ds-picker-popover) { z-index: 31; }
 .ds-picker-trigger {
   display: flex;
   align-items: center;
@@ -1723,10 +1732,14 @@ button.connector-action.is-loading {
   max-width: 420px;
   padding: 28px 28px 24px;
   text-align: center;
+  text-decoration: none;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.18));
+}
+.connector-gate-card:visited {
+  color: inherit;
 }
 .connector-gate-icon {
   display: inline-flex;
@@ -1752,6 +1765,15 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+.connector-gate-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
 }
 /* ------------------------------------------------------------------ */
 /* Connector detail drawer                                             */

@@ -23,6 +23,17 @@ function withSandboxMode<T>(run: () => T): T {
   }
 }
 
+function withSandboxImportAllowedRoots<T>(roots: string[], run: () => T): T {
+  const previous = process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
+  process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = roots.join(path.delimiter);
+  try {
+    return run();
+  } finally {
+    if (previous == null) delete process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS;
+    else process.env.OD_SANDBOX_IMPORT_ALLOWED_ROOTS = previous;
+  }
+}
+
 describe('resolveProjectDir', () => {
   const projectsRoot = '/var/od/projects';
   const projectId = 'proj-abc';
@@ -81,6 +92,31 @@ describe('resolveProjectDir', () => {
         kind: 'prototype',
         baseDir,
       })).toThrowError();
+    });
+  });
+
+  it('uses metadata.baseDir in sandbox mode when it is under an allowed import root', () => {
+    withSandboxMode(() => {
+      const baseDir = '/Users/me/scratch/od-clone/job-1';
+      withSandboxImportAllowedRoots(['/Users/me/scratch/od-clone'], () => {
+        expect(
+          resolveProjectDir(projectsRoot, projectId, { kind: 'prototype', baseDir }),
+        ).toBe(path.normalize(baseDir));
+        expect(() =>
+          assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
+        ).not.toThrow();
+      });
+    });
+  });
+
+  it('rejects relative sandbox import allowed roots', () => {
+    withSandboxMode(() => {
+      const baseDir = path.join(path.parse(process.cwd()).root, 'tmp', 'od-clone', 'job-1');
+      withSandboxImportAllowedRoots(['tmp'], () => {
+        expect(() =>
+          assertSandboxProjectRootAvailable({ kind: 'prototype', baseDir }),
+        ).toThrowError(/OD_SANDBOX_IMPORT_ALLOWED_ROOTS.*absolute/i);
+      });
     });
   });
 });

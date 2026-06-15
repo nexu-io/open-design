@@ -231,6 +231,43 @@ test('[P0] onboarding AMR card lets the user pick a live runtime model before co
     });
 });
 
+test('[P0] @critical onboarding signed-in AMR path finishes setup with the selected runtime model', async ({ page }) => {
+  const config = await wireOnboardingMocks(page, {
+    amrAvailable: true,
+    initialLoggedIn: true,
+    amrModels: [
+      { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    ],
+  });
+
+  await seedOnboardingConfig(page, config);
+  await gotoOnboarding(page);
+
+  const amrCard = page.locator('.onboarding-view__amr-cloud-card');
+  await expect(amrCard.getByRole('button', { name: /Open Design AMR/i })).toBeVisible();
+  await expect(amrCard).toContainText('Officially recommended');
+  await expect(amrCard).toContainText('No deploy needed');
+  await selectOnboardingOption(amrCard, 'Model', 'DeepSeek V4 Flash');
+  await expect(expectOnboardingTrigger(amrCard, 'Model')).toContainText('DeepSeek V4 Flash');
+
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
+  await page.getByRole('button', { name: /^Continue$/i }).click();
+  await page.getByRole('button', { name: /Finish setup/i }).click();
+
+  await expect(page).not.toHaveURL(/\/onboarding$/);
+  await pollStoredConfig(page).toMatchObject({
+    agentId: 'amr',
+    onboardingCompleted: true,
+    agentModels: {
+      amr: {
+        model: 'deepseek-v4-flash',
+      },
+    },
+  });
+});
+
 test('[P0] onboarding skip exits to home and marks onboarding completed', async ({ page }) => {
   const config = await wireOnboardingMocks(page, {
     amrAvailable: true,

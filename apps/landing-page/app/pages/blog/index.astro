@@ -21,17 +21,19 @@ import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
-import { localizeBlogPostText } from '../../content-i18n';
 import {
+  explicitLocalizedString,
+  localizeBlogPostText,
+} from '../../content-i18n';
+import {
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
   localizedHref,
 } from '../../i18n';
-import { repositoryAsset } from '../../image-assets';
 import '../../globals.css';
 import '../../sub-pages.css';
 
@@ -56,7 +58,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'blog',
     locale,
-    currentPath: Astro.url.pathname,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -78,44 +80,36 @@ const fmtDate = (d: Date) =>
 const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
 const postImages: Record<string, { src: string; alt: string }> = {
   'open-design-0-8-0-everything-is-a-plugin': {
-    src: repositoryAsset('resources/images/landing-page/blog/plate-15-plugin-engine-modular.png'),
+    src: '/blog/plate-15-plugin-engine-modular.webp',
     alt: 'A central black cube engine core ringed by paper-tile plugins, an olive branch, and a bold red circle on a warm editorial study plate',
   },
   'layout-layer-canvas-used-to-hide': {
-    src: repositoryAsset('resources/images/landing-page/blog/plate-13-layout-layer.png'),
+    src: '/blog/plate-13-layout-layer.webp',
     alt: 'An abstract layout map emerging from a hidden canvas on a warm paper study plate',
   },
   'port-figma-workflow-open-design-plugin': {
-    src: repositoryAsset('resources/images/landing-page/blog/plate-14-figma-plugin-workflow.png'),
+    src: '/blog/plate-14-figma-plugin-workflow.webp',
     alt: 'An abstract workflow of frames, connectors, and a plugin module on a warm paper study plate',
   },
   'open-source-alternative-to-claude-design': {
-    src: '/blog/plate-10-crystal-exploded.png',
+    src: '/blog/plate-10-crystal-exploded.webp',
     alt: 'An editorial plate with black crystal fragments arranged around a red circle',
   },
   '31-skills-72-systems-how-the-library-works': {
-    src: '/blog/plate-11-ledger-compass.png',
+    src: '/blog/plate-11-ledger-compass.webp',
     alt: 'An open notebook with a brass compass and leaf over a red circle study plate',
   },
   'byok-design-workflow-claude-codex-qwen': {
-    src: '/blog/plate-12-pure-abstract.png',
+    src: '/blog/plate-12-pure-abstract.webp',
     alt: 'An abstract paper plate with a red circle, dotted fields, arcs, and leaves',
   },
   'byok-reality-check-5-things-that-break': {
-    src: '/blog/plate-09-geometric-solids.png',
+    src: '/blog/plate-09-geometric-solids.webp',
     alt: 'A geometric study plate with a red circle, branch, sphere, and black cube',
   },
   'why-we-built-open-design-as-a-skill-layer': {
-    src: '/blog/plate-12-pure-abstract.png',
+    src: '/blog/plate-12-pure-abstract.webp',
     alt: 'An abstract paper plate with layered circles, arcs, and botanical details',
-  },
-  'figma-alternative-open-design': {
-    src: '/blog/plate-16-figma-vs-canvas.png',
-    alt: 'Black faceted picture-frame and vector-pen solids re-measured around a red circle with an olive branch on a warm editorial study plate',
-  },
-  'open-design-0-9-0-design-for-everyone': {
-    src: '/blog/plate-22-install-and-create.png',
-    alt: 'A black faceted installer box opened with a ready-made engine core rising out of it, accented by a red circle and an olive branch on a warm editorial study plate',
   },
 };
 const getPostImage = (id: string) => postImages[id];
@@ -133,14 +127,10 @@ const localizedPostField = (
     category: post.data.category,
     locale,
   });
-  // `i18n[locale][field]` is already the resolved string for this locale, not a
-  // locale→string map, so it must not go through explicitLocalizedString (which
-  // expects the map shape and returns undefined for a bare string on non-default
-  // locales — the reason post translations never rendered). Use it directly and
-  // fall back to the English source text.
-  const explicit = i18n?.[locale]?.[field];
-  if (typeof explicit === 'string' && explicit.trim()) return explicit.trim();
-  return fallbackPost[field];
+  return explicitLocalizedString(
+    i18n?.[locale]?.[field] as Parameters<typeof explicitLocalizedString>[0],
+    locale,
+  ) ?? fallbackPost[field];
 };
 
 ---
@@ -161,7 +151,6 @@ const localizedPostField = (
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -169,9 +158,6 @@ const localizedPostField = (
       <section class='blog-masthead'>
         <div class='container'>
           <h1 class='blog-title'>{ui.blog.title}</h1>
-          <p class='blog-sub'>
-            {ui.blog.description}
-          </p>
         </div>
       </section>
 
@@ -334,13 +320,19 @@ const localizedPostField = (
       .blog-shell {
         position: relative;
         z-index: 2;
+        /* The sticky chrome (.site-chrome) is position:absolute and overlays
+         * the page, so the first content block must clear the topbar + nav —
+         * mirrors the 140px offset .sub-main uses on the other sub-pages.
+         * Without it the masthead title overlaps the logo (issue: header
+         * overlap on /blog). */
+        padding-top: 116px;
       }
       .blog-shell + .sub-footer {
         margin-top: 0;
       }
       .blog-masthead {
         padding: 24px 0 14px;
-        border-bottom: 1px solid var(--line-soft);
+        border-bottom: 0;
       }
       .blog-title {
         font-family: var(--sans);
@@ -350,14 +342,6 @@ const localizedPostField = (
         line-height: 0.94;
         color: var(--ink);
         margin: 0 0 8px;
-      }
-      .blog-sub {
-        font-family: var(--body);
-        font-size: 17px;
-        line-height: 1.48;
-        color: var(--ink-soft);
-        max-width: 58ch;
-        margin-bottom: 0;
       }
       .blog-categories {
         padding: 12px 0 0;
@@ -381,17 +365,17 @@ const localizedPostField = (
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--ink-mute);
-        background: rgba(247, 241, 222, 0.38);
+        background: var(--bone);
         text-decoration: none;
         transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
       }
       .blog-chip:hover {
         color: var(--ink);
-        border-color: rgba(21, 20, 15, 0.42);
-        background: rgba(247, 241, 222, 0.72);
+        border-color: rgba(38, 38, 38, 0.42);
+        background: var(--paper-warm);
       }
       .blog-chip.is-active {
-        color: var(--paper);
+        color: #ffffff;
         background: var(--ink);
         border-color: var(--ink);
       }
@@ -403,6 +387,7 @@ const localizedPostField = (
         grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
         min-height: 252px;
         border: 1px solid var(--line);
+        border-radius: 8px;
         background: var(--bone);
         color: var(--ink);
         text-decoration: none;
@@ -436,7 +421,7 @@ const localizedPostField = (
         flex-wrap: wrap;
         gap: 12px;
         padding-top: 12px;
-        border-top: 1px solid var(--line-soft);
+        border-top: 0;
         font-family: var(--mono);
         font-size: 11px;
         letter-spacing: 0.06em;
@@ -466,7 +451,8 @@ const localizedPostField = (
         flex-direction: column;
         min-height: 100%;
         border: 1px solid var(--line);
-        background: rgba(247, 241, 222, 0.46);
+        border-radius: 8px;
+        background: var(--bone);
         color: var(--ink);
         text-decoration: none;
         overflow: hidden;
@@ -520,7 +506,7 @@ const localizedPostField = (
         gap: 14px;
         margin-top: auto;
         padding-top: 16px;
-        border-top: 1px solid var(--line-soft);
+        border-top: 0;
         font-family: var(--mono);
         font-size: 11px;
         letter-spacing: 0.06em;
@@ -538,11 +524,11 @@ const localizedPostField = (
         display: block;
         min-height: 172px;
         overflow: hidden;
-        border-bottom: 1px solid var(--line);
+        border-bottom: 0;
         background:
-          radial-gradient(circle at 20% 20%, rgba(237, 106, 90, 0.18), transparent 30%),
-          radial-gradient(circle at 80% 40%, rgba(21, 20, 15, 0.12), transparent 28%),
-          linear-gradient(135deg, rgba(239, 231, 210, 0.9), rgba(247, 241, 222, 0.58));
+          radial-gradient(circle at 20% 20%, rgba(99, 254, 19, 0.16), transparent 30%),
+          radial-gradient(circle at 80% 40%, rgba(38, 38, 38, 0.12), transparent 28%),
+          linear-gradient(135deg, rgba(245, 245, 245, 0.9), rgba(250, 250, 250, 0.58));
       }
       .media-panel.has-image {
         background: var(--bone);
@@ -564,8 +550,8 @@ const localizedPostField = (
         z-index: 1;
         background-image: linear-gradient(
           180deg,
-          rgba(247, 241, 222, 0.08),
-          rgba(21, 20, 15, 0.08)
+          rgba(255, 255, 255, 0.08),
+          rgba(38, 38, 38, 0.08)
         );
         pointer-events: none;
       }
@@ -577,8 +563,8 @@ const localizedPostField = (
         position: absolute;
         inset: 0;
         background-image:
-          linear-gradient(rgba(21, 20, 15, 0.09) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(21, 20, 15, 0.09) 1px, transparent 1px);
+          linear-gradient(rgba(38, 38, 38, 0.09) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(38, 38, 38, 0.09) 1px, transparent 1px);
         background-size: 24px 24px;
         mask-image: radial-gradient(circle at 70% 44%, black, transparent 62%);
       }
@@ -589,8 +575,8 @@ const localizedPostField = (
         bottom: 24px;
         width: 72px;
         height: 72px;
-        border: 1px solid rgba(21, 20, 15, 0.45);
-        box-shadow: -48px -38px 0 -22px rgba(237, 106, 90, 0.82);
+        border: 1px solid rgba(38, 38, 38, 0.45);
+        box-shadow: -48px -38px 0 -22px rgba(99, 254, 19, 0.82);
       }
       .media-panel-large {
         min-height: 252px;
@@ -631,7 +617,7 @@ const localizedPostField = (
         top: 32px;
         width: 128px;
         height: 96px;
-        background-image: radial-gradient(rgba(21, 20, 15, 0.38) 1.2px, transparent 1.2px);
+        background-image: radial-gradient(rgba(38, 38, 38, 0.38) 1.2px, transparent 1.2px);
         background-size: 12px 12px;
       }
       .media-orbit {
@@ -639,7 +625,7 @@ const localizedPostField = (
         top: 72px;
         width: 150px;
         height: 150px;
-        border: 28px solid rgba(237, 106, 90, 0.28);
+        border: 28px solid rgba(99, 254, 19, 0.28);
         border-radius: 50%;
       }
       .blog-empty {
@@ -663,17 +649,15 @@ const localizedPostField = (
         }
       }
       @media (max-width: 760px) {
+        .blog-shell {
+          padding-top: 98px;
+        }
         .blog-masthead {
           padding: 22px 0 18px;
         }
         .blog-title {
           font-size: clamp(42px, 13vw, 50px);
           margin-bottom: 10px;
-        }
-        .blog-sub {
-          font-size: 15.5px;
-          line-height: 1.35;
-          margin-bottom: 12px;
         }
         .blog-category-strip {
           gap: 8px;

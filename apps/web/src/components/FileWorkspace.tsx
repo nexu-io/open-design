@@ -24,6 +24,7 @@ import {
   fetchProjectFileText,
   fetchProjectFolders,
   projectFileUrl,
+  projectRawUrl,
   createProjectFolder,
   deleteProjectFolder,
   renameProjectFile,
@@ -35,6 +36,7 @@ import {
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
+import { buildSrcdoc } from '../runtime/srcdoc';
 import {
   type AgentEvent,
   type AgentInfo,
@@ -342,6 +344,7 @@ function createDefaultDesignFilesNavState(): DesignFilesNavState {
 interface DesignSystemProjectSectionReview {
   section: DesignSystemProjectSection;
   previewFile: ProjectFile | null;
+  previewDisplay: DesignSystemReviewPreviewDisplay;
   reviewEntry: DesignSystemReviewEntry | undefined;
   sectionActivity: DesignSystemSectionActivity;
   changedAfterFeedback: boolean;
@@ -349,6 +352,16 @@ interface DesignSystemProjectSectionReview {
   sectionStatusLabel: string;
   reviewTimeLabel: string | null;
 }
+type DesignSystemReviewPreviewDisplay = 'specimen' | 'ui-kit' | 'asset';
+interface DesignSystemCardManifestEntry {
+  path: string;
+  group?: string;
+  name?: string;
+  subtitle?: string;
+  viewport?: string;
+}
+type DesignSystemCardManifestMap = Map<string, DesignSystemCardManifestEntry>;
+const DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS = ['group', 'name', 'subtitle', 'viewport'] as const;
 type DesignSystemGenerationStepStatus = 'pending' | 'running' | 'succeeded';
 interface DesignSystemGenerationStep {
   id: string;
@@ -2484,6 +2497,8 @@ function DesignSystemProjectPanel({
   const [feedbackText, setFeedbackText] = useState('');
   const [status, setStatus] = useState(system.status ?? 'draft');
   const [statusBusy, setStatusBusy] = useState(false);
+  const [cardManifest, setCardManifest] = useState<DesignSystemCardManifestMap>(() => new Map());
+  const [cardManifestError, setCardManifestError] = useState<string | null>(null);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -2496,11 +2511,37 @@ function DesignSystemProjectPanel({
   }, [designSystemReview]);
   const allFileNames = files.map((file) => file.name);
   const fileByName = new Map(files.map((file) => [file.name, file]));
+  const manifestFile = files.find((file) => normalizeDesignSystemPath(file.name) === '_ds_manifest.json');
+  const manifestFileName = manifestFile?.name ?? null;
+  const manifestCacheBustKey = manifestFile ? Math.round(manifestFile.mtime) : null;
+  useEffect(() => {
+    if (!system.id || !manifestFileName || manifestCacheBustKey === null) {
+      setCardManifest(new Map());
+      setCardManifestError(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void fetchProjectFileText(projectId, manifestFileName, {
+      cache: 'no-store',
+      cacheBustKey: manifestCacheBustKey,
+    }).then((text) => {
+      if (cancelled) return;
+      setCardManifest(parseDesignSystemCardManifest(text));
+      setCardManifestError(null);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setCardManifest(new Map());
+      setCardManifestError(err instanceof Error ? err.message : 'Unable to read _ds_manifest.json.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [manifestCacheBustKey, manifestFileName, projectId, system.id]);
   const fontFiles = allFileNames.filter((name) =>
     /\.(otf|ttf|woff|woff2)$/i.test(name) || name.toLowerCase().includes('/fonts/'),
   );
   const githubEvidence = designSystemGithubEvidenceState(system, allFileNames);
-  const sections = buildDesignSystemReviewSections(allFileNames, fileByName);
+  const sections = buildDesignSystemReviewSections(allFileNames, fileByName, cardManifest);
   const published = status === 'published';
   const isDefault = published && defaultDesignSystemId === system.id;
   // Strip a trailing "design system" from the title so the heading
@@ -2528,6 +2569,7 @@ function DesignSystemProjectPanel({
     return {
       section,
       previewFile,
+      previewDisplay: designSystemReviewPreviewDisplay(section, previewFile),
       reviewEntry,
       sectionActivity,
       changedAfterFeedback,
@@ -2542,9 +2584,18 @@ function DesignSystemProjectPanel({
   const visibleSectionReviews = streaming && !published && generationReviewHasStarted
     ? sectionReviews.filter((item) => designSystemSectionVisibleDuringGeneration(item))
     : sectionReviews;
-  const needsReviewSectionReviews = visibleSectionReviews.filter(designSystemReviewNeedsAttention);
-  const primaryNeedsReview = needsReviewSectionReviews.slice(0, 1);
   const groupedSectionReviews = designSystemReviewGroups(visibleSectionReviews);
+  const reviewTocGroups = groupedSectionReviews
+    .map((group) => ({
+      title: group.title,
+      items: group.items.map((item) => ({
+        id: `design-system-section-${slugForTestId(`${group.title}:${item.section.title}`)}`,
+        label: item.section.title,
+        statusClass: designSystemSectionStatusClass(item.sectionStatus),
+        statusLabel: item.sectionStatusLabel,
+      })),
+    }))
+    .filter((group) => group.items.length > 0);
   const creatingInitialDraft = streaming && !published;
   const generationSteps = designSystemInitialGenerationSteps({
     files,
@@ -2586,9 +2637,9 @@ function DesignSystemProjectPanel({
     }));
   }
 
-  function openNeedsWorkFeedback(sectionTitle: string) {
+  function openNeedsWorkFeedback(sectionTitle: string, expansionKey: string) {
     setReviewDecisions((current) => ({ ...current, [sectionTitle]: 'needs-work' }));
-    setExpandedSections((current) => ({ ...current, [sectionTitle]: true }));
+    setExpandedSections((current) => ({ ...current, [expansionKey]: true }));
     setFeedbackSection(sectionTitle);
     setFeedbackText('');
   }
@@ -2625,8 +2676,7 @@ function DesignSystemProjectPanel({
     // default to show it is done. Gate that on the current status, not just the
     // stored decision: when a section is regenerated after approval its status
     // moves back to needs-attention, and it has to reopen so the "review again"
-    // notice and the review buttons (both rendered only while expanded) stay
-    // visible. Without the needsAttention guard a stale "looks-good" decision
+    // notice and regenerated preview stay visible. Without the needsAttention guard a stale "looks-good" decision
     // keeps the regenerated section collapsed and the change is easy to miss.
     // The user can still re-expand with the chevron (expandedSections[instanceId]),
     // and an active agent run forces it open.
@@ -2634,12 +2684,17 @@ function DesignSystemProjectPanel({
       !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
     const expanded =
       (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
+    const sectionSlug = slugForTestId(instanceId);
+    const sectionAnchorId = `design-system-section-${sectionSlug}`;
+    const editableFile = designSystemSectionEditableFile(section, previewFile, fileByName);
     return (
       <section
+        id={sectionAnchorId}
         key={instanceId}
         className={[
           'ds-project-section',
           'ds-project-review-item',
+          `ds-project-review-item--${item.previewDisplay}`,
           expanded ? 'is-expanded' : 'is-collapsed',
         ].join(' ')}
       >
@@ -2676,73 +2731,83 @@ function DesignSystemProjectPanel({
               </span>
             ) : null}
           </span>
-          {expanded ? (
-            <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
+          <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
+            <button
+              type="button"
+              className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
+              data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
+              onClick={() => {
+                markSectionReview(section.title, 'looks-good');
+                // Collapse on validate, overriding any manual expand so the
+                // section always tidies away once it is marked good.
+                setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+              }}
+            >
+              <Icon name="check" size={13} />
+              Looks good
+            </button>
+            <button
+              type="button"
+              className={`ghost danger ${reviewDecisions[section.title] === 'needs-work' ? 'active' : ''}`}
+              data-testid={`design-system-review-work-${slugForTestId(section.title)}`}
+              onClick={() => openNeedsWorkFeedback(section.title, instanceId)}
+            >
+              <Icon name="comment" size={13} />
+              Needs work...
+            </button>
+            {editableFile ? (
               <button
                 type="button"
-                className={`ghost success ${reviewDecisions[section.title] === 'looks-good' ? 'active' : ''}`}
-                data-testid={`design-system-review-good-${slugForTestId(section.title)}`}
-                onClick={() => {
-                  markSectionReview(section.title, 'looks-good');
-                  // Collapse on validate, overriding any manual expand so the
-                  // section always tidies away once it is marked good.
-                  setExpandedSections((current) => ({ ...current, [instanceId]: false }));
+                className="ghost compact"
+                data-testid={`design-system-review-edit-${sectionSlug}`}
+                title={`Edit ${editableFile.name}`}
+                onClick={() => onOpenFile(editableFile.name)}
+              >
+                <Icon name="edit" size={13} />
+                Edit
+              </button>
+            ) : null}
+            {feedbackSection === section.title ? (
+              <form
+                className="ds-project-feedback-popover"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitNeedsWorkFeedback(section.title, section.files);
                 }}
               >
-                <Icon name="check" size={13} />
-                Looks good
-              </button>
-              <button
-                type="button"
-                className={`ghost danger ${reviewDecisions[section.title] === 'needs-work' ? 'active' : ''}`}
-                data-testid={`design-system-review-work-${slugForTestId(section.title)}`}
-                onClick={() => openNeedsWorkFeedback(section.title)}
-              >
-                <Icon name="comment" size={13} />
-                Needs work...
-              </button>
-              {feedbackSection === section.title ? (
-                <form
-                  className="ds-project-feedback-popover"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitNeedsWorkFeedback(section.title, section.files);
-                  }}
-                >
-                  <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                    Tell the agent what to change
-                  </label>
-                  <textarea
-                    id={`ds-feedback-${slugForTestId(section.title)}`}
-                    value={feedbackText}
-                    rows={3}
-                    placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
-                    onChange={(event) => setFeedbackText(event.target.value)}
-                    autoFocus
-                  />
-                  <div>
-                    <button
-                      type="button"
-                      className="ghost compact"
-                      onClick={() => {
-                        setFeedbackSection(null);
-                        setFeedbackText('');
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="primary compact"
-                      disabled={!feedbackText.trim()}
-                    >
-                      Send
-                    </button>
-                  </div>
-                </form>
+                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                  Tell the agent what to change
+                </label>
+                <textarea
+                  id={`ds-feedback-${slugForTestId(section.title)}`}
+                  value={feedbackText}
+                  rows={3}
+                  placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                  onChange={(event) => setFeedbackText(event.target.value)}
+                  autoFocus
+                />
+                <div>
+                  <button
+                    type="button"
+                    className="ghost compact"
+                    onClick={() => {
+                      setFeedbackSection(null);
+                      setFeedbackText('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary compact"
+                    disabled={!feedbackText.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </form>
               ) : null}
-            </div>
-          ) : null}
+          </div>
         </div>
         {expanded ? (
           <div className="ds-project-section-body">
@@ -2815,8 +2880,37 @@ function DesignSystemProjectPanel({
 
   return (
     <div className="ds-project-panel">
-      <div className="ds-project-main ds-project-main--review">
-        <div className="ds-project-head ds-project-head--review">
+      <div className="ds-project-review-layout">
+        {reviewTocGroups.length > 0 ? (
+          <nav
+            className="ds-project-toc"
+            aria-label="Design system sections"
+            data-testid="design-system-review-toc"
+          >
+            <div className="ds-project-toc__title">
+              <Icon name="panel-left" size={14} />
+              <span>Contents</span>
+            </div>
+            {reviewTocGroups.map((group) => (
+              <div key={group.title} className="ds-project-toc__group">
+                <strong>{group.title}</strong>
+                {group.items.map((item) => (
+                  <a key={item.id} href={`#${item.id}`}>
+                    <span
+                      className={['ds-project-toc__dot', item.statusClass].join(' ')}
+                      aria-label={item.statusLabel}
+                      title={item.statusLabel}
+                    />
+                    <span>{item.label}</span>
+                  </a>
+                ))}
+              </div>
+            ))}
+          </nav>
+        ) : null}
+
+        <div className="ds-project-main ds-project-main--review">
+          <div className="ds-project-head ds-project-head--review">
           <h1>
             {published
               ? `${systemDisplayName} design system`
@@ -2915,15 +3009,27 @@ function DesignSystemProjectPanel({
           <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
-        <div className="ds-project-sections">
-          {primaryNeedsReview.length > 0 ? (
-            <div className="ds-project-section-group">
-              {primaryNeedsReview.map((item, index) =>
-                renderReviewCard(item, `needs-review:${item.section.title}`, index === 0),
-              )}
-            </div>
-          ) : null}
+        {cardManifestError ? (
+          <div
+            className="ds-project-warning-card ds-project-warning-card--error"
+            data-testid="design-system-manifest-error"
+            role="alert"
+          >
+            <Icon name="alert-triangle" size={16} />
+            <span>
+              <strong>Design manifest needs attention</strong>
+              <small>{cardManifestError}</small>
+            </span>
+            {manifestFileName ? (
+              <Button variant="ghost" className="compact" onClick={() => onOpenFile(manifestFileName)}>
+                <Icon name="file" size={13} />
+                Open manifest
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
+        <div className="ds-project-sections">
           {groupedSectionReviews.map((group) => (
             <div key={group.title} className="ds-project-section-group">
               <h2>{group.title}</h2>
@@ -2939,6 +3045,7 @@ function DesignSystemProjectPanel({
               <span>Preview cards will appear here as the agent creates them.</span>
             </div>
           ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -2963,6 +3070,19 @@ function slugForTestId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+function designSystemSectionEditableFile(
+  section: DesignSystemProjectSection,
+  previewFile: ProjectFile | null,
+  fileByName: Map<string, ProjectFile>,
+): ProjectFile | null {
+  if (previewFile && (previewFile.kind === 'html' || previewFile.kind === 'sketch')) return previewFile;
+  const htmlFile = section.files
+    .map((name) => fileByName.get(name))
+    .find((file) => file?.kind === 'html');
+  if (htmlFile) return htmlFile;
+  return previewFile ?? section.files.map((name) => fileByName.get(name)).find(Boolean) ?? null;
+}
+
 function designSystemSectionPreviewFile(
   names: string[],
   fileByName: Map<string, ProjectFile>,
@@ -2978,6 +3098,7 @@ function designSystemSectionPreviewFile(
 function buildDesignSystemReviewSections(
   names: string[],
   fileByName: Map<string, ProjectFile>,
+  cardManifest: DesignSystemCardManifestMap = new Map(),
 ): DesignSystemProjectSection[] {
   const artifactNames = names
     .filter((name) => isDesignSystemReviewArtifactFile(name, fileByName))
@@ -2985,11 +3106,12 @@ function buildDesignSystemReviewSections(
   if (artifactNames.length > 0) {
     const reviewNames = preferPreviewArtifactsOverRawAssets(artifactNames);
     return reviewNames.map((name) => {
-      const title = designSystemReviewTitleFromPath(name);
-      const category = inferDesignSystemReviewCategory(name, title);
+      const manifestEntry = cardManifest.get(normalizeDesignSystemPath(name));
+      const title = manifestEntry?.name?.trim() || designSystemReviewTitleFromPath(name);
+      const category = inferDesignSystemReviewCategory(name, title, manifestEntry);
       return {
         title,
-        subtitle: designSystemReviewSubtitle(title, category),
+        subtitle: manifestEntry?.subtitle?.trim() || designSystemReviewSubtitle(title, category, name),
         category,
         files: designSystemRelatedFilesForCategory(name, category, names),
       };
@@ -3023,19 +3145,25 @@ function isDesignSystemReviewArtifactFile(
   if (!file || isDesignSystemEvidenceFile(path) || path === 'metadata.json') return false;
   const isRenderable = file.kind === 'html' || file.kind === 'image' || file.kind === 'sketch';
   if (!isRenderable) return false;
+  if (isDesignSystemRawAssetFile(path)) return isDesignSystemReviewableAssetArtifact(path);
   if (path === 'index.html') return true;
   if (path.startsWith('preview/') || path.includes('/preview/')) return true;
-  if (path.startsWith('ui_kits/') || path.includes('/ui_kits/')) return true;
-  if (
-    path.startsWith('assets/')
+  if (isDesignSystemUiKitFile(path)) return true;
+  return false;
+}
+
+function isDesignSystemRawAssetFile(path: string): boolean {
+  return path.startsWith('assets/')
     || path.startsWith('src/assets/')
     || path.startsWith('public/')
     || path.includes('/assets/')
-    || path.includes('/logos/')
-  ) {
-    return /\b(brand|logo|mark|icon)\b/u.test(path) || DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS.test(path);
-  }
-  return false;
+    || path.includes('/src/assets/')
+    || path.includes('/fonts/')
+    || path.includes('/logos/');
+}
+
+function isDesignSystemReviewableAssetArtifact(path: string): boolean {
+  return /\b(brand|logo|logos|mark|wordmark|icon)\b/u.test(path);
 }
 
 function designSystemReviewArtifactSort(first: string, second: string): number {
@@ -3060,25 +3188,37 @@ function designSystemReviewTitleFromPath(name: string): string {
     || 'overview';
 }
 
-function inferDesignSystemReviewCategory(name: string, title: string): DesignSystemReviewCategory {
+function inferDesignSystemReviewCategory(
+  name: string,
+  title: string,
+  manifestEntry?: DesignSystemCardManifestEntry,
+): DesignSystemReviewCategory {
   const text = `${normalizeDesignSystemPath(name)} ${title}`.toLowerCase();
+  const group = manifestEntry?.group?.toLowerCase() ?? '';
+  if (group.includes('ui kit')) return 'Components';
   if (/\b(type|typography|font|text)\b/u.test(text)) return 'Type';
   if (/\b(color|colors|palette|theme)\b/u.test(text)) return 'Colors';
-  if (/\b(space|spacing|radius|layout-grid)\b/u.test(text)) return 'Spacing';
-  if (/\b(brand|logo|logos|mark|wordmark|icon)\b/u.test(text)) return 'Brand';
+  if (/\b(space|spacing|radius|radii|shadow|shadows|elevation|layout-grid)\b/u.test(text)) return 'Spacing';
+  if (/\b(brand|logo|logos|mark|wordmark|icon|favicon)\b/u.test(text)) return 'Brand';
+  if (group.includes('brand')) return 'Brand';
   return 'Components';
 }
 
-function designSystemReviewSubtitle(title: string, category: DesignSystemReviewCategory): string {
-  const text = title.toLowerCase();
+function designSystemReviewSubtitle(title: string, category: DesignSystemReviewCategory, name = ''): string {
+  const path = normalizeDesignSystemPath(name);
+  const titleText = title.toLowerCase();
+  const text = `${title} ${path}`.toLowerCase();
+  if (isDesignSystemUiKitEntryPage(path)) return 'Applied UI kit example';
   if (text.includes('typography')) return 'Text hierarchy and styles';
+  if (text.includes('type-')) return 'Typography scale and font guidance';
   if (text.includes('font')) return 'Font family specimens';
   if (text.includes('node')) return 'Data type color coding system';
   if (text.includes('ui-palette') || text.includes('palette')) return 'Interface color palette';
   if (text.includes('dark')) return 'Dark theme color palette';
-  if (text.includes('spacing') || text.includes('radius')) return 'Spacing scale and border radius tokens';
+  if (text.includes('spacing') || text.includes('radius') || text.includes('radii') || text.includes('shadow')) return 'Spacing scale and border radius tokens';
+  if (text.includes('favicon')) return 'Brand app icon and favicon';
   if (text.includes('logo') || text.includes('brand')) return 'Brand logo marks';
-  if (text.includes('interface') || text.includes('ui')) return 'Interface and component patterns';
+  if (titleText.includes('interface') || titleText.includes('ui')) return 'Interface and component patterns';
   switch (category) {
     case 'Type':
       return 'Typography scale and font guidance';
@@ -3091,6 +3231,77 @@ function designSystemReviewSubtitle(title: string, category: DesignSystemReviewC
     case 'Components':
       return 'Reusable product interface examples';
   }
+}
+
+function isDesignSystemUiKitEntryPage(path: string): boolean {
+  return isDesignSystemUiKitFile(path) && /\.html?$/iu.test(path);
+}
+
+function designSystemManifestCardError(index: number, detail: string): Error {
+  const separator = detail.startsWith('.') ? '' : ' ';
+  return new Error(`Invalid _ds_manifest.json: cards[${index}]${separator}${detail}.`);
+}
+
+function optionalDesignSystemManifestString(
+  record: Record<string, unknown>,
+  field: (typeof DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS)[number],
+  index: number,
+): string | undefined {
+  const value = record[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') throw designSystemManifestCardError(index, `.${field} must be a string`);
+  return value;
+}
+
+function parseDesignSystemCardManifestEntry(card: unknown, index: number): DesignSystemCardManifestEntry {
+  if (!card || typeof card !== 'object' || Array.isArray(card)) {
+    throw designSystemManifestCardError(index, 'must be an object');
+  }
+  const record = card as Record<string, unknown>;
+  if (typeof record.path !== 'string' || !record.path.trim()) {
+    throw designSystemManifestCardError(index, '.path must be a non-empty string');
+  }
+  const entry: DesignSystemCardManifestEntry = { path: normalizeDesignSystemPath(record.path) };
+  for (const field of DESIGN_SYSTEM_CARD_MANIFEST_OPTIONAL_STRING_FIELDS) {
+    entry[field] = optionalDesignSystemManifestString(record, field, index);
+  }
+  return entry;
+}
+
+function parseDesignSystemCardManifest(text: string | null): DesignSystemCardManifestMap {
+  if (!text) return new Map();
+  let parsed: { cards?: unknown };
+  try {
+    parsed = JSON.parse(text) as { cards?: unknown };
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid _ds_manifest.json: ${detail}`);
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid _ds_manifest.json: expected an object with a cards array.');
+  }
+  if (parsed.cards !== undefined && !Array.isArray(parsed.cards)) {
+    throw new Error('Invalid _ds_manifest.json: cards must be an array.');
+  }
+  const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
+  const entries: Array<[string, DesignSystemCardManifestEntry]> = [];
+  for (const [index, card] of cards.entries()) {
+    const entry = parseDesignSystemCardManifestEntry(card, index);
+    entries.push([entry.path, entry]);
+  }
+  return new Map(entries);
+}
+
+function designSystemReviewPreviewDisplay(
+  section: DesignSystemProjectSection,
+  previewFile: ProjectFile | null,
+): DesignSystemReviewPreviewDisplay {
+  if (!previewFile) return 'specimen';
+  const path = normalizeDesignSystemPath(previewFile.name);
+  if (path.startsWith('ui_kits/') || path.includes('/ui_kits/')) return 'ui-kit';
+  if (previewFile.kind !== 'html') return 'asset';
+  if (section.category === 'Components' && !path.startsWith('preview/')) return 'ui-kit';
+  return 'specimen';
 }
 
 function designSystemRelatedFilesForCategory(
@@ -3238,6 +3449,7 @@ function isDesignSystemPreviewFile(name: string): boolean {
 function isDesignSystemUiKitFile(name: string): boolean {
   const path = normalizeDesignSystemPath(name);
   if (isDesignSystemEvidenceFile(path)) return false;
+  if (isDesignSystemRawAssetFile(path)) return false;
   return path.startsWith('ui_kits/')
     || path.startsWith('src/components/')
     || path.startsWith('components/')
@@ -3766,13 +3978,247 @@ function DesignSystemInlinePreview({
   file: ProjectFile;
 }) {
   const url = projectFileUrl(projectId, file.name);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const [srcDocReady, setSrcDocReady] = useState(false);
+
+  useEffect(() => {
+    setSrcDoc(null);
+    setSrcDocReady(false);
+    if (file.kind !== 'html') return undefined;
+    let cancelled = false;
+    void fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: Math.round(file.mtime),
+    }).then(async (html) => {
+      if (cancelled) return;
+      if (!html) {
+        setSrcDocReady(true);
+        return;
+      }
+      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(html, projectId, file.name);
+      if (cancelled) return;
+      setSrcDoc(buildSrcdoc(inlinedHtml, {
+        baseHref: projectRawUrl(projectId, baseDirForDesignSystemPreviewFile(file.name)),
+      }));
+      setSrcDocReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.kind, file.mtime, file.name, projectId]);
+
   if (file.kind === 'html') {
-    return <iframe title={file.name} src={url} sandbox="allow-scripts" />;
+    return (
+      <iframe
+        title={file.name}
+        src={srcDocReady && srcDoc ? undefined : url}
+        srcDoc={srcDoc ?? undefined}
+        sandbox="allow-scripts allow-downloads"
+      />
+    );
   }
   return <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />;
 }
 
+async function inlineDesignSystemPreviewRelativeAssets(
+  html: string,
+  projectId: string,
+  ownerFileName: string,
+): Promise<string> {
+  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
+  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of links) {
+    const rel = readDesignSystemPreviewHtmlAttr(tag, 'rel');
+    const href = readDesignSystemPreviewHtmlAttr(tag, 'href');
+    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
+    const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
+    if (!stylesheetPath) continue;
+    replacements.push(fetchProjectFileText(projectId, stylesheetPath, { cache: 'no-store' }).then((css) => {
+      if (css == null) return null;
+      const safeCss = rewriteDesignSystemPreviewCssUrls(css, projectId, stylesheetPath)
+        .replace(/<\/style/gi, '<\\/style');
+      return {
+        from: tag,
+        to: [
+          `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">`,
+          safeCss,
+          '</style>',
+        ].join('\n'),
+      };
+    }));
+  }
 
+  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
+  for (const tag of scripts) {
+    const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
+    if (!src) continue;
+    replacements.push(fetchDesignSystemPreviewRelativeText(projectId, ownerFileName, src).then((js) => {
+      if (js == null) return null;
+      const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
+      const attrs = open
+        .replace(/^<script/i, '')
+        .replace(/>$/i, '')
+        .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
+      return {
+        from: tag,
+        to: [
+          `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">`,
+          js.replace(/<\/script/gi, '<\\/script'),
+          '</script>',
+        ].join('\n'),
+      };
+    }));
+  }
+
+  const resolved = (await Promise.all(replacements)).filter(
+    (replacement): replacement is { from: string; to: string } => replacement !== null,
+  );
+  const withInlineAssets = resolved.reduce(
+    (next, replacement) => next.replace(replacement.from, () => replacement.to),
+    html,
+  );
+  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(withInlineAssets, projectId, ownerFileName);
+  return rewriteDesignSystemPreviewHtmlAssetUrls(withInlineCssAssets, projectId, ownerFileName);
+}
+
+async function fetchDesignSystemPreviewRelativeText(
+  projectId: string,
+  ownerFileName: string,
+  assetRef: string,
+): Promise<string | null> {
+  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
+  if (!filePath) return null;
+  return fetchProjectFileText(projectId, filePath, { cache: 'no-store' });
+}
+
+type DesignSystemPreviewAssetPath = {
+  filePath: string;
+  suffix: string;
+};
+
+function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
+  return resolveDesignSystemPreviewAssetPath(ownerFileName, assetRef)?.filePath ?? null;
+}
+
+function resolveDesignSystemPreviewAssetPath(ownerFileName: string, assetRef: string): DesignSystemPreviewAssetPath | null {
+  const ref = assetRef.trim();
+  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
+  if (isDesignSystemPreviewAppRootRef(ref)) return null;
+  try {
+    const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
+    if (url.origin !== 'https://od.local') return null;
+    return {
+      filePath: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
+      suffix: `${url.search}${url.hash}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isDesignSystemPreviewAppRootRef(ref: string): boolean {
+  if (!ref.startsWith('/') || ref.startsWith('//')) return false;
+  const pathOnly = ref.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+  return pathOnly === '/api'
+    || pathOnly.startsWith('/api/')
+    || pathOnly === '/artifacts'
+    || pathOnly.startsWith('/artifacts/')
+    || pathOnly === '/frames'
+    || pathOnly.startsWith('/frames/');
+}
+
+function rewriteDesignSystemPreviewCssUrls(css: string, projectId: string, stylesheetFileName: string): string {
+  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
+    const ref = rawRef.trim();
+    const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
+    if (!assetPath) return match;
+    return `url("${escapeDesignSystemPreviewCssUrl(projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix)}")`;
+  });
+}
+
+function rewriteDesignSystemPreviewHtmlAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+  const directAssetTags = new RegExp(
+    '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
+      '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
+    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(rawRef, projectId, ownerFileName);
+    if (rewritten === rawRef) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+  const srcsetAssetTags = new RegExp(
+    '(<(?:img|source)\\b[^>]*?\\ssrcset\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
+    'gi',
+  );
+  return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
+    const rewritten = rewriteDesignSystemPreviewSrcset(rawSrcset, projectId, ownerFileName);
+    if (rewritten === rawSrcset) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+function rewriteDesignSystemPreviewInlineCssAssetUrls(html: string, projectId: string, ownerFileName: string): string {
+  const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
+    match,
+    attrs: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    if (rewritten === css) return match;
+    return `<style${attrs}>${rewritten}</style>`;
+  });
+  return withStyleBlocks.replace(/(\sstyle\s*=\s*)(['"])([\s\S]*?)\2/gi, (
+    match,
+    prefix: string,
+    quote: string,
+    css: string,
+  ) => {
+    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName);
+    if (rewritten === css) return match;
+    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
+  });
+}
+
+function rewriteDesignSystemPreviewHtmlAssetRef(ref: string, projectId: string, ownerFileName: string): string {
+  const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
+  return assetPath ? projectRawUrl(projectId, assetPath.filePath) + assetPath.suffix : ref;
+}
+
+function rewriteDesignSystemPreviewSrcset(srcset: string, projectId: string, ownerFileName: string): string {
+  if (/\bdata:/i.test(srcset)) return srcset;
+  return srcset
+    .split(',')
+    .map((candidate) => {
+      const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
+      if (!match) return candidate;
+      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(match[1] ?? '', projectId, ownerFileName);
+      return `${rewritten}${match[2] ?? ''}`;
+    })
+    .join(', ');
+}
+
+function baseDirForDesignSystemPreviewFile(name: string): string {
+  const index = name.lastIndexOf('/');
+  return index >= 0 ? name.slice(0, index + 1) : '';
+}
+
+function readDesignSystemPreviewHtmlAttr(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+function escapeDesignSystemPreviewAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeDesignSystemPreviewCssUrl(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
+}
 
 function Tab({
   label,
@@ -3821,6 +4267,7 @@ function Tab({
     <div
       className={[
         'ws-tab',
+        'od-tooltip',
         meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
         kind === 'surface-preview' ? 'surface-preview-tab' : '',
@@ -3840,6 +4287,8 @@ function Tab({
       aria-selected={active}
       tabIndex={0}
       title={tabTitle}
+      data-tooltip={tabTitle}
+      data-tooltip-placement="bottom"
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
       onDragOver={draggable ? onDragOver : undefined}

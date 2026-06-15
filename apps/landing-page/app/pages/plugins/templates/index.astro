@@ -22,6 +22,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import TemplateCard from '../../../_components/template-card.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import { getBundledPlugins, type BundledPluginRecord } from '../../../_lib/bundled-plugins';
 import {
   PLUGIN_CATEGORIES,
@@ -126,24 +127,19 @@ const jsonLd = [
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pcopy.tileTemplates}</span>
-  </nav>
-
-  <header class="catalog-head tpl-hero">
+  <header class="catalog-head tpl-hero plugin-templates-head">
     <div class="tpl-hero-text">
-      <span class="label">{pcopy.templatesHeroEyebrow}</span>
+      <nav class="label detail-crumb" aria-label="Breadcrumb">
+        <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <span aria-current="page">{pcopy.tileTemplates}</span>
+      </nav>
       <h1 class="display">{pcopy.tileTemplates}<span class="dot">.</span></h1>
       <p class="lead">{pcopy.templatesHeroLead}</p>
     </div>
-    <div class="tpl-hero-side">
-      <span class="tpl-counter">{pcopy.templatesCounterLabel} · <strong>{totalCount}</strong></span>
-    </div>
   </header>
+
+  <PluginContribute />
 
   <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
     <div class="filter-group">
@@ -166,6 +162,18 @@ const jsonLd = [
       </ul>
     </div>
   </section>
+
+  <div class="catalog-search-wrap">
+    <input
+      type="search"
+      class="catalog-search"
+      data-catalog-search
+      placeholder={pcopy.searchPlaceholder}
+      aria-label={pcopy.searchPlaceholder}
+    />
+  </div>
+
+  <p class="catalog-no-results" data-catalog-empty hidden>{pcopy.searchNoResults}</p>
 
   <section class="tpl-grid" aria-label={pcopy.tileTemplates}>
     {templates.map((item, idx) => (
@@ -261,6 +269,46 @@ const jsonLd = [
       </div>
     </form>
   </dialog>
+
+  <style>
+    .plugin-templates-head {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .detail-crumb a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .detail-crumb a:hover {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+    }
+    .detail-crumb .crumb-sep {
+      margin: 0 0.45em;
+      opacity: 0.55;
+    }
+    .catalog-search-wrap {
+      margin: 0 0 24px;
+    }
+    .catalog-search {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper, #fafafa);
+      color: var(--ink, #262626);
+    }
+    .catalog-search:focus {
+      outline: none;
+      border-color: var(--ink-mute, #595959);
+    }
+    .catalog-no-results {
+      margin: 24px 0;
+      color: var(--ink-mute, #595959);
+    }
+  </style>
 </Layout>
 
 <script>
@@ -277,53 +325,10 @@ const jsonLd = [
    * fire to cover the case where the DOM rehydrated.
    */
   const initTemplatesPage = () => {
-    // 1) Hover-only video preview. The IntersectionObserver only
-    //    hydrates `data-src` into `src` lazily so the network fetch
-    //    + decoder warmup happens just-in-time; play/pause is gated
-    //    to pointer + focus interactions so we never spawn N
-    //    simultaneous decoders when the user is just scrolling past.
-    //    Without this, the grid plays every card the moment it
-    //    enters the viewport, which both reads as visually noisy and
-    //    burns mobile CPU. (Reviewer flag #3185.)
-    const videos = document.querySelectorAll<HTMLVideoElement>('video[data-tpl-autoplay]:not([data-tpl-init])');
-    if (videos.length > 0) {
-      const hydrate = (v: HTMLVideoElement) => {
-        const src = v.getAttribute('data-src');
-        if (src && !v.src) v.src = src;
-      };
-      const lazyObs = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-            const v = entry.target as HTMLVideoElement;
-            hydrate(v);
-            lazyObs.unobserve(v); // one-shot — once the src is set we're done with the observer
-          }
-        },
-        { rootMargin: '300px' },
-      );
-      videos.forEach((v) => {
-        v.setAttribute('data-tpl-init', '1');
-        lazyObs.observe(v);
-        // Ensure src is hydrated before playback even if the observer
-        // fired late on a scroll-and-hover sequence.
-        const startPlayback = () => {
-          hydrate(v);
-          v.play().catch(() => {/* user-gesture / autoplay-policy fallback: card stays on poster */});
-        };
-        const stopPlayback = () => {
-          v.pause();
-        };
-        // Find the parent card (anchor wrapping the media) so hovering
-        // anywhere on the preview frame, not just the video pixels,
-        // triggers playback. Falls back to the video element itself.
-        const host = v.closest('.tpl-media') ?? v;
-        host.addEventListener('pointerenter', startPlayback);
-        host.addEventListener('pointerleave', stopPlayback);
-        host.addEventListener('focusin', startPlayback);
-        host.addEventListener('focusout', stopPlayback);
-      });
-    }
+    // 1) Card preview hover-autoplay + idle hold/pan loop lives in the shared
+    //    <TemplateCardAutoplay /> component (self-initialising on DOMContentLoaded
+    //    + astro:page-load), so it stays identical across the index and per-kind
+    //    grids. Lazy src hydration keeps decoder warmup just-in-time.
 
     // 2) Card-level share button → page-level <dialog> (single
     //    instance for the whole grid, populated per-click). Using the
@@ -411,6 +416,11 @@ const jsonLd = [
           const copyLinkBtn = dialog.querySelector<HTMLButtonElement>('[data-copy-link]');
           if (ta) ta.value = text;
           if (copyLinkBtn) copyLinkBtn.setAttribute('data-copy-link', url);
+          // Rebuild the X/LinkedIn/Reddit/Facebook share-intent hrefs from
+          // this card's freshly-swapped message + link; the shared dialog is
+          // reused across cards, so without this the social buttons keep the
+          // previous card's payload (or open an empty composer on first use).
+          (window as unknown as { __odWireShareIntents?: (d: Element) => void }).__odWireShareIntents?.(dialog);
           // Close-then-reopen so the positioner runs fresh against the
           // new trigger; otherwise an already-open dialog stays put at
           // its previous coordinates while the textarea swaps.
@@ -418,6 +428,26 @@ const jsonLd = [
           positionPopover(btn);
         });
       });
+
+    // 3) Client-side filter for the card grid — typing narrows the
+    //    visible templates by name/keyword so users don't scroll the
+    //    whole catalogue to find one.
+    const search = document.querySelector<HTMLInputElement>('[data-catalog-search]');
+    if (search && !search.dataset.bound) {
+      search.dataset.bound = '1';
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('.tpl-grid > *'));
+      const empty = document.querySelector<HTMLElement>('[data-catalog-empty]');
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+        cards.forEach((el) => {
+          const match = !q || (el.textContent || '').toLowerCase().includes(q);
+          el.hidden = !match;
+          if (match) shown += 1;
+        });
+        if (empty) empty.hidden = shown !== 0;
+      });
+    }
   };
 
   if (document.readyState === 'loading') {

@@ -119,6 +119,7 @@ import {
 } from '../state/apiProtocols';
 import { KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { saveOnboardingProfile } from '../state/onboarding-profile';
 import { testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
@@ -135,6 +136,7 @@ import {
 import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { AnimatePresence } from 'motion/react';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
+import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -583,9 +585,11 @@ export function EntryShell({
   // projectKind='other', so the agent asks for the exact task type
   // before continuing.
   function handlePluginLoopSubmit(payload: PluginLoopSubmit) {
+    const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
-    const fallbackName = head.length > 0 ? head : firstAttachmentName || 'Untitled';
+    const fallbackName =
+      summarizedName || (head.length > 0 ? head : firstAttachmentName || 'Untitled');
     const name =
       payload.pluginTitle && payload.pluginTitle.trim().length > 0
         ? payload.pluginTitle.trim()
@@ -727,11 +731,11 @@ export function EntryShell({
             <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
               <GithubStarBadge />
               <a
-                className="entry-discord-badge"
+                className="entry-discord-badge od-tooltip"
                 href={DISCORD_URL}
                 aria-label={discordAriaLabel}
-                title={discordAriaLabel}
                 data-tooltip={discordAriaLabel}
+                data-tooltip-placement="bottom"
                 data-testid="entry-discord-badge"
               >
                 <Icon name="discord" size={14} className="entry-discord-badge__icon" />
@@ -750,7 +754,7 @@ export function EntryShell({
               {executionSwitcher}
               <button
                 type="button"
-                className="use-everywhere-chip"
+                className="use-everywhere-chip od-tooltip"
                 onClick={() => {
                   trackHomeToolbarClick(analytics.track, {
                     page_name: 'home',
@@ -760,6 +764,7 @@ export function EntryShell({
                   openIntegrationTab('use-everywhere');
                 }}
                 data-tooltip={t('entry.useEverywhereTitle')}
+                data-tooltip-placement="bottom"
                 aria-label={t('entry.useEverywhereAria')}
                 data-testid="entry-use-everywhere-button"
               >
@@ -1595,6 +1600,14 @@ function OnboardingView({
     if (!onboardingSessionId) return;
     aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
+    // Persist the survey so later AMR entries (outside onboarding) can forward
+    // the visitor's profile to AMR for paid-conversion segmentation.
+    saveOnboardingProfile({
+      role: snapshot.role,
+      orgSize: snapshot.orgSize,
+      useCase: snapshot.useCase,
+      source: snapshot.source,
+    });
     trackOnboardingClick(analytics.track, {
       page_name: 'onboarding',
       area: 'about_you',

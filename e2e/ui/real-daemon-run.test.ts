@@ -86,6 +86,12 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   expect(await rawResponse.text()).toContain(GENERATED_HEADING);
 
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(artifactPreview(page)).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: GENERATED_HEADING })).toBeVisible();
+  await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
 test('[P0] real daemon run persists an artifact streamed across multiple chunks', async ({ page }) => {

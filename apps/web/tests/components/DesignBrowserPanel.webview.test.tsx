@@ -291,7 +291,7 @@ describe('DesignBrowserPanel <webview> navigation', () => {
 
     expect(getAddressDisplay(container)).toMatchObject({
       title: '百度一下，你就知道',
-      url: 'https://www.baidu.com/',
+      url: 'https://www.baidu.com',
     });
 
     fireEvent.focus(input);

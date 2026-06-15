@@ -1,0 +1,131 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-product-promo-30s",
+  "title": "Product Promo · 30s",
+  "title_i18n": {
+    "en": "Product Promo · 30s",
+    "zh-CN": "产品宣传 · 30秒"
+  },
+  "version": "0.1.0",
+  "description": "Multi-scene 30-second product promo: problem-type intro, brand reveal, benefits flowchart, product surfaces, value pillars, foundation, CTA outro. Forked from Nate Herk's hyperframes-student-kit (linear-promo-30s); brand-specific copy + assets replaced with generic placeholders.",
+  "description_i18n": {
+    "en": "Multi-scene 30-second product promo: problem-type intro, brand reveal, benefits flowchart, product surfaces, value pillars, foundation, CTA outro. Forked from Nate Herk's hyperframes-student-kit (linear-promo-30s); brand-specific copy + assets replaced with generic placeholders.",
+    "zh-CN": "30 秒多场景产品宣传流程，保留完整的镜头节奏，替换文案即可出片。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Nate Herk",
+    "url": "https://github.com/nateherkai/hyperframes-student-kit"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-product-promo-30s",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "product",
+    "promo",
+    "multi-scene",
+    "30s",
+    "benefits",
+    "flowchart",
+    "sfx",
+    "product-demo"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo-30s/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-product-promo-30s/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Product Promo · 30s HyperFrames template to create a 30s product-demo video. Replace the sample copy with real content, preserve the template's motion signature, and render to MP4.",
+        "zh-CN": "使用「产品宣传 · 30秒」HyperFrames 模板创建一段约 30 秒的product-demo动效视频。把示例文案替换为真实内容，保留模板的动效签名，并渲染为 MP4。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 30
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "attribution": [
+      {
+        "name": "hyperframes-student-kit / linear-promo-30s",
+        "license": "MIT",
+        "author": "Nate Herk",
+        "url": "https://github.com/nateherkai/hyperframes-student-kit/tree/main/video-projects/linear-promo-30s"
+      }
+    ]
+  }
+}

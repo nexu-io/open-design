@@ -67,4 +67,14 @@ export const copilotAgentDef = {
     },
     promptViaStdin: true,
     streamFormat: 'copilot-stream-json',
+    // GitHub Copilot's deck-generation and large-prompt turns go silent
+    // (no stdout, no streamed events) for stretches that exceed the
+    // 10-minute global default — the model is still working but the
+    // CLI does not emit keepalive frames. The default watchdog used to
+    // kill those runs as `stalled` even though the agent was healthy
+    // (issue #2467: "GitHub Copilot agent getting stuck after 10 mins
+    // and few seconds"). 30 minutes gives the heavy turns room to land
+    // while still bounding genuine hangs; operators can override via
+    // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` if they want it tighter.
+    inactivityTimeoutMs: 30 * 60 * 1000,
 } satisfies RuntimeAgentDef;

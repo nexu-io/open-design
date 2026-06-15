@@ -9,6 +9,7 @@ import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
+  fetchProjectFileText: vi.fn(),
   updateDesignSystemDraft: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
+    fetchProjectFileText: registryMocks.fetchProjectFileText,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
   };
 });
@@ -93,6 +95,359 @@ function todoWrite(
 }
 
 describe('FileWorkspace design-system project surface', () => {
+  it('uses design-system card manifest labels and preview density when available', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/type-display.html',
+          group: 'Brand',
+          name: 'Display & Headings',
+          subtitle: 'Tahoma bold, tight — display 52 to H3 24',
+        },
+        {
+          path: 'ui_kits/website/index.html',
+          group: 'UI Kit — Website',
+          name: 'Website — Home (UI Kit)',
+          subtitle: 'Full passivebook.com home recreation',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+          workspaceFile('ui_kits/website/index.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const items = Array.from(container.querySelectorAll('.ds-project-review-item'));
+    const itemByTitle = (title: string) => items.find((item) =>
+      item.querySelector('.ds-project-section-title strong')?.textContent === title,
+    );
+    const typeCard = itemByTitle('Display & Headings');
+    const uiKitCard = itemByTitle('Website — Home (UI Kit)');
+
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(workspaceFile('_ds_manifest.json').mtime),
+    });
+    expect(container.textContent).not.toContain('type-display');
+    expect(typeCard?.textContent).toContain('Tahoma bold, tight');
+    expect(typeCard?.classList.contains('ds-project-review-item--specimen')).toBe(true);
+    expect(uiKitCard?.textContent).toContain('Full passivebook.com home recreation');
+    expect(uiKitCard?.classList.contains('ds-project-review-item--ui-kit')).toBe(true);
+  });
+
+  it('refreshes design-system card manifest labels when the manifest mtime changes', async () => {
+    const firstManifest = workspaceFile('_ds_manifest.json');
+    const nextManifest = { ...firstManifest, mtime: firstManifest.mtime + 5_000 };
+    registryMocks.fetchProjectFileText.mockImplementation((
+      _projectId: string,
+      _name: string,
+      options?: { cacheBustKey?: number },
+    ) => {
+      if (options?.cacheBustKey === Math.round(nextManifest.mtime)) {
+        return Promise.resolve(JSON.stringify({
+          cards: [
+            {
+              path: 'preview/type-display.html',
+              group: 'Brand',
+              name: 'Fresh Type Label',
+              subtitle: 'Fresh subtitle',
+            },
+          ],
+        }));
+      }
+      return Promise.resolve(JSON.stringify({
+        cards: [
+          {
+            path: 'preview/type-display.html',
+            group: 'Brand',
+            name: 'Old Type Label',
+            subtitle: 'Old subtitle',
+          },
+        ],
+      }));
+    });
+
+    const renderDesignSystem = (manifestFile: ProjectFile) => (
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          manifestFile,
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />
+    );
+
+    const container = renderWorkspace(renderDesignSystem(firstManifest));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('Old Type Label');
+
+    await act(async () => {
+      root?.render(renderDesignSystem(nextManifest));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('Fresh Type Label');
+    expect(container.textContent).not.toContain('Old Type Label');
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(firstManifest.mtime),
+    });
+    expect(registryMocks.fetchProjectFileText).toHaveBeenCalledWith('ds-acme', '_ds_manifest.json', {
+      cache: 'no-store',
+      cacheBustKey: Math.round(nextManifest.mtime),
+    });
+  });
+
+  it('reports malformed design-system card manifests instead of silently falling back', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue('{not json');
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const alert = container.querySelector<HTMLElement>('[data-testid="design-system-manifest-error"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('Invalid _ds_manifest.json');
+  });
+
+  it('reports semantically invalid design-system card entries instead of silently skipping them', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/type-display.html',
+          group: 123,
+          name: 'Display & Headings',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const alert = container.querySelector<HTMLElement>('[data-testid="design-system-manifest-error"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('cards[0].group must be a string');
+  });
+
+  it('does not duplicate the first review card above the grouped gallery after generation', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/text-highlight.html',
+          group: 'Brand',
+          name: 'Text Highlighting',
+          subtitle: 'Knockout box + highlighter marker',
+        },
+        {
+          path: 'preview/type-display.html',
+          group: 'Brand',
+          name: 'Display & Headings',
+          subtitle: 'Tahoma bold, tight',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/text-highlight.html'),
+          workspaceFile('preview/type-display.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const titles = Array.from(container.querySelectorAll('.ds-project-section-title strong'))
+      .map((node) => node.textContent);
+    expect(titles.filter((title) => title === 'Text Highlighting')).toHaveLength(1);
+  });
+
+  it('inlines local React design-system preview files before sandboxing', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === '_ds_manifest.json') {
+        return Promise.resolve(JSON.stringify({
+          cards: [
+            {
+              path: 'ui_kits/website/index.html',
+              group: 'UI Kit — Website',
+              name: 'Website — Home (UI Kit)',
+              subtitle: 'Full Passive Book page',
+            },
+          ],
+        }));
+      }
+      if (name === 'ui_kits/website/index.html') {
+        return Promise.resolve(`
+          <!doctype html>
+          <html>
+            <head>
+              <link rel="stylesheet" href="../../colors_and_type.css">
+              <style>.inline-bg { background-image: url("/assets/site/inline-bg.png"); }</style>
+            </head>
+            <body>
+              <div id="root"></div>
+              <div class="inline-style" style="background-image:url('/assets/site/inline-card.png')"></div>
+              <img
+                alt="Hero"
+                src="../assets/site/hero.png"
+                srcset="../assets/site/hero.png 1x, ../assets/site/hero@2x.png 2x"
+              >
+              <img
+                alt="Root"
+                src="/assets/site/root.png"
+                srcset="/assets/site/root.png 1x, /assets/site/root@2x.png 2x"
+              >
+              <img alt="Cache" src="/assets/site/cache.png?v=2">
+              <img alt="Runtime artifact" src="/api/live-artifacts/hero.png">
+              <svg><use href="../assets/site/icons.svg#logo"></use></svg>
+              <script type="text/babel" src="Widget.jsx"></script>
+              <script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<Widget />);</script>
+            </body>
+          </html>
+        `);
+      }
+      if (name === 'ui_kits/website/Widget.jsx') {
+        return Promise.resolve('function Widget(){ return <strong>Passive Book loaded</strong>; }');
+      }
+      if (name === 'colors_and_type.css') {
+        return Promise.resolve(`
+          @font-face { font-family: Passive; src: url("./fonts/brand.woff2"); }
+          .root-asset { background-image: url("/assets/site/root-bg.png"); }
+          :root { --pb-green: #00d07e; }
+        `);
+      }
+      return Promise.resolve(null);
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('colors_and_type.css'),
+          workspaceFile('ui_kits/website/index.html'),
+          workspaceFile('ui_kits/website/Widget.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const iframe = container.querySelector<HTMLIFrameElement>('.ds-project-review-item iframe');
+    const srcdoc = iframe?.getAttribute('srcdoc') ?? '';
+    expect(srcdoc).toContain('function Widget()');
+    expect(srcdoc).toContain('data-od-inline-asset="Widget.jsx"');
+    expect(srcdoc).toContain('data-od-inline-asset="../../colors_and_type.css"');
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/fonts/brand.woff2")');
+    expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png"');
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/assets/site/inline-bg.png")');
+    expect(srcdoc).toContain('/api/projects/ds-acme/raw/assets/site/inline-card.png');
+    expect(srcdoc).toContain(
+      'srcset="/api/projects/ds-acme/raw/ui_kits/assets/site/hero.png 1x, /api/projects/ds-acme/raw/ui_kits/assets/site/hero%402x.png 2x"',
+    );
+    expect(srcdoc).toContain('url("/api/projects/ds-acme/raw/assets/site/root-bg.png")');
+    expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/assets/site/root.png"');
+    expect(srcdoc).toContain(
+      'srcset="/api/projects/ds-acme/raw/assets/site/root.png 1x, /api/projects/ds-acme/raw/assets/site/root%402x.png 2x"',
+    );
+    expect(srcdoc).toContain('src="/api/projects/ds-acme/raw/assets/site/cache.png?v=2"');
+    expect(srcdoc).toContain('src="/api/live-artifacts/hero.png"');
+    expect(srcdoc).not.toContain('/api/projects/ds-acme/raw/api/live-artifacts/hero.png');
+    expect(srcdoc).toContain('href="/api/projects/ds-acme/raw/ui_kits/assets/site/icons.svg#logo"');
+    expect(srcdoc).not.toContain('src="Widget.jsx"');
+  });
+
   it('keeps project-backed design systems inside the normal workspace tabs with inline preview cards', () => {
     const markup = renderToStaticMarkup(
       <FileWorkspace
@@ -505,6 +860,61 @@ describe('FileWorkspace design-system project surface', () => {
     expect(reviewed?.querySelector('.ds-project-section-state')?.textContent).toContain('Looks good');
     // An unreviewed section stays expanded for review.
     expect(unreviewed?.classList.contains('is-expanded')).toBe(true);
+  });
+
+  it('re-expands a grouped section after Looks good collapses it and Needs work is clicked', async () => {
+    registryMocks.fetchProjectFileText.mockResolvedValue(JSON.stringify({
+      cards: [
+        {
+          path: 'preview/colors-primary.html',
+          group: 'Colors',
+          name: 'Primary Colors',
+          subtitle: 'Emerald green + navy ink',
+        },
+      ],
+    }));
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('_ds_manifest.json'),
+          workspaceFile('preview/colors-primary.html'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const section = Array.from(container.querySelectorAll('.ds-project-review-item')).find((item) =>
+      item.querySelector('.ds-project-section-title strong')?.textContent === 'Primary Colors',
+    );
+    expect(section?.classList.contains('is-expanded')).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-system-review-good-primary-colors"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(section?.classList.contains('is-collapsed')).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="design-system-review-work-primary-colors"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(section?.classList.contains('is-expanded')).toBe(true);
+    expect(section?.querySelector('.ds-project-feedback-popover')).toBeTruthy();
   });
 
   it('reopens a looks-good section after it is regenerated so the review-again prompt stays visible', () => {

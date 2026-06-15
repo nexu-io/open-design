@@ -124,7 +124,7 @@ Packaged official plugins
 
 Default community registry
   community source -> Available by default -> user installs intentionally
-  -> ~/.open-design/plugins/<plugin-id> -> Installed -> agent
+  -> installed plugin record -> Installed -> agent
 ```
 
 `Available` is not directly consumable by the agent. It is a supply pool. The
@@ -133,12 +133,13 @@ plugins, direct GitHub/URL/local installs, and marketplace-installed plugins. A
 future "Use from Available" convenience action may auto-install first, but it
 must still create an installed record before execution.
 
-User-created and user-installed plugins are persisted under the user plugin
-root (`~/.open-design/plugins/<plugin-id>` by default). Daemon startup reloads
-installed records from SQLite and resolves those user-state plugin folders; a
-packaged runtime upgrade should not overwrite them. Bundled official plugins
-stay inside the runtime image and are re-registered on boot as official-source
-preinstalls.
+User-created and user-installed plugins are persisted through daemon-managed
+storage. This plan MUST NOT define daemon data paths; read the root
+`AGENTS.md` section **Daemon data directory contract** before changing or
+documenting plugin storage. Daemon startup reloads installed records from
+SQLite and resolves those user-state plugin folders; a packaged runtime upgrade
+should not overwrite them. Bundled official plugins stay inside the runtime
+image and are re-registered on boot as official-source preinstalls.
 
 Authoring and publishing mirror the consumption loop:
 
@@ -289,10 +290,10 @@ the archive remains reachable and integrity matches.
 od plugin install <name>[@<range>]
   → daemon iterates configured backends in trust order
   → first match: download tarball, verify SHA-256, extract to
-    .od/plugins/<name>/<version>/, write InstalledPluginRecord with
+    daemon-managed plugin storage, write InstalledPluginRecord with
     full provenance (sourceMarketplaceId, marketplaceTrust, source URL,
     sourceDigest, resolved ref)
-  → record into .od/od-plugin-lock.json for reproducibility
+  → record the lockfile through daemon-managed storage for reproducibility
 ```
 
 `od plugin upgrade [--policy latest|pinned]` re-resolves against lockfile and
@@ -463,7 +464,7 @@ first, headless, JSON-emitting.
   PR payloads; `od plugin publish --to marketplace-json --catalog <path>`
   covers self-hosted static catalogs. The release-upload/fork/branch executor
   remains an adapter on top of the tested mutation contract.
-- [x] **P1.4 Lockfile.** `.od/od-plugin-lock.json` records resolved
+- [x] **P1.4 Lockfile.** The daemon-managed plugin lockfile records resolved
   `name@version` + integrity + `sourceMarketplaceId`. `od plugin install`
   honors lock on second run; `od plugin upgrade` rewrites it.
 - [x] **P1.5 Private GitHub catalog auth.** `od marketplace login <id>`

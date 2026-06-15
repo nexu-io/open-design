@@ -575,10 +575,16 @@ function AssistantMessageImpl({
   const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
   const showOpenDesignSubmission =
     canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
+  // "Next step" only makes sense once there is a deliverable to act on. Anchor
+  // the whole card (toolbox cascade + Share + Contribute) on a previewable HTML
+  // artifact — produced this turn or earlier in the project. A pure
+  // clarifying-questions / summary turn that emitted no HTML must not surface
+  // the card (issue: card appeared after a question-only turn with no artifact).
   const showNextStepActions =
     !streaming &&
     !!projectId &&
     runSucceeded &&
+    !!nextStepArtifactName &&
     ((!!isLast && !!onToolboxAction) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
@@ -618,7 +624,7 @@ function AssistantMessageImpl({
               <ProseBlock
                 key={i}
                 text={b.text}
-                hideRecoveredHtmlFallback={message.agentId === "grok-build" && !streaming}
+                hideRecoveredHtmlFallback={(message.agentId === "grok-build" || message.agentId === "claude") && !streaming}
                 assistantMessageId={message.id}
                 isLastAssistant={!!isLast}
                 streaming={streaming}
@@ -1052,6 +1058,7 @@ function AssistantForkButton({
       type="button"
       className="assistant-copy-button od-tooltip"
       disabled={disabled}
+      data-testid="assistant-fork-button"
       data-tooltip={label}
       data-tooltip-placement="top"
       onClick={onFork}
@@ -1090,6 +1097,7 @@ function AssistantMarkdownCopyButton({ markdown }: { markdown: string }) {
     <button
       type="button"
       className="assistant-copy-button od-tooltip"
+      data-testid="assistant-copy-markdown"
       data-copied={copied ? "true" : "false"}
       data-tooltip={label}
       data-tooltip-placement="top"
@@ -1390,6 +1398,7 @@ function AssistantFeedback({
       <button
         type="button"
         className="assistant-feedback-button od-tooltip"
+        data-testid="assistant-feedback-positive"
         data-selected={selected === "positive" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackPositive")}
         data-tooltip-placement="top"
@@ -1417,6 +1426,7 @@ function AssistantFeedback({
       <button
         type="button"
         className="assistant-feedback-button od-tooltip"
+        data-testid="assistant-feedback-negative"
         data-selected={selected === "negative" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackNegative")}
         data-tooltip-placement="top"

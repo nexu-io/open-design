@@ -1,0 +1,38 @@
+name: ci-owned
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-owned-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned:
+    name: Owned CI
+    runs-on: [self-hosted, Linux, ARM64, nexu-spark, open-design-ci]
+    timeout-minutes: 120
+    env:
+      CI_GATE_PLAYWRIGHT_INSTALL_FLAGS: chromium
+      CI_GATE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: /home/runner/.cache/open-design-ci/corepack
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Run owned CI protocol
+        run: .github/workflows/scripts/ci-gate.sh --provider owned --mode default --results-path .od/ci-gate/ci-results.json
+
+      - name: Upload owned CI results
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-results-owned
+          path: .od/ci-gate/ci-results.json
+          if-no-files-found: error
+          retention-days: 7

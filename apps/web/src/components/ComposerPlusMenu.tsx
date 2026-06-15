@@ -403,6 +403,7 @@ export function ComposerPlusMenu({
             label={t('connectors.title')}
             icon="link"
             open={submenu === 'connectors'}
+            testId="composer-plus-connectors"
             onOpen={(row) => openSubmenu('connectors', row)}
             onClose={scheduleCloseSubmenu}
           >
@@ -452,6 +453,7 @@ export function ComposerPlusMenu({
             label={t('entry.navPlugins')}
             icon="sparkles"
             open={submenu === 'plugins'}
+            testId="composer-plus-plugins"
             onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
             flyoutClassName={
@@ -522,6 +524,7 @@ export function ComposerPlusMenu({
             label="MCP"
             icon="link"
             open={submenu === 'mcp'}
+            testId="composer-plus-mcp"
             onOpen={(row) => openSubmenu('mcp', row)}
             onClose={scheduleCloseSubmenu}
           >
@@ -599,6 +602,7 @@ function PlusSubmenuRow({
   onOpen,
   onClose,
   flyoutClassName,
+  testId,
   children,
 }: {
   label: string;
@@ -608,6 +612,7 @@ function PlusSubmenuRow({
   onClose: () => void;
   /** Extra class on the flyout, e.g. the wide plugins-preview variant. */
   flyoutClassName?: string;
+  testId?: string;
   children: ReactNode;
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null);
@@ -622,6 +627,7 @@ function PlusSubmenuRow({
         type="button"
         role="menuitem"
         className="plus-menu__item plus-menu__parent"
+        data-testid={testId}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => (open ? onClose() : onOpen(rowRef.current))}

@@ -17,6 +17,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['amr', 'VELA_BIN'],
   ['aider', 'AIDER_BIN'],
   ['claude', 'CLAUDE_BIN'],
+  ['codebuddy', 'CODEBUDDY_BIN'],
   ['codex', 'CODEX_BIN'],
   ['copilot', 'COPILOT_BIN'],
   ['cursor-agent', 'CURSOR_AGENT_BIN'],

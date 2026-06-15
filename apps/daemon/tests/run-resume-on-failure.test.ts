@@ -45,7 +45,7 @@ describe('resume-on-failure runtime', () => {
       await new Promise<void>((resolve) => started?.server.close(() => resolve()));
     }
     started = null;
-    if (binDir) await rm(binDir, { recursive: true, force: true });
+    if (binDir) await removeTempDir(binDir);
     binDir = null;
     restoreEnv(originalEnv);
   });
@@ -384,4 +384,13 @@ function flagValue(args: string[], flag: string): string | null {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function removeTempDir(dir: string): Promise<void> {
+  await rm(dir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 50,
+  });
 }

@@ -123,6 +123,11 @@ function releaseMetadataFields(): Record<string, unknown> {
       nightlyNumber: parsed.number,
       nightlyVersion: releaseVersion,
       releaseVersion,
+      // Stable promotion gates the validated nightly on metadata.stableVersion
+      // (scripts/release-stable.ts). A nightly is a candidate for its own base
+      // version, so stamp it here; the unified-publisher refactor (#3995)
+      // dropped this field for nightlies and blocked stable promotion.
+      stableVersion: optional("STABLE_VERSION", parsed.baseVersion),
     };
   }
   const parsed = parseStableReleaseVersion(releaseVersion);

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -156,4 +158,65 @@ test("postinstall builds workspace packages whose linkable bins delegate to dist
     .filter((directory) => !postinstallBuildTargets().has(directory));
 
   assert.deepEqual(missingBuildTargets, []);
+});
+
+test("every postinstall build target has a checked-in tsconfig.json", () => {
+  // postinstall.mjs skips targets without a tsconfig.json so partial install
+  // contexts (deploy/Dockerfile) survive; this invariant keeps that skip a
+  // no-op for full checkouts instead of silently masking a broken target.
+  // postinstallBuildTargets() over-extracts other quoted workspace paths from
+  // the script (e.g. apps/daemon/package.json), so narrow to package roots.
+  const missingTsconfigs = [...postinstallBuildTargets()]
+    .filter((target) => existsSync(join(repoRoot, target, "package.json")))
+    .filter((target) => !existsSync(join(repoRoot, target, "tsconfig.json")));
+  assert.deepEqual(missingTsconfigs, []);
+});
+
+test("postinstall skips build targets whose tsconfig.json is absent from the install context", () => {
+  // deploy/Dockerfile runs `pnpm install` (and thus this postinstall) at a stage
+  // where only apps/daemon/package.json has been copied — no tsconfig.json or
+  // src/. Building such a target fails `tsc -p tsconfig.json` with TS5058 and
+  // aborts the image build, so postinstall must skip it instead.
+  const sandbox = mkdtempSync(join(tmpdir(), "postinstall-test-"));
+  try {
+    // repoRoot inside postinstall.mjs resolves to the script's parent directory,
+    // so a copy of the script in <sandbox>/scripts exercises the sandbox layout.
+    mkdirSync(join(sandbox, "scripts"));
+    writeFileSync(
+      join(sandbox, "scripts", "postinstall.mjs"),
+      readFileSync(join(repoRoot, "scripts/postinstall.mjs")),
+    );
+
+    // Buildable target: package.json + tsconfig.json present.
+    mkdirSync(join(sandbox, "packages/contracts"), { recursive: true });
+    writeFileSync(join(sandbox, "packages/contracts/package.json"), "{}");
+    writeFileSync(join(sandbox, "packages/contracts/tsconfig.json"), "{}");
+
+    // Docker install-stage state: manifest only, no tsconfig.json.
+    mkdirSync(join(sandbox, "apps/daemon"), { recursive: true });
+    writeFileSync(join(sandbox, "apps/daemon/package.json"), "{}");
+
+    // Stub package manager: postinstall.mjs treats a JS npm_execpath as the pnpm
+    // entry point, so every build invocation lands here and gets logged.
+    const invocationLog = join(sandbox, "invocations.log");
+    writeFileSync(
+      join(sandbox, "pnpm-stub.mjs"),
+      [
+        'import { appendFileSync } from "node:fs";',
+        `appendFileSync(${JSON.stringify(invocationLog)}, process.argv.slice(2).join(" ") + "\\n");`,
+      ].join("\n"),
+    );
+
+    const result = spawnSync(process.execPath, [join(sandbox, "scripts", "postinstall.mjs")], {
+      encoding: "utf8",
+      env: { ...process.env, npm_execpath: join(sandbox, "pnpm-stub.mjs") },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const invocations = existsSync(invocationLog) ? readFileSync(invocationLog, "utf8") : "";
+    assert.match(invocations, /-C packages\/contracts run build/);
+    assert.doesNotMatch(invocations, /-C apps\/daemon run build/);
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });

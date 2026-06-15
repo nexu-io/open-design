@@ -3,6 +3,8 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
+import type { QuestionFormOpenRequest } from '../../src/components/AssistantMessage';
+import type { QuestionForm } from '../../src/artifacts/question-form';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -31,8 +33,14 @@ const saveTabs = vi.fn();
 // regression we want to pin).
 const chatPaneProps: {
   onDeleteConversation?: (id: string) => Promise<void> | void;
+  onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
+} = {};
+
+const fileWorkspaceProps: {
+  questionFormInteractive?: boolean;
+  questionFormSubmittedAnswers?: Record<string, string | string[]>;
 } = {};
 
 vi.mock('../../src/i18n', () => ({
@@ -96,10 +104,12 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     onDeleteConversation?: (id: string) => Promise<void> | void;
+    onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
   }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
+    chatPaneProps.onOpenQuestions = props.onOpenQuestions;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     return null;
@@ -107,7 +117,14 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => null,
+  FileWorkspace: (props: {
+    questionFormInteractive?: boolean;
+    questionFormSubmittedAnswers?: Record<string, string | string[]>;
+  }) => {
+    fileWorkspaceProps.questionFormInteractive = props.questionFormInteractive;
+    fileWorkspaceProps.questionFormSubmittedAnswers = props.questionFormSubmittedAnswers;
+    return null;
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -148,8 +165,11 @@ describe('ProjectView conversation delete', () => {
     cleanup();
     vi.clearAllMocks();
     chatPaneProps.onDeleteConversation = undefined;
+    chatPaneProps.onOpenQuestions = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
+    fileWorkspaceProps.questionFormInteractive = undefined;
+    fileWorkspaceProps.questionFormSubmittedAnswers = undefined;
   });
 
   // Issue #1202: the home `Needs input` badge is rendered from the
@@ -287,5 +307,69 @@ describe('ProjectView conversation delete', () => {
     await waitFor(() => expect(createConversation).toHaveBeenCalledWith('project-1'));
     await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
+  });
+
+  it('keeps the latest unanswered question form editable after opening it from the chat banner', async () => {
+    const form: QuestionForm = {
+      id: 'task-type',
+      title: 'Choose the task type',
+      questions: [
+        {
+          id: 'taskType',
+          label: 'What should we make?',
+          type: 'radio',
+          required: true,
+          options: [
+            { label: 'Prototype', value: 'prototype' },
+            { label: 'Image', value: 'image' },
+          ],
+        },
+      ],
+    };
+    const assistantMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: [
+        '<question-form id="task-type" title="Choose the task type">',
+        JSON.stringify({ questions: form.questions }),
+        '</question-form>',
+      ].join('\n'),
+      runStatus: 'succeeded',
+      events: [],
+      producedFiles: [],
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1' }]);
+    listMessages.mockResolvedValue([assistantMessage]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(fileWorkspaceProps.questionFormInteractive).toBe(true));
+    expect(fileWorkspaceProps.questionFormSubmittedAnswers).toBeUndefined();
+    await waitFor(() => expect(chatPaneProps.onOpenQuestions).toBeDefined());
+
+    act(() => {
+      chatPaneProps.onOpenQuestions?.({
+        form: {
+          id: form.id,
+          title: form.title,
+          questions: [...form.questions],
+        },
+        messageId: assistantMessage.id,
+      });
+    });
+
+    expect(fileWorkspaceProps.questionFormSubmittedAnswers).toBeUndefined();
+    expect(fileWorkspaceProps.questionFormInteractive).toBe(true);
   });
 });

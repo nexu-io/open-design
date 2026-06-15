@@ -24,6 +24,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_nightly_gate:
+        description: "channel=stable only: skip the validated-nightly metadata gate (escape hatch when the gate blocks an otherwise-good release). Build still produces freshly signed artifacts."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Optional git ref (branch/tag/SHA) to build. Empty builds the ref this workflow was dispatched on."
         required: false
@@ -48,6 +53,11 @@ on:
         default: ""
       dry_run:
         description: "Validate release inputs and read-only remote gates without building or publishing."
+        required: false
+        type: boolean
+        default: false
+      skip_nightly_gate:
+        description: "channel=stable only: skip the validated-nightly metadata gate."
         required: false
         type: boolean
         default: false
@@ -114,6 +124,18 @@ env:
   # and the helper still strips .map to keep source out of the installer.
   POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
   POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+  # Run/repo attribution for the published metadata + per-platform manifests,
+  # set workflow-wide so the platform build jobs and the publish-metadata step
+  # agree on github.runId — publish-metadata.ts refuses a platform manifest
+  # whose github.{runId,commit} disagree with the publish step's. These are the
+  # same for caller and callee under workflow_call, so they're safe here. Branch
+  # is NOT: under workflow_call (or inputs.ref) github.ref_name is the caller's
+  # ref, so RELEASE_BRANCH is passed per publish step as the resolved
+  # needs.metadata.outputs.branch instead, matching what the metadata job built.
+  RELEASE_REPOSITORY: ${{ github.repository }}
+  RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+  RELEASE_RUN_ID: ${{ github.run_id }}
+  RELEASE_WORKFLOW: ${{ github.workflow }}
 
 jobs:
   metadata:
@@ -129,6 +151,7 @@ jobs:
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_NIGHTLY_VERSION: ${{ inputs.nightly_version }}
       OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
+      OPEN_DESIGN_SKIP_STABLE_NIGHTLY_GATE: ${{ inputs.skip_nightly_gate }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
       branch: ${{ steps.stable.outputs.branch }}
@@ -457,6 +480,7 @@ jobs:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
           RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
@@ -471,7 +495,9 @@ jobs:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -568,6 +594,7 @@ jobs:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.mac_intel_namespace }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -581,7 +608,9 @@ jobs:
           RELEASE_ARTIFACT_MODE: all
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -801,7 +830,9 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -935,6 +966,7 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -947,7 +979,9 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/linux_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -1171,11 +1205,16 @@ jobs:
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_intel.result }}
           RELEASE_ASSET_SUFFIX: ""
+          RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_RUN_ID: ${{ github.run_id }}
           RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -1183,6 +1222,7 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          RELEASE_WORKFLOW: ${{ github.workflow }}
           STABLE_VERSION: ${{ needs.metadata.outputs.stable_version }}
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
           VERSION_TAG: ${{ needs.metadata.outputs.version_tag }}

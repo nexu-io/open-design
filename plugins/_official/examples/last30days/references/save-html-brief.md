@@ -32,11 +32,11 @@ If the bundled engine ran successfully and Python 3.12+ is available, you may
 ask it to render HTML from the same topic and synthesis:
 
 ```bash
-python3.12 ".od-skills/last30days/scripts/last30days.py" "<topic>" --emit=html --synthesis-file "<temp-synthesis-file>" > "research/last30days/<safe-topic-slug>.html"
+python3.12 "<staged-skill-dir>/last30days/scripts/last30days.py" "<topic>" --emit=html --synthesis-file "<temp-synthesis-file>" > "research/last30days/<safe-topic-slug>.html"
 ```
 
 Use the absolute skill root fallback from the skill preamble if the staged
-`.od-skills/last30days/` path is unavailable.
+the staged skill directory is unavailable.
 
 The temporary synthesis file should contain only the report synthesis you
 already wrote: short summary, key findings, community signals, limitations, and

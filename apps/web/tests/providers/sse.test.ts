@@ -210,6 +210,32 @@ describe('streamViaDaemon', () => {
     });
   });
 
+  it('requests title generation when enabled', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'name this conversation' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      titleGeneration: { enabled: true },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.titleGeneration).toEqual({ enabled: true });
+  });
+
   it('sends the applied plugin snapshot id to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -380,7 +406,7 @@ describe('streamViaDaemon', () => {
     expect(sanitized).toBe(original);
   });
 
-  it('preserves <artifact> blocks — only question-form is stripped, the deliverable stays intact', () => {
+  it('replaces a persisted prior-turn <artifact> with a one-line summary (the deliverable lives on disk)', () => {
     const original = [
       'Build summary below.',
       '',
@@ -389,11 +415,181 @@ describe('streamViaDaemon', () => {
       '<html><body>slide content</body></html>',
       '</artifact>',
     ].join('\n');
-    const sanitized = sanitizePriorAssistantTurnForTranscript(original);
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck.html', identifier: 'deck' },
+    ]);
 
+    // The HTML body is gone — no point re-sending it, the agent reads it from disk.
+    expect(sanitized).not.toContain('<!doctype html>');
+    expect(sanitized).not.toContain('slide content');
+    expect(sanitized).not.toContain('</artifact>');
+    // The summary keeps the metadata the agent needs to locate the file.
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('identifier="deck"');
+    expect(sanitized).toContain('title="Pitch deck"');
+    expect(sanitized).toContain('"deck.html"');
+    // Surrounding prose is preserved.
+    expect(sanitized).toContain('Build summary below.');
+  });
+
+  it('keeps an <artifact> body verbatim when its save is NOT confirmed (failed/refused persist path)', () => {
+    // persistArtifact has refusal (validateHtmlArtifact) and write-failure
+    // (writeProjectTextFile → null) branches. On those paths the transcript
+    // copy is the ONLY surviving artifact body — summarizing it would strand
+    // the next turn with no content to inspect or repair.
+    const original = [
+      '<artifact identifier="deck" type="text/html" title="Pitch deck">',
+      '<html><body>only surviving copy</body></html>',
+      '</artifact>',
+    ].join('\n');
+    // No producedFiles recorded for this artifact → no confirmed persistence.
+    expect(sanitizePriorAssistantTurnForTranscript(original, [])).toBe(original);
+    // A produced file that does not match the artifact also must not trigger
+    // summarization for it.
+    expect(
+      sanitizePriorAssistantTurnForTranscript(original, [{ name: 'other.html', identifier: 'other' }]),
+    ).toBe(original);
+  });
+
+  it('matches persistence by manifest identifier even when collision-suffix renames changed the file name', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>v3</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'deck-3.html', identifier: 'deck' },
+    ]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).toContain('"deck-3.html"');
+    expect(sanitized).not.toContain('v3');
+  });
+
+  it('matches persistence by derived file name when the manifest carries no identifier (legacy files)', () => {
+    const original =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>legacy</html></artifact>';
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [{ name: 'deck.html' }]);
+    expect(sanitized).toContain('artifact emitted on a prior turn');
+    expect(sanitized).not.toContain('legacy');
+  });
+
+  it('summarizes only the persisted <artifact> when a turn emits multiple and one save failed', () => {
+    const sanitized = sanitizePriorAssistantTurnForTranscript(
+      [
+        '<artifact identifier="a" type="text/html" title="A"><html>aaa</html></artifact>',
+        'and',
+        '<artifact identifier="b" type="text/html" title="B"><html>bbb</html></artifact>',
+      ].join('\n'),
+      [{ name: 'a.html', identifier: 'a' }],
+    );
+    // `a` is confirmed on disk → summarized.
+    expect(sanitized).not.toContain('aaa');
+    expect(sanitized).toContain('identifier="a"');
+    // `b` never persisted → its body must survive in the transcript.
+    expect(sanitized).toContain('bbb');
+    expect((sanitized.match(/artifact emitted on a prior turn/g) ?? []).length).toBe(1);
+  });
+
+  it('leaves a literal <artifact> recited inside a code fence intact (not a real protocol block)', () => {
+    const original = [
+      'Here is how the artifact protocol looks:',
+      '',
+      '```html',
+      '<artifact identifier="x" type="text/html" title="X">...</artifact>',
+      '```',
+    ].join('\n');
+    const sanitized = sanitizePriorAssistantTurnForTranscript(original, [
+      { name: 'x.html', identifier: 'x' },
+    ]);
+    // Inside a fenced code block → a literal recitation, must survive.
     expect(sanitized).toBe(original);
-    expect(sanitized).toContain('<artifact');
-    expect(sanitized).toContain('<!doctype html>');
+  });
+
+  it('summarizes via buildDaemonTranscript using the message producedFiles as persistence evidence', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'assistant',
+        content:
+          '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>slide content</html></artifact>',
+        producedFiles: [
+          {
+            name: 'deck.html',
+            size: 100,
+            mtime: 1,
+            kind: 'html',
+            mime: 'text/html',
+            artifactManifest: {
+              version: 1,
+              kind: 'html',
+              title: 'Pitch deck',
+              entry: 'deck.html',
+              renderer: 'html',
+              exports: [],
+              metadata: { identifier: 'deck' },
+            },
+          },
+        ],
+      },
+    ]);
+    expect(transcript).toContain('artifact emitted on a prior turn');
+    expect(transcript).not.toContain('slide content');
+  });
+
+  it('does NOT treat an unrelated same-named tool-written file as artifact persistence evidence', () => {
+    // Regression for the producedFiles-evidence review: producedFiles is the
+    // whole per-turn diff, not just persistArtifact outputs. When the
+    // artifact save fails but a tool wrote `deck.html` in the same turn
+    // (surfacing with no manifest, or a daemon-inferred one), the filename
+    // coincidence must NOT summarize the <artifact> block — its transcript
+    // body is still the only surviving copy.
+    const artifactTurn =
+      '<artifact identifier="deck" type="text/html" title="Pitch deck"><html>only copy</html></artifact>';
+    const toolWrittenNoManifest = {
+      id: '1',
+      role: 'assistant' as const,
+      content: artifactTurn,
+      producedFiles: [
+        { name: 'deck.html', size: 10, mtime: 1, kind: 'html' as const, mime: 'text/html' },
+      ],
+    };
+    const toolWrittenInferredManifest = {
+      ...toolWrittenNoManifest,
+      id: '2',
+      producedFiles: [
+        {
+          name: 'deck.html',
+          size: 10,
+          mtime: 1,
+          kind: 'html' as const,
+          mime: 'text/html',
+          artifactManifest: {
+            version: 1 as const,
+            kind: 'html' as const,
+            title: 'deck.html',
+            entry: 'deck.html',
+            renderer: 'html' as const,
+            exports: ['html' as const],
+            metadata: { inferred: true },
+          },
+        },
+      ],
+    };
+    for (const message of [toolWrittenNoManifest, toolWrittenInferredManifest]) {
+      const transcript = buildDaemonTranscript([message]);
+      expect(transcript).toContain('only copy');
+      expect(transcript).not.toContain('artifact emitted on a prior turn');
+    }
+  });
+
+  it('does NOT summarize <artifact> in user messages (only assistant turns) via buildDaemonTranscript', () => {
+    const transcript = buildDaemonTranscript([
+      {
+        id: '1',
+        role: 'user',
+        content: 'Can you explain what <artifact identifier="z" type="text/html" title="Z">...</artifact> means?',
+      },
+    ]);
+    // User content is never sanitized — their artifact mention survives verbatim.
+    expect(transcript).toContain('<artifact identifier="z" type="text/html" title="Z">');
+    expect(transcript).not.toContain('artifact emitted on a prior turn');
   });
 
   it('sanitizes ONLY assistant content inside buildDaemonTranscript — user messages quoting <question-form> stay verbatim', () => {
@@ -1718,6 +1914,31 @@ describe('streamViaDaemon', () => {
       kind: 'status',
       label: 'researching',
       detail: 'tavily · shallow',
+    });
+  });
+
+  it('forwards agent-generated conversation title events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"conversation_title","title":"Infographic Habits"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'conversation_title',
+      title: 'Infographic Habits',
     });
   });
 

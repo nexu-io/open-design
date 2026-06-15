@@ -61,6 +61,8 @@ const designSystems: DesignSystemSummary[] = [
     summary: 'Friendly tactile product UI.',
     category: 'Product',
     swatches: ['#f4efe7', '#25211d'],
+    source: 'built-in',
+    status: 'published',
   },
   {
     id: 'noir',
@@ -68,6 +70,18 @@ const designSystems: DesignSystemSummary[] = [
     summary: 'High-contrast editorial system.',
     category: 'Editorial',
     swatches: ['#111111', '#f7f0e8'],
+    source: 'built-in',
+    status: 'published',
+  },
+  {
+    id: 'user:draft-system',
+    title: 'Draft Personal DS',
+    summary: 'Should not be selectable for project creation.',
+    category: 'Personal',
+    swatches: ['#663399', '#faf7ff'],
+    source: 'user',
+    isEditable: true,
+    status: 'draft',
   },
 ];
 
@@ -128,6 +142,26 @@ describe('NewProjectPanel design system defaults', () => {
     expect(markup).toContain('Clay');
     expect(markup).toContain('Default');
     expect(markup).not.toContain('Freeform');
+  });
+
+  it('filters draft personal design systems out of the new project picker', () => {
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('design-system-trigger'));
+
+    expect(screen.queryByRole('option', { name: /Draft Personal DS/i })).toBeNull();
+    expect(screen.getByRole('option', { name: /Clay/i })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Editorial Noir/i })).toBeTruthy();
   });
 
   it('keeps media project creation from inheriting a hidden design system pick', () => {

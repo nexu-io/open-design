@@ -231,13 +231,13 @@ describe('formatAddressDisplay', () => {
 
   it('appends a real page title for the passive address display', () => {
     expect(formatAddressDisplay('https://www.baidu.com/', '百度一下，你就知道')).toBe(
-      'https://www.baidu.com/ / 百度一下，你就知道',
+      'https://www.baidu.com / 百度一下，你就知道',
     );
   });
 
   it('exposes URL and title as separate passive display parts', () => {
     expect(formatAddressDisplayParts('https://brandfetch.com/', 'Just a moment...')).toEqual({
-      url: 'https://brandfetch.com/',
+      url: 'https://brandfetch.com',
       title: 'Just a moment...',
     });
   });

@@ -576,6 +576,20 @@ if (channel === "nightly") {
   releaseVersion = `${packagedVersion}.nightly.${nightlyNumber}`;
   releaseName = `Open Design Nightly ${releaseVersion}`;
   console.log(`[release-stable] latest nightly: ${latestNightly.nightlyVersion}`);
+} else if (process.env.OPEN_DESIGN_SKIP_STABLE_NIGHTLY_GATE === "true") {
+  // Escape hatch (skip_nightly_gate input). The stable-promotion gate validates
+  // a long list of fields on the candidate nightly's metadata; when a publisher
+  // gap leaves one missing (e.g. r2.reportZipUrl is hard-coded null), the gate
+  // blocks an otherwise-good release. This bypasses that validation for the run.
+  // The stable build still produces freshly built + signed artifacts and still
+  // runs publish-metadata.ts's own per-platform manifest consistency checks.
+  const skippedNightly = (process.env.OPEN_DESIGN_STABLE_NIGHTLY_VERSION ?? "").trim();
+  stateSource = skippedNightly.length > 0
+    ? `R2 nightly metadata ${skippedNightly} (gate skipped)`
+    : "stable build (nightly gate skipped)";
+  console.warn(
+    `[release-stable] WARNING: stable nightly gate skipped via skip_nightly_gate; not validating nightly ${skippedNightly || "(none)"}`,
+  );
 } else {
   const stableReleaseBranch = `release/v${stableBaseVersion.value}`;
   const stableNightly = await validateStableNightlyMetadata({

@@ -2,9 +2,10 @@
 
 /**
  * Gate coverage for the "next step" affordance under the last assistant
- * message. The featured design-toolbox rows should appear for the last
- * successful turn even without a previewable artifact; the Share action still
- * needs HTML.
+ * message. The card anchors on a deliverable: it appears only once the turn
+ * (or the project) has a previewable HTML artifact to take a next step on. A
+ * pure clarifying-questions / summary turn that produced no HTML must not
+ * surface the card.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -115,13 +116,27 @@ describe('AssistantMessage next-step affordance', () => {
     expect(onShareToOpenDesign).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the featured toolbox rows even when the turn produced no previewable HTML artifact', () => {
+  it('does not render the card when the turn produced no previewable HTML artifact', () => {
     render(
       <AssistantMessage
         message={baseMessage({ producedFiles: [producedFile('notes.md', 'text')] })}
         streaming={false}
         projectId="proj-1"
         isLast
+        {...handlers()}
+      />,
+    );
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('renders once the project has a previewable HTML artifact from an earlier turn', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({ producedFiles: [] })}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        projectFiles={[producedFile('landing.html')]}
         {...handlers()}
       />,
     );

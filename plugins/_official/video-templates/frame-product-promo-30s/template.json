@@ -1,0 +1,39 @@
+{
+  "id": "frame-product-promo-30s",
+  "surface": "hyperframes",
+  "title": "Product Promo · 30s",
+  "summary": "Multi-scene 30-second product promo: problem-type intro, brand reveal, benefits flowchart, product surfaces, value pillars, foundation, CTA outro. Forked from Nate Herk's hyperframes-student-kit (linear-promo-30s); brand-specific copy + assets replaced with generic placeholders.",
+  "category": "Product-demo",
+  "tags": [
+    "product",
+    "promo",
+    "multi-scene",
+    "30s",
+    "benefits",
+    "flowchart",
+    "sfx"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 30,
+  "durationSec": 30,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "30-second product promo",
+    "B2B SaaS launch",
+    "Multi-feature reel with sound"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-product-promo-30s",
+    "license": "MIT",
+    "author": "Nate Herk",
+    "url": "https://github.com/nateherkai/hyperframes-student-kit/tree/main/video-projects/linear-promo-30s",
+    "notes": "Forked from nateherkai/hyperframes-student-kit (MIT). Brand-specific Linear assets replaced with generic placeholders."
+  }
+}

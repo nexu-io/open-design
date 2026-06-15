@@ -1,0 +1,387 @@
+---
+/*
+ * Design-example "live preview" for a design-system detail page.
+ *
+ * Renders an ORIGINAL mock product UI (browser chrome → nav → hero →
+ * feature cards → CTA) themed entirely from the system's palette tokens
+ * (the same colors documented in its DESIGN.md). It is not a screenshot
+ * of any real brand site — it's a generic mock re-skinned per system, so
+ * a visitor instantly sees what the design language looks like applied.
+ *
+ * Colours are derived heuristically from `system.palette`: the darkest
+ * swatch → ink, the lightest → surface, the most saturated mid-tone →
+ * accent, with safe fallbacks when a palette is thin or skewed.
+ */
+import type { SystemRecord } from '../_lib/catalog';
+
+interface Props {
+  system: SystemRecord;
+  /** Caption (localized) shown under the mock. Omitted in compact mode. */
+  caption?: string;
+  /** Compact card-thumbnail variant (lean markup, no caption). */
+  compact?: boolean;
+}
+
+const { system, caption, compact = false } = Astro.props as Props;
+
+const HEX = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const toRgb = (h: string): [number, number, number] => {
+  let s = h.replace('#', '');
+  if (s.length === 3) s = s.split('').map((c) => c + c).join('');
+  const n = parseInt(s, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const lum = (rgb: [number, number, number]): number =>
+  0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+const sat = (rgb: [number, number, number]): number => {
+  const mx = Math.max(...rgb);
+  const mn = Math.min(...rgb);
+  return mx === 0 ? 0 : (mx - mn) / mx;
+};
+
+const swatches = (system.palette ?? [])
+  .filter((h) => HEX.test(h))
+  .map((h) => ({ h, rgb: toRgb(h) }));
+
+const byLum = [...swatches].sort((a, b) => lum(a.rgb) - lum(b.rgb));
+const darkest = byLum[0];
+const lightest = byLum[byLum.length - 1];
+const accentCand = [...swatches]
+  .filter((x) => sat(x.rgb) > 0.25 && lum(x.rgb) > 40 && lum(x.rgb) < 225)
+  .sort((a, b) => sat(b.rgb) - sat(a.rgb))[0];
+
+const ink = darkest && lum(darkest.rgb) < 115 ? darkest.h : '#14110b';
+const bg = lightest && lum(lightest.rgb) > 205 ? lightest.h : '#ffffff';
+const accent = (accentCand ?? darkest)?.h ?? '#533afd';
+
+const inkRgb = toRgb(ink);
+const accentRgb = toRgb(accent);
+const muted = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.55)`;
+const line = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.12)`;
+const accentSoft = `rgba(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]}, 0.14)`;
+const accentInk = lum(accentRgb) > 150 ? '#14110b' : '#ffffff';
+
+const vars = [
+  `--pv-bg:${bg}`,
+  `--pv-ink:${ink}`,
+  `--pv-accent:${accent}`,
+  `--pv-accent-ink:${accentInk}`,
+  `--pv-accent-soft:${accentSoft}`,
+  `--pv-muted:${muted}`,
+  `--pv-line:${line}`,
+].join(';');
+
+const domain = `${system.slug}.com`;
+---
+
+{compact ? (
+  <div class="pv pv-compact" style={vars} role="img" aria-label={`${system.name} design system preview`}>
+    <div class="pv-chrome">
+      <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
+    </div>
+    <div class="pv-screen">
+      <nav class="pv-nav">
+        <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
+        <span class="pv-btn pv-btn-solid">Sign up</span>
+      </nav>
+      <div class="pv-h1">Build something people love.</div>
+      <div class="pv-cta-row">
+        <span class="pv-btn pv-btn-solid">Get started</span>
+        <span class="pv-btn pv-btn-ghost">Learn more</span>
+      </div>
+      <div class="pv-cards">
+        {['', '', ''].map(() => (
+          <div class="pv-card"><span class="pv-card-icon"></span><div class="pv-card-line"></div></div>
+        ))}
+      </div>
+    </div>
+  </div>
+) : (
+<figure class="sys-preview">
+  <div class="pv" style={vars} role="img" aria-label={caption}>
+    <div class="pv-chrome">
+      <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
+      <span class="pv-url">{domain}</span>
+    </div>
+    <div class="pv-screen">
+      <nav class="pv-nav">
+        <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
+        <span class="pv-links"><span>Product</span><span>Pricing</span><span>Docs</span></span>
+        <span class="pv-btn pv-btn-solid">Sign up</span>
+      </nav>
+      <div class="pv-hero">
+        <span class="pv-badge">NEW · LIVE PREVIEW</span>
+        <div class="pv-h1">Build something people love.</div>
+        <div class="pv-sub">A mock UI rendered with the {system.name} design tokens — colors pulled straight from its DESIGN.md.</div>
+        <div class="pv-cta-row">
+          <span class="pv-btn pv-btn-solid">Get started</span>
+          <span class="pv-btn pv-btn-ghost">Learn more</span>
+        </div>
+      </div>
+      <div class="pv-cards">
+        {['Fast', 'Secure', 'Simple'].map((t) => (
+          <div class="pv-card">
+            <span class="pv-card-icon"></span>
+            <div class="pv-card-title">{t}</div>
+            <div class="pv-card-line"></div>
+            <div class="pv-card-line short"></div>
+          </div>
+        ))}
+      </div>
+      <div class="pv-foot">
+        <span class="pv-input">you@email.com</span>
+        <span class="pv-btn pv-btn-solid">Subscribe</span>
+        <span class="pv-tag pv-tag-accent">Active</span>
+        <span class="pv-tag">Draft</span>
+      </div>
+    </div>
+  </div>
+  <figcaption>{caption}</figcaption>
+</figure>
+)}
+
+<style>
+  .sys-preview {
+    margin: 0 0 8px;
+  }
+  .sys-preview figcaption {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--ink-mute, #595959);
+  }
+  .pv {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--pv-bg);
+    color: var(--pv-ink);
+    box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.28);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .pv-chrome {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--pv-line);
+  }
+  .pv-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--pv-line);
+  }
+  .pv-url {
+    margin-left: 10px;
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: var(--pv-accent-soft);
+    color: var(--pv-muted);
+    font-size: 12px;
+  }
+  .pv-screen {
+    padding: 26px 30px 30px;
+  }
+  .pv-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 38px;
+  }
+  .pv-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .pv-logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: var(--pv-accent);
+  }
+  .pv-links {
+    display: flex;
+    gap: 22px;
+    font-size: 13px;
+    color: var(--pv-muted);
+  }
+  .pv-btn {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .pv-btn-solid {
+    background: var(--pv-accent);
+    color: var(--pv-accent-ink);
+  }
+  .pv-btn-ghost {
+    border: 1px solid var(--pv-line);
+    color: var(--pv-ink);
+  }
+  .pv-hero {
+    margin-bottom: 34px;
+  }
+  .pv-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: var(--pv-accent-soft);
+    color: var(--pv-accent);
+    margin-bottom: 16px;
+  }
+  .pv-h1 {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin-bottom: 14px;
+  }
+  .pv-sub {
+    max-width: 460px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--pv-muted);
+    margin-bottom: 22px;
+  }
+  .pv-cta-row {
+    display: flex;
+    gap: 12px;
+  }
+  .pv-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 26px;
+  }
+  .pv-card {
+    border: 1px solid var(--pv-line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .pv-card-icon {
+    display: block;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: var(--pv-accent);
+    margin-bottom: 14px;
+  }
+  .pv-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 9px;
+  }
+  .pv-card-line {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--pv-line);
+    margin-bottom: 6px;
+  }
+  .pv-card-line.short {
+    width: 65%;
+  }
+  .pv-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .pv-input {
+    flex: 1;
+    min-width: 180px;
+    padding: 9px 14px;
+    border: 1px solid var(--pv-line);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--pv-muted);
+  }
+  .pv-tag {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--pv-line);
+    color: var(--pv-muted);
+  }
+  .pv-tag-accent {
+    background: var(--pv-accent);
+    color: var(--pv-accent-ink);
+    border-color: transparent;
+  }
+  /* Compact card-thumbnail variant */
+  .pv-compact {
+    border-radius: 10px;
+    box-shadow: none;
+  }
+  .pv-compact .pv-chrome {
+    padding: 7px 10px;
+    gap: 5px;
+  }
+  .pv-compact .pv-dot {
+    width: 7px;
+    height: 7px;
+  }
+  .pv-compact .pv-screen {
+    padding: 14px 16px 16px;
+  }
+  .pv-compact .pv-nav {
+    margin-bottom: 14px;
+  }
+  .pv-compact .pv-brand {
+    font-size: 12px;
+    gap: 6px;
+  }
+  .pv-compact .pv-logo {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+  }
+  .pv-compact .pv-btn {
+    font-size: 10px;
+    padding: 5px 10px;
+    border-radius: 6px;
+  }
+  .pv-compact .pv-h1 {
+    font-size: 19px;
+    margin-bottom: 12px;
+  }
+  .pv-compact .pv-cta-row {
+    margin-bottom: 14px;
+  }
+  .pv-compact .pv-cards {
+    gap: 8px;
+    margin-bottom: 0;
+  }
+  .pv-compact .pv-card {
+    padding: 10px;
+  }
+  .pv-compact .pv-card-icon {
+    width: 16px;
+    height: 16px;
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 640px) {
+    .pv-screen {
+      padding: 20px;
+    }
+    .pv-links {
+      display: none;
+    }
+    .pv-h1 {
+      font-size: 30px;
+    }
+    .pv-cards {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

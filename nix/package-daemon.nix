@@ -26,12 +26,17 @@
 #   are already wired.
 #
 # pnpm version note:
-#   `package.json` declares `engines.pnpm: ">=10.33.2 <11"` and pnpm
-#   enforces this on `pnpm install` (regardless of `engine-strict`).
-#   nixpkgs currently ships 10.33.0, which is rejected. The flake
-#   overrides `pkgs.pnpm_10` to fetch the 10.33.2 tarball from npm —
-#   see flake.nix for the override and how to bump the hash when
-#   `packageManager` advances.
+#   `package.json` declares `engines.pnpm` and pnpm enforces it on
+#   `pnpm install` (regardless of `engine-strict`). The nixpkgs
+#   default `pnpm` is generally incompatible — older than the
+#   floor or newer than the ceiling depending on which nixpkgs
+#   the consumer follows. The flake overrides `pkgs.pnpm_10` to
+#   the exact tarball pinned by `packageManager` (see flake.nix
+#   for the override + hash bump). This derivation uses
+#   `pnpm_10` for both phases: in `nativeBuildInputs` so the
+#   install-phase `pnpmConfigHook` resolves it from PATH, and
+#   `pnpm = pnpm_10` to `fetchPnpmDeps` to override its
+#   `pkgs.pnpm` default.
 #
 # Workspace siblings the daemon depends on are built in dependency order
 # before the daemon itself; tsc emits each package's dist/, which is what
@@ -61,9 +66,12 @@ in
       pkg-config
     ];
 
+    # `fetchPnpmDeps` defaults to `pkgs.pnpm`; pin to the flake's
+    # `pnpm_10` so the dep-fetch matches the install phase.
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };

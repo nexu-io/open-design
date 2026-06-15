@@ -169,6 +169,130 @@ async function selectPreviewElementThroughBridge(
   await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
 }
 
+test('preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
+  await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', manualEditHtml());
+  await page.goto(`/projects/${projectId}/files/toolbar-preview.html`);
+  await openDesignFile(page, 'toolbar-preview.html');
+
+  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(
+    page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }),
+  ).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('button', { name: /^Share$/ }).click();
+  const shareMenu = page.locator('.share-menu-popover[role="menu"]');
+  await expect(shareMenu).toBeVisible();
+  await expect(shareMenu).toContainText('PUBLISH ONLINE');
+  await expect(shareMenu).toContainText('SOCIAL SHARE');
+  await page.keyboard.press('Escape');
+  await expect(shareMenu).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Download$/ }).click();
+  const downloadMenu = page.locator('.share-menu-popover[role="menu"]');
+  await expect(downloadMenu).toBeVisible();
+  await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
+  await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
+  await expect(downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(downloadMenu).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+  const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
+  await expect(zoomButton).toHaveText('100%');
+  await zoomButton.click();
+  const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
+  await expect(zoomMenu).toBeVisible();
+  await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
+  await expect(zoomButton).toHaveText('150%');
+});
+
+test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit workflows', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await page.addInitScript(() => {
+    class TestClipboardItem {
+      constructor(public readonly items: Record<string, Blob | Promise<Blob>>) {}
+    }
+    Object.defineProperty(window, 'ClipboardItem', {
+      configurable: true,
+      value: TestClipboardItem,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        write: async () => undefined,
+        writeText: async () => undefined,
+      },
+    });
+  });
+
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Preview tools smoke');
+  await seedHtmlArtifact(page, projectId, 'preview-tools.html', withSnapshotBridge(manualEditHtml()));
+  const conversationId = await latestConversationId(page, projectId);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/preview-tools.html`);
+  await openDesignFile(page, 'preview-tools.html');
+
+  await expect(artifactPreview(page)).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+
+  await page.getByTestId('screenshot-copy-button').click();
+  await expect(
+    page.getByText(/Screenshot copied to clipboard|Browser blocked clipboard access|Could not capture the preview|Preview is still loading/),
+  ).toBeVisible();
+
+  await page.getByTestId('board-mode-toggle').click();
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  await page.getByTestId('comment-popover-input').fill('Panel-level comment');
+  await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
+  await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
+
+  await expect(page.getByTestId('comment-side-panel')).toBeVisible();
+  await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  await page.getByTestId('comment-panel-toggle').click();
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+
+  await holdNextRunOpen(page);
+  await sendPrompt(page, 'Keep the current preview run active');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+
+  await page.getByTestId('draw-overlay-toggle').click();
+  await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
+  await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
+  await expect(page.getByRole('button', { name: 'Add to input' })).toBeEnabled();
+
+  const previewBox = await artifactPreview(page).boundingBox();
+  expect(previewBox).not.toBeNull();
+  await page.mouse.move(previewBox!.x + 80, previewBox!.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(previewBox!.x + 220, previewBox!.y + 170);
+  await page.mouse.up();
+  const queueButton = page.getByRole('button', { name: 'Queue' });
+  await expect(queueButton).toBeEnabled();
+  await queueButton.click();
+  const queuedStrip = page.getByTestId('chat-queued-send-strip');
+  await expect(queuedStrip).toBeVisible();
+  await expect(queuedStrip).toContainText('Mark this hero crop');
+  await expect(queuedStrip).toContainText('1 mark');
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await selectPreviewElementThroughBridge(page, artifactPreviewFrame(page), '[data-od-id="hero-title"]', 'TYPOGRAPHY');
+  await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
+  await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
+  await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
+});
+
 async function selectStyleRowInput(
   page: Page,
   frame: ReturnType<Page['frameLocator']>,
@@ -378,6 +502,69 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
     },
   );
   expect(resp.ok()).toBeTruthy();
+}
+
+async function latestConversationId(page: Page, projectId: string): Promise<string> {
+  const response = await page.request.get(`/api/projects/${projectId}/conversations`, { timeout: 15_000 });
+  expect(response.ok()).toBeTruthy();
+  const { conversations } = (await response.json()) as {
+    conversations: Array<{ id: string; updatedAt: number }>;
+  };
+  const latest = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!latest) throw new Error(`no conversations found for project ${projectId}`);
+  return latest.id;
+}
+
+async function holdNextRunOpen(page: Page) {
+  let runCount = 0;
+  await page.route('**/api/runs', async (route) => {
+    runCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `preview-tools-run-${runCount}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async () => {
+    await new Promise(() => undefined);
+  });
+}
+
+async function sendPrompt(page: Page, prompt: string) {
+  const input = page.getByTestId('chat-composer-input');
+  const sendButton = page.getByTestId('chat-send');
+  await expect(input).toBeVisible({ timeout: T.short });
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveText(prompt, { timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.short });
+  await Promise.all([
+    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+  ]);
+}
+
+function isCreateRunResponse(resp: { url(): string; request(): { method(): string } }): boolean {
+  const url = new URL(resp.url());
+  return url.pathname === '/api/runs' && resp.request().method() === 'POST';
+}
+
+function withSnapshotBridge(html: string): string {
+  const bridge = `
+<script>
+window.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type !== 'od:snapshot') return;
+  event.source?.postMessage({
+    type: 'od:snapshot:result',
+    id: data.id,
+    dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    w: 1,
+    h: 1,
+  }, '*');
+});
+</script>`;
+  return html.replace('</body>', `${bridge}</body>`);
 }
 
 async function seedDeckArtifact(

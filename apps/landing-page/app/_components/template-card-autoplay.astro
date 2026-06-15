@@ -1,0 +1,126 @@
+---
+// Hover-autoplay + idle hold/pan loop for the template-grid cards' preview
+// clips. Shared by the templates index and the per-kind pages so the behaviour
+// stays in one place (both render `template-card.astro`, which emits the
+// `<video data-tpl-autoplay>` element).
+//
+// Mirrors the in-app gallery's MediaSurface:
+//   - Baked hover-pan clips (those with `data-tpl-hold-ms`) lead with a
+//     `[0, hold]` in-place-animation span, then pan to the end. They start
+//     playing as soon as the card is on-screen and LOOP the `[0, hold]` span
+//     while idle (the page still looks alive), then on hover JUMP to `hold` and
+//     loop the pan span `[hold, end]`; leaving resumes the idle loop. One
+//     element, never remounted, paused while off-screen.
+//   - Plain clips (no hold) keep the cheaper poster-until-hover behaviour.
+//
+// `requestVideoFrameCallback` drives the loop boundary because `timeupdate`
+// fires only ~4x/s, which lets the idle loop overshoot past `hold` and briefly
+// reveal the pan (a small downward lurch each cycle).
+---
+
+<script is:inline>
+  (() => {
+    const wire = () => {
+      const videos = document.querySelectorAll('video[data-tpl-autoplay]:not([data-tpl-init])');
+      if (videos.length === 0) return;
+
+      const hydrate = (v) => {
+        const src = v.getAttribute('data-src');
+        if (src && !v.src) v.src = src;
+      };
+
+      // Mount margin (mirrors the in-app MediaSurface's 1000px): hydrate the
+      // src well before the card scrolls in so `preload="metadata"` can paint
+      // the first frame off-screen and the clip is ready without a poster→video
+      // flash. Playback/decode is still gated to true visibility below.
+      const lazyObs = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            hydrate(entry.target);
+            lazyObs.unobserve(entry.target);
+          }
+        },
+        { rootMargin: '1000px' },
+      );
+
+      // On-screen visibility drives idle playback for hold/pan clips.
+      const visObs = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const v = entry.target;
+            v.__tplVisible = entry.isIntersecting;
+            if (typeof v.__tplSync === 'function') v.__tplSync();
+          }
+        },
+        { rootMargin: '0px', threshold: 0.01 },
+      );
+
+      videos.forEach((v) => {
+        v.setAttribute('data-tpl-init', '1');
+        lazyObs.observe(v);
+
+        const holdAttr = v.getAttribute('data-tpl-hold-ms');
+        const holdMs = holdAttr != null ? parseInt(holdAttr, 10) : NaN;
+        const hasHold = Number.isFinite(holdMs) && holdMs > 0;
+        const hold = hasHold ? holdMs / 1000 : 0;
+
+        // playing = (idle-plays && on-screen) || hovering
+        const sync = () => {
+          const playing = (hasHold && v.__tplVisible) || v.__tplHover;
+          if (playing) {
+            hydrate(v);
+            const p = v.play();
+            if (p && p.catch) p.catch(() => {/* autoplay policy: stays on poster */});
+          } else {
+            v.pause();
+            // Plain clips reset to their poster frame; hold/pan clips keep their
+            // position so resuming the idle loop is seamless.
+            if (!hasHold) {
+              try { v.currentTime = 0; } catch (e) {}
+            }
+          }
+        };
+        v.__tplSync = sync;
+
+        if (hasHold) {
+          visObs.observe(v);
+          // Idle loops [0, hold]; hover loops [hold, end].
+          const clamp = (t) => {
+            if (v.__tplHover) {
+              if (t < hold) { try { v.currentTime = hold; } catch (e) {} }
+            } else if (t >= hold) {
+              try { v.currentTime = 0; } catch (e) {}
+            }
+          };
+          if (typeof v.requestVideoFrameCallback === 'function') {
+            const tick = (_now, meta) => {
+              clamp(meta && typeof meta.mediaTime === 'number' ? meta.mediaTime : v.currentTime);
+              v.requestVideoFrameCallback(tick);
+            };
+            v.requestVideoFrameCallback(tick);
+          } else {
+            v.addEventListener('timeupdate', () => clamp(v.currentTime));
+          }
+        }
+
+        // Hovering anywhere on the preview frame (not just the video pixels)
+        // toggles the pan; falls back to the video element itself.
+        const host = v.closest('.tpl-media') || v;
+        const enter = () => { v.__tplHover = true; sync(); };
+        const leave = () => { v.__tplHover = false; sync(); };
+        host.addEventListener('pointerenter', enter);
+        host.addEventListener('pointerleave', leave);
+        host.addEventListener('focusin', enter);
+        host.addEventListener('focusout', leave);
+      });
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wire);
+    } else {
+      wire();
+    }
+    document.addEventListener('astro:page-load', wire);
+  })();
+</script>

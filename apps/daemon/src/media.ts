@@ -20,6 +20,7 @@
 //                              plus text-to-speech via /v1/audio/speech,
 //                              with auto-detection for Azure OpenAI
 //                              deployments based on the configured base URL
+//   * provider 'codex'      → local Codex CLI subscription imagegen
 //   * provider 'volcengine' → Volcengine Ark async tasks API for
 //                              Doubao Seedance 2.0 (video) and Seedream
 //                              (image)
@@ -46,7 +47,7 @@
 // so the CLI can exit non-zero and the agent can't silently narrate the
 // placeholder as the final result.
 
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile as execFileCb, spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,6 +66,9 @@ import {
 } from './media-models.js';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
+import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
+import { spawnEnvForAgent } from './agents.js';
+import { agentCliEnvForAgent, appConfigDir, readAppConfig } from './app-config.js';
 import {
   ensureProject,
   kindFor,
@@ -126,6 +130,7 @@ type MediaContext = {
   requestInit: MediaRequestInit;
   /** Additional reference images for multi-image i2v / style reference flows. */
   imageRefs: ImageRef[];
+  projectRoot: string;
 };
 type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
 type JsonRecord = Record<string, unknown>;
@@ -148,6 +153,7 @@ const NANOBANANA_DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 const NANOBANANA_DEFAULT_IMAGE_SIZE = '1K';
 const IMAGEROUTER_DEFAULT_BASE_URL = 'https://api.imagerouter.io/v1/openai';
 const CUSTOM_IMAGE_MODEL_ID = 'custom-image';
+const CODEX_IMAGE_ORCHESTRATOR_MODEL = 'gpt-5.5';
 
 const DEFAULT_OUTPUT_BY_SURFACE = {
   image: 'image.png',
@@ -485,6 +491,7 @@ export async function generateMedia(args: {
     imageRef,
     requestInit: requestInit || {},
     imageRefs,
+    projectRoot,
   };
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
@@ -521,6 +528,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openai' && surface === 'image') {
       const result = await renderOpenAIImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'codex' && surface === 'image') {
+      const result = await renderCodexImage(ctx);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -901,6 +913,143 @@ async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig)
     bytes,
     providerNote: `${tag}/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
     suggestedExt: '.png',
+  };
+}
+
+function codexGeneratedImagesRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+  const resolvedHome = home.startsWith('~/') ? path.join(os.homedir(), home.slice(2)) : home;
+  return path.resolve(resolvedHome, 'generated_images');
+}
+
+function codexImageModelLabel(model: string): string {
+  return model.startsWith('codex-') ? model.slice('codex-'.length) : model;
+}
+
+function codexImagePrompt(ctx: MediaContext): string {
+  const prompt = ctx.prompt || 'A high-quality reference image.';
+  const aspect = ctx.aspect ? `\nAspect ratio: ${ctx.aspect}.` : '';
+  const prefix = ctx.imageRefs.length > 0
+    ? '$imagegen Edit the attached reference image:'
+    : '$imagegen';
+  return `${prefix} ${prompt}${aspect}`;
+}
+
+async function resolveCodexImagegenEnv(projectRoot: string): Promise<NodeJS.ProcessEnv> {
+  const dataDir = appConfigDir(projectRoot);
+  try {
+    const appConfig = await readAppConfig(dataDir);
+    const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
+    return spawnEnvForAgent('codex', process.env, configuredEnv);
+  } catch {
+    return spawnEnvForAgent('codex', process.env);
+  }
+}
+
+function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS.ProcessEnv): string[] {
+  const sandbox = codexNeedsDangerFullAccessSandbox()
+    ? ['--sandbox', 'danger-full-access']
+    : ['--sandbox', 'workspace-write', '-c', 'sandbox_workspace_write.network_access=true'];
+  const model = env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL;
+  const args = [
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    ...sandbox,
+    '-c',
+    'default_permissions=":workspace"',
+    '-C',
+    ctx.projectRoot,
+    '--add-dir',
+    generatedRoot,
+    '--model',
+    model,
+  ];
+  if (env.OD_CODEX_DISABLE_PLUGINS === '1') args.push('--disable', 'plugins');
+  for (const ref of ctx.imageRefs) args.push('-i', ref.abs);
+  return args;
+}
+
+function parseCodexThreadId(stdout: string): string {
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const obj = JSON.parse(line) as { thread_id?: unknown; type?: unknown };
+      if (obj.type === 'thread.started' && typeof obj.thread_id === 'string') {
+        return obj.thread_id;
+      }
+    } catch {
+      // Non-JSON progress belongs in stdout on some CLI builds; ignore it.
+    }
+  }
+  throw new Error('codex imagegen did not emit a thread.started thread_id');
+}
+
+async function readCodexGeneratedImage(generatedRoot: string, threadId: string): Promise<Buffer> {
+  const threadDir = path.join(generatedRoot, threadId);
+  const entries = await readdir(threadDir);
+  const match = entries
+    .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
+    .sort()[0];
+  if (!match) {
+    throw new Error(`codex imagegen produced no ig_* image in ${threadDir}`);
+  }
+  const imagePath = path.join(threadDir, match);
+  const bytes = await readFile(imagePath);
+  if (process.env.OD_CODEX_KEEP_GENERATED_IMAGES !== '1') {
+    await rm(threadDir, { recursive: true, force: true });
+  }
+  return bytes;
+}
+
+async function runCodexImagegen(
+  ctx: MediaContext,
+  generatedRoot: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ stderr: string; stdout: string }> {
+  const codexBin = env.CODEX_BIN?.trim() || 'codex';
+  const child = spawn(codexBin, codexImagegenArgs(ctx, generatedRoot, env), {
+    cwd: ctx.projectRoot,
+    env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  const timeoutMs = Number(process.env.OD_CODEX_IMAGEGEN_TIMEOUT_MS || 300_000);
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`codex imagegen timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const out = Buffer.concat(stdout).toString('utf8');
+      const err = Buffer.concat(stderr).toString('utf8');
+      if (code !== 0) reject(new Error(`codex imagegen exited ${code}: ${truncate(err || out, 1000)}`));
+      else resolve({ stdout: out, stderr: err });
+    });
+    child.stdin.end(codexImagePrompt(ctx));
+  });
+}
+
+async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
+  const env = await resolveCodexImagegenEnv(ctx.projectRoot);
+  const generatedRoot = codexGeneratedImagesRoot(env);
+  await mkdir(generatedRoot, { recursive: true });
+  const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
+  const threadId = parseCodexThreadId(stdout);
+  const bytes = await readCodexGeneratedImage(generatedRoot, threadId);
+  const imageModel = codexImageModelLabel(ctx.model);
+  return {
+    bytes,
+    providerNote: `codex/${imageModel} via ${env.OD_CODEX_IMAGEGEN_MODEL?.trim() || CODEX_IMAGE_ORCHESTRATOR_MODEL} · ${ctx.aspect} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
   };
 }
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -404,6 +404,114 @@ describe('buildOpenCodeMcpConfigContent', () => {
         },
       ]),
     ).toBeNull();
+  });
+
+  it('emits an external_directory allowlist when the daemon grants OpenCode absolute project dirs', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [],
+      {},
+      {
+        allowedDirectories: [
+          '/tmp/od-project',
+          '',
+          'relative/path',
+          '/tmp/od-skills',
+          '/tmp/od-project',
+        ],
+      },
+    );
+
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as {
+      permission?: {
+        external_directory?: Record<string, string>;
+      };
+      mcp?: Record<string, unknown>;
+    };
+
+    expect(parsed.mcp).toBeUndefined();
+    expect(parsed.permission?.external_directory).toEqual({
+      '/tmp/od-project': 'allow',
+      '/tmp/od-project/*': 'allow',
+      '/tmp/od-project/**': 'allow',
+      '/tmp/od-skills': 'allow',
+      '/tmp/od-skills/*': 'allow',
+      '/tmp/od-skills/**': 'allow',
+    });
+  });
+
+  it('includes canonical realpath aliases for OpenCode external_directory grants', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'od-mcpconfig-realpath-'));
+    try {
+      const realDir = path.join(root, 'real-project');
+      const linkDir = path.join(root, 'linked-project');
+      await mkdir(realDir);
+      await symlink(
+        realDir,
+        linkDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+
+      const raw = buildOpenCodeMcpConfigContent(
+        [],
+        {},
+        { allowedDirectories: [linkDir] },
+      );
+
+      expect(raw).not.toBeNull();
+      const parsed = JSON.parse(raw as string) as {
+        permission?: {
+          external_directory?: Record<string, string>;
+        };
+      };
+      const canonicalDir = await realpath(linkDir);
+
+      expect(parsed.permission?.external_directory).toMatchObject({
+        [linkDir]: 'allow',
+        [`${linkDir}/*`]: 'allow',
+        [`${linkDir}/**`]: 'allow',
+        [canonicalDir]: 'allow',
+        [`${canonicalDir}/*`]: 'allow',
+        [`${canonicalDir}/**`]: 'allow',
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('merges MCP servers and granted external_directory rules into one payload', () => {
+    const raw = buildOpenCodeMcpConfigContent(
+      [
+        {
+          id: 'basic-memory',
+          transport: 'stdio',
+          enabled: true,
+          command: '/opt/homebrew/bin/uvx',
+          args: ['basic-memory', 'mcp'],
+        },
+      ],
+      {},
+      { allowedDirectories: ['/tmp/od-project'] },
+    );
+
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string) as {
+      permission?: {
+        external_directory?: Record<string, string>;
+      };
+      mcp: Record<string, Record<string, unknown>>;
+    };
+
+    expect(parsed.mcp['basic-memory']).toEqual({
+      type: 'local',
+      command: ['/opt/homebrew/bin/uvx', 'basic-memory', 'mcp'],
+      enabled: true,
+    });
+    expect(parsed.permission?.external_directory).toMatchObject({
+      '/tmp/od-project': 'allow',
+      '/tmp/od-project/*': 'allow',
+      '/tmp/od-project/**': 'allow',
+    });
   });
 
   it('serialises a stdio server to OpenCode local schema (type=local, command=[cmd,...args])', () => {

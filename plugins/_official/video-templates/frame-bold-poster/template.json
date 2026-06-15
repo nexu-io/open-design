@@ -1,0 +1,55 @@
+{
+  "id": "frame-bold-poster",
+  "surface": "hyperframes",
+  "title": "Bold Poster Frame",
+  "summary": "A 1970s European editorial poster in motion — a red rule draws across, a giant tilted figure drops in, a three-line headline rises line-by-line, an italic serif standfirst fades.",
+  "category": "Presentation",
+  "tags": [
+    "poster",
+    "editorial",
+    "bold",
+    "serif",
+    "red",
+    "print",
+    "manifesto",
+    "tilted",
+    "high-impact"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Brand manifesto / vision statement",
+    "Editorial or cultural pitch opener",
+    "A few words that should feel like a magazine cover"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-bold-poster",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/zarazhangrui/frontend-slides"
+  },
+  "provenance": {
+    "origin": {
+      "name": "1970s European editorial / poster tradition",
+      "kind": "movement",
+      "reference": "No single studio — the upstream template names vintage Italian sports magazines, mid-century European brand annual reports, and wine-merchant catalogues as its visual lineage. Recorded as a tradition, not a specific firm.\n"
+    },
+    "via_skill": {
+      "name": "frontend-slides",
+      "author": "Zara Zhang",
+      "url": "https://github.com/zarazhangrui/frontend-slides",
+      "license": "MIT",
+      "source_file": "bold-template-pack/templates/bold-poster/design.md"
+    },
+    "transformation": "Static slide design spec → animated hyperframes timeline (red kicker rule draws in, a giant Shrikhand figure rotates + drops, a three-line headline rises line-by-line each tilted, an italic serif standfirst fades, an ink footer rule draws in) built as original CSS keyframes. Palette (#FFFFFF / #1C1410 / #D8000F / #F5F2EF) and the three-face type stack (Shrikhand / Libre Baskerville / Space Grotesk) follow the upstream spec; sample copy is original; no upstream source HTML copied verbatim.\n"
+  }
+}

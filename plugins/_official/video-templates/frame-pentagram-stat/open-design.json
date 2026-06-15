@@ -1,0 +1,139 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-frame-pentagram-stat",
+  "title": "Pentagram Stat Frame",
+  "title_i18n": {
+    "en": "Pentagram Stat Frame",
+    "zh-CN": "瑞士网格数据帧"
+  },
+  "version": "0.1.0",
+  "description": "Swiss-grid statistic anchor — giant number, red accent, growing bars, black data bar. Rational and editorial.",
+  "description_i18n": {
+    "en": "Swiss-grid statistic anchor — giant number, red accent, growing bars, black data bar. Rational and editorial.",
+    "zh-CN": "瑞士网格数据帧:巨大数字锚点 + 红色强调 + 生长条形图 + 黑色数据底栏, 理性克制的编辑风"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "nexu-io",
+    "url": "https://github.com/nexu-io",
+    "contact": "open-design@nexu.io"
+  },
+  "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/frame-pentagram-stat",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "hyperframes",
+    "html-video",
+    "motion",
+    "stat",
+    "swiss-grid",
+    "editorial",
+    "data",
+    "pentagram",
+    "number",
+    "benchmark",
+    "data-viz"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "engine": "hyperframes",
+    "preview": {
+      "type": "video",
+      "poster": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-pentagram-stat/preview.png",
+      "video": "https://cdn.jsdelivr.net/gh/nexu-io/open-design@main/plugins/_official/video-templates/frame-pentagram-stat/preview.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Pentagram Stat Frame template to turn my key metric into a Swiss-grid data reveal — a giant number anchor, red accent, growing bar chart, and a black data bar. Preserve the template's visual signature, use real numbers, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「瑞士网格数据帧」模板把我的关键指标做成一段瑞士风数据揭示:巨大数字锚点 + 红色强调 + 生长条形图 + 黑色数据底栏。保持模板的视觉签名,使用真实数字,避免 lorem ipsum 和占位图片。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9"
+        ],
+        "default": "16:9"
+      },
+      {
+        "name": "format",
+        "label": "Output format",
+        "type": "select",
+        "options": [
+          "mp4",
+          "webm"
+        ],
+        "default": "mp4"
+      },
+      {
+        "name": "durationSec",
+        "label": "Duration (seconds)",
+        "type": "number",
+        "default": 15
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./template.json",
+        "./source"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "compose",
+          "atoms": [
+            "file-write"
+          ]
+        },
+        {
+          "id": "render",
+          "atoms": [
+            "media-video"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "media:video-generate"
+    ],
+    "provenance": {
+      "origin": {
+        "name": "Pentagram (Michael Bierut)",
+        "kind": "design-studio",
+        "reference": "pentagram.com — Swiss-grid editorial typography; Hillary Clinton logo system"
+      },
+      "via_skill": {
+        "name": "huashu-design",
+        "author": "alchaincyf (花叔 · 花生)",
+        "url": "https://github.com/alchaincyf/huashu-design",
+        "license": "MIT",
+        "source_file": "assets/showcases/ppt/ppt-pentagram.html"
+      },
+      "transformation": "Static PPT showcase → animated hyperframes timeline (Swiss grid sweeps in, giant typographic anchor bleeds off-edge, bar chart grows, black data bar slides up) built as original CSS keyframes. Pentagram's signature #E63946 red is retained as the recognisable brand cue; original sample data. No upstream source code copied verbatim.\n"
+    }
+  }
+}

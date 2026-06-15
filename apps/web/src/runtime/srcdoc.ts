@@ -17,6 +17,7 @@
 import {
   buildManualEditBridge,
   buildManualEditBridgeStyle,
+  buildManualEditKeyboardGuard,
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
@@ -635,8 +636,14 @@ function annotateMissingOdIds(doc: string): string {
 }
 
 function injectManualEditBridge(doc: string): string {
-  const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
+  const withGuard = injectAfterHeadOpen(doc, buildManualEditKeyboardGuard());
+  const withStyle = injectBeforeHeadEnd(withGuard, buildManualEditBridgeStyle());
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
+}
+
+function injectAfterHeadOpen(doc: string, payload: string): string {
+  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  return payload + doc;
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {

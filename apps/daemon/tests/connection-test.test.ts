@@ -149,6 +149,10 @@ async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promi
   return withFakeAgent('deepseek', script, run);
 }
 
+async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('kimi', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1614,6 +1618,55 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('reports a helpful base URL error when Google Gemini is tested against Anthropic', async () => {
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'goog-key',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('invalid_base_url');
+    expect(String(body.detail ?? '')).toContain('generativelanguage.googleapis.com');
+  });
+
+  it('maps Google API key failures on HTTP 400 to auth_failed', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse(
+        {
+          error: {
+            code: 400,
+            message: 'API key not valid. Please pass a valid API key.',
+            status: 'INVALID_ARGUMENT',
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'google',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AQ.TestKeyForUnitTests01234567890123456789012',
+        model: 'gemini-2.0-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('auth_failed');
+  });
+
   it('normalizes Gemini model ids and base URLs in the provider smoke test', async () => {
     const fetchMock = passThroughOrUpstream(() =>
       jsonResponse({
@@ -2088,11 +2141,9 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // CODEX_API_KEY only flows through when the user has also
-          // configured a custom OPENAI_BASE_URL — i.e. they intend to
-          // authenticate Codex CLI against a third-party gateway. Without
-          // the base URL, spawnEnvForAgent strips the credential so Codex
-          // CLI's own `codex login` wins (issue #2420).
+          // Settings -> Local CLI -> Advanced is an explicit low-level CLI
+          // env override. API keys configured there are passed to the child,
+          // while unrelated env keys remain filtered by app-config allowlists.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2133,11 +2184,15 @@ setImmediate(() => process.exit(0));
     }
   });
 
-  it('strips stale Codex API keys when no custom OPENAI_BASE_URL is configured', async () => {
+  it('preserves inherited Codex API keys during connection tests', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-strip-'));
     const envFile = path.join(markerDir, 'env.json');
     const codexHome = path.join(markerDir, 'codex-home');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
     try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
       await withFakeCodex(
         `
 const fs = require('node:fs');
@@ -2150,12 +2205,8 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // Simulates the user flow that triggered issue #2420: a stale
-          // BYOK OPENAI_API_KEY sat in agentCliEnv.codex from a previous
-          // session, the user cleared the BYOK dialog (which doesn't
-          // touch agentCliEnv) and switched back to Local CLI. Without
-          // an OPENAI_BASE_URL the daemon must keep the secret out of
-          // the spawn so Codex CLI's own `codex login` wins.
+          // These keys come from the process environment, not Open Design
+          // BYOK/agentCliEnv. Preserve them so local CLI API-key auth works.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2165,8 +2216,6 @@ setImmediate(() => process.exit(0));
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
-                  OPENAI_API_KEY: 'sk-stale-byok',
-                  CODEX_API_KEY: 'sk-stale-byok',
                 },
               },
             }),
@@ -2180,13 +2229,150 @@ setImmediate(() => process.exit(0));
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
-              OPENAI_API_KEY: null,
-              CODEX_API_KEY: null,
+              OPENAI_API_KEY: 'sk-inherited-openai',
+              CODEX_API_KEY: 'sk-inherited-codex',
             }),
           );
         },
       );
     } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Codex API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
+    try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  OPENAI_API_KEY: 'sk-configured-openai',
+                  CODEX_API_KEY: 'sk-configured-codex',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              OPENAI_API_KEY: 'sk-configured-openai',
+              CODEX_API_KEY: 'sk-configured-codex',
+              OPENAI_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Claude API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-claude-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousKey = process.env.ANTHROPIC_API_KEY;
+    const previousToken = process.env.ANTHROPIC_AUTH_TOKEN;
+    try {
+      process.env.ANTHROPIC_API_KEY = 'sk-inherited-stale';
+      process.env.ANTHROPIC_AUTH_TOKEN = 'sk-inherited-token';
+      await withFakeClaude(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || null,
+  ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || null,
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || null,
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'claude',
+              agentCliEnv: {
+                claude: {
+                  ANTHROPIC_API_KEY: 'sk-configured',
+                  ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Claude Code',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              ANTHROPIC_API_KEY: 'sk-configured',
+              ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+              ANTHROPIC_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+      else process.env.ANTHROPIC_AUTH_TOKEN = previousToken;
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });
@@ -2676,6 +2862,71 @@ setTimeout(() => process.exit(0), 50);
     );
   });
 
+  it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
+    const expectedDetail =
+      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('opencode');
+console.error('Usage: opencode [options] [command]');
+console.error('Options:');
+console.error('  --help  Show help');
+console.error('incompatible opencode args');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+          detail: expectedDetail,
+        });
+      },
+    );
+  });
+
+  it('preserves unrelated OpenCode missing-required failures', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('missing required environment variable OPENAI_API_KEY');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json() as { detail?: string };
+        expect(body).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+        });
+        expect(body.detail).toContain('missing required environment variable OPENAI_API_KEY');
+        expect(body.detail).not.toContain('OpenCode CLI appears to be outdated');
+      },
+    );
+  });
+
   it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
@@ -2729,6 +2980,9 @@ process.stdin.on('end', () => {
               'json',
               '-m',
               'github-copilot/gpt-4o',
+              '--pure',
+              '--title',
+              'Connection test',
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
@@ -2736,6 +2990,110 @@ process.stdin.on('end', () => {
       );
     } finally {
       await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('launches Kimi connection tests without the legacy acp positional arg', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeKimi(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+if (args.includes('acp')) {
+  console.error('error: too many arguments. Expected 0 arguments but got 1.');
+  process.exit(1);
+}
+const promptIndex = args.indexOf('-p');
+if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
+  console.error('missing connection-test prompt');
+  process.exit(1);
+}
+const outputFormatIndex = args.indexOf('--output-format');
+if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
+  console.error('missing --output-format stream-json');
+  process.exit(1);
+}
+console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'kimi',
+              model: 'moonshot-v1-32k',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Kimi CLI',
+            model: 'moonshot-v1-32k',
+            sample: 'ok',
+          });
+
+          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
+            JSON.stringify([
+              '-p',
+              'Reply with only: ok',
+              '--output-format',
+              'stream-json',
+              '--model',
+              'moonshot-v1-32k',
+            ]),
+          );
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
+    const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
+    const oldPath = process.env.PATH;
+    try {
+      if (process.platform === 'win32') {
+        await fsp.writeFile(path.join(gitDir, 'git.cmd'), '@echo off\r\nexit /b 1\r\n');
+      } else {
+        const gitBin = path.join(gitDir, 'git');
+        await fsp.writeFile(gitBin, '#!/bin/sh\nexit 1\n');
+        await fsp.chmod(gitBin, 0o755);
+      }
+      process.env.PATH = `${gitDir}${path.delimiter}${oldPath ?? ''}`;
+
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            sample: 'ok',
+          });
+        },
+      );
+    } finally {
+      process.env.PATH = oldPath;
+      await fsp.rm(gitDir, { recursive: true, force: true });
     }
   });
 
