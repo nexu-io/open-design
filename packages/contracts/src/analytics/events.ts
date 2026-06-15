@@ -1652,7 +1652,12 @@ export interface DesignToolboxClickProps {
 //     or jumping to the add-resource surface (`resource_kind`).
 //   - `design_system_switch`: picked a design system from the composer
 //     (`design_system_id`).
-//   - `working_dir_switch`: changed the project's local-storage working dir.
+//   - `working_dir` / `working_dir_recent` / `working_dir_clear`: the
+//     working-dir picker under the composer — picking a new folder, re-selecting
+//     one from the "Recent folders" submenu, or clearing the bound dir. Fires on
+//     the click itself (intent), identical timing/semantics to the home
+//     composer's `working_dir*` elements, so one dashboard counts the action
+//     across both surfaces.
 //   - `agent_selector_open` / `agent_select` / `agent_model_select`: the CLI/
 //     agent/model dropdown (`agent_id` / `model_id`).
 //   - `context_remove`: removed a staged context chip (`resource_kind` +
@@ -1665,7 +1670,9 @@ export interface ComposerBarClickProps {
     | 'plus_pick'
     | 'plus_add'
     | 'design_system_switch'
-    | 'working_dir_switch'
+    | 'working_dir'
+    | 'working_dir_recent'
+    | 'working_dir_clear'
     | 'agent_selector_open'
     | 'agent_select'
     | 'agent_model_select'
