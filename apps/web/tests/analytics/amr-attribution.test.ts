@@ -190,4 +190,21 @@ describe('AMR attribution helper', () => {
       'https://open-design.ai/amr/wallet?tab=recharge&od_origin=open_design&od_entry_id=od-amr-entry-123&od_entry_source=generation_preview_recharge&od_entry_at=2026-06-03T12%3A00%3A00.000Z',
     );
   });
+
+  it('adds od_device_id only when a device id is provided', () => {
+    const attribution = {
+      entryId: 'od-amr-entry-123',
+      sourceProduct: 'open_design' as const,
+      sourceDetail: 'generation_preview_recharge' as const,
+      occurredAt: '2026-06-03T12:00:00.000Z',
+    };
+    // With a device id (user opted into metrics): od_device_id is present.
+    expect(
+      attributedAmrUrl('https://open-design.ai/amr/wallet', attribution, 'od-install-abc'),
+    ).toContain('od_device_id=od-install-abc');
+    // Without one (consent off): no od_device_id param leaks into the URL.
+    expect(
+      attributedAmrUrl('https://open-design.ai/amr/wallet', attribution, null),
+    ).not.toContain('od_device_id');
+  });
 });

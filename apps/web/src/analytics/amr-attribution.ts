@@ -97,22 +97,34 @@ export function readAmrAttribution(now: Date = new Date()): AmrEntryAttribution 
   }
 }
 
-export function attributedAmrUrl(baseUrl: string, attribution: AmrEntryAttribution): string {
+// Builds the AMR handoff URL with Open Design attribution params. When
+// `deviceId` is provided it is added as `od_device_id`, so AMR can link the
+// landing/registration directly back to this Open Design install instead of
+// only through the one-shot entry id. The caller passes it ONLY when the user
+// has consented to metrics: AMR is Open Design's official model service, so
+// this is a same-owner cross-product link, but it still respects the telemetry
+// opt-in. Pass null/undefined to omit it.
+export function attributedAmrUrl(
+  baseUrl: string,
+  attribution: AmrEntryAttribution,
+  deviceId?: string | null,
+): string {
+  const params: Record<string, string> = {
+    od_origin: attribution.sourceProduct,
+    od_entry_id: attribution.entryId,
+    od_entry_source: attribution.sourceDetail,
+    od_entry_at: attribution.occurredAt,
+  };
+  if (deviceId) params.od_device_id = deviceId;
   try {
     const url = new URL(baseUrl);
-    url.searchParams.set('od_origin', attribution.sourceProduct);
-    url.searchParams.set('od_entry_id', attribution.entryId);
-    url.searchParams.set('od_entry_source', attribution.sourceDetail);
-    url.searchParams.set('od_entry_at', attribution.occurredAt);
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
     return url.toString();
   } catch {
     const separator = baseUrl.includes('?') ? '&' : '?';
-    return `${baseUrl}${separator}${new URLSearchParams({
-      od_origin: attribution.sourceProduct,
-      od_entry_id: attribution.entryId,
-      od_entry_source: attribution.sourceDetail,
-      od_entry_at: attribution.occurredAt,
-    }).toString()}`;
+    return `${baseUrl}${separator}${new URLSearchParams(params).toString()}`;
   }
 }
 

@@ -2029,8 +2029,19 @@ export function ChatPane({
                                   analytics.track,
                                   'chat_error_recharge',
                                 );
+                                // Forward the Open Design device id only when
+                                // the user has opted into metrics, so AMR can
+                                // link this install to the AMR account.
+                                const deviceId =
+                                  config?.telemetry?.metrics === true
+                                    ? analytics.anonymousId
+                                    : null;
                                 window.open(
-                                  attributedAmrUrl(amrRechargeUrlForProfile(amrProfile), attribution),
+                                  attributedAmrUrl(
+                                    amrRechargeUrlForProfile(amrProfile),
+                                    attribution,
+                                    deviceId,
+                                  ),
                                   '_blank',
                                   'noopener,noreferrer',
                                 );
