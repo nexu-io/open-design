@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SketchEditor } from '../../src/components/SketchEditor';
@@ -15,6 +15,7 @@ beforeAll(() => {
     disconnect() {}
     unobserve() {}
   });
+  HTMLCanvasElement.prototype.setPointerCapture = vi.fn();
 });
 
 afterEach(() => {
@@ -258,5 +259,23 @@ describe('SketchEditor save', () => {
     );
     expect(saveButton().getAttribute('aria-label')).toBe('common.save');
     expect(saveButton().querySelector('svg')).toBeNull();
+  });
+
+  it('keeps the text modal open on backdrop click so draft text is preserved', () => {
+    const { container } = renderEditor();
+
+    fireEvent.click(screen.getByTitle('sketch.toolText'));
+    fireEvent.pointerDown(container.querySelector('canvas') as HTMLCanvasElement, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 60,
+    });
+
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Draft note' } });
+    fireEvent.click(container.querySelector('.modal-backdrop') as HTMLElement);
+
+    expect(screen.getByDisplayValue('Draft note')).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'sketch.textModalTitle' })).toBeTruthy();
   });
 });
