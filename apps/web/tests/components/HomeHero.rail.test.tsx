@@ -145,6 +145,8 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByTestId('home-hero-rail-video')).toBeNull();
     const node = screen.getByTestId('home-hero-active-type-chip');
     expect(node.getAttribute('data-chip-id')).toBe('video');
+    expect(node.className).toContain('is-active');
+    expect(node.getAttribute('aria-pressed')).toBe('true');
     expect(node.textContent).toContain('Video');
   });
 

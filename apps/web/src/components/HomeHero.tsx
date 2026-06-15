@@ -2667,11 +2667,12 @@ function ActiveTypeChip({ chip, onClear }: { chip: HomeHeroChip; onClear: () => 
   return (
     <button
       type="button"
-      className="home-hero__active-type-chip"
+      className="home-hero__active-type-chip is-active"
       data-testid="home-hero-active-type-chip"
       data-chip-id={chip.id}
       title={homeHeroChipTitle(chip, t)}
       aria-label={`${homeHeroChipLabel(chip.id, t)} ${t('common.delete')}`}
+      aria-pressed="true"
       onClick={onClear}
     >
       <span className="home-hero__active-type-chip-icon" aria-hidden>
