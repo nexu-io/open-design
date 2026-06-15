@@ -15,11 +15,14 @@ import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
-import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
-import { localizeBlogPostText } from '../../content-i18n';
 import {
+  explicitLocalizedString,
+  localizeBlogPostText,
+} from '../../content-i18n';
+import {
+  getHeaderLocaleSwitcher,
   getLandingUiCopy,
   getLocaleDefinition,
   localeFromPath,
@@ -52,32 +55,16 @@ const fallbackPost = localizeBlogPostText({
   category: post.data.category,
   locale,
 });
-// `localizedPostI18n` is already `i18n[locale]`, so each field is the resolved
-// string for this locale rather than a locale→string map. It must not go through
-// explicitLocalizedString (which expects the map shape and returns undefined for a
-// bare string on non-default locales — the reason post translations never
-// rendered). Use the field directly and fall back to the English source text.
-const explicitField = (field: 'title' | 'summary' | 'category' | 'bodyHtml') => {
-  const value = localizedPostI18n?.[field];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+const localizedPostField = (field: 'title' | 'summary' | 'category') => {
+  return explicitLocalizedString(
+    localizedPostI18n?.[field] as Parameters<typeof explicitLocalizedString>[0],
+    locale,
+  ) ?? fallbackPost[field];
 };
-const localizedPostField = (field: 'title' | 'summary' | 'category') =>
-  explicitField(field) ?? fallbackPost[field];
-// Translated `bodyHtml` is authored with root-relative internal links
-// (`href="/blog/..."`), which point at the default English routes. On a
-// localized page (`/zh/blog/...`) those links would bounce the reader back to
-// English, so rewrite each internal `href` through `localizedHref` before the
-// HTML is injected verbatim via `set:html`. Only `href` is rewritten — `src`
-// (images and other locale-agnostic static assets) is left untouched, and
-// `localizedHref` already passes through absolute/external/anchor URLs.
-const localizeBodyHtmlLinks = (html: string): string =>
-  html.replace(
-    /(\bhref=)(["'])(\/[^"']*)\2/g,
-    (_match, attr: string, quote: string, path: string) =>
-      `${attr}${quote}${href(path)}${quote}`,
-  );
-const rawBodyHtml = explicitField('bodyHtml') ?? fallbackPost.bodyHtml;
-const localizedBodyHtml = rawBodyHtml ? localizeBodyHtmlLinks(rawBodyHtml) : rawBodyHtml;
+const localizedBodyHtml = explicitLocalizedString(
+  localizedPostI18n?.bodyHtml as Parameters<typeof explicitLocalizedString>[0],
+  locale,
+) ?? fallbackPost.bodyHtml;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 const category = post.data.category.toLowerCase();
@@ -94,7 +81,7 @@ const bottomCta =
       ? {
           title: ui.blog.cta.skillsTitle,
           body: ui.blog.cta.skillsBody,
-          href: '/plugins/skills/',
+          href: '/skills/',
           label: ui.blog.cta.skillsLabel,
           external: false,
         }
@@ -132,7 +119,7 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'blog',
     locale,
-    currentPath: Astro.url.pathname,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
   }),
 );
 
@@ -163,7 +150,6 @@ const fmtDate = (d: Date) =>
   <body>
     <div class='shell'>
       <div class='site-chrome' data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -244,7 +230,10 @@ const fmtDate = (d: Date) =>
         margin-top: 0;
       }
       .post {
-        padding: 88px 0 96px;
+        /* Clear the absolutely-positioned .site-chrome (~123px tall) so the
+         * back-link / title don't slide under the nav. Matches the 140px
+         * offset the other sub-pages use. */
+        padding: 140px 0 96px;
       }
       .post .container {
         max-width: 860px;
@@ -313,25 +302,6 @@ const fmtDate = (d: Date) =>
       .post-body :global(p) {
         margin: 0 0 1.4em;
       }
-      .post-body :global(figure) {
-        margin: 2.5rem 0;
-      }
-      .post-body :global(figure img),
-      .post-body :global(img) {
-        display: block;
-        width: 100%;
-        max-width: 100%;
-        height: auto;
-        border-radius: 6px;
-      }
-      .post-body :global(figure figcaption) {
-        margin-top: 0.6rem;
-        font-size: 0.85rem;
-        line-height: 1.4;
-        opacity: 0.7;
-        text-align: center;
-        font-family: var(--sans);
-      }
       .post-body :global(h2) {
         font-family: var(--serif);
         font-weight: 500;
@@ -383,7 +353,7 @@ const fmtDate = (d: Date) =>
         font-size: 0.9em;
         background: var(--paper-warm);
         padding: 2px 6px;
-        border-radius: 3px;
+        border-radius: 4px;
         color: var(--ink);
       }
       .post-body :global(pre) {
@@ -499,7 +469,7 @@ const fmtDate = (d: Date) =>
       }
       @media (max-width: 760px) {
         .post {
-          padding: 56px 0 72px;
+          padding: 116px 0 72px;
         }
         .post-foot {
           align-items: flex-start;

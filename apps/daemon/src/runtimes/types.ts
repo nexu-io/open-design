@@ -184,6 +184,14 @@ export type RuntimeAgentDef = {
   // present in the daemon's `process.env`; Settings-UI per-agent env
   // values only reach the spawned child and are NOT consulted here.
   defaultModelEnvVar?: string;
+  // Agent-recommended override for the chat-run inactivity watchdog.
+  // The watchdog observes child stdout/stderr/SSE activity, not real
+  // CPU progress, so agents whose CLIs go silent for long stretches
+  // during legitimate work (e.g. Copilot's deck-generation thinking
+  // phase from #2467) need a longer ceiling than the 10-minute global
+  // default. Operators can still override per-process via
+  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
+  inactivityTimeoutMs?: number;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous
@@ -217,6 +225,13 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
+  // `inactivityTimeoutMs` is a spawn-time-only hint consumed by the
+  // chat-run watchdog. It is not part of the public `/api/agents`
+  // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
+  // omitting it here keeps the daemon response aligned with that
+  // shared web/CLI shape — agents pick it up by reading the runtime
+  // def directly, the registry payload stays unchanged.
+  | 'inactivityTimeoutMs'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];

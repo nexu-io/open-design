@@ -45,6 +45,10 @@ in
     pnpmDeps = fetchPnpmDeps {
       inherit (finalAttrs) pname version src;
       hash = pnpmDepsHash;
+      # Force the deps-fetch derivation to use the flake's pinned
+      # pnpm_10 as well. fetchPnpmDeps defaults to `pkgs.pnpm` when
+      # the `pnpm` arg is omitted.
+      pnpm = pnpm_10;
       pnpmWorkspaces = pnpmWorkspaceFilters;
       fetcherVersion = 3;
     };

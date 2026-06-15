@@ -7,6 +7,7 @@ import {
   readAmrAttribution,
   recordAmrEntry,
 } from '../../src/analytics/amr-attribution';
+import { saveOnboardingProfile } from '../../src/state/onboarding-profile';
 
 describe('AMR attribution helper', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -97,6 +98,47 @@ describe('AMR attribution helper', () => {
         entryOccurredAt: '2026-06-03T12:00:00.000Z',
       },
     });
+  });
+
+  it('attaches the persisted onboarding profile and forwards it to AMR', () => {
+    saveOnboardingProfile({
+      role: 'pm',
+      orgSize: 'startup',
+      useCase: ['product', 'design-system'],
+      source: 'github',
+    });
+    const track = vi.fn();
+    const now = new Date('2026-06-03T12:00:00.000Z');
+
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+
+    expect(attribution).toMatchObject({
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body)).payload).toMatchObject({
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+  });
+
+  it('omits profile fields entirely when no onboarding profile is stored', () => {
+    const track = vi.fn();
+    const attribution = recordAmrEntry(
+      track,
+      'chat_error_recharge',
+      new Date('2026-06-03T12:00:00.000Z'),
+    );
+
+    expect(attribution.odRole).toBeUndefined();
+    expect(attribution.odOrgSize).toBeUndefined();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body)).payload).not.toHaveProperty('odRole');
   });
 
   it('reuses a previous entry id for follow-up actions in the same source path', () => {

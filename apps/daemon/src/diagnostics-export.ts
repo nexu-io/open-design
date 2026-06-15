@@ -27,6 +27,7 @@ import {
 import { readCurrentAppVersionInfo } from './app-version.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
+import { collectBrowserUseDiscoveryFacts } from './browser-use-diagnostics.js';
 
 interface ResolvedAgentHomes {
   amrOpenCodeHome: string | null;
@@ -150,6 +151,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
       const home = homedir();
       const agentHomes = await resolveAgentHomes(options.dataDir);
+      const browserUse = collectBrowserUseDiscoveryFacts();
       const sources = [
         ...buildSidecarLogSources(options.runtime),
         ...(await buildRunEventLogSources(options.runsDir)),
@@ -180,6 +182,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
             mode: options.runtime?.mode ?? null,
             base: options.runtime?.base ?? null,
             projectRoot: options.projectRoot,
+            browserUse,
           },
           warnings: options.runtime == null ? [STANDALONE_LAUNCH_WARNING] : undefined,
         },

@@ -17,34 +17,86 @@
  * about to render, so multi-script support stays intact without paying for
  * unused scripts up front.
  */
-@import '@fontsource-variable/inter';
-@import '@fontsource-variable/inter-tight';
-@import '@fontsource-variable/playfair-display';
-@import '@fontsource-variable/playfair-display/wght-italic.css';
-@import '@fontsource-variable/jetbrains-mono';
+@font-face {
+  font-family: 'Albert Sans';
+  /* woff2 first (≈50KB, all modern browsers); the variable .ttf (≈125KB)
+     stays as a fallback for ancient engines only. font-display:swap so text
+     paints immediately in the fallback face and never blocks render. */
+  src:
+    url('/skill-assets/AlbertSans-VariableFont_wght.woff2') format('woff2'),
+    url('/skill-assets/AlbertSans-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Albert Sans';
+  src:
+    url('/skill-assets/AlbertSans-Italic-VariableFont_wght.woff2') format('woff2'),
+    url('/skill-assets/AlbertSans-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Remix Icon';
+  /* Subset to the 11 glyphs the site actually renders: 598KB .ttf → ≈1.3KB
+     woff2. font-display:swap (was `block`, which hid the icons — and any text
+     in the same paint — until the font downloaded). */
+  src:
+    url('/skill-assets/remixicon.subset.woff2') format('woff2'),
+    url('/skill-assets/remixicon.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
-  --paper: #efe7d2;
-  --paper-warm: #ece4cf;
-  --paper-dark: #ddd2b6;
-  --ink: #15140f;
-  --ink-soft: #2a2620;
-  --ink-mute: #5a5448;
-  --ink-faint: #8b8676;
-  --coral: #ed6f5c;
-  --coral-soft: #f08e7c;
-  --amr-green: #237f00;
-  --mustard: #e9b94a;
-  --olive: #6e7448;
-  --bone: #f7f1de;
-  --line: rgba(21, 20, 15, 0.16);
-  --line-soft: rgba(21, 20, 15, 0.08);
-  --line-faint: rgba(21, 20, 15, 0.05);
-  --shadow: 0 30px 60px -30px rgba(21, 20, 15, 0.18);
-  --serif: 'Playfair Display Variable', 'Playfair Display', 'Times New Roman', serif;
-  --sans: 'Inter Tight Variable', 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --body: 'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif;
-  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --paper: #fafafa;
+  --paper-warm: #f5f5f5;
+  --paper-dark: #f0f0f0;
+  --ink: #262626;
+  --ink-soft: #434343;
+  --ink-mute: #595959;
+  --ink-faint: #8c8c8c;
+  --coral: #63fe13;
+  --coral-tint: color-mix(in oklab, var(--bone), var(--coral) 8%);
+  --coral-soft: #83ff3b;
+  --mustard: #63fe13;
+  --olive: #218c00;
+  --bone: #ffffff;
+  --line: #d9d9d9;
+  --line-hover: #bfbfbf;
+  --line-soft: #f0f0f0;
+  --line-faint: #f5f5f5;
+  --shadow: 0 30px 60px -30px rgba(38, 38, 38, 0.16);
+  --serif: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --sans: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --body: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'Albert Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --spacing-2: 2px;
+  --spacing-4: 4px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-18: 18px;
+  --spacing-20: 20px;
+  --spacing-22: 22px;
+  --spacing-24: 24px;
+  --spacing-28: 28px;
+  --spacing-32: 32px;
+  --spacing-36: 36px;
+  --spacing-38: 38px;
+  --spacing-42: 42px;
+  --spacing-48: 48px;
+  --spacing-52: 52px;
+  --spacing-58: 58px;
+  --spacing-62: 62px;
+  --spacing-68: 68px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -100,12 +152,12 @@ body::before {
   pointer-events: none;
   z-index: 3;
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(106, 92, 56, 0.07) 0, transparent 28%),
-    radial-gradient(circle at 88% 72%, rgba(106, 92, 56, 0.06) 0, transparent 32%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.16  0 0 0 0 0.12  0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    radial-gradient(circle at 12% 18%, rgba(217, 217, 217, 0.45) 0, transparent 28%),
+    radial-gradient(circle at 88% 72%, rgba(240, 240, 240, 0.72) 0, transparent 32%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.15  0 0 0 0 0.15  0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: auto, auto, 240px 240px;
   mix-blend-mode: multiply;
-  opacity: 0.92;
+  opacity: 0.62;
 }
 
 .shell { position: relative; z-index: 2; }
@@ -122,7 +174,7 @@ body::before {
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 46px;
+  width: 36px;
   z-index: 3;
   pointer-events: none;
   display: flex;
@@ -131,26 +183,6 @@ body::before {
 }
 .side-rail.right { right: 0; border-left: 1px solid var(--line-faint); }
 .side-rail.left { left: 0; border-right: 1px solid var(--line-faint); }
-body.newsletter-popup-visible .side-rail.right {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 var(--newsletter-popup-mask-top, 0px),
-    transparent var(--newsletter-popup-mask-top, 0px),
-    transparent var(--newsletter-popup-mask-bottom, 0px),
-    #000 var(--newsletter-popup-mask-bottom, 0px),
-    #000 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 var(--newsletter-popup-mask-top, 0px),
-    transparent var(--newsletter-popup-mask-top, 0px),
-    transparent var(--newsletter-popup-mask-bottom, 0px),
-    #000 var(--newsletter-popup-mask-bottom, 0px),
-    #000 100%
-  );
-}
 .side-rail .rail-text {
   font-family: var(--sans);
   font-size: 10px;
@@ -179,10 +211,17 @@ body.newsletter-popup-visible .side-rail.right {
  * toggle `is-hidden` on.
  */
 .site-chrome {
-  position: sticky;
+  /* Fixed so the bar stays pinned to the top and condenses on scroll
+     (was `absolute`, which let it scroll away). At the very top it is a
+     transparent overlay on the hero; past the scroll threshold the inline
+     script adds `.is-condensed`, which shrinks the bar and turns on the
+     Liquid Glass material below. */
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
-  background: var(--paper);
+  background: transparent;
   transform: translateY(0);
   transition: transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1),
     box-shadow 220ms ease,
@@ -197,9 +236,9 @@ body.newsletter-popup-visible .side-rail.right {
 
 /* top metadata strip */
 .topbar {
-  border-bottom: 0;
+  border-bottom: 1px solid transparent;
   padding: 10px 0;
-  background: var(--paper);
+  background: transparent;
   /*
    * Stays a positioned context so the locale menu has an absolute
    * anchor. The z-index is small but non-zero so the topbar — and the
@@ -226,12 +265,7 @@ body.newsletter-popup-visible .side-rail.right {
 .topbar-inner > span { white-space: nowrap; }
 .topbar-inner .mid { display: inline-flex; gap: 26px; }
 .topbar-inner .mid > span { white-space: nowrap; }
-.topbar-inner .right {
-  display: inline-flex;
-  gap: 18px;
-  align-items: center;
-  margin-left: auto;
-}
+.topbar-inner .right { display: inline-flex; gap: 18px; align-items: center; }
 .topbar-inner .right > span,
 .topbar-inner .right > a { white-space: nowrap; }
 .topbar-link {
@@ -295,9 +329,32 @@ body.newsletter-popup-visible .side-rail.right {
 .locale-trigger:focus-visible .locale-trigger-code {
   color: var(--coral);
 }
+/* Iconic language switcher — Remix Icon "translate-2" glyph from the
+   skill font (see @font-face 'Remix Icon'). Replaces the 语言 · 简中 text. */
+.locale-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  transition: color 160ms ease;
+}
+.locale-trigger-icon::before {
+  font-family: 'Remix Icon';
+  content: '\f226';
+  font-style: normal;
+  font-weight: normal;
+  font-size: 18px;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+}
+.locale-trigger-iconic { border-bottom: 0; }
+.locale-trigger-iconic:hover .locale-trigger-icon,
+.locale-switch[open] > .locale-trigger-iconic .locale-trigger-icon,
+.locale-trigger-iconic:focus-visible .locale-trigger-icon {
+  color: var(--coral);
+}
 .locale-trigger-caret {
-  width: 8px;
-  height: 5px;
+  font-size: 12px;
   flex-shrink: 0;
   opacity: 0.7;
   transition: transform 160ms ease, opacity 160ms ease;
@@ -312,13 +369,13 @@ body.newsletter-popup-visible .side-rail.right {
  * keeps the panel under 9 rows so every language is visible at once and
  * reads like a small index of nameplates rather than a dropdown.
  *
- * The 20px top offset gives clear breathing room from the topbar baseline
+ * The shared top offset gives clear breathing room from the topbar baseline
  * — without it the active row (which mirrors the trigger label) feels
  * fused to the chrome above it.
  */
 .locale-menu {
   position: absolute;
-  top: calc(100% + 20px);
+  top: calc(100% + var(--nav-flyout-gap, 12px));
   right: 0;
   z-index: 60;
   display: grid;
@@ -326,10 +383,11 @@ body.newsletter-popup-visible .side-rail.right {
   gap: 2px 4px;
   padding: 10px;
   background: var(--paper);
-  border: 1px solid rgba(21, 20, 15, 0.22);
-  box-shadow:
-    0 1px 0 rgba(21, 20, 15, 0.04),
-    0 28px 60px -32px rgba(21, 20, 15, 0.42);
+  /* Match the sibling product `.nav-dropdown`: same border, radius, and shadow
+     so both header menus read as one panel style. */
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(26, 26, 26, 0.08);
   font-family: var(--sans);
   letter-spacing: normal;
   text-transform: none;
@@ -340,6 +398,17 @@ body.newsletter-popup-visible .side-rail.right {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* Invisible hover bridge across the gap between the trigger and the panel,
+   so moving the cursor down to the menu doesn't drop the hover and close it
+   (mirrors the sibling `.nav-dropdown::before`). */
+.locale-menu::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--nav-flyout-gap, 12px));
+  left: 0;
+  right: 0;
+  height: var(--nav-flyout-gap, 12px);
+}
 .locale-menu-item {
   display: flex;
   align-items: baseline;
@@ -349,19 +418,24 @@ body.newsletter-popup-visible .side-rail.right {
   text-decoration: none;
   font-size: 12.5px;
   line-height: 1.2;
+  /* Rounded so the hover/active fill reads as a pill-ish row inside the
+     8px panel rather than a hard-edged rectangle. */
+  border-radius: 6px;
   transition: background 140ms ease, color 140ms ease;
 }
+/* Hover / active match the product `.nav-dropdown a`: coral-tint fill on hover,
+   a faint grey fill for the current locale — both keep ink text. */
 .locale-menu-item:hover {
-  background: color-mix(in oklab, var(--paper), var(--ink) 6%);
-  color: var(--coral);
+  background: var(--coral-tint);
+  color: var(--ink);
 }
-.locale-menu-item:hover .locale-menu-code { color: var(--coral); }
+.locale-menu-item:hover .locale-menu-code { color: var(--ink-faint); }
 .locale-menu-item.is-active {
-  background: color-mix(in oklab, var(--paper), var(--coral) 8%);
-  color: var(--coral);
+  background: rgba(26, 26, 26, 0.04);
+  color: var(--ink);
 }
 .locale-menu-item.is-active .locale-menu-code {
-  color: var(--coral);
+  color: var(--ink-faint);
 }
 .locale-menu-code {
   flex-shrink: 0;
@@ -410,67 +484,120 @@ body.newsletter-popup-visible .side-rail.right {
  * only the spacing and surface treatment.
  */
 .nav {
+  /* Explicit 100% (not auto) so the width can animate to the condensed
+     capsule instead of snapping — `auto` widths don't transition. */
+  width: 100%;
+  /* Inline margins are `auto` in BOTH states so the width shrink stays
+     centered every frame (shrinks toward the middle). If the base were
+     `margin: 0`, the 0 → auto transition isn't interpolable and the left
+     edge stays pinned while the right pulls in — reads as a left-to-right
+     collapse. */
+  margin-inline: auto;
   padding: 22px 0;
-  background: var(--paper);
+  background: transparent;
   border-bottom: 1px solid transparent;
+  transition:
+    width 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    margin 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 420ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    background 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease;
+}
+/* Off-screen host for the Liquid Glass `<filter>` defs (referenced by id
+   from the nav's backdrop-filter). Kept in flow with zero size rather than
+   display:none, since some engines drop filter references on hidden subtrees. */
+.nav-glass-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/*
+ * Condensed bar — the Liquid Glass material. Two `backdrop-filter`
+ * declarations: the plain blur is the Safari/Firefox fallback (the
+ * component's SVG displacement filter is unsupported there); the
+ * `url(#nav-liquid-glass)` line is the Chromium chromatic-refraction
+ * material and overrides it where supported. The bar also shrinks its
+ * vertical padding for the condensed feel.
+ */
+.site-chrome.is-condensed .nav {
+  /* Detaches from the edges into a centered floating capsule: a gap from
+     the top, side margins, and fully rounded ends. 1280px (not 1080px) so
+     the longest translated nav rows (ja/ru/uk) still hold a single line —
+     the row must never wrap into a second line over the hero. */
+  margin: 14px auto 0;
+  width: min(1280px, calc(100% - 32px));
+  padding: 9px 0;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 20, 15, 0.08);
+  background: hsl(0 0% 100% / 0.42);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: url(#nav-liquid-glass) blur(7px) saturate(1.4);
+  box-shadow:
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.55),
+    inset 0 0 10px 4px rgba(255, 255, 255, 0.22),
+    0 6px 24px rgba(17, 17, 26, 0.06),
+    0 12px 40px rgba(17, 17, 26, 0.05);
+}
+/* The inner gutter eases in lockstep with the capsule width. */
+.nav > .container {
+  transition: padding 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Tighten the inner container padding inside the capsule (the full 64px
+   container gutter would over-inset the brand / links / actions). */
+.site-chrome.is-condensed .nav > .container {
+  max-width: none;
+  padding: 0 28px;
 }
 .nav-inner {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 24px;
 }
 /*
- * Desktop header: keep the logo, primary nav, and side actions in one row
- * without forcing the nav onto the page center. The primary nav should follow
- * the logo; the side actions consume the remaining room by pinning themselves
- * to the right edge. Scoped to desktop only — at ≤1280px the nav becomes an
- * absolutely positioned hamburger panel (rules further below), which must not
- * inherit this flex layout.
+ * Desktop bar layout (≥1081px, above the hamburger breakpoint): three
+ * equal-flanked columns — brand logo pinned flush-left, the nav links
+ * centred, and the action cluster (download / star / locale) flush-right.
+ * The two 1fr side tracks are symmetric, which keeps the centre column
+ * optically centred regardless of how wide either side gets. Mobile keeps
+ * the base flex layout untouched.
  */
-@media (min-width: 1281px) {
-  /* Header spans the full viewport width (overriding the shared .container
-   * max-width) so the brand sits near the left edge and the side actions
-   * near the right edge, rather than aligned to the 1360px content column. */
-  .nav .nav-inner {
-    max-width: none;
-    /* Clear the fixed 46px decorative side-rails (plus breathing room) so
-     * the brand and side actions never collide with the edge lines. */
-    padding-left: clamp(32px, 3.8vw, 60px);
-    padding-right: clamp(32px, 3.8vw, 60px);
-  }
+@media (min-width: 1081px) {
   .nav-inner {
-    gap: clamp(28px, 3vw, 56px);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
   }
   .nav-inner > .brand {
-    flex: 0 0 auto;
-    justify-content: flex-start;
-  }
-  .nav-inner > .nav-side {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin-left: auto;
-    justify-content: flex-end;
+    order: 1;
+    justify-self: start;
   }
   .nav-inner > nav[data-nav-primary] {
-    flex: 0 1 auto;
-    min-width: 0;
-    display: flex;
-    justify-content: flex-start;
+    order: 2;
+    justify-self: center;
   }
-
-  /* Scale the header chrome up a step so the bar reads as substantial across
-   * the now-full-width layout, rather than small elements floating in extra
-   * whitespace. Desktop-only; sizes return to base below 1281px. Selectors
-   * are deliberately one level more specific than the base rules below
-   * (which appear later in source) so these win without !important. */
-  .nav .nav-inner .brand-logo { height: 44px; }
-  .nav-inner .nav-links { gap: clamp(24px, 2.55vw, 44px); }
-  .nav-inner .nav-links a { font-size: clamp(14px, 0.95vw, 16px); }
-  .nav-inner .nav-side { gap: clamp(8px, 0.85vw, 14px); }
-  .nav-inner .nav-side .nav-cta.ghost { font-size: 13px; }
-  .nav-inner .nav-side .locale-trigger { font-size: 13px; }
-  .nav-inner .nav-side .nav-amr img { width: 68px; height: auto; }
+  .nav-inner > .nav-side {
+    order: 3;
+    justify-self: end;
+  }
+  /* Translated labels (ja ソリューション, ru Сообщество, …) run longer than
+     the English originals. A trigger must never break between its label and
+     the ▾ caret — wrapping stacks the bar into two lines that overlap the
+     hero. The bar widens / tightens instead (capsule cap + the band below). */
+  .nav-links a {
+    white-space: nowrap;
+  }
+}
+/* Mid-band desktop (hamburger ends at 1081px): the longest locales need
+ * tighter link spacing to hold a single row. The hover bridge width must
+ * track the gap so sweeping between triggers keeps a dropdown open. */
+@media (min-width: 1081px) and (max-width: 1366px) {
+  .nav-links { gap: 22px; }
+  .nav-links li.has-dropdown:not(:last-child)::after { width: 22px; }
 }
 .brand {
   display: inline-flex;
@@ -482,16 +609,25 @@ body.newsletter-popup-visible .side-rail.right {
   color: var(--ink);
   text-decoration: none;
   font-size: 18px;
-  /*
-   * Pin the brand so it never participates in flex-shrink. `.nav-inner` is a
-   * `justify-content: space-between` flex row; in locales whose nav labels are
-   * longer (de/ru/pt-BR…) the link list widens the row past the container and
-   * the browser shrinks every shrinkable child proportionally — including the
-   * logo, which is why the wordmark looked smaller in some languages. The nav
-   * links absorb the squeeze instead (they already tighten/collapse to the
-   * hamburger at the 1180/1080 breakpoints below).
-   */
-  flex-shrink: 0;
+}
+/*
+ * Combined brand lockup — the glyph + "Open Design" wordmark as a single
+ * SVG (`/logo-lockup.svg`, viewBox 225×83). Sized by height so the glyph
+ * keeps roughly its previous 44px optical weight while the wordmark sets
+ * its own width. Replaces the old `.brand-mark` glyph + `.brand-name`
+ * text pair in the header and both footers.
+ */
+.brand-logo {
+  height: 40px;
+  width: auto;
+  display: block;
+  flex: 0 0 auto;
+  transition: height 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Shrinks alongside the condensed bar (eased in lockstep with the
+   capsule's width/padding so nothing jumps ahead). */
+.site-chrome.is-condensed .brand-logo {
+  height: 33px;
 }
 .brand-mark {
   /*
@@ -508,15 +644,6 @@ body.newsletter-popup-visible .side-rail.right {
 }
 .brand-name {
   white-space: nowrap;
-}
-.brand-logo {
-  width: 204px;
-  height: auto;
-  display: block;
-}
-.nav .brand-logo {
-  width: auto;
-  height: 42px;
 }
 .brand-mark img {
   width: 100%;
@@ -552,16 +679,8 @@ body.newsletter-popup-visible .side-rail.right {
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 500;
-  white-space: nowrap;
   transition: color 0.18s ease;
   position: relative;
-  /*
-   * inline-flex + center so the dropdown caret sits on the text's optical
-   * midline. As a baseline-aligned inline child the small ▾ glyph dropped to
-   * the lower-right and read like a stray comma after each label.
-   */
-  display: inline-flex;
-  align-items: center;
 }
 .nav-links a:hover { color: var(--coral); }
 .nav-links a .num {
@@ -573,6 +692,21 @@ body.newsletter-popup-visible .side-rail.right {
   letter-spacing: 0.04em;
 }
 
+/* AMR partner logo at the tail of the nav links (700×272 lockup scaled to
+   the bar). */
+.nav-links .nav-amr {
+  display: flex;
+  align-items: center;
+}
+.nav-amr-logo {
+  display: block;
+  height: 22px;
+  width: auto;
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+.nav-amr a:hover .nav-amr-logo { opacity: 1; }
+
 /*
  * Product dropdown — CSS-only, no JS. The submenu is hidden by default and
  * revealed on `:hover` of the parent `li.has-dropdown`, or on `:focus-within`
@@ -580,6 +714,20 @@ body.newsletter-popup-visible .side-rail.right {
  */
 .nav-links li.has-dropdown {
   position: relative;
+  --nav-flyout-gap: 12px;
+}
+/*
+ * Invisible hover bridge across the 38px flex gap between nav triggers so
+ * sweeping between items keeps something hovered — otherwise the dropdown and
+ * the :has() page blur flick off/on in the dead gap. Last item excluded.
+ */
+.nav-links li.has-dropdown:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 38px;
 }
 .nav-links .dropdown-caret {
   display: inline-flex;
@@ -600,7 +748,7 @@ body.newsletter-popup-visible .side-rail.right {
 }
 .nav-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + var(--nav-flyout-gap, 12px));
   left: -16px;
   margin: 0;
   padding: 10px;
@@ -622,15 +770,54 @@ body.newsletter-popup-visible .side-rail.right {
   visibility: visible;
   transform: translateY(0);
 }
+/*
+ * Frosted backdrop behind an open header menu. Opening a nav dropdown — or the
+ * language switcher — frosts the page (blueprint / glass look) while the nav
+ * bar and its menu stay sharp on top. Pure CSS via :has().
+ *
+ * Anchored to the viewport top (`top: 0`, full-viewport height) so it covers
+ * the WHOLE screen behind the chrome — including the transparent topbar strip
+ * above the nav pill, where page content used to bleed through while a menu was
+ * open. It lives in the chrome's stacking context (z-index 50 in .shell) at the
+ * back (z-index -1), so it covers page content while the topbar, nav links,
+ * dropdown, and locale menu all paint above it; the opaque condensed nav pill
+ * hides the frost behind itself, so the bar still reads as a clean bar.
+ * Desktop only: the mobile nav is a vertical drawer, not a hover panel.
+ */
+@media (min-width: 1081px) {
+  .site-chrome::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100vh;
+    z-index: -1;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(26px) saturate(108%);
+    -webkit-backdrop-filter: blur(26px) saturate(108%);
+    opacity: 0;
+    pointer-events: none;
+    /* Delay the fade-OUT so a brief hover loss (crossing a gap) doesn't flash
+       the blur; opening stays instant via the override below. */
+    transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1) 120ms;
+  }
+  .site-chrome:has(.nav-links li.has-dropdown:hover)::after,
+  .site-chrome:has(.nav-links li.has-dropdown:focus-within)::after,
+  .site-chrome:has(.locale-switch[open])::after {
+    opacity: 1;
+    transition-delay: 0ms;
+  }
+}
 /* invisible bridge so cursor can travel from trigger to menu without
  * crossing a gap that closes the menu mid-traverse */
 .nav-dropdown::before {
   content: '';
   position: absolute;
-  top: -10px;
+  top: calc(-1 * var(--nav-flyout-gap, 12px));
   left: 0;
   right: 0;
-  height: 10px;
+  height: var(--nav-flyout-gap, 12px);
 }
 .nav-dropdown a {
   display: block;
@@ -641,7 +828,7 @@ body.newsletter-popup-visible .side-rail.right {
   transition: background 0.12s ease;
 }
 .nav-dropdown a:hover {
-  background: rgba(255, 122, 89, 0.08);
+  background: var(--coral-tint);
   color: var(--ink);
 }
 .nav-dropdown a.is-active {
@@ -660,8 +847,9 @@ body.newsletter-popup-visible .side-rail.right {
   color: var(--ink-faint);
   line-height: 1.4;
 }
-/* Section label inside a multi-group dropdown (Solution: Use cases / Roles).
- * Not a link — rendered as a small uppercase caption that spans the column. */
+
+/* Grouped dropdown (Solution): small-caps group labels between the rows.
+   Rules mirror upstream main's header CSS 1:1. */
 .nav-dropdown .nav-dropdown-group {
   padding: 8px 12px 2px;
 }
@@ -677,15 +865,16 @@ body.newsletter-popup-visible .side-rail.right {
   text-transform: uppercase;
   color: var(--ink-faint);
 }
-/* Solution dropdown is tall (two groups, 11 items). Cap height and let it
- * scroll rather than run off the bottom of short viewports. */
+
+/* Solution panel lists 11 rows + 2 group labels; cap the height so it never
+   grows past the viewport, scrolling inside instead. */
 .nav-dropdown-solution {
   max-height: min(70vh, 520px);
   overflow-y: auto;
 }
 
 /*
- * Hamburger toggle. Hidden at desktop widths (≥1281px). At narrower
+ * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
  * viewports it replaces the inline nav-links and toggles a panel
  * underneath the header bar via a small handler in `header-enhancer`.
  */
@@ -737,110 +926,29 @@ body.newsletter-popup-visible .side-rail.right {
 .nav-side {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
 }
-/*
- * Compact icon-only chrome buttons for community-channel links
- * (Discord, X) sitting beside the Download / Star CTAs. They share
- * the ghost-button outline language but stay square so they read as
- * social affordances and don't compete with the text CTAs.
- */
-.nav-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid rgba(21, 20, 15, 0.18);
-  color: var(--ink);
-  background: transparent;
-  text-decoration: none;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+.nav-side .locale-switch {
   flex-shrink: 0;
-}
-.nav-icon:hover {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--paper);
-}
-.nav-icon svg {
-  display: block;
-}
-.nav-amr {
-  /* AMR pill is a "nice to have" entry point — AMR is also reachable via the
-   * Agent dropdown. It only earns its slot in the side actions at wide
-   * viewports (≥1520px); below that it is hidden so longer-copy locales
-   * (Japanese, German, Russian) never get their nav links pushed into the
-   * right-hand CTAs. Shown by the min-width:1520 block further down. */
-  display: none;
-  align-items: center;
-  justify-content: center;
-  height: 40.1484px;
-  min-height: 40.1484px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(21, 20, 15, 0.18);
-  background: transparent;
-  color: var(--ink);
-  box-shadow: none;
+  color: var(--ink-faint);
   font-family: var(--sans);
-  text-decoration: none;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition:
-    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
-.nav-amr:hover {
-  transform: translateY(-1px);
-  background: rgba(21, 20, 15, 0.04);
-  border-color: rgba(21, 20, 15, 0.36);
-  box-shadow: none;
-}
-.nav-amr img {
-  width: 66px;
-  height: 24px;
-  display: block;
-  flex: 0 0 auto;
-}
-/* Reveal the AMR pill only at wide viewports, where every locale's nav row
- * still has room for it beside the Star + Download CTAs. The threshold is
- * 1520px: the widest-copy locale (Japanese) only clears the pill's ~90px
- * without crowding the Star CTA above this width. Below it the pill stays
- * hidden (default above) so the nav never overlaps. */
-@media (min-width: 1520px) {
-  .nav-side .nav-amr {
-    display: inline-flex;
-  }
-}
-.nav-amr-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  line-height: 1;
-}
-.nav-amr-title {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-.nav-amr-kicker {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: rgba(13, 84, 0, 0.72);
+.nav-side .locale-menu {
+  top: calc(100% + var(--nav-flyout-gap, 12px));
+  right: 0;
 }
 .nav-cta {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 16px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
   font-family: var(--sans);
   font-size: 13px;
   font-weight: 500;
@@ -853,188 +961,48 @@ body.newsletter-popup-visible .side-rail.right {
   font-variant-numeric: tabular-nums;
 }
 .nav-cta::after {
-  content: '★';
-  color: var(--mustard);
-  font-size: 11px;
+  content: none;
 }
+/* Download: a compact filled pill. Same ink background as the primary button
+   (.btn-primary), but tighter padding than .btn's 14px 22px so it reads at
+   nav scale. */
 .nav-cta.ghost {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid rgba(21, 20, 15, 0.18);
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  transition: background 160ms ease, transform 160ms ease;
+}
+.nav-cta:not(.ghost):hover {
+  color: var(--coral);
 }
 .nav-cta.ghost:hover {
-  background: rgba(21, 20, 15, 0.04);
-  border-color: rgba(21, 20, 15, 0.36);
+  background: #434343;
 }
-.nav-cta.ghost::after {
-  content: '↓';
-  color: var(--ink);
-  font-size: 12px;
+/* ---------- gradual blur ---------- */
+/*
+ * Layer geometry, blur radii, and mask gradients are emitted inline by the
+ * `GradualBlur` component (see `_components/gradual-blur.tsx`). These rules
+ * own only the cross-layer plumbing: `isolation` keeps the stacked
+ * backdrop-filters in their own compositing context, the parent variant
+ * clips the band to its container, and the `@supports` fallback degrades to
+ * a translucent veil on browsers without backdrop-filter.
+ */
+.gradual-blur {
+  isolation: isolate;
 }
-.nav-cta.is-download { gap: 4px; }
-.nav-cta.is-download::after { content: '↓'; color: var(--ink); font-size: 12px; }
-.nav-cta.ghost.is-star::after { content: '★'; color: var(--mustard); font-size: 11px; }
-.download-arch {
-  margin-left: 0;
-  opacity: 0.62;
-  font-weight: 500;
-}
-.btn[data-download-cta] { gap: 2px; }
-
-/* ====== AMR band ======
- * Homepage model band for Open Design AMR: a centered headline + lead +
- * four feature chips, followed by an edge-to-edge infinite marquee of
- * frontier-model cards (vendor logo + model/vendor name in a soft pill).
- * Sits directly under the testimonial. Hairline rules top/bottom keep it
- * reading as a supporting band rather than a competing hero. */
-.amr-band {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+.gradual-blur-parent {
   overflow: hidden;
 }
-.amr-band-inner {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 18px 0 0;
-  text-align: center;
+.gradual-blur-inner > div {
+  -webkit-backdrop-filter: inherit;
+  backdrop-filter: inherit;
 }
-.amr-band-kicker {
-  display: inline-block;
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+@supports not (backdrop-filter: blur(1px)) {
+  .gradual-blur-inner > div {
+    background: rgba(20, 20, 20, 0.18);
+  }
 }
-.amr-band-title {
-  font-family: var(--sans);
-  font-size: clamp(30px, 5vw, 52px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.08;
-  margin: 16px auto 0;
-  max-width: 720px;
-  color: var(--ink);
-}
-.amr-band-lead {
-  font-family: var(--sans);
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink-mute);
-  margin: 16px auto 0;
-  max-width: 620px;
-}
-.amr-band-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  list-style: none;
-  margin: 24px 0 0;
-  padding: 0;
-}
-.amr-band-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 16px 7px 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-soft);
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
-}
-.amr-band-chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent, var(--ink-soft));
-  flex: none;
-}
-
-/* Static monochrome vendor-logo row, centered, trailing with an ellipsis
- * that signals "and more" beyond the marks shown. The logos are <img>-loaded
- * SVGs (fill="currentColor"), which render in an isolated context and cannot
- * inherit this stylesheet's color — they paint in the SVG's own default ink
- * (near-black). The opacity below is what softens the row to read alongside
- * the warm body type; recoloring would need inlined SVGs or a CSS mask. */
-.amr-band-logos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  list-style: none;
-  margin: 30px 0 0;
-  padding: 0;
-}
-.amr-band-logos li {
-  display: inline-flex;
-  align-items: center;
-}
-.amr-band-logo {
-  width: 26px;
-  height: 26px;
-  display: block;
-  opacity: 0.74;
-  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.amr-band-logos li:hover .amr-band-logo {
-  opacity: 1;
-}
-.amr-band-more {
-  font-family: var(--sans);
-  font-size: 26px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.05em;
-  color: var(--ink-faint);
-  transform: translateY(-4px);
-}
-.amr-band-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 30px;
-}
-.amr-band-cta {
-  /* Reuse the dark .nav-cta pill; add the trailing arrow the nav CTAs use. */
-  padding: 11px 22px;
-  font-size: 14px;
-}
-.amr-band-cta::after {
-  content: '→';
-  color: var(--paper);
-  font-size: 13px;
-  margin-left: 7px;
-}
-
-.nav-locale {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
-  flex-shrink: 0;
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink);
-}
-.nav-locale .locale-trigger {
-  gap: 6px;
-}
-.nav-locale .locale-menu {
-  top: calc(100% + 14px);
-}
-
 /* ---------- typography primitives ---------- */
 .label {
   font-family: var(--sans);
@@ -1080,6 +1048,18 @@ body.newsletter-popup-visible .side-rail.right {
   color: var(--ink-soft);
   max-width: 36ch;
 }
+/*
+ * Arrow-pipeline leads (Brief → 模板 → … → 记忆沉淀) read as one chain and
+ * must never wrap, in any state or viewport. The generic 36ch cap is
+ * lifted and the font scales with the viewport below ~520px so the line
+ * shrinks instead of breaking (CJK would otherwise wrap between any two
+ * characters regardless of nbsp).
+ */
+.lead-pipeline {
+  max-width: none;
+  white-space: nowrap;
+  font-size: clamp(10px, min(3.2vw, 16px), 16px);
+}
 .meta {
   font-family: var(--sans);
   font-size: 10.5px;
@@ -1118,11 +1098,11 @@ body.newsletter-popup-visible .side-rail.right {
   white-space: nowrap;
 }
 .btn-primary {
-  background: var(--coral);
-  color: #fff;
-  box-shadow: 0 14px 26px -16px rgba(237, 111, 92, 1);
+  background: var(--ink);
+  color: #ffffff;
+  box-shadow: 0 14px 26px -16px rgba(38, 38, 38, 0.42);
 }
-.btn-primary:hover { transform: translateY(-1px); background: #e25e4a; }
+.btn-primary:hover { transform: translateY(-1px); background: #434343; }
 .btn-ghost {
   background: transparent;
   color: var(--ink);
@@ -1135,16 +1115,24 @@ body.newsletter-popup-visible .side-rail.right {
   align-items: center;
   justify-content: center;
 }
-.btn .arrow-fill {
-  width: 24px;
-  height: 24px;
-}
 .btn .arrow svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; }
-.btn .arrow svg.icon-fill {
-  width: 24px;
-  height: 24px;
-  fill: currentColor;
-  stroke: none;
+.btn .arrow .ri-glyph { font-size: 16px; }
+/* Live GitHub star count appended after "Star us" — tabular figures so the
+   button width doesn't jitter when the live count ticks. */
+.star-count { font-variant-numeric: tabular-nums; }
+
+/* Skill Remix Icon glyph — the only interface-icon primitive (see the bundled
+   skill's references/图标.md). Sizes to the surrounding font-size; colour
+   inherits from the parent. */
+.ri-glyph {
+  font-family: 'Remix Icon';
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* helper used inline in headlines */
@@ -1160,11 +1148,41 @@ body.newsletter-popup-visible .side-rail.right {
 .hero {
   position: relative;
   padding: 0;
-  min-height: calc(100vh - 140px);
+  /* Downward shift applied to the backdrop artwork so it sits lower on the
+     first screen; the hero height grows by the same amount below so the
+     artwork's bottom (the deck screenshot) still isn't clipped. */
+  --hero-bg-offset: 8vw;
+  /* Tall enough to reveal the hero artwork's visible content so its bottom —
+     the deck screenshot — isn't clipped. The current artwork file is
+     2880x1648, but everything below y≈980 is a transparent tail with stray
+     near-invisible specks, so the formula tracks the visible height (not the
+     file height) to avoid reserving phantom blank space before the next
+     section. */
+  min-height: calc(min(100vw * 980 / 2880, 980px) + var(--hero-bg-offset));
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
+  overflow: hidden;
+}
+/* First-screen backdrop image. It scales down to the viewport but never
+   exceeds the source image width, so the artwork stays proportional instead
+   of being stretched on wide screens. */
+.hero-bg {
+  position: absolute;
+  top: var(--hero-bg-offset, 0);
+  left: 50%;
+  /* Fill the full width edge-to-edge while preserving the artwork's native
+     aspect ratio: `height: auto` scales height proportionally (no stretch,
+     no letterbox gaps). Any overflow past the hero is clipped by the
+     section's `overflow: hidden`. */
+  width: 100%;
+  max-width: 2880px;
+  height: auto;
+  transform: translateX(-50%);
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
 }
 .hero > .container { flex: 0 0 auto; }
 .hero > .container.hero-grid { flex: 1 1 auto; }
@@ -1180,73 +1198,80 @@ body.newsletter-popup-visible .side-rail.right {
   display: none;
 }
 .hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 36px;
-  align-items: stretch;
+  display: flex;
+  justify-content: center;
+  /* Top-anchored (not centered): the hero artwork behind the copy scales
+     with viewport WIDTH, so a width-proportional padding-top keeps the CTAs
+     parked in the empty band under the headline at any viewport height. */
+  align-items: flex-start;
   width: 100%;
   position: relative;
+  /* Above the hero background image so the copy renders over the artwork. */
+  z-index: 1;
 }
 .hero-copy {
-  padding: 4vh 0 4vh;
+  padding: calc(12vw - 12px) 0 4vh;
   display: flex;
   flex-direction: column;
+  /* Centered hero — every first-screen module (eyebrow, manifesto, actions,
+     stats, foot) stacks on the page's horizontal center. */
   align-items: center;
-  max-width: 1120px;
+  width: min(820px, 100%);
   margin: 0 auto;
   position: relative;
   text-align: center;
-  z-index: 1;
 }
-.hero-angel {
-  position: absolute;
-  right: clamp(60px, 10vw, 140px);
-  bottom: 0;
-  width: clamp(240px, 28vw, 380px);
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
+/* Hero manifesto line. Skill spec (UIUX-design): Albert Sans, --font-size-18
+   (18px / 125%), weight 400 body, neutral 正文文字 #434343 (= --ink-soft),
+   centered short emphasis text, --spacing-32 gap to the CTAs below. */
+.hero-lead {
+  max-width: 760px;
+  margin: 0 0 32px;
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 400;
+  color: var(--ink-soft);
+  text-align: center;
 }
-.hero-scene-wrap {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 32px;
-  width: 24px;
-  border-radius: 999px;
-  overflow: hidden;
-  opacity: 0.8;
-  pointer-events: none;
-  user-select: none;
-  z-index: 1;
-  line-height: 0;
+/* Hero sub-line beneath the CTAs. Skill spec: Albert Sans, --font-size-16
+   (16px / 125%), weight 400, neutral 正文次级文字 #595959 (= --ink-mute),
+   centered. --spacing-28 gap above. */
+.hero-sub {
+  max-width: 760px;
+  margin: 28px 0 0;
+  font-family: var(--sans);
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 400;
+  color: var(--ink-mute);
+  text-align: center;
 }
-.hero-scene {
+/* First-screen product window. Centered, can sit wider than the 820px copy
+   column; capped to 92vw on narrow screens. Border uses the skill's neutral
+   分割线 #d9d9d9 (= --line). --spacing-48 gap above. */
+.hero-shot {
+  width: min(1080px, 92vw);
+  margin: 48px 0 0;
+}
+.hero-shot-img {
+  display: block;
   width: 100%;
   height: auto;
-  display: block;
-}
-.hero-dancer {
-  position: absolute;
-  left: clamp(188px, 10vw, 268px);
-  bottom: 0;
-  width: clamp(180px, 20vw, 280px);
-  height: auto;
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px -40px rgba(38, 38, 38, 0.28);
 }
 .hero-discord-pill {
-  align-self: flex-start;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   margin-bottom: 22px;
   padding: 7px 13px;
-  border: 1px solid rgba(237, 111, 92, 0.28);
+  border: 1px solid #beff8c;
   border-radius: 999px;
-  background: rgba(237, 111, 92, 0.12);
+  background: #f2ffe6;
   color: var(--coral);
   font-family: var(--sans);
   font-size: 12px;
@@ -1254,48 +1279,152 @@ body.newsletter-popup-visible .side-rail.right {
   letter-spacing: -0.005em;
   line-height: 1;
   text-decoration: none;
-  box-shadow: 0 12px 24px -22px rgba(237, 111, 92, 0.8);
+  box-shadow: 0 12px 24px -22px rgba(38, 38, 38, 0.22);
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 .hero-discord-pill:hover {
   transform: translateY(-1px);
-  border-color: rgba(237, 111, 92, 0.46);
-  background: rgba(237, 111, 92, 0.18);
+  border-color: #83ff3b;
+  background: #d8ffb5;
 }
 .hero-discord-pill span {
   font-size: 8px;
   line-height: 1;
 }
-.hero-copy .label { margin-bottom: 28px; }
-.hero-copy .lead {
-  margin-bottom: 30px;
-  max-width: none;
-  font-size: 16px;
-  margin-left: auto;
-  margin-right: auto;
-}
-/* Keep each BreakText line on a single row only on wider screens. On phones
-   the longer second line would otherwise overflow horizontally and clip
-   instead of wrapping at spaces, so let it reflow below the breakpoint. */
-@media (min-width: 768px) {
-  .hero-copy .lead span {
-    white-space: nowrap;
-  }
-}
+/* Centered eyebrow chrome above the left-aligned manifesto: the Discord
+   pill is already align-self centered; match the label to it. */
+.hero-copy .label { margin-bottom: 28px; align-self: center; }
+.hero-copy .lead { margin-bottom: 30px; max-width: 52ch; font-size: 16px; }
 .hero h1 {
   font-size: clamp(44px, 5vw, 78px);
   line-height: 1.0;
   margin-bottom: 28px;
 }
-.hero-title-line {
-  font-size: 60px;
+/*
+ * Hero manifesto headline — three left-aligned statements at a fixed 46px,
+ * weight 700 (UIUX skill: page-title weight). Albert Sans is inherited from
+ * the global --sans stack; a gentle line-height keeps the CJK sentences
+ * readable as they wrap inside the 820px copy column.
+ */
+.hero h1.hero-manifesto {
+  font-family: var(--sans);
+  font-size: 46px;
+  line-height: 1.32;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-align: center;
+  margin-bottom: 30px;
+}
+/* Hero brand title (zh first screen): the product name stacked over a
+   one-line positioning statement. Oversized brand line, slightly smaller
+   tagline, both centered — mirrors the reference comp. */
+.hero h1.hero-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 8px;
+  /* Frame hugs the text: shrink-wrap to the widest line (brand vs tagline) plus
+     padding, instead of spanning the full hero column. Stays centred. */
+  width: fit-content;
+  max-width: 100%;
+  line-height: 1;
+  /* Blueprint-style selection frame around the brand title (reference comp):
+     a thin accent border with a small filled square sitting on each corner. */
+  position: relative;
+  padding: 28px 48px;
+  border: 1px solid var(--coral);
+}
+/* Small filled squares centred on each corner of the title frame. */
+.hero-title-corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: var(--coral);
+}
+.hero-title-corner.tl { top: 0; left: 0; transform: translate(-50%, -50%); }
+.hero-title-corner.tr { top: 0; right: 0; transform: translate(50%, -50%); }
+.hero-title-corner.bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+.hero-title-corner.br { bottom: 0; right: 0; transform: translate(50%, 50%); }
+.hero-title-brand {
+  /* Editorial slab/serif treatment for the brand line only — system serif
+     stack (no webfont load) so it costs zero extra requests. The CJK tagline
+     below stays on the sans display face. */
+  font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  font-weight: 800;
+  font-size: 54px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.hero-title-sub {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 35px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+/* ---------- BlurText reveal (React Bits "BlurText", static SSR port) ----------
+ *
+ * Each word/letter of the hero title is a `.blur-word` span carrying a `--i`
+ * stagger index (see `BlurText` in page.tsx). The container `.hero-title` keeps
+ * its `data-reveal`, so the IntersectionObserver in home-enhancer.astro flips it
+ * to `data-revealed='true'` on scroll-in and the cascade begins. The keyframes
+ * mirror the component's blur(10→5→0) + opacity(0→.5→1) + translateY steps. */
+.hero h1.hero-title[data-reveal] {
+  /* Let the per-word blur be the whole motion: cancel the generic block reveal
+     translate/opacity so the frame itself doesn't slide or fade. */
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+  transition: none;
+}
+.blur-word {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(10px);
+  transform: translateY(-50px);
+  will-change: transform, filter, opacity;
+}
+.hero-title[data-revealed='true'] .blur-word {
+  animation: blurTextIn 0.38s cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation-delay: calc(var(--i, 0) * 0.035s);
+}
+@keyframes blurTextIn {
+  0% {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(-50px);
+  }
+  50% {
+    opacity: 0.5;
+    filter: blur(5px);
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .blur-word {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    animation: none;
+  }
 }
 .hero-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 14px;
-  margin-bottom: 40px;
+  margin-top: 42px; /* skill --spacing-42 (was 90px) */
+  margin-bottom: 0;
 }
 .hero-stats {
   display: flex;
@@ -1331,14 +1460,14 @@ body.newsletter-popup-visible .side-rail.right {
 .hero-stats .stat-label b { display: block; font-weight: 700; color: var(--ink); font-size: 12px; }
 
 .hero-foot {
-  width: 100%;
   margin-top: auto;
   padding-top: 22px;
-  border-top: 1px solid var(--line);
+  border-top: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 24px;
+  width: 100%;
 }
 .hero-foot .meta { line-height: 1.4; }
 
@@ -1616,18 +1745,317 @@ section.tight { padding: 90px 0; }
 }
 
 /* ---------- ABOUT ---------- */
+.about {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
 .about-grid {
   display: grid;
-  grid-template-columns: 1.05fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 80px;
   align-items: center;
+  justify-items: center;
 }
 .about h2 {
   font-size: clamp(44px, 5.4vw, 78px);
   margin: 30px 0 36px;
 }
+.about-copy {
+  max-width: 980px;
+  text-align: center;
+}
+.about-kicker {
+  width: 203px;
+  max-width: 100%;
+  margin: 0 0 26px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-align: left;
+}
+/* === Text Scroll Reveal — the ABOUT statement (Magic UI / Inspira port).
+   A tall track with a sticky, vertically-centered paragraph; the inline
+   script in pages/index.astro maps scroll progress to each token's opacity,
+   lighting the copy word by word as the reader scrolls through. === */
+.about-reveal {
+  /* Normal flow with the original statement spacing — no tall pinned track.
+     The word-by-word reveal is driven by the block's pass through the
+     viewport instead (see `enhanceStatementReveal`). */
+  position: relative;
+  margin: 0 0 36px;
+}
+.about-reveal-sticky {
+  display: block;
+}
+/* `.about h2` (0,1,1) sets a large display size; match the old statement's
+   specificity (0,2,1) so the reveal copy keeps the original 26px. */
+.about h2.about-reveal-text {
+  margin: 0;
+  max-width: 900px;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-align: left;
+  color: var(--ink);
+}
+.reveal-word {
+  /* No-JS / reduced-motion fallback is full ink; the script adds
+     `.is-reveal-active` (which dims the base) then drives per-token opacity. */
+  opacity: 1;
+  transition: opacity 90ms linear;
+  will-change: opacity;
+}
+.about-reveal.is-reveal-active .reveal-word {
+  opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-reveal.is-reveal-active .reveal-word { opacity: 1; }
+}
+.about h2.about-statement {
+  display: grid;
+  gap: 18px;
+  /* Second-screen statement fixed at 26px (was driven up to 78px by the
+     generic `.about h2` rule). */
+  font-size: 26px;
+  line-height: 1.18;
+  /* Left-aligned, overriding the centered `.about-copy`. */
+  text-align: left;
+}
+.about-statement span {
+  display: block;
+}
+/*
+ * Second-screen statement entrance — true "Mask Reveal Up" (animata.design/
+ * docs/text/mask-reveal-up). Each line is a clip window (`overflow: hidden`)
+ * and its inner text rises from fully below the edge (translateY 110% → 0),
+ * so the words wipe up from behind the mask rather than just fading. Lines
+ * stagger top-to-bottom; easing matches the rest of the page's reveals.
+ *
+ * Replayed on every scroll-in: a dedicated observer in `pages/index.astro`
+ * toggles `.is-inview` on the statement as it enters / leaves the viewport,
+ * so the reveal plays each time the reader scrolls to this module rather
+ * than once-and-done.
+ */
+.about-statement.text-appear span {
+  /* Clip window. The small vertical padding (cancelled by the negative
+     margin) gives Latin descenders room so the resting text isn't shaved
+     by the overflow clip. */
+  overflow: hidden;
+  padding-block: 0.12em;
+  margin-block: -0.12em;
+}
+.about-statement.text-appear .line-inner {
+  display: block;
+  transform: translateY(110%);
+  transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1) var(--line-delay, 0ms);
+  will-change: transform;
+}
+.about-statement.text-appear span:nth-child(1) .line-inner { --line-delay: 0ms; }
+.about-statement.text-appear span:nth-child(2) .line-inner { --line-delay: 110ms; }
+.about-statement.text-appear span:nth-child(3) .line-inner { --line-delay: 220ms; }
+.about-statement.text-appear.is-inview .line-inner {
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-statement.text-appear .line-inner {
+    transform: none;
+    transition: none;
+  }
+}
 .about .label { margin-bottom: 28px; }
-.about .lead { margin-bottom: 36px; max-width: 42ch; font-size: 17px; }
+.about .lead {
+  margin: 0 auto 36px;
+  max-width: 56ch;
+  font-size: 17px;
+}
+/* Tabbed capability surface — a pill segmented control on top, with one
+   content panel revealed below. Pure CSS (hidden radio + :checked sibling
+   selectors) so it works in the static Astro render with no JS island.
+   (Replaces the former three-up .about-cards grid.) */
+/* Scroll-driven tab cycle: scrolling through `.about-scrolly` advances the
+   active tab (1→2→3) while `.about-sticky` pins the tabs+panels in view. Clicks
+   still work — `enhanceAboutScrolly` just checks the matching radio. */
+.about-scrolly {
+  position: relative;
+  width: 100%;
+  height: calc(3 * 64vh);
+}
+.about-sticky {
+  position: sticky;
+  top: 110px;
+}
+@media (max-width: 880px) {
+  /* No pinning on small screens — tabs stay click-only. */
+  .about-scrolly { height: auto; }
+  .about-sticky { position: static; }
+}
+.about-tabs {
+  margin: 0 auto 42px;
+  text-align: left;
+}
+.about-tab-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.about-tablist {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(21, 20, 15, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.about-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.2s cubic-bezier(0.23, 1, 0.32, 1),
+    color 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Leading icon per tab, drawn from the skill's Remix Icon font (line style
+   per the skill's icon rule, coral accent from the palette). */
+.about-tab::before {
+  font-family: 'Remix Icon';
+  font-weight: 400;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--coral);
+  -webkit-font-smoothing: antialiased;
+}
+.about-tablist label:nth-of-type(1)::before { content: '\ebca'; } /* computer-line */
+.about-tablist label:nth-of-type(2)::before { content: '\f019'; } /* plug-line */
+.about-tablist label:nth-of-type(3)::before { content: '\f36d'; } /* sparkling-line */
+.about-tab:hover { color: var(--ink); }
+/* Active tab fills to the dark ink pill (white label, coral icon retained). */
+#about-tab-1:checked ~ .about-tablist label[for='about-tab-1'],
+#about-tab-2:checked ~ .about-tablist label[for='about-tab-2'],
+#about-tab-3:checked ~ .about-tablist label[for='about-tab-3'] {
+  background: var(--ink);
+  color: #fff;
+}
+.about-panels {
+  margin-top: 16px;
+  /* Viewport for the vertical stacking reel: one panel tall (panel art is
+     1768×1144); the stacked panels are clipped to it. */
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1768 / 1144;
+}
+.about-track {
+  /* Positioning layer for the absolutely-stacked panels. */
+  position: absolute;
+  inset: 0;
+}
+.about-panel {
+  /* Vertical stacking reel (matches the capability module below): each panel
+     parks below and slides UP to cover the previous as you advance; sliding
+     back down reveals it. JS drives the transform 1:1 with scroll (跟手); the
+     CSS transition + :checked rules below are the mobile / click fallback. */
+  position: absolute;
+  inset: 0;
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: transform;
+  min-width: 0;
+  min-height: 0;
+  padding: 28px;
+  border: 1px solid rgba(21, 20, 15, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 20px 42px -38px rgba(15, 23, 42, 0.28);
+}
+.about-panel:nth-child(1) { z-index: 1; }
+.about-panel:nth-child(2) { z-index: 2; }
+.about-panel:nth-child(3) { z-index: 3; }
+/* Click / mobile fallback: a checked tab stacks itself + every earlier panel at
+   translateY(0); the higher z-index covers the lower. */
+#about-tab-1:checked ~ .about-panels .about-panel:nth-child(1),
+#about-tab-2:checked ~ .about-panels .about-panel:nth-child(-n + 2),
+#about-tab-3:checked ~ .about-panels .about-panel:nth-child(-n + 3) {
+  transform: translateY(0);
+}
+.about-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.72;
+}
+/* When a panel holds a full-card image, let the image BE the card: drop the
+   panel's own padding/background/frame so there's no card-in-card. */
+.about-panel:has(.about-panel-img) {
+  padding: 0;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.about-panel-img {
+  border-radius: 40px;
+  overflow: hidden;
+  line-height: 0;
+  border: none;
+  background: transparent;
+}
+/* Show the image exactly as provided — no rounded corners, no clipping. */
+.about-panel-img-bare {
+  border-radius: 0;
+  overflow: visible;
+}
+/* Live caption laid over the the painting card baked into these about images. Uses
+   container query units so the text scales in lockstep with the image width. */
+.about-panel-img-captioned {
+  position: relative;
+  container-type: inline-size;
+}
+.about-panel-caption {
+  position: absolute;
+  left: 50%;
+  top: 53.5%;
+  transform: translateX(-50%);
+  width: 86%;
+  margin: 0;
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 2.7cqw;
+  line-height: 1.5;
+  font-weight: 500;
+  color: var(--ink);
+}
+/* The 3rd panel (越用越懂你 / self-evolution) centers the caption in its image's
+   white-card blank zone (above the divider + chips row baked into the art). */
+.about-track .about-panel:nth-child(3) .about-panel-caption {
+  top: 57.5%;
+}
+.about-panel-img img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 .about .footer-row {
   display: flex;
   align-items: center;
@@ -1700,11 +2128,28 @@ section.tight { padding: 90px 0; }
 .about-caption b { color: var(--ink); display: block; }
 
 /* ---------- CAPABILITIES ---------- */
+/* Nudge the whole capabilities module left. Uses position/left rather than a
+   transform: a transform on this ancestor would re-root the sticky card stack
+   inside it and break the scroll-driven stacking (Steps 3/4 would vanish). */
+.capabilities {
+  position: relative;
+  /* Symmetric top/bottom: both neighbours (.about, .labs) use the generic
+     section's 130px, so matching padding-top and padding-bottom here makes the
+     module's visible top gap equal its bottom gap (130 + 40 on each side). */
+  padding-top: 40px;
+  padding-bottom: 40px;
+  margin-top: 0;
+}
 .capabilities-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 70px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: center;
+  /* Break out of the centered .container to a fixed 238px left/right safe area
+     (same convention as the lab stage): the module spans calc(100vw - 476px) and
+     stays edge-anchored at 238px on both sides at any width. */
+  width: calc(100vw - 476px);
+  margin-left: calc(50% - 50vw + 238px);
 }
 .capabilities-art {
   position: relative;
@@ -1728,11 +2173,12 @@ section.tight { padding: 90px 0; }
 .capabilities-art .corner { position: absolute; width: 22px; height: 22px; border-color: var(--ink-faint); border-style: solid; border-width: 0; }
 .capabilities-art .corner.tl { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; }
 .capabilities-art .corner.br { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
-.capabilities-copy h2 { font-size: clamp(40px, 4.8vw, 64px); margin: 22px 0 30px; }
+.capabilities-copy h2 { font-size: 38px; margin: 22px 0 14px; }
 .cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  /* Capability cards laid out as a single horizontal row. */
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
   margin-top: 22px;
 }
 .card {
@@ -1745,6 +2191,315 @@ section.tight { padding: 90px 0; }
   transition: transform 0.2s ease;
 }
 .card:hover { transform: translateY(-3px); }
+
+/*
+ * Capability cards as a scroll-driven sticky stack. Each card pins near the
+ * top at a slightly lower offset than the previous (var(--i) peek), so as the
+ * reader scrolls every card slides up and stacks onto the pile, the prior
+ * card's "Step N" header peeking above it. Once the 5th is stacked the whole
+ * pile scrolls away with the section. Pure CSS — no scroll listeners.
+ */
+/*
+ * The capabilities heading stays pinned at the top of the viewport while the
+ * card stack scrolls/recedes beneath it, so the title + lead + cards all read
+ * within a single screen. Opaque background + z-index mask any card that
+ * scrolls up behind it before pinning.
+ */
+.capabilities-head {
+  position: relative;
+  z-index: 2;
+  background: var(--paper);
+  padding-top: 24px;
+  padding-bottom: 6px;
+}
+/* ===== Capabilities scrollytelling (left steps / right art) ===== */
+.cap-scrolly {
+  position: relative;
+  /* Scroll length: one "page" of travel per step drives the active index. */
+  height: calc(var(--steps, 5) * 68vh);
+  margin-top: 20px;
+}
+.cap-sticky {
+  position: sticky;
+  top: 96px;
+  /* Pins the WHOLE module (heading + row) while the track scrubs the steps. */
+  min-height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 3vh, 40px);
+}
+.cap-row {
+  display: grid;
+  /* Gap from the head (lead line) down to the steps + Step card — bumped so
+     the measured 35px reads as 64px. */
+  margin-top: 29px;
+  /* Narrow step column, wide art column. */
+  grid-template-columns: minmax(0, 0.30fr) minmax(0, 1fr);
+  gap: clamp(28px, 4vw, 72px);
+  /* Top-align both columns so the art's top edge lines up with the first step. */
+  align-items: start;
+}
+.cap-steps {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(13px, 1.8vw, 26px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-items: flex-start;
+}
+.cap-step {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  cursor: pointer;
+  opacity: 0.38;
+  /* Constant padding on every step so the row doesn't resize when the active
+     pill (below) appears — only the background/shadow toggle. Taller pill. */
+  padding: 14px 18px;
+  border-radius: 999px;
+  transition: opacity 0.3s cubic-bezier(0.23, 1, 0.32, 1),
+    background 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.cap-step.is-active {
+  opacity: 1;
+  /* Selected step copies the hero black button: black fill, white text, the
+     same pill radius (above) and the same elevation shadow. */
+  background: var(--ink);
+  box-shadow: 0 14px 26px -16px rgba(38, 38, 38, 0.42);
+}
+.cap-step-num {
+  font-family: var(--mono);
+  font-size: 14px; /* --font-size-14 */
+  line-height: 1.25;
+  font-weight: 400;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+.cap-step.is-active .cap-step-num {
+  color: #ffffff;
+}
+.cap-step-label {
+  font-family: var(--serif);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px; /* --font-size-14 */
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  transition: color 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.cap-step.is-active .cap-step-label {
+  color: #ffffff;
+}
+.cap-visual {
+  position: relative;
+  /* Matches the step PNGs' native ratio (1500×928). `overflow: hidden` only
+     clips the sliding reel. */
+  aspect-ratio: 1500 / 928;
+  overflow: hidden;
+  /* Scaled up 10% proportionally. */
+  transform: scale(1.1);
+  transform-origin: center;
+}
+/* Vertical reel: each frame slides up from below to cover the previous one
+   (and back down when scrolling up). JS (`enhanceCapScrolly`) drives the
+   per-frame translateY + z-index; `.cap-visual { overflow: hidden }` clips the
+   parked frames. */
+.cap-frame {
+  position: absolute;
+  inset: 0;
+  transform: translateY(100%);
+  /* Short transition only smooths between scroll frames — the slide is now
+     driven continuously from the scroll position (see `enhanceCapScrolly`), so
+     it tracks the finger instead of easing in over half a second. */
+  transition: transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: transform;
+}
+.cap-frame.is-active {
+  transform: translateY(0);
+}
+.cap-frame img {
+  width: 100%;
+  height: 100%;
+  /* Show the PNG exactly as supplied — no crop, no zoom, no distortion. All
+     four step PNGs are 1500×928, matching the frame ratio, so `contain` fills
+     edge-to-edge with no side gap. */
+  object-fit: contain;
+  display: block;
+}
+/* Nudge the 4th card (Step 4, index 3) 5px to the right. Applied to the image
+   rather than the frame so it doesn't fight the reel's translateY animation. */
+.cap-frame[data-cap-frame='3'] img {
+  transform: translateX(5px);
+}
+/* Caption overlaid in the image's top white bar, to the right of the baked-in
+   "step N" pill. Positioned as a % of the frame so it tracks the PNG at any
+   size. */
+.cap-frame-caption {
+  position: absolute;
+  top: 11.4%;
+  left: 20.5%;
+  right: 5%;
+  transform: translateY(-50%);
+  z-index: 2;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: clamp(11px, 1.15vw, 18px);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+}
+.cap-frame-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  padding: clamp(28px, 4vw, 64px);
+}
+.cap-frame-text .cap-frame-title {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(24px, 3vw, 40px);
+  color: var(--coral);
+}
+.cap-frame-text p {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  max-width: 42ch;
+}
+@media (max-width: 880px) {
+  /* Collapse to a single column: art on top, steps below, no pinning. */
+  .cap-scrolly { height: auto; margin-top: 8px; }
+  .cap-sticky {
+    position: static;
+    min-height: 0;
+  }
+  .cap-row {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .cap-step { opacity: 1; }
+}
+/* Draggable "DONE 👌" mark, inline 20px after the heading text.
+   On hover it casts a soft drop-shadow under just the icon (not the whole bar). */
+.cap-head-icon {
+  display: inline-block;
+  vertical-align: middle;
+  height: 120px;
+  width: auto;
+  margin-left: 20px;
+  z-index: 3;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
+  transition: filter 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.capabilities-head:hover .cap-head-icon {
+  filter: drop-shadow(0 12px 14px rgba(38, 38, 38, 0.15));
+}
+.cap-head-icon.is-dragging { cursor: grabbing; }
+@media (max-width: 880px) {
+  .cap-head-icon { height: 84px; margin-left: 14px; }
+}
+
+.cards-stack {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  gap: 0;
+  /* Cards span the full copy column so their left/right edges align flush with
+     the heading and eyebrow above (no 20px inset). */
+  max-width: 100%;
+  margin: 8px 0 0;
+  /* Total number of stacked sheets — drives the per-card scroll slices below. */
+  --numcards: 5;
+  /* Top offset where the front card pins. Tuned to sit just below the sticky
+     heading (top 80px + ~145px tall) with the same ~14px gap the cards have in
+     normal flow, so pinning doesn't pop the head/card gap open on entry. */
+  --stack-top: 240px;
+  /* Per-card staircase step: each sheet pins one --peek lower than the prior,
+     so the previous card's header peeks above it. */
+  --peek: 64px;
+  /* Floor height for the text-only Step 5 card. */
+  --card-h: 460px;
+}
+.cards-stack .card {
+  position: sticky;
+  top: calc(var(--stack-top) + var(--i, 0) * var(--peek));
+  /* Each pins one --peek lower than the prior, so the previous card's header
+     peeks above it. Image cards (Steps 1–4) size to their banner; the text-only
+     Step 5 gets a floor below so it isn't a thin strip. */
+  height: auto;
+  margin-bottom: 52px;
+  /* Tighter top padding than the base .card (28px) so the green step title sits
+     closer to the card's top edge. */
+  padding-top: 14px;
+  /* No projected shadow; keep only a hairline inset so stacked sheets stay distinct. */
+  box-shadow: inset 0 0 0 1px rgba(21, 20, 15, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+/* Keep the last card (Step 5) on the same fixed spacing as the others, so the
+   pile's rhythm doesn't shift / offset when it reaches the final step. */
+.cards-stack .card p { max-width: 52ch; }
+/* Optional step banner. The box is locked to the art's own ~2:1 ratio so the
+   full image (including its bottom content) shows at full width — no crop, no
+   distortion — and the card height grows to fit it. */
+.card-art {
+  margin-top: 22px;
+  flex: 0 0 auto;
+  aspect-ratio: 1480 / 748;
+  border-radius: 14px;
+  overflow: hidden;
+}
+/* Image-only cards (Steps 1–4) have the banner as their first child — drop the
+   top gap so the image sits flush under the card padding. */
+.card-art:first-child { margin-top: 0; }
+/* In the step stack the banner bleeds to the card's left/right/bottom edges
+   (cancels the .card padding 28/26/32) so there's no white frame around it; the
+   card's own overflow:hidden + radius rounds the banner's bottom corners. */
+.cards-stack .card-art {
+  /* Title→banner gap is controlled solely by the title's margin-bottom (24px). */
+  margin-top: 0;
+  margin-left: -26px;
+  margin-right: -26px;
+  margin-bottom: -32px;
+  border-radius: 0;
+}
+/* Uniform 24px gap between the green heading and the content below it (banner
+   for Steps 1–4, body copy for Step 5), and a slightly heavier heading. */
+.cards-stack .card .num { margin-bottom: 24px; font-weight: 600; }
+.cards-stack .card p { margin-top: 0; }
+/* Text-only card (Step 5, no banner) keeps a comfortable minimum height. */
+.cards-stack .card:not(:has(.card-art)) { min-height: var(--card-h); }
+.card-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/*
+ * Plain sticky stack (no scroll-driven scale). Each card pins at its offset,
+ * the next stacks over it, and when the section scrolls past the last card the
+ * whole pinned pile scrolls away together — earlier cards stay put (no recede
+ * "联动" while the stack exits the viewport).
+ */
+@media (max-width: 880px) {
+  /* Override the staircase vars only; the shared top/min-height formula on
+     .cards-stack .card adapts automatically and keeps `top + height` constant. */
+  .cards-stack { max-width: 100%; --stack-top: 212px; --peek: 52px; --card-h: 260px; }
+  .capabilities-head { padding-top: 16px; }
+  /* Drop the 238px breakout on narrow screens — fall back to the normal
+     container width so the cards don't get squeezed. */
+  .capabilities-grid { width: auto; margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No pinning for readers who opt out of motion — plain vertical list. */
+  .cards-stack .card { position: static; margin-bottom: 16px; height: auto; }
+}
 .card .num {
   font-family: var(--serif);
   font-style: italic;
@@ -1782,7 +2537,7 @@ section.tight { padding: 90px 0; }
 }
 .card p {
   font-family: var(--body);
-  font-size: 13.5px;
+  font-size: 16px;
   color: var(--ink-mute);
   line-height: 1.55;
   max-width: 24ch;
@@ -1800,18 +2555,19 @@ section.tight { padding: 90px 0; }
   color: var(--ink);
   transition: all 0.18s ease;
 }
-.card:hover .arrow-mark { background: var(--coral); border-color: var(--coral); color: #fff; }
+.card:hover .arrow-mark { background: var(--coral); border-color: var(--coral); color: #ffffff; }
 .card .arrow-mark svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 1.6; }
 
 /* ---------- LABS ---------- */
 .labs-head {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 60px;
-  align-items: end;
-  margin-bottom: 48px;
+  /* Dock moved out to its own centered row, so the head is just the
+     title block now. */
+  margin-bottom: 24px;
 }
-.labs-head h2 { font-size: clamp(40px, 4.8vw, 68px); }
+.labs-head h2 { font-size: 48px; text-align: center; }
+/* Unify the title color: the trailing ？ stays ink like the rest of the line
+   instead of the global coral dot. */
+.labs-head .display .dot { color: inherit; }
 .pills {
   display: flex;
   flex-wrap: wrap;
@@ -1832,11 +2588,15 @@ section.tight { padding: 90px 0; }
   align-items: center;
   gap: 8px;
 }
-.pill:hover { background: rgba(21, 20, 15, 0.04); }
+.pill:hover {
+  background: var(--coral-tint);
+  border-color: var(--coral);
+  color: var(--coral);
+}
 .pill.active {
   background: var(--coral);
   border-color: var(--coral);
-  color: #fff;
+  color: #ffffff;
 }
 .pill .count {
   font-size: 10px;
@@ -1844,7 +2604,123 @@ section.tight { padding: 90px 0; }
   border-left: 1px solid var(--line);
   padding-left: 8px;
 }
+.pill:hover .count {
+  color: var(--coral);
+  border-color: color-mix(in oklab, var(--line), var(--coral) 32%);
+}
 .pill.active .count { color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.3); }
+
+/*
+ * Labs filter Dock — light-themed reproduction of React Bits' "Dock".
+ * Items magnify on cursor proximity (driven by the `pages/index.astro`
+ * enhancer via `transform: scale`, origin bottom, so tiles grow upward like
+ * a macOS dock); the gap is wide enough that peak magnification never
+ * overlaps neighbours. Hover label is pure CSS. Surface uses the site's
+ * bone/paper palette instead of the upstream dark panel.
+ */
+.lab-dock {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  width: fit-content;
+  /* Centered as its own module beneath the Labs cards grid. Extra top
+     margin clears the always-on active tooltip that pokes above the dock;
+     bottom margin separates it from the next module. */
+  margin: 48px auto 44px;
+  padding: 9px 13px;
+  background: var(--bone);
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  box-shadow: var(--shadow), inset 0 0 0 1px rgba(21, 20, 15, 0.04);
+}
+.lab-dock-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  text-decoration: none;
+  transform-origin: bottom center;
+  transition: transform 0.14s ease-out, background 0.16s ease, color 0.16s ease,
+    border-color 0.16s ease;
+  will-change: transform;
+}
+.lab-dock-item:hover,
+.lab-dock-item:focus-visible,
+.lab-dock-item.active {
+  background: var(--coral-tint);
+  border-color: var(--coral);
+  color: var(--coral);
+  outline: none;
+}
+/* Selected mode lifts the whole tile (border included) up out of the dock.
+   The proximity-magnify enhancer folds this offset into its inline transform
+   so the lift survives while hovering — see `enhanceLabDock` in index.astro.
+   Selection reads from the lift plus the coral icon/colour alone — no outer
+   ring stroke. */
+.lab-dock-item.active {
+  transform: translateY(-20px);
+  /* Selected tile: black→grey gradient with the green (coral) glyph kept from
+     the shared hover/active rule above, plus an elevation shadow. Colours are
+     existing project tokens (--ink / --ink-soft). */
+  background: linear-gradient(180deg, var(--ink-soft) 0%, var(--ink) 100%);
+  border-color: transparent;
+  box-shadow: 0 14px 24px -10px rgba(38, 38, 38, 0.45);
+}
+.lab-dock-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.lab-dock-icon::before {
+  font-family: 'Remix Icon';
+  font-weight: 400;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+}
+.lab-dock-item:nth-child(1) .lab-dock-icon::before { content: '\efe4'; } /* pencil-ruler-line — Prototype */
+.lab-dock-item:nth-child(2) .lab-dock-icon::before { content: '\f2c6'; } /* window-line — Live Artifact */
+.lab-dock-item:nth-child(3) .lab-dock-icon::before { content: '\f158'; } /* slideshow-line — Slides */
+.lab-dock-item:nth-child(4) .lab-dock-icon::before { content: '\ee4b'; } /* image-line — 图片 */
+.lab-dock-item:nth-child(5) .lab-dock-icon::before { content: '\ed21'; } /* film-line — HyperFrames */
+.lab-dock-item:nth-child(6) .lab-dock-icon::before { content: '\f282'; } /* video-line — 视频 */
+.lab-dock-label {
+  position: absolute;
+  /* Gap between the tooltip bubble and the tile's top edge. */
+  bottom: calc(100% + 4px);
+  left: 50%;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.3;
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.lab-dock-item:hover .lab-dock-label,
+.lab-dock-item:focus-visible .lab-dock-label,
+.lab-dock-item.active .lab-dock-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* While hovering a different item, hide the pinned active tooltip so the two
+   bubbles don't overlap — only the hovered item's label shows. */
+.lab-dock:hover .lab-dock-item.active:not(:hover) .lab-dock-label {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
 .labs-meta {
   display: flex;
   align-items: flex-start;
@@ -1873,75 +2749,478 @@ section.tight { padding: 90px 0; }
   max-width: 28ch;
 }
 .labs-meta .meta-text b { display: block; color: var(--ink); }
-.labs-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 22px;
+/*
+ * Labs as a Raycast-style "Artifact History" command window — an ivory
+ * reframing of a clipboard manager. Top search bar, two-column body
+ * (history list + preview/metadata), a floating actions menu overlapping
+ * the preview, and a bottom action bar. All surfaces use the site's
+ * bone/paper palette; no dark panels.
+ */
+/* ---------- Labs product-window showcase ----------
+ * The Open Design deck editor rendered as a static window, sitting on a
+ * full-bleed canvas (`heroImage`). The mode Dock floats over the window's
+ * lower edge and swaps the deck preview (`.la-slide img`). All chrome below
+ * is purely presentational (SSR/no-JS). */
+.lab-stage {
+  position: relative;
+  /* Scaled to 100.8% of the full safe-area width (was 100vw - 280px) — the 96%
+     size enlarged by a further 5%. The box stays centered via the symmetric
+     `-0.4vw + 141.12px` side insets. Aspect-ratio is locked below, so the image
+     scales in step. */
+  width: calc(100.8vw - 282.24px);
+  margin: 40px 0 0;
+  margin-left: calc(50% - 50.4vw + 141.12px);
+  border-radius: 0;
+  /* Clip the carousel at the 底图 edge: sliding images travel beyond the preview
+     card and are only cut off at the painting's edge (the card no longer clips
+     them — see `.lab-view { overflow: visible }`). */
+  overflow: hidden;
+  padding: clamp(40px, 6vw, 72px) clamp(24px, 5vw, 72px);
+  isolation: isolate;
+  /* Lock the stage to the 底图's native ratio (2262×1358) so the painting shows in
+     full — never stretched, never cropped. Because the box ratio equals the art
+     ratio, `cover` fills it exactly with no trim on any edge. */
+  aspect-ratio: 2262 / 1358;
+  /* The painting lives on ::before so it can carry its own opacity without
+     fading the preview card / dock above it. */
+  background: transparent;
 }
-.lab {
+/* 底图 layer at 80% opacity — sits below the artifact (z 2) and dock (z 3). */
+.lab-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/lab-stage-art.webp') center / cover no-repeat;
+  opacity: 0.8;
+  z-index: 0;
+  pointer-events: none;
+}
+@media (max-width: 880px) {
+  .lab-stage { width: auto; margin-left: 0; margin-right: 0; }
+}
+/* Floating artifact window, anchored 36px below the painting's top edge. The
+   dock swaps its src and toggles `.is-visible` (see `enhanceLabSwitch`).
+   `height: auto` keeps each artifact at its native ratio; the painting frames it
+   on the sides and below. Sits below the dock (z-index 3) so tiles stay clickable. */
+.lab-artifact {
+  position: absolute;
+  left: 50%;
+  /* Anchored 36px from the stage's top edge (absolute offsets are measured from
+     the stage padding box, i.e. its top edge). */
+  top: 36px;
+  transform: translateX(-50%);
+  /* `height: auto` + no object-fit renders the image at exactly its native ratio
+     — no clipping, no contain letterbox slivers. Enlarged 10% over the previous
+     min(64%, 880px) so the card reads bigger while the painting still frames it. */
+  width: 70.4%;
+  height: auto;
+  /* Lock to the image previews' 1592×1000 ratio so every artifact (stills + the
+     16:9 video) shares one box and the same rendered height; object-fit: cover
+     fills it (the video trims its sides a touch, stills are already that ratio). */
+  aspect-ratio: 1592 / 1000;
+  object-fit: cover;
+  /* 8px rounded corners + the project's default elevation shadow (--shadow,
+     built on the neutral #262626 from the skill palette) so the selected
+     tile's preview card reads as a lifted sheet over the painting. */
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+.lab-artifact.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+/* 16:9 artifacts (the video, and wide stills tagged `.is-wide`) match the stills'
+   HEIGHT but leave width unconstrained: they keep their native 16:9 ratio (no
+   crop, no letterbox) and run wider than the 1592×1000 image box, extending a
+   little past each side (centred via the base transform). Width is tuned so the
+   height equals the stills': a still is `width ÷ 1.592` tall, so a 16:9 box of the
+   same height needs width × (1.778 / 1.592) ≈ ×1.117 → 70.4%→78.6%, 968→1080px. */
+.lab-artifact-video,
+.lab-artifact.is-wide {
+  aspect-ratio: 16 / 9;
+  width: 78.6%;
+}
+.lab-stage-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* Fixed to the full width, natural height, anchored to the top — no cover
+     up-scaling/cropping. Extra height beyond the art shows the stage's own
+     dark background; overflow is clipped by .lab-stage. */
+  width: 100%;
+  height: auto;
+  z-index: 0;
+}
+/* Scrim removed along with the background art — the stage is a flat black fill. */
+.lab-stage::after { content: none; }
+/* Clean image preview frame (the app-window chrome was removed). The mode
+   Dock below swaps `.la-slide-img`'s src in place — see the enhancers in
+   `pages/index.astro`. */
+.lab-view {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  /* Match the preview images' native ratio (1280×867) so they show at their
+     original proportions with no top/bottom crop. */
+  aspect-ratio: 1280 / 867;
+  margin: 0 auto;
+  /* Nudge the preview up within the stage and scale the whole card down 20%. */
+  transform: translateY(-90px) scale(0.8);
+  border-radius: 16px;
+  /* Let sliding images spill out of the card — clipping now happens at the 底图
+     edge (`.lab-stage { overflow: hidden }`). The rounded-card look is preserved
+     by rounding the images themselves. */
+  overflow: visible;
+  background: transparent;
+}
+.lab-view .la-slide-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Round each slide individually so the card keeps its rounded look even though
+     `.lab-view` no longer clips (clipping moved to `.lab-stage`). The single
+     sliding track (built in `pages/index.astro`) owns the animated layer, so the
+     resting images need no `will-change`. */
+  border-radius: 16px;
+}
+/* The 120px safe area is a desktop spec; shrink it on narrow viewports so the
+   preview + dock don't get squeezed off-canvas. */
+@media (max-width: 1024px) {
+  .lab-stage { padding: clamp(24px, 9vw, 120px); }
+}
+.lab-app {
+  position: relative;
+  z-index: 2;
+  contain: layout paint;
+  max-width: 1080px;
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  transform: translateY(-24px);
+  background: var(--bone);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(20, 20, 20, 0.28), 0 8px 24px rgba(20, 20, 20, 0.14);
+  overflow: hidden;
+  font-family: var(--sans);
   display: flex;
   flex-direction: column;
 }
-.lab-img {
-  aspect-ratio: 4 / 5;
-  background: var(--bone);
-  border-radius: 14px;
-  overflow: hidden;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow);
-  position: relative;
+.lab-app svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.lab-img img { width: 100%; height: 100%; object-fit: cover; }
-.lab-img .badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: rgba(239, 231, 210, 0.9);
-  color: var(--ink);
-  padding: 4px 9px;
-  border-radius: 4px;
-  font-family: var(--sans);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.lab .num-row {
-  font-family: var(--sans);
-  font-size: 10.5px;
-  color: var(--ink-faint);
-  letter-spacing: 0.14em;
-  margin-bottom: 8px;
+/* window tab strip */
+.la-tabs {
   display: flex;
-  justify-content: space-between;
-  text-transform: uppercase;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line-soft);
 }
-.lab h4 {
-  font-family: var(--sans);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.014em;
-  margin-bottom: 8px;
-}
-.lab p {
-  font-family: var(--body);
-  font-size: 13px;
+.la-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
   color: var(--ink-mute);
-  line-height: 1.55;
-  margin-bottom: 14px;
 }
-.lab .arrow-mark {
-  width: 28px; height: 28px;
+.la-tab.is-active {
+  background: var(--bone);
   border: 1px solid var(--line);
-  border-radius: 50%;
+  color: var(--ink);
+}
+.la-tab svg { width: 14px; height: 14px; }
+.la-x { width: 12px; height: 12px; color: var(--ink-faint); margin-left: 2px; }
+/* document toolbar */
+.la-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.la-back {
+  flex: 0 0 auto;
+  width: 26px; height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink);
-  margin-top: auto;
-  align-self: flex-start;
+  color: var(--ink-soft);
 }
-.lab .arrow-mark svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.la-back svg { width: 16px; height: 16px; }
+.la-name { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.la-pill {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--paper-dark);
+}
+.la-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+.la-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+.la-bar-gap { flex: 1 1 auto; }
+.la-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bone);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.la-act svg { width: 14px; height: 14px; }
+.la-act.primary {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #fff;
+}
+.la-cv {
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--ink-faint);
+  margin-left: 2px;
+}
+.la-cv-light { border-top-color: rgba(255, 255, 255, 0.85); }
+/* body: chat transcript + deck preview */
+.la-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.la-chat {
+  position: relative;
+  border-right: 1px solid var(--line-soft);
+  padding: 16px 14px 66px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+.la-chat-q {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  padding-bottom: 2px;
+}
+.la-chat-p {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.la-chat code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--paper-dark);
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--ink);
+}
+.la-mono { font-family: var(--mono); color: var(--ink-mute); }
+.la-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.la-run-chev { margin-left: auto; color: var(--ink-faint); }
+.la-bash {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+}
+.la-bash-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.la-tag {
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--paper-dark);
+  color: var(--ink-mute);
+}
+.la-tag-ok { color: #34785c; }
+.la-bash-cmd {
+  display: block;
+  padding: 9px 11px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--bone);
+  background: #1f1f1f;
+}
+.la-file {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px 11px;
+}
+.la-file-head {
+  font-size: 11.5px;
+  color: var(--ink-mute);
+  margin-bottom: 8px;
+}
+.la-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.la-file-row svg { width: 15px; height: 15px; color: var(--ink-mute); flex: 0 0 auto; }
+.la-file-row b { font-weight: 600; }
+.la-file-size { color: var(--ink-faint); font-size: 11px; font-family: var(--mono); }
+.la-file-btn {
+  font-size: 11.5px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-soft);
+}
+.la-file-btn:nth-of-type(1) { margin-left: auto; }
+.la-done {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink-mute);
+}
+.la-done-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #34785c;
+}
+.la-composer {
+  position: absolute;
+  left: 14px; right: 14px; bottom: 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bone);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+/* right deck preview */
+.la-doc {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.la-doc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.la-doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--ink-mute);
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+.la-doc-tab svg { width: 14px; height: 14px; }
+.la-doc-tab.is-active {
+  background: var(--paper-dark);
+  color: var(--ink);
+}
+.la-doc-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.la-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.la-page { color: var(--ink-mute); font-family: var(--mono); font-size: 11.5px; }
+.la-tool { color: var(--ink-mute); padding: 5px 7px; }
+.la-slide {
+  position: relative;
+  flex: 1 1 auto;
+  margin: 18px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--paper-dark);
+  border: 1px solid var(--line);
+  min-height: 300px;
+}
+.la-slide-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.la-slide-page {
+  position: absolute;
+  right: 14px; bottom: 12px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--ink-soft);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 8px;
+}
+/* mode Dock floats over the window's lower edge */
+.lab-stage .lab-dock {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(18px, 3vw, 36px);
+  transform: translateX(-50%);
+  margin: 0;
+  z-index: 3;
+}
+@media (max-width: 820px) {
+  .lab-app { aspect-ratio: auto; transform: none; }
+  .la-bar { flex-wrap: wrap; }
+  .la-body { grid-template-columns: 1fr; }
+  .la-chat { display: none; }
+  .la-act:not(.primary) { display: none; }
+}
 .labs-foot {
   display: flex;
   align-items: center;
@@ -1963,19 +3242,35 @@ section.tight { padding: 90px 0; }
 .progress span.on { background: var(--coral); }
 
 /* ---------- METHOD ---------- */
+/* Method section safe area: fixed 120px inset on both sides (per design spec),
+   independent of the shared container's centered max-width. Falls back to a
+   tighter gutter on narrower viewports so the heading isn't crushed. */
+.method > .container {
+  max-width: none;
+  /* Module safe area: 238px left/right (matches the .work module convention). */
+  padding-inline: 238px;
+}
+@media (max-width: 1180px) {
+  .method > .container { padding-inline: 64px; }
+}
 .method-head {
+  /* Stacked top→bottom and centred: title on top, the lead line below, both
+     horizontally centred with centre-aligned text. */
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 60px;
+  grid-template-columns: 1fr;
+  gap: 28px;
   align-items: start;
+  justify-items: center;
+  text-align: center;
   margin-bottom: 80px;
 }
-.method-head h2 { font-size: clamp(44px, 5.2vw, 76px); }
+.method-head h2 { font-size: clamp(32px, 3vw, 42px); }
 .method-head .right {
   display: flex;
   align-items: flex-start;
+  justify-content: center;
   gap: 14px;
-  padding-top: 14px;
+  padding-top: 0;
 }
 .method-head .plus {
   color: var(--coral);
@@ -1985,9 +3280,12 @@ section.tight { padding: 90px 0; }
 }
 .method-head .right p {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: 500;
   color: var(--ink-soft);
-  max-width: 22ch;
+  /* Span the full width — no narrow column cap; grow to fill the row. */
+  flex: 1;
+  max-width: none;
   line-height: 1.55;
 }
 .method-grid {
@@ -2005,6 +3303,7 @@ section.tight { padding: 90px 0; }
   height: 1px;
   background: var(--line-soft);
 }
+.method-grid-images-only::before { display: none; }
 .method-step { position: relative; }
 .method-step .num {
   font-family: var(--serif);
@@ -2054,6 +3353,93 @@ section.tight { padding: 90px 0; }
   box-shadow: var(--shadow);
 }
 .method-step .img img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ===== FallingText (React Bits / matter-js) — Method section ===== */
+.falling-text {
+  position: relative;
+  width: 100%;
+  height: clamp(360px, 38vw, 460px);
+  margin-top: 40px;
+  overflow: hidden;
+  cursor: grab;
+}
+.falling-text:active { cursor: grabbing; }
+.falling-text-target {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding-top: 1.4em;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: clamp(20px, 2.4vw, 34px);
+  line-height: 1.6;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.falling-word {
+  display: inline-block;
+  margin: 0 9px;
+  user-select: none;
+  white-space: nowrap;
+}
+.falling-word.is-highlight { color: var(--coral); font-weight: 700; }
+/* Icon chips — agent logos drop as rounded app-icon tiles instead of words. */
+.falling-word.falling-chip {
+  width: 60px;
+  height: 60px;
+  margin: 8px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(21, 20, 15, 0.12), inset 0 0 0 1px rgba(21, 20, 15, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  overflow: hidden;
+}
+.falling-chip img {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.falling-text-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+/* Banner that fades in at the centre the moment the icons start dropping
+   (the `is-visible` class is toggled in `pages/index.astro`). It is freely
+   draggable with the mouse: `--drag-x` / `--drag-y` carry the pointer offset
+   applied on top of the centring translate. */
+.falling-text-reveal {
+  position: absolute;
+  /* Default vertical position within the playground. */
+  top: 32%;
+  left: 50%;
+  width: min(86%, 760px);
+  height: auto;
+  z-index: 3;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transform: translate(calc(-50% + var(--drag-x, 0px)), calc(-50% + var(--drag-y, 0px))) scale(0.92);
+  transition:
+    opacity 520ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 520ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.falling-text-reveal.is-visible {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--drag-x, 0px)), calc(-50% + var(--drag-y, 0px))) scale(1);
+}
+/* While dragging, drop the transform transition so the banner tracks the
+   cursor 1:1 instead of easing behind it. */
+.falling-text-reveal.is-dragging {
+  cursor: grabbing;
+  transition: opacity 520ms cubic-bezier(0.23, 1, 0.32, 1);
+}
 .method-foot {
   margin-top: 80px;
   display: flex;
@@ -2084,24 +3470,22 @@ section.tight { padding: 90px 0; }
 
 /* ---------- WORK ---------- */
 .work {
-  background: #15140f;
+  /* Solid ink fill (component-scoped, framed by the rounded card). */
+  background: var(--ink);
   color: var(--paper);
-  border-radius: 32px;
-  margin: 0 64px;
+  border-radius: 28px;
+  /* Uniform inner safe area: all four sides 40px, so the cards sit an equal
+     distance from every edge of the black panel. The panel itself is inset
+     238px left/right (canvas-coloured page margin, NOT black) so the cards keep
+     the same size/position as before — the old 238px lived in the padding; it
+     now lives in the margin, leaving a uniform 40px black border. */
+  margin: 0 238px;
   overflow: hidden;
   position: relative;
-  padding: 110px 64px;
+  padding: 40px;
 }
-.work::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n2'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.95  0 0 0 0 0.85  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n2)'/></svg>");
-  background-size: 240px 240px;
-  opacity: 0.6;
-  mix-blend-mode: screen;
+@media (max-width: 1024px) {
+  .work { margin: 0 clamp(20px, 9vw, 120px); padding: clamp(20px, 4vw, 40px); }
 }
 .work-rule {
   position: relative;
@@ -2234,6 +3618,177 @@ section.tight { padding: 90px 0; }
   padding-top: 14px;
 }
 .work-card .year { color: var(--coral); font-weight: 600; }
+.work-stats-title {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 38px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  /* Align with the black .work panel below (which is inset margin: 0 238px). */
+  margin: 0 238px 28px;
+}
+@media (max-width: 1024px) {
+  .work-stats-title { margin: 0 clamp(20px, 9vw, 120px) 24px; }
+}
+.work-stats-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+.work-stat-card {
+  min-height: 208px;
+  padding: 28px;
+  border-radius: 18px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  display: flex;
+  align-items: flex-end;
+  transform: rotate(var(--tilt, 0deg));
+  box-shadow: 0 28px 60px -42px rgba(0, 0, 0, 0.72);
+  transition: transform 260ms ease, box-shadow 260ms ease;
+}
+.work-stat-card:hover {
+  transform: rotate(var(--tilt, 0deg)) translateY(-4px);
+  box-shadow: 0 36px 76px -42px rgba(0, 0, 0, 0.86);
+}
+.work-stat-card h3 {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: clamp(34px, 4vw, 58px);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: -0.028em;
+}
+.work-stat-card h3 span,
+.work-stat-card h3 em {
+  display: block;
+}
+.work-stat-card h3 span {
+  color: var(--coral);
+  margin-bottom: 10px;
+  font-style: normal;
+}
+.work-stat-card h3 em {
+  color: var(--ink);
+  font-style: normal;
+}
+.work-stat-card-cta {
+  background: var(--coral);
+}
+.work-stat-card-cta h3 span,
+.work-stat-card-cta h3 em {
+  color: var(--ink);
+}
+/* Image cards: the artwork fills the whole card, no inner padding. The
+   `.work-stats-grid` prefix keeps these winning over the responsive
+   `.work-stat-card` padding/min-height overrides further down the file. */
+.work-stats-grid .work-img-card {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 1400 / 948;
+  align-items: stretch;
+  /* Dark base instead of the near-white --paper: the card is rounded AND
+     rotated, so its background anti-aliases into a ~1px fringe just outside
+     the image at the bottom/corners. A near-white fringe reads as a white
+     line on the dark panel; a dark base makes that edge pixel invisible (and
+     is the better fallback if the artwork ever fails to load). */
+  background: #141414;
+}
+/* Absolutely fill the card so the artwork always covers the full box. A
+   plain in-flow `height: 100%` resolves against the aspect-ratio height, not
+   the grid-stretched card height, leaving a ~8px sliver of the near-white
+   card background along the bottom edge. inset:0 pins it to the padding box. */
+.work-img-card img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Stat data overlaid on the painterly image cards. The data used to be
+   baked into card-N.png; now the cards ship as plain artwork, so the
+   number + label live in the DOM on top of a bottom scrim that keeps them
+   legible over any crop of the painting. */
+.work-img-card .work-stat-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  margin: 0;
+  padding: clamp(18px, 1.9vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--sans);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.028em;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 15, 15, 0) 34%,
+    rgba(15, 15, 15, 0.76) 100%
+  );
+}
+.work-img-card .work-stat-overlay span {
+  display: block;
+  font-size: clamp(34px, 4vw, 58px);
+  color: var(--coral);
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}
+.work-img-card .work-stat-overlay em {
+  display: block;
+  font-style: normal;
+  font-size: clamp(18px, 1.9vw, 26px);
+  color: var(--paper);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.62);
+}
+/* Out-link arrow pinned to the top-right of the GitHub-stars card (moved
+   here from the capability step cards). Decorative — the whole card is the
+   link — so it's aria-hidden and ignores pointer events. */
+.work-img-card .work-card-arrow {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(21, 20, 15, 0.12);
+  color: var(--ink);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  pointer-events: none;
+}
+.work-img-card:hover .work-card-arrow {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #ffffff;
+}
+.work-img-card .work-card-arrow svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+}
+.work-img-card .work-card-arrow .ri-glyph { font-size: 15px; }
+
+/* CTA card ("Star us"): no number, so promote the label to headline size. */
+.work-img-card.work-stat-card-cta .work-stat-overlay em {
+  font-size: clamp(28px, 3vw, 46px);
+  color: var(--coral);
+}
 .work-arrows {
   position: absolute;
   right: 64px;
@@ -2256,15 +3811,31 @@ section.tight { padding: 90px 0; }
 .work-arrows .nav-btn.active { background: var(--coral); border-color: var(--coral); }
 
 /* ---------- TESTIMONIAL / COLLABORATORS ---------- */
+/* Module safe area: inset the content (copy + globe) 120px on all four sides.
+   Vertical overrides the generic `section { padding: 130px 0 }`; horizontal
+   overrides `.container { padding: 0 64px }`. */
+.testimonial { padding: 120px 0; }
+.testimonial .container { max-width: none; padding: 0 238px; }
+@media (max-width: 1024px) {
+  .testimonial { padding: clamp(40px, 12vw, 120px) 0; }
+  .testimonial .container { padding: 0 clamp(20px, 9vw, 120px); }
+}
 .testimonial-grid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 80px;
   align-items: center;
 }
+.testimonial-grid.with-globe {
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.9fr);
+  gap: clamp(42px, 7vw, 96px);
+}
+.testimonial-grid.with-globe .testimonial-copy {
+  max-width: 720px;
+}
 .testimonial-copy h2 {
   font-family: var(--sans);
-  font-size: clamp(36px, 4vw, 54px);
+  font-size: 42px;
   font-weight: 700;
   letter-spacing: -0.022em;
   line-height: 1.12;
@@ -2377,19 +3948,173 @@ section.tight { padding: 90px 0; }
   max-width: 560px;
 }
 .testimonial-art img { width: 100%; height: 100%; object-fit: contain; }
+.testimonial-globe {
+  position: relative;
+  min-height: clamp(340px, 42vw, 540px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* visible so the orbiting avatar ring can sit on the globe's edge without
+     being clipped by the column box. */
+  overflow: visible;
+  isolation: isolate;
+}
+
+/* ---- Contributor orbit ----------------------------------------------------
+ * A ring of contributor avatars revolving around the globe. The ring square
+ * matches the canvas; each `.orbit-slot` fills it and is rotated to its angle
+ * so its pinned avatar lands on the circle (radius = ring/2, fully responsive,
+ * no JS sizing). The whole ring spins; avatars counter-spin to stay upright.
+ * No connecting spokes — just the photos. */
+.contributor-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* Avatar ring. Allowed to spill ~8% past the grid column (the parent
+     `.testimonial-globe` is `overflow: visible`) so the circle isn't capped at
+     the column width. */
+  width: min(108%, 680px);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  /* Right-to-left fade — this IS the "half of the orbit recedes behind the
+     globe" depth effect (the ring is a flat 2D circle, so the occlusion is
+     faked here, not via z-order). Avatars are fully visible on the left and
+     dissolve toward the right. The transparent stop is pushed out to 92% (was
+     82%) so the right-edge avatars fade smoothly instead of looking hard-cut.
+     Masks only the avatar layer, not the globe canvas (a separate sibling). */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 22%,
+    rgba(0, 0, 0, 0.55) 52%,
+    rgba(0, 0, 0, 0.18) 78%,
+    transparent 92%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 22%,
+    rgba(0, 0, 0, 0.55) 52%,
+    rgba(0, 0, 0, 0.18) 78%,
+    transparent 92%
+  );
+}
+.contributor-orbit .orbit-ring {
+  position: absolute;
+  /* Inset the orbit circle so avatars sit INSIDE the masked box and never
+     get hard-clipped at its edges (the mask clips to the box). The inset is
+     a touch larger than the avatar's radius. */
+  inset: clamp(28px, 6%, 38px);
+  animation: contributor-orbit-spin 38s linear infinite;
+}
+.orbit-slot {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--angle, 0deg));
+}
+.orbit-avatar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: clamp(34px, 6.4vw, 48px);
+  height: clamp(34px, 6.4vw, 48px);
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--paper);
+  border: 2px solid var(--paper);
+  box-shadow: 0 8px 20px -8px rgba(21, 20, 15, 0.45),
+    inset 0 0 0 1px rgba(21, 20, 15, 0.06);
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--angle, 0deg)));
+  pointer-events: auto;
+  transition: box-shadow 0.2s ease;
+}
+.orbit-avatar:hover {
+  box-shadow: 0 10px 24px -8px rgba(21, 20, 15, 0.5),
+    inset 0 0 0 1px var(--coral);
+}
+.orbit-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* cancel the ring spin so the photo stays upright as it orbits. */
+  animation: contributor-orbit-spin-rev 38s linear infinite;
+}
+/* Initial-letter fallback when an avatar image can't be fetched. */
+.orbit-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(14px, 2.6vw, 19px);
+  color: var(--ink-mute);
+  background: var(--paper-dark);
+  /* keep the letter upright as the ring spins. */
+  animation: contributor-orbit-spin-rev 38s linear infinite;
+}
+@keyframes contributor-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes contributor-orbit-spin-rev {
+  to { transform: rotate(-360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .contributor-orbit .orbit-ring,
+  .orbit-avatar img { animation: none; }
+}
+.testimonial-globe-canvas {
+  /* Absolutely centred with the exact same mechanism as `.contributor-orbit`
+     so the globe and the avatar ring always share one center. Kept a touch
+     smaller than the orbit so the ring clears the globe edge. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(82%, 500px);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  display: block;
+}
+.testimonial-globe-meta {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(14px, 4vw, 34px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+.testimonial-globe-meta span:first-child {
+  color: var(--coral);
+}
+.testimonial-globe-meta span + span::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--coral);
+}
 
 /* ---------- CTA ---------- */
 .cta-grid {
   display: grid;
-  grid-template-columns: 1.05fr 1fr;
+  /* Art column removed — copy spans the full width. */
+  grid-template-columns: 1fr;
   gap: 50px;
   align-items: center;
 }
 .cta h2 {
-  font-size: clamp(54px, 6.6vw, 100px);
-  margin: 32px 0 32px;
+  font-size: 38px;
+  margin: 18px 0 14px;
 }
-.cta .lead { margin-bottom: 36px; max-width: 36ch; font-size: 16px; }
+.cta .lead { margin-bottom: 12px; max-width: 36ch; font-size: 16px; }
 .cta-actions {
   display: inline-flex;
   align-items: center;
@@ -2459,6 +4184,91 @@ section.tight { padding: 90px 0; }
   color: var(--ink-faint);
   writing-mode: vertical-rl;
   transform: rotate(180deg);
+}
+/* Full-width painterly CTA: the artwork is the backdrop, the heading +
+   lead + buttons sit on top. A top-anchored light wash keeps the dark copy
+   legible over the busy painting while the dancers stay visible lower down. */
+/* Page safe area: 238px left/right (matches the faq / testimonial / work
+   modules). The content column sits flush at 238px, so the inner padding below
+   is vertical-only. */
+.cta .container { max-width: none; padding: 0 238px; }
+@media (max-width: 1024px) {
+  .cta .container { padding: 0 clamp(20px, 9vw, 120px); }
+}
+.cta-dance {
+  position: relative;
+  /* Match the condensed nav capsule width (1080px, centered) so the mural
+     lines up with the navbar. Aspect-ratio below keeps the proportions, so it's
+     just a narrower version of the same image. */
+  width: 100%;
+  max-width: 1080px;
+  margin: clamp(28px, 4vw, 56px) auto 0;
+  border-radius: 24px;
+  overflow: hidden;
+  /* Lock the block to the mural's ratio: height follows width, full painting
+     shown, no cropping. */
+  aspect-ratio: 2776 / 1660;
+}
+/* Mural background image for the CTA block, behind the copy. Because the box
+   ratio equals the image ratio, `cover` paints the whole image with no crop. */
+.cta-dance::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/cta-bg.webp?v=2') center / cover no-repeat;
+  z-index: 0;
+}
+/* Open Design Home window floating over the mural, centered in the lower half;
+   its bottom is clipped by the block's overflow:hidden (matching the comp). */
+.cta-window {
+  position: absolute;
+  left: 50%;
+  top: calc(46% - 50px);
+  transform: translateX(-50%);
+  width: 82.4%;
+  height: auto;
+  z-index: 1;
+  border-radius: 14px;
+  box-shadow: 0 36px 70px -30px rgba(20, 20, 20, 0.5);
+  pointer-events: none;
+}
+/* The product window rises up from below when the CTA scrolls into view.
+   `translate` (longhand) stacks with the centering `transform: translateX(-50%)`,
+   so the card stays centered while it animates vertically. */
+.cta-window[data-reveal] {
+  translate: 0 96px;
+}
+.cta-dance-inner {
+  position: relative;
+  z-index: 2;
+  /* Smaller top padding shifts the whole block up; content is centered. */
+  padding: clamp(14px, 2.4vw, 32px) clamp(28px, 5vw, 64px) clamp(32px, 5vw, 72px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.cta-dance-inner .display {
+  margin-top: 0;
+}
+/* Copy sits over the mural background — render it all white for legibility. */
+.cta-dance-inner .display,
+.cta-dance-inner .lead {
+  color: #ffffff;
+}
+.cta-dance-inner .lead {
+  font-size: 19px;
+  font-weight: 700;
+}
+/* Ghost button (Star on GitHub) over the mural — white text + light border,
+   matching the hero's ghost button but legible on the painting. The primary
+   button keeps its black fill / white text from .btn-primary. */
+.cta-dance-inner .btn-ghost {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+.cta-dance-inner .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* ---------- OFFICIAL SOURCE STRIP ----------
@@ -2549,10 +4359,121 @@ section.tight { padding: 90px 0; }
   }
 }
 
+/* ---------- NEWSLETTER ---------- */
+/* Subscribe band between the CTA window and the FAQ. Same 238px safe area as
+   the faq / testimonial / work modules. */
+.newsletter {
+  padding: 96px 0;
+}
+.newsletter .container { max-width: none; padding: 0 238px; }
+@media (max-width: 1024px) {
+  .newsletter .container { padding: 0 clamp(20px, 9vw, 120px); }
+}
+.newsletter-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.34fr);
+  gap: clamp(48px, 7vw, 110px);
+  align-items: center;
+}
+.newsletter-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(34px, 4vw, 56px);
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+  margin: 0 0 16px;
+  /* CJK titles ("Open Design 订阅") must wrap at the space, never inside the
+     CJK word; balance keeps the two lines visually even. */
+  word-break: keep-all;
+  text-wrap: balance;
+}
+.newsletter-desc {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-mute);
+  max-width: 44ch;
+  margin: 0;
+}
+.newsletter-form {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+.newsletter-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 20px 22px;
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--bone);
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+}
+.newsletter-input::placeholder { color: var(--ink-faint); }
+.newsletter-input:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: -1px;
+}
+.newsletter-submit {
+  flex: 0 0 auto;
+  padding: 0 34px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+.newsletter-submit:hover { transform: translateY(-1px); background: #434343; }
+/* Post-submit thanks line swapped in by `enhanceNewsletter`. */
+.newsletter-done {
+  align-self: center;
+  font-family: var(--sans);
+  font-size: 15px;
+  color: var(--ink);
+}
+.newsletter-error {
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--coral, #ed6f5c);
+}
+@media (max-width: 720px) {
+  .newsletter { padding: 72px 0; }
+  .newsletter-grid {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+  .newsletter-form { flex-wrap: wrap; }
+  .newsletter-submit { padding: 16px 34px; }
+}
+
 /* ---------- FAQ ---------- */
+/* Page safe area: 238px left/right (matches the testimonial / work modules). */
+.faq .container { max-width: none; padding: 0 238px; }
+@media (max-width: 1024px) {
+  .faq .container { padding: 0 clamp(20px, 9vw, 120px); }
+}
+.faq-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.34fr);
+  gap: clamp(48px, 7vw, 110px);
+  align-items: start;
+}
 .faq-head {
-  max-width: 880px;
-  margin: 36px 0 48px;
+  max-width: 520px;
+  margin: 0;
+  position: sticky;
+  top: 120px;
 }
 .faq-head .label {
   font-family: var(--mono);
@@ -2566,7 +4487,7 @@ section.tight { padding: 90px 0; }
 .faq-head .display {
   font-family: var(--serif);
   font-weight: 600;
-  font-size: clamp(36px, 5.4vw, 64px);
+  font-size: clamp(36px, 4.8vw, 68px);
   line-height: 1.06;
   letter-spacing: -0.022em;
   color: var(--ink);
@@ -2577,12 +4498,14 @@ section.tight { padding: 90px 0; }
   color: var(--coral);
 }
 .faq-head .display .dot { color: var(--coral); }
+/* zh FAQ heading ("常见问题") is a short label, not the long editorial sentence
+   the other locales use — pin it to 38px instead of the large display clamp. */
+.faq-head .display.faq-title-zh { font-size: 38px; }
 
 .faq-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  border-top: 1px solid var(--line);
 }
 .faq-item {
   border-bottom: 1px solid var(--line);
@@ -2595,7 +4518,7 @@ section.tight { padding: 90px 0; }
   grid-template-columns: 56px 1fr 32px;
   gap: 24px;
   align-items: center;
-  padding: 26px 0;
+  padding: 16px 0;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -2609,7 +4532,7 @@ section.tight { padding: 90px 0; }
 }
 .faq-q {
   font-family: var(--serif);
-  font-size: clamp(20px, 2.2vw, 26px);
+  font-size: 18px;
   line-height: 1.25;
   color: var(--ink);
 }
@@ -2637,37 +4560,56 @@ section.tight { padding: 90px 0; }
 }
 .faq-a {
   grid-column: 2 / 3;
-  margin: 0 0 26px;
+  margin: 0 0 16px;
   padding-left: 80px;
   max-width: 64ch;
   font-family: var(--sans);
-  font-size: 15.5px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--ink-mute);
 }
 
 @media (max-width: 720px) {
+  .faq-layout {
+    grid-template-columns: 1fr;
+    gap: 34px;
+  }
+  .faq-head {
+    position: static;
+    max-width: none;
+  }
+  .faq-head .display {
+    font-size: clamp(34px, 12vw, 52px);
+  }
   .faq-item summary {
     grid-template-columns: 36px 1fr 28px;
     gap: 14px;
-    padding: 20px 0;
   }
   .faq-a {
     padding-left: 50px;
-    font-size: 14.5px;
   }
 }
 
 /* ---------- FOOTER ---------- */
 footer {
-  border-top: 1px solid var(--line);
   padding: 60px 0 30px;
   margin-top: 60px;
 }
+/* Footer fills the page safe area (238px left/right, matching the testimonial /
+   work / faq modules) instead of the centered 1360px container. */
+footer .container {
+  max-width: none;
+  padding: 0 238px;
+}
+@media (max-width: 1024px) {
+  footer .container { padding: 0 clamp(20px, 9vw, 238px); }
+}
 .foot-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
-  gap: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  /* Spread the columns edge-to-edge across the safe area. */
+  justify-content: space-between;
+  gap: 40px 80px;
   margin-bottom: 60px;
 }
 .foot-brand .brand { margin-bottom: 18px; }
@@ -2744,10 +4686,10 @@ footer {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   margin-bottom: 18px;
-  font-weight: 700;
+  font-weight: 800;
 }
 .foot-col ul { list-style: none; }
-.foot-col li { margin-bottom: 10px; }
+.foot-col li { margin-bottom: 18px; }
 .foot-col a {
   font-family: var(--body);
   font-size: 13.5px;
@@ -2780,18 +4722,18 @@ footer {
   margin-top: 60px;
   padding-top: 0;
   padding-bottom: 12px;
-  border-top: 1px solid var(--line);
   overflow-x: hidden;
   overflow-y: visible;
 }
 .foot-mega .word {
   font-family: var(--sans);
   font-weight: 900;
-  font-size: clamp(70px, 13vw, 200px);
+  font-size: clamp(70px, 12vw, 184px);
   letter-spacing: -0.04em;
   line-height: 1.05;
   color: var(--ink);
   white-space: nowrap;
+  text-align: center;
   margin-top: 30px;
   padding-bottom: 0.18em;
 }
@@ -2800,6 +4742,92 @@ footer {
   font-style: italic;
   font-weight: 500;
   color: var(--coral);
+}
+
+/* Shared compact footer used by sub-pages and mirrored on the homepage. */
+.sub-footer {
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  padding: 60px 0 32px;
+  margin-top: 96px;
+}
+.sub-footer .sub-footer-inner {
+  max-width: none;
+  padding-inline: 238px;
+}
+.sub-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 40px;
+  margin-bottom: 36px;
+}
+.sub-footer-col h5 {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+.sub-footer-col ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.sub-footer-col a {
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 14px;
+  transition: color 0.16s ease;
+}
+.sub-footer-col a:hover { color: var(--coral); }
+
+/* ---------- footer masthead ----------
+ *
+ * Masthead sign-off under the footer link columns: a container-filling
+ * two-tone "Open Design." wordmark. One class contract shared by
+ * `site-footer.astro` and the homepage footer in `page.tsx`.
+ */
+.foot-masthead {
+  margin-top: 56px;
+}
+.foot-masthead-wordmark {
+  margin: 0;
+  font-weight: 800;
+  /* Fills the 964px column at the 1440px design width and degrades fluidly.
+     The lower bound follows the viewport (10.4vw) rather than a fixed 52px
+     floor: "Open Design." is ~5.75em wide here, so the old 52px floor rendered
+     ~299px and overflowed the padded mobile footer box (100vw - 48px ≈ 272px on
+     a 320px phone), where the page's global overflow-x:hidden clipped it.
+     10.4vw always satisfies 10.4vw·5.75 ≤ 100vw-48, so the sign-off fits at
+     every width (≈80px of headroom at 320px). */
+  font-size: clamp(26px, 10.4vw, 158px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  /* Desktop keeps the single editorial line; the narrow-breakpoint rule below
+     relaxes this to a no-clip wrap as a safety net. */
+  white-space: nowrap;
+}
+.foot-masthead-accent { color: var(--coral); }
+.foot-masthead-period { color: var(--ink); }
+
+@media (max-width: 720px) {
+  .sub-footer .sub-footer-inner { padding-inline: 24px; }
+  .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
+  .sub-footer { padding: 40px 0 24px; }
+  /* Clear the page-bottom GradualBlur band (4rem) so the wordmark
+     reads crisp at final scroll on phones. */
+  .foot-masthead { margin-top: 40px; padding-bottom: 48px; }
+  /* No-clip safety net on phones: 10.4vw already fits the box with ~80px
+     headroom at 320px, but if a font/locale ever renders the wordmark wider
+     than the box, wrap to a second line rather than clip under
+     overflow-x:hidden. */
+  .foot-masthead-wordmark { white-space: normal; }
 }
 
 /* ---------- scroll-reveal motion ----------
@@ -2830,6 +4858,7 @@ footer {
   opacity: 1;
   translate: 0 0;
   scale: 1;
+  will-change: auto;
 }
 
 /* stagger primitives — set --reveal-delay on grid children so siblings
@@ -2838,12 +4867,7 @@ footer {
 .cards > .card[data-reveal]:nth-child(2) { --reveal-delay: 90ms; }
 .cards > .card[data-reveal]:nth-child(3) { --reveal-delay: 180ms; }
 .cards > .card[data-reveal]:nth-child(4) { --reveal-delay: 270ms; }
-
-.labs-grid > .lab[data-reveal]:nth-child(1) { --reveal-delay: 0ms; }
-.labs-grid > .lab[data-reveal]:nth-child(2) { --reveal-delay: 90ms; }
-.labs-grid > .lab[data-reveal]:nth-child(3) { --reveal-delay: 180ms; }
-.labs-grid > .lab[data-reveal]:nth-child(4) { --reveal-delay: 270ms; }
-.labs-grid > .lab[data-reveal]:nth-child(5) { --reveal-delay: 360ms; }
+.cards > .card[data-reveal]:nth-child(5) { --reveal-delay: 360ms; }
 
 .method-grid > .method-step[data-reveal]:nth-child(1) { --reveal-delay: 0ms; }
 .method-grid > .method-step[data-reveal]:nth-child(2) { --reveal-delay: 110ms; }
@@ -2893,43 +4917,36 @@ footer {
  */
 @media (max-width: 1280px) {
   .container { padding: 0 44px; }
-  .work { margin: 0 44px; padding: 90px 44px; }
+  .work { margin: 0 44px; padding: 90px; }
   .side-rail { display: none; }
-  .nav-links { gap: 30px; }
 }
 /* hide topbar mid text early — between 1200 and 1280 it crowds even with nowrap */
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: 1281–1519px is the desktop band after the ≤1280px hamburger but
- * before the AMR pill is allowed in (≥1520px). The brand tail + six nav
- * dropdowns + Star + Download still crowd the row in longer-copy locales
- * (Japanese, German), so drop the brand sub-meta and the social icons and
- * tighten link spacing so the Star CTA never has to compress. */
-@media (min-width: 1281px) and (max-width: 1519px) {
+/* nav: between 1080 and 1180 the brand tail + nav links + 2 CTAs + dot
+ * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
+ * so the Star CTA never has to compress. */
+@media (max-width: 1180px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
-  .nav-links { gap: 26px; }
-  .nav-side .nav-icon { display: none; }
+  /* Link gap for this band already comes from the 1081–1366px rule next to
+     the desktop grid layout (22px — translated labels need the tighter
+     spacing); restating a larger gap here would override it. */
 }
 
-/* nav: at ≤1280px there's no clean way to fit the six localized nav
- * dropdowns + Download + Star in one row — and longer-copy locales
- * (German "Lösungen / Ressourcen", French, Russian, pt-BR, Japanese)
- * overran the row and collided with the right-hand CTAs in the desktop
- * band even after the AMR pill was retired. So swap to a hamburger panel
- * at ≤1280px for every locale. Star CTA stays visible in the bar (it's the
- * social-proof CTA); Download moves into the panel. The Product submenu
- * flattens from a hover-popup to an always-expanded inline list, since
- * hover doesn't translate to touch.
+/* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
+ * Templates · Craft · Blog · Contact + Download + Star + dot in one row,
+ * so swap to a hamburger panel. Star CTA stays visible in the bar (it's
+ * the social-proof CTA); Download moves into the panel. The Product
+ * submenu flattens from a hover-popup to an always-expanded inline list,
+ * since hover doesn't translate to touch.
  */
-@media (max-width: 1280px) {
+@media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
-  /* Hide AMR, Star + Discord/X icon buttons from the bar (Download stays). */
-  .nav-side .nav-amr { display: none; }
-  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
-  .nav-side .nav-icon { display: none; }
+  /* Hide Download from the bar (Star stays). */
+  .nav-side .nav-cta.ghost { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
    * The header is `position: sticky`, so absolute-positioning the panel
    * relative to the header element keeps it pinned correctly. */
@@ -2949,6 +4966,16 @@ footer {
     background: var(--paper);
     border-top: 1px solid rgba(26, 26, 26, 0.08);
     box-shadow: 0 12px 32px rgba(26, 26, 26, 0.06);
+    /* The flattened menu can be taller than the viewport. Cap it to the space
+     * below the (sticky) header bar and let the panel itself scroll — `100%`
+     * resolves to the header height here since `.nav` is the positioned
+     * containing block. `overscroll-behavior: contain` stops the scroll from
+     * chaining to the page behind once the list hits its top/bottom edge. */
+    max-height: calc(100vh - 100%);
+    max-height: calc(100dvh - 100%);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .nav.is-open > .nav-inner > nav[data-nav-primary] {
     pointer-events: auto;
@@ -2976,7 +5003,7 @@ footer {
     margin-left: 6px;
     font-size: 11px;
   }
-  /* Product dropdown flattens — always show OD + HA + AMR as nested static items. */
+  /* Product dropdown flattens — always show OD + HA as nested static items. */
   .nav-links li.has-dropdown { position: static; }
   .nav-links .dropdown-caret { display: none; }
   .nav-dropdown {
@@ -2996,17 +5023,18 @@ footer {
   .nav-dropdown::before { display: none; }
   .nav-dropdown a { padding: 8px 8px; border-radius: 4px; }
   .nav-dropdown .dropdown-blurb { display: none; }
+  /* Let the Solution panel flow naturally inside the flattened nav panel
+     instead of scrolling within a capped box. */
+  .nav-dropdown-solution { max-height: none; overflow: visible; }
 }
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }
   .hero h1 { font-size: clamp(36px, 4.6vw, 54px); }
+  .hero h1.hero-manifesto { font-size: clamp(30px, 4.4vw, 46px); }
   .section-header h2 { font-size: clamp(32px, 4vw, 50px); }
-  .labs-grid { grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .cards { grid-template-columns: repeat(3, 1fr); }
   .partners { grid-template-columns: repeat(3, 1fr); gap: 18px; row-gap: 28px; }
-  .foot-grid { grid-template-columns: 2fr 1fr 1fr; }
-  .foot-grid .foot-col:nth-child(4),
-  .foot-grid .foot-col:nth-child(5) { display: none; }
-  .work { padding: 80px 40px; }
+  .work { padding: 80px; }
   .work-arrows { right: 32px; bottom: 32px; }
 }
 @media (max-width: 880px) {
@@ -3016,22 +5044,22 @@ footer {
     grid-template-columns: 1fr;
     gap: 50px;
   }
+  .about-tablist { flex-direction: column; border-radius: 16px; }
+  .about-tab { justify-content: flex-start; }
+  .cards { grid-template-columns: repeat(2, 1fr); }
   .labs-head, .method-head { grid-template-columns: 1fr; gap: 28px; }
   .labs-meta { justify-content: flex-start; }
   .pills { justify-content: flex-start; }
-  .labs-grid { grid-template-columns: repeat(2, 1fr); }
   .method-grid { grid-template-columns: repeat(2, 1fr); gap: 36px; }
   .method-grid::before { display: none; }
   /* hero — copy first, art second; trim art height so the page isn't 200vh */
   .hero { min-height: 0; padding: 32px 0 0; }
   .hero::before { display: none; }
   .hero-grid { gap: 36px; }
-  .hero-angel { display: none; }
-  .hero-dancer { display: none; }
   .hero-copy { padding: 18px 0 8px; }
   .hero-copy .lead { max-width: none; }
   .hero-art { height: auto; aspect-ratio: 4 / 5; max-height: none; margin: 0 -8px 0 0; }
-  .hero-actions { flex-wrap: wrap; }
+  .hero-actions { flex-wrap: wrap; margin-top: 140px; }
   .hero-stats { flex-wrap: wrap; gap: 14px 22px; }
   .hero-foot { flex-wrap: wrap; gap: 12px 24px; padding-top: 18px; }
   .sec-rule { flex-wrap: wrap; gap: 8px 18px; }
@@ -3062,12 +5090,17 @@ footer {
   /* dark work card */
   .work { margin: 0 12px; padding: 60px 24px; border-radius: 24px; }
   .work-grid { grid-template-columns: 1fr; gap: 36px; }
+  .work-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .work-stat-card { min-height: 190px; padding: 24px; transform: none; }
+  .work-stat-card:hover { transform: translateY(-3px); }
   .work-arrows { position: static; margin-top: 32px; }
   .work-card,
   .work-card.alt { transform: none; }
   .work-card:hover { transform: translateY(-3px); }
   .work-card.alt:hover { transform: translateY(-3px); }
   /* testimonial / partners */
+  .testimonial-grid.with-globe { grid-template-columns: 1fr; }
+  .testimonial-globe { min-height: 360px; }
   .testimonial-art { max-width: 420px; margin: 0 auto; }
   .partners { grid-template-columns: repeat(3, 1fr); gap: 18px; }
   /* cta */
@@ -3076,18 +5109,15 @@ footer {
   .cta-actions { flex-wrap: wrap; }
   .cta-foot { flex-wrap: wrap; gap: 14px 24px; }
   /* footer */
-  .foot-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .foot-grid { gap: 32px 48px; }
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1280px. Brand meta, Star, AMR,
-   * and the Discord/X icon buttons stay hidden; Download CTA stays
-   * reachable in the bar. */
+   * the hamburger panel introduced at ≤1080px. Brand meta and Download
+   * stay hidden; Star CTA still pings in the bar. */
   .nav { padding: 16px 0; }
   .brand-meta { display: none; }
-  .nav-side .nav-amr { display: none; }
-  .nav-side .nav-cta.ghost:not(.is-download) { display: none; }
-  .nav-side .nav-icon { display: none; }
+  .nav-side .nav-cta.ghost { display: none; }
 }
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }
@@ -3099,6 +5129,7 @@ footer {
 @media (max-width: 560px) {
   .container { padding: 0 16px; }
   .hero h1 { font-size: clamp(34px, 9.5vw, 44px); }
+  .hero h1.hero-manifesto { font-size: clamp(26px, 7.4vw, 34px); }
   .about h2,
   .capabilities-copy h2,
   .labs-head h2,
@@ -3106,8 +5137,8 @@ footer {
   .testimonial-copy h2,
   .cta h2,
   .section-header h2 { font-size: clamp(30px, 8.5vw, 44px); }
-  .cta h2 { font-size: clamp(34px, 10vw, 54px); }
-  .labs-grid { grid-template-columns: 1fr; }
+  .about h2.about-statement { font-size: clamp(26px, 6vw, 38px); }
+  .cta h2 { font-size: clamp(28px, 8vw, 38px); }
   .cards { grid-template-columns: 1fr; }
   .method-grid { grid-template-columns: 1fr; gap: 28px; }
   .method-step .num { font-size: 48px; }
@@ -3120,9 +5151,9 @@ footer {
   .locale-trigger-sep { display: none; }
   .locale-menu { min-width: 208px; }
   .partners { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-  .foot-grid { grid-template-columns: 1fr; gap: 24px; }
+  .foot-grid { flex-direction: column; align-items: center; text-align: center; gap: 24px; }
   .work { margin: 0 8px; padding: 48px 20px; border-radius: 20px; }
-  .hero-actions { width: 100%; }
+  .hero-actions { width: 100%; margin-top: 90px; }
   .hero-actions .btn { flex: 1 1 auto; justify-content: center; }
   .cta-actions { width: 100%; }
   .cta-actions .btn,
@@ -3130,7 +5161,7 @@ footer {
   .nav-inner { gap: 12px; }
   .brand { font-size: 16px; gap: 8px; }
   .brand-mark { width: 32px; height: 32px; font-size: 16px; }
-  .brand-logo { width: 150px; }
+  .brand-logo { height: 34px; }
   .read-more { margin-top: 36px; }
   .foot-mega .word { font-size: clamp(48px, 16vw, 88px); }
 }
@@ -3151,6 +5182,9 @@ footer {
   .foot-mega .word { font-size: clamp(40px, 16vw, 64px); }
   .work-card { padding: 26px 22px; }
   .work-card.alt { padding: 24px 20px; }
+  .work-stats-grid { grid-template-columns: 1fr; }
+  .work-stat-card { min-height: 168px; padding: 22px; }
+  .work-stat-card h3 { font-size: clamp(32px, 13vw, 48px); }
 }
 
 /* ====== Plugin registry pages ====== */
@@ -3170,10 +5204,12 @@ footer {
 .plugin-detail { padding-bottom: 96px; }
 .plugin-hero,
 .plugin-detail-hero {
-  padding: 96px 0 72px;
+  /* Top padding clears the absolutely-positioned .site-chrome (~123px) so the
+     hero eyebrow/title don't slide under the nav (matches sub-page 140px). */
+  padding: 140px 0 72px;
   border-bottom: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(247, 241, 222, 0.74), rgba(239, 231, 210, 0.4)),
+    linear-gradient(180deg, var(--paper-warm), rgba(245, 245, 245, 0.4)),
     var(--paper);
 }
 .plugin-hero__grid,
@@ -3218,7 +5254,7 @@ footer {
 .plugin-detail-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(247, 241, 222, 0.72);
+  background: var(--bone);
   box-shadow: var(--shadow);
 }
 .plugin-hero__panel {
@@ -3230,7 +5266,7 @@ footer {
 .plugin-showcase__head {
   min-height: 116px;
   padding: 18px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--paper-warm);
   border-bottom: 1px solid var(--line-soft);
 }
 .plugin-showcase__head span,
@@ -3266,7 +5302,7 @@ footer {
   padding: 10px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--paper);
   color: inherit;
   text-decoration: none;
 }
@@ -3275,9 +5311,9 @@ footer {
   display: block;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  border: 1px solid rgba(21, 20, 15, 0.14);
+  border: 1px solid rgba(38, 38, 38, 0.14);
   border-radius: 6px;
-  background: #101b38;
+  background: var(--ink);
 }
 .plugin-showcase-item__visual img {
   width: 100%;
@@ -3288,7 +5324,7 @@ footer {
 .plugin-showcase-item__visual > span {
   position: absolute;
   display: block;
-  background: rgba(247, 241, 222, 0.86);
+  background: rgba(255, 255, 255, 0.86);
 }
 .plugin-showcase-item__visual > span:nth-child(1) {
   left: 12%;
@@ -3330,11 +5366,11 @@ footer {
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
-.plugin-showcase-item--image .plugin-showcase-item__visual { background: #d9b86f; }
-.plugin-showcase-item--video .plugin-showcase-item__visual { background: #16120f; }
-.plugin-showcase-item--dashboard .plugin-showcase-item__visual { background: #eef3ed; }
-.plugin-showcase-item--system .plugin-showcase-item__visual { background: #243025; }
-.plugin-showcase-item--atom .plugin-showcase-item__visual { background: #f2e8c9; }
+.plugin-showcase-item--image .plugin-showcase-item__visual { background: #d8ffb5; }
+.plugin-showcase-item--video .plugin-showcase-item__visual { background: var(--ink); }
+.plugin-showcase-item--dashboard .plugin-showcase-item__visual { background: var(--paper-warm); }
+.plugin-showcase-item--system .plugin-showcase-item__visual { background: var(--ink); }
+.plugin-showcase-item--atom .plugin-showcase-item__visual { background: var(--paper-dark); }
 .plugin-hero__stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3346,7 +5382,7 @@ footer {
 .plugin-hero__stats div {
   min-width: 0;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--paper);
 }
 .plugin-hero__stats dt {
   font-family: var(--serif);
@@ -3385,14 +5421,14 @@ footer {
   padding: 0 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(247, 241, 222, 0.86);
+  background: var(--bone);
   color: var(--ink);
   font: 500 15px var(--body);
   outline: none;
 }
 .plugin-search input:focus {
-  border-color: rgba(237, 111, 92, 0.72);
-  box-shadow: 0 0 0 3px rgba(237, 111, 92, 0.16);
+  border-color: #83ff3b;
+  box-shadow: 0 0 0 3px #d8ffb5;
 }
 .plugin-filter-row {
   display: flex;
@@ -3408,7 +5444,7 @@ footer {
   padding: 0 16px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(247, 241, 222, 0.65);
+  background: var(--bone);
   color: var(--ink-mute);
   font: 600 14px var(--body);
   cursor: pointer;
@@ -3416,10 +5452,10 @@ footer {
 .plugin-filter span { color: var(--ink-faint); }
 .plugin-filter.is-active {
   background: var(--ink);
-  color: var(--bone);
+  color: #ffffff;
   border-color: var(--ink);
 }
-.plugin-filter.is-active span { color: rgba(247, 241, 222, 0.72); }
+.plugin-filter.is-active span { color: rgba(255, 255, 255, 0.72); }
 .plugin-result-count {
   margin-top: 18px;
   color: var(--ink-mute);
@@ -3445,15 +5481,15 @@ footer {
   padding: 14px 16px 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(247, 241, 222, 0.66);
-  box-shadow: 0 18px 36px -30px rgba(21, 20, 15, 0.22);
+  background: var(--bone);
+  box-shadow: 0 18px 36px -30px rgba(38, 38, 38, 0.18);
   overflow: hidden;
   transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 .plugin-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(21, 20, 15, 0.24);
-  background: rgba(247, 241, 222, 0.82);
+  border-color: var(--coral);
+  background: var(--coral-tint);
 }
 .plugin-card[hidden] { display: none; }
 .plugin-card__preview {
@@ -3461,9 +5497,9 @@ footer {
   display: block;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  border: 1px solid rgba(21, 20, 15, 0.13);
-  border-radius: 7px;
-  background: #17213a;
+  border: 1px solid rgba(38, 38, 38, 0.13);
+  border-radius: 6px;
+  background: var(--ink);
   color: inherit;
   text-decoration: none;
 }
@@ -3480,12 +5516,12 @@ footer {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 42px 42px,
     linear-gradient(180deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 42px 42px,
-    #12224a;
+    var(--ink);
 }
 .plugin-card__mock span {
   position: absolute;
   display: block;
-  background: rgba(247, 241, 222, 0.9);
+  background: rgba(255, 255, 255, 0.9);
 }
 .plugin-card__mock span:nth-child(1) {
   left: 9%;
@@ -3507,38 +5543,38 @@ footer {
   height: 42px;
   background: var(--coral);
 }
-.plugin-card__preview--image { background: #d0b169; }
+.plugin-card__preview--image { background: #d8ffb5; }
 .plugin-card__preview--image .plugin-card__mock {
   background:
-    linear-gradient(135deg, rgba(21, 20, 15, 0.2), transparent 55%),
-    #d9b86f;
+    linear-gradient(135deg, rgba(38, 38, 38, 0.2), transparent 55%),
+    #d8ffb5;
 }
-.plugin-card__preview--video { background: #15140f; }
+.plugin-card__preview--video { background: var(--ink); }
 .plugin-card__preview--video .plugin-card__mock {
   background:
-    linear-gradient(90deg, rgba(237, 111, 92, 0.42) 0 18%, transparent 18% 82%, rgba(237, 111, 92, 0.42) 82%),
-    #15140f;
+    linear-gradient(90deg, #a2ff63 0 18%, transparent 18% 82%, #a2ff63 82%),
+    var(--ink);
 }
 .plugin-card__preview--dashboard .plugin-card__mock {
   background:
-    linear-gradient(90deg, rgba(21, 20, 15, 0.08) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(180deg, rgba(21, 20, 15, 0.08) 1px, transparent 1px) 0 0 / 32px 32px,
-    #eff2e6;
+    linear-gradient(90deg, rgba(38, 38, 38, 0.08) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(180deg, rgba(38, 38, 38, 0.08) 1px, transparent 1px) 0 0 / 32px 32px,
+    var(--paper-warm);
 }
 .plugin-card__preview--system .plugin-card__mock {
   background:
-    linear-gradient(90deg, rgba(247, 241, 222, 0.08) 1px, transparent 1px) 0 0 / 28px 28px,
-    #273324;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--ink);
 }
 .plugin-card__preview--atom .plugin-card__mock {
   background:
-    linear-gradient(90deg, rgba(21, 20, 15, 0.08) 1px, transparent 1px) 0 0 / 38px 100%,
-    #f1e5c5;
+    linear-gradient(90deg, rgba(38, 38, 38, 0.08) 1px, transparent 1px) 0 0 / 38px 100%,
+    var(--paper-warm);
 }
 .plugin-card__preview--workflow .plugin-card__mock {
   background:
-    linear-gradient(135deg, rgba(237, 111, 92, 0.2), transparent 46%),
-    #eee2c3;
+    linear-gradient(135deg, #d8ffb5, transparent 46%),
+    var(--paper-warm);
 }
 .plugin-card__preview-label {
   position: absolute;
@@ -3548,9 +5584,9 @@ footer {
   display: block;
   max-width: calc(100% - 20px);
   padding: 7px 9px;
-  border: 1px solid rgba(21, 20, 15, 0.12);
+  border: 1px solid rgba(38, 38, 38, 0.12);
   border-radius: 999px;
-  background: rgba(247, 241, 222, 0.88);
+  background: rgba(255, 255, 255, 0.88);
   color: var(--ink-soft);
   font: 700 10px var(--body);
   text-transform: uppercase;
@@ -3581,20 +5617,20 @@ footer {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--ink-soft);
-  background: rgba(255, 255, 255, 0.24);
+  background: var(--paper-warm);
   font: 700 11px var(--body);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .plugin-badge--official {
-  color: #6f2c1f;
-  border-color: rgba(237, 111, 92, 0.35);
-  background: rgba(237, 111, 92, 0.14);
+  color: #218c00;
+  border-color: #beff8c;
+  background: #f2ffe6;
 }
 .plugin-badge--community {
-  color: #454c20;
-  border-color: rgba(110, 116, 72, 0.38);
-  background: rgba(110, 116, 72, 0.14);
+  color: var(--ink-soft);
+  border-color: var(--line);
+  background: var(--paper-dark);
 }
 .plugin-card h3 {
   min-width: 0;
@@ -3609,7 +5645,7 @@ footer {
 .plugin-back-link,
 .plugin-source-list a {
   color: inherit;
-  text-decoration-color: rgba(21, 20, 15, 0.28);
+  text-decoration-color: rgba(38, 38, 38, 0.28);
   text-underline-offset: 4px;
 }
 .plugin-card code,
@@ -3641,7 +5677,7 @@ footer {
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   color: var(--ink-mute);
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--paper);
   font-size: 12px;
 }
 .plugin-tags--large {
@@ -3678,7 +5714,7 @@ footer {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(21, 20, 15, 0.05);
+  background: var(--paper-warm);
 }
 .plugin-detail__commands.compact {
   display: block;
@@ -3696,12 +5732,14 @@ footer {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+/* Neutral dark fill per the skill's button rule (no brand green as a button
+   ground); matches the homepage .btn-primary pairing. */
 .plugin-detail__commands button {
   min-width: 86px;
-  border: 1px solid rgba(237, 111, 92, 0.36);
+  border: 1px solid var(--ink);
   border-radius: 8px;
-  background: var(--coral);
-  color: #fff;
+  background: var(--ink);
+  color: #ffffff;
   font: 700 13px var(--body);
   cursor: pointer;
 }
@@ -3734,7 +5772,7 @@ footer {
   position: relative;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  background: #121f42;
+  background: #262626;
 }
 .plugin-detail-preview__frame iframe,
 .plugin-detail-preview__frame img {
@@ -3758,14 +5796,14 @@ footer {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(247, 241, 222, 0.12) 1px, transparent 1px) 0 0 / 44px 44px,
-    linear-gradient(180deg, rgba(247, 241, 222, 0.1) 1px, transparent 1px) 0 0 / 44px 44px,
-    #121f42;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px) 0 0 / 44px 44px,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px) 0 0 / 44px 44px,
+    var(--ink);
 }
 .plugin-detail-preview__mock span {
   position: absolute;
   display: block;
-  background: rgba(247, 241, 222, 0.9);
+  background: rgba(255, 255, 255, 0.9);
 }
 .plugin-detail-preview__mock span:nth-child(1) {
   left: 9%;
@@ -3787,11 +5825,11 @@ footer {
   height: 64px;
   background: var(--coral);
 }
-.plugin-detail-preview--image .plugin-detail-preview__frame { background: #d9b86f; }
-.plugin-detail-preview--video .plugin-detail-preview__frame { background: #15140f; }
-.plugin-detail-preview--dashboard .plugin-detail-preview__frame { background: #eff2e6; }
-.plugin-detail-preview--system .plugin-detail-preview__frame { background: #263223; }
-.plugin-detail-preview--atom .plugin-detail-preview__frame { background: #f1e5c5; }
+.plugin-detail-preview--image .plugin-detail-preview__frame { background: #d8ffb5; }
+.plugin-detail-preview--video .plugin-detail-preview__frame { background: var(--ink); }
+.plugin-detail-preview--dashboard .plugin-detail-preview__frame { background: var(--paper-warm); }
+.plugin-detail-preview--system .plugin-detail-preview__frame { background: var(--ink); }
+.plugin-detail-preview--atom .plugin-detail-preview__frame { background: var(--paper-warm); }
 .plugin-detail__facts {
   padding: 22px;
 }
@@ -3834,7 +5872,7 @@ footer {
   overflow: auto;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
-  background: rgba(21, 20, 15, 0.05);
+  background: var(--paper-warm);
   color: var(--ink-soft);
   font: 12px/1.7 var(--mono);
   white-space: pre-wrap;
@@ -3853,7 +5891,7 @@ footer {
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--bone);
   font-weight: 700;
   text-decoration: none;
 }
@@ -3874,7 +5912,7 @@ footer {
 @media (max-width: 640px) {
   .plugin-hero,
   .plugin-detail-hero {
-    padding: 72px 0 52px;
+    padding: 112px 0 52px;
   }
   .plugin-hero h1,
   .plugin-detail h1 {
@@ -3914,174 +5952,4 @@ footer {
   .plugin-detail__commands button {
     min-height: 44px;
   }
-}
-
-/* ====== NEWSLETTER ====== */
-.newsletter {
-  padding: 80px 0;
-  border-top: 1px solid var(--ink);
-}
-.newsletter-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 48px;
-  align-items: center;
-}
-.newsletter-title {
-  font-family: var(--serif);
-  font-size: clamp(28px, 4vw, 44px);
-  line-height: 1.05;
-  margin: 12px 0 14px;
-  color: var(--ink);
-}
-.newsletter-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-.newsletter-input {
-  flex: 1 1 220px;
-  min-width: 0;
-  padding: 14px 16px;
-  font-family: var(--body);
-  font-size: 15px;
-  color: var(--ink);
-  background: var(--paper-warm);
-  border: 1px solid var(--ink);
-  border-radius: 2px;
-}
-.newsletter-input:focus-visible {
-  outline: 2px solid var(--coral);
-  outline-offset: 1px;
-}
-.newsletter-submit {
-  flex: 0 0 auto;
-}
-.newsletter-submit.is-loading {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.newsletter-submit.is-loading::before {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.52);
-  border-top-color: var(--paper);
-  border-radius: 50%;
-  animation: newsletter-spin 760ms linear infinite;
-}
-.newsletter-submit:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-.newsletter-msg {
-  flex: 1 0 100%;
-  margin: 4px 0 0;
-  min-height: 1.2em;
-  font-size: 13px;
-  color: var(--ink-mute);
-}
-.newsletter-form.is-success .newsletter-input,
-.newsletter-form.is-success .newsletter-submit {
-  display: none;
-}
-.newsletter-form.is-success .newsletter-msg {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-/* Bottom-right popup */
-.newsletter-popup {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 90;
-  width: min(360px, calc(100vw - 48px));
-  padding: 22px 22px 20px;
-  background: color-mix(in srgb, var(--paper) 96%, #fff 4%);
-  background-clip: padding-box;
-  border: 1px solid var(--ink);
-  border-radius: 4px;
-  box-shadow: 0 18px 48px rgba(21, 20, 15, 0.22);
-  opacity: 0;
-  isolation: isolate;
-  transform: translateY(12px);
-  transition: opacity 0.28s ease, transform 0.28s ease;
-}
-.newsletter-popup.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-.newsletter-popup__title {
-  font-family: var(--serif);
-  font-size: 22px;
-  line-height: 1.1;
-  margin: 10px 0 8px;
-  color: var(--ink);
-}
-.newsletter-popup__lead {
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--ink-mute);
-  margin: 0 0 14px;
-}
-.newsletter-popup__close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  font-size: 22px;
-  line-height: 1;
-  color: var(--ink-faint);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-.newsletter-popup__close:hover {
-  color: var(--ink);
-}
-.newsletter-popup .newsletter-input {
-  flex: 1 1 100%;
-}
-.newsletter-popup .newsletter-submit {
-  flex: 1 1 100%;
-  justify-content: center;
-}
-@media (prefers-reduced-motion: reduce) {
-  .newsletter-popup {
-    transition: none;
-  }
-}
-@media (max-width: 860px) {
-  .newsletter-card {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-}
-
-@media (min-width: 1081px) and (max-width: 1360px) {
-  .nav-inner .nav-side .nav-cta.ghost {
-    padding-inline: 13px;
-  }
-  .nav-inner .nav-side .nav-amr {
-    padding-inline: 12px;
-  }
-}
-
-@media (min-width: 1081px) and (max-width: 1240px) {
-  .nav-inner .nav-side .nav-icon {
-    display: none;
-  }
-  .nav-inner .nav-side .nav-amr img {
-    width: 64px;
-  }
-}
-
-@keyframes newsletter-spin {
-  to { transform: rotate(360deg); }
 }

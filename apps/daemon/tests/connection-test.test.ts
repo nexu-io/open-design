@@ -149,6 +149,10 @@ async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promi
   return withFakeAgent('deepseek', script, run);
 }
 
+async function withFakeKimi<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('kimi', script, run);
+}
+
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -2725,6 +2729,71 @@ setTimeout(() => process.exit(0), 50);
     );
   });
 
+  it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
+    const expectedDetail =
+      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('opencode');
+console.error('Usage: opencode [options] [command]');
+console.error('Options:');
+console.error('  --help  Show help');
+console.error('incompatible opencode args');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+          detail: expectedDetail,
+        });
+      },
+    );
+  });
+
+  it('preserves unrelated OpenCode missing-required failures', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+console.error('missing required environment variable OPENAI_API_KEY');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json() as { detail?: string };
+        expect(body).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+        });
+        expect(body.detail).toContain('missing required environment variable OPENAI_API_KEY');
+        expect(body.detail).not.toContain('OpenCode CLI appears to be outdated');
+      },
+    );
+  });
+
   it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
@@ -2784,6 +2853,67 @@ process.stdin.on('end', () => {
             ]),
           );
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('launches Kimi connection tests without the legacy acp positional arg', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    try {
+      await withFakeKimi(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+if (args.includes('acp')) {
+  console.error('error: too many arguments. Expected 0 arguments but got 1.');
+  process.exit(1);
+}
+const promptIndex = args.indexOf('-p');
+if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
+  console.error('missing connection-test prompt');
+  process.exit(1);
+}
+const outputFormatIndex = args.indexOf('--output-format');
+if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
+  console.error('missing --output-format stream-json');
+  process.exit(1);
+}
+console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'kimi',
+              model: 'moonshot-v1-32k',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Kimi CLI',
+            model: 'moonshot-v1-32k',
+            sample: 'ok',
+          });
+
+          await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
+            JSON.stringify([
+              '-p',
+              'Reply with only: ok',
+              '--output-format',
+              'stream-json',
+              '--model',
+              'moonshot-v1-32k',
+            ]),
+          );
         },
       );
     } finally {

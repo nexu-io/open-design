@@ -91,15 +91,15 @@ const jsonLd = [
 ];
 ---
 
-<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+<Layout title={title} description={description} active="resources" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
 
-  <article class="info-page">
-    <header class="catalog-head">
+  <article class="info-page info-page-centered">
+    <header class="catalog-head compare-head">
       <span class="label">{page.label}</span>
       <h1 class="display">{page.heading}</h1>
       <p class="lead">{page.lead}</p>

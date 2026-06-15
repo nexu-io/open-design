@@ -65,8 +65,24 @@ describe('diagnostics export handler — non-sidecar launch', () => {
     const manifest = JSON.parse(manifestRaw) as {
       warnings: string[];
       files: DiagnosticsManifestFile[];
+      extra?: {
+        browserUse?: {
+          registryPath?: string;
+          socketCount?: number;
+          candidateCount?: number;
+          staleCount?: number;
+          probeFailureCategory?: string;
+        };
+      };
     };
     expect(manifest.warnings).toContain(STANDALONE_LAUNCH_WARNING);
+    expect(manifest.extra?.browserUse).toMatchObject({
+      registryPath: expect.stringContaining('codex-browser-use'),
+      probeFailureCategory: expect.any(String),
+    });
+    expect(typeof manifest.extra?.browserUse?.socketCount).toBe('number');
+    expect(typeof manifest.extra?.browserUse?.candidateCount).toBe('number');
+    expect(typeof manifest.extra?.browserUse?.staleCount).toBe('number');
     // Standalone launches intentionally omit sidecar-managed daemon/web/desktop
     // log files, but real developer machines may still contribute matching
     // macOS crash reports from /Library/Logs/DiagnosticReports. Keep the test

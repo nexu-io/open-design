@@ -320,6 +320,7 @@ describe('app-config', () => {
           },
           amr: {
             VELA_BIN: '~/bin/vela',
+            VELA_API_URL: '  https://custom-amr.example  ',
             OPEN_DESIGN_AMR_PROFILE: '  local  ',
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
             HOME: 'should-not-persist',
@@ -343,6 +344,7 @@ describe('app-config', () => {
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_API_KEY: 'sk-proxy-openai' },
         amr: {
           VELA_BIN: '~/bin/vela',
+          VELA_API_URL: 'https://custom-amr.example',
           OPEN_DESIGN_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },

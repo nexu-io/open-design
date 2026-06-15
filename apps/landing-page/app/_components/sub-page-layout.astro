@@ -26,12 +26,13 @@ import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
 import LocaleSwitcherScript from './locale-switcher-script.astro';
 import PreciseLazyload from './precise-lazyload.astro';
+import TemplateCardAutoplay from './template-card-autoplay.astro';
 import SiteFooter from './site-footer.astro';
-import Topbar from './topbar.astro';
-import { heroImage } from '../image-assets';
+import { ogDefaultImage } from '../image-assets';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
+  getHeaderLocaleSwitcher,
   getLocaleDefinition,
   localeFromPath,
 } from '../i18n';
@@ -44,28 +45,68 @@ export interface Props {
   active?: HeaderProps['active'];
   ogImage?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+  /**
+   * Set on pages that are NOT generated per-locale (e.g. plugin detail pages,
+   * which would explode the page count × 18 locales). The language switcher
+   * then points every locale at the single canonical URL and the client script
+   * suppresses its locale auto-redirect, so a zh-preference visitor is not sent
+   * to a non-existent `/zh/...` variant that 404s.
+   */
+  localeCanonicalOnly?: boolean;
 }
 
-const { title, description, active = 'home', ogImage, jsonLd } = Astro.props;
+const {
+  title,
+  description,
+  active = 'home',
+  ogImage,
+  jsonLd,
+  localeCanonicalOnly = false,
+} = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
-const alternateLinks = alternateLinksForPath(Astro.url.pathname).map((entry) => ({
-  ...entry,
-  href: new URL(entry.hrefPath, Astro.site).toString(),
-}));
-const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString();
-const og = ogImage ?? heroImage;
+// Canonical-only pages have no per-locale variants, so emit only the canonical
+// (x-default) hreflang — listing `/<locale>/...` alternates that 404 would feed
+// search engines dangling targets. `altEntries[0]` is the default-locale
+// (stripped) path, so x-default stays correct for localized pages too.
+const altEntries = alternateLinksForPath(Astro.url.pathname);
+const alternateLinks = localeCanonicalOnly
+  ? []
+  : altEntries.map((entry) => ({
+      ...entry,
+      href: new URL(entry.hrefPath, Astro.site).toString(),
+    }));
+const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
+// Absolute URL for the social share card: og:image / twitter:image are read
+// by external crawlers outside the page-origin context, so a same-origin path
+// is unreliable for rich previews. The default is the site-wide OG card
+// (`ogDefaultImage`, already an absolute R2 URL); `new URL()` leaves an
+// already-absolute `ogImage` override untouched.
+const og = new URL(ogImage ?? ogDefaultImage, Astro.site).toString();
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
-  Header({ active, counts, github, brandHref: '/', locale, currentPath: Astro.url.pathname }) as ReturnType<typeof createElement>,
+  Header({
+    active,
+    counts,
+    github,
+    brandHref: '/',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+      canonicalOnly: localeCanonicalOnly,
+    }),
+  }) as ReturnType<typeof createElement>,
 );
 const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 ---
 
 <!doctype html>
-<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+<html
+  lang={localeDef.htmlLang}
+  dir={localeDef.dir}
+  data-locale-canonical={localeCanonicalOnly ? 'true' : undefined}
+>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -107,9 +148,8 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
   <body class="sub-page">
     <div class="shell">
       <div class="site-chrome" data-chrome-headroom>
-        <Topbar github={github} locale={locale} />
-        {/* Same React-rendered Header used by the homepage. SSR'd here
-         * so we have one nav implementation that handles active state. */}
+        {/* Same React-rendered Header used by the homepage (language switcher
+         * lives in the nav, no separate topbar) so the chrome matches `/`. */}
         <Fragment set:html={headerHtml} />
       </div>
 
@@ -123,5 +163,11 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <HeaderEnhancer />
     <LocaleSwitcherScript />
     <PreciseLazyload />
+    {/* Hover-autoplay + idle hold/pan loop for any TemplateCard preview clips on
+        the page. Self-initialising and a no-op when the page has no cards, so it
+        covers every TemplateCard consumer (templates grids, solution pages, …)
+        from one place — a card that renders <video data-tpl-autoplay> is never
+        left inert. */}
+    <TemplateCardAutoplay />
   </body>
 </html>

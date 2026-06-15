@@ -108,7 +108,9 @@ same shape with provider-specific `endpoint` strings.
    - else `<OD_DATA_DIR>/media-config.json` when `OD_DATA_DIR` is set
      (relative paths are anchored to the active project root, `$HOME`
      and `~` shorthands are expanded);
-   - else `<projectRoot>/.od/media-config.json` for the active project.
+   - else daemon-managed media configuration for the active project. Before
+     documenting daemon storage paths, read root `AGENTS.md` → **Daemon data
+     directory contract**.
 
    The artifact never opens any of these paths itself — it always goes
    through the daemon poll endpoint, and the daemon enforces the

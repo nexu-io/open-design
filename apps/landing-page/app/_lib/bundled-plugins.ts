@@ -51,6 +51,73 @@ function communityRoot(): string | null {
   return COMMUNITY_ROOTS.find((dir) => existsSync(dir)) ?? null;
 }
 
+// Pre-baked plugin preview clips. The `bake-plugin-previews` CI workflow renders
+// each plugin's live page to a short H.264 clip + poster, uploads them to R2,
+// and commits the index at `data/plugin-previews/manifest.json`. The daemon
+// serves these to the in-app gallery; this static site reads the same index and
+// points at the public R2 origin so plugin cards + detail pages get a real
+// preview (with hover-autoplay) even when the manifest carries no authored
+// poster/video. Authored `od.preview.video` always wins over the baked clip.
+const PLUGIN_PREVIEWS_BASE_URL = 'https://repo-assets.open-design.ai/plugin-previews';
+
+const BAKED_PREVIEW_MANIFEST_ROOTS = [
+  path.resolve(process.cwd(), 'data/plugin-previews/manifest.json'),
+  path.resolve(process.cwd(), '../../data/plugin-previews/manifest.json'),
+  path.resolve(
+    fileURLToPath(new URL('../../../../data/plugin-previews/manifest.json', import.meta.url)),
+  ),
+] as const;
+
+let cachedBakedPreviews: Map<
+  string,
+  { video: string; poster: string; holdMs: number | null }
+> | null = null;
+
+function bakedPreviews(): Map<
+  string,
+  { video: string; poster: string; holdMs: number | null }
+> {
+  if (cachedBakedPreviews) return cachedBakedPreviews;
+  const map = new Map<string, { video: string; poster: string; holdMs: number | null }>();
+  const file = BAKED_PREVIEW_MANIFEST_ROOTS.find((p) => existsSync(p));
+  if (file) {
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as {
+        previews?: Record<
+          string,
+          { video?: unknown; poster?: unknown; holdMs?: unknown; durationMs?: unknown }
+        >;
+      };
+      for (const [id, entry] of Object.entries(raw.previews ?? {})) {
+        const video = typeof entry?.video === 'string' ? entry.video : null;
+        const poster = typeof entry?.poster === 'string' ? entry.poster : null;
+        const rawHold = typeof entry?.holdMs === 'number' ? entry.holdMs : null;
+        const durationMs = typeof entry?.durationMs === 'number' ? entry.durationMs : null;
+        // Only treat the clip as a hold/pan split when there is a real pan
+        // segment after the hold — i.e. the clip runs LONGER than the hold.
+        // Some baked clips are shorter than the 2.5s hold (no pan); flagging
+        // those as hold/pan would make the hover seek past the end and stall.
+        const holdMs =
+          rawHold != null && rawHold > 0 && durationMs != null && durationMs > rawHold
+            ? rawHold
+            : null;
+        if (video && poster) {
+          map.set(id, {
+            video: `${PLUGIN_PREVIEWS_BASE_URL}/${video}`,
+            poster: `${PLUGIN_PREVIEWS_BASE_URL}/${poster}`,
+            holdMs,
+          });
+        }
+      }
+    } catch {
+      // Missing/corrupt index → no baked previews; plugins fall back to their
+      // authored poster/video or the local typographic placeholder.
+    }
+  }
+  cachedBakedPreviews = map;
+  return map;
+}
+
 /** Buckets we walk under `plugins/_official/`. Order = display order. */
 export const BUNDLED_BUCKETS = [
   'examples',
@@ -62,18 +129,6 @@ export const BUNDLED_BUCKETS = [
 ] as const;
 
 export type BundledBucket = (typeof BUNDLED_BUCKETS)[number];
-
-// Manifest ids hidden from the public template/plugin library views. These
-// `examples/` entries are "how to drive the HyperFrames feature" onboarding
-// scenarios, not visual templates — they carry the `hyperframes` slug so they
-// land in the HyperFrames artifact bucket and show up cover-less next to the
-// real video-templates. They stay bundled for the daemon; we just keep them
-// out of the marketing catalog. Detail pages (getDetailPlugins) still include
-// them so any existing links resolve.
-const HIDDEN_PUBLIC_LIBRARY_IDS: ReadonlySet<string> = new Set([
-  'example-hyperframes',
-  'example-video-hyperframes',
-]);
 
 // Detail pages cover every locally-shipped plugin: the `_official` buckets
 // above PLUS the `community/` source folders. `community` is not a `_official`
@@ -124,6 +179,12 @@ export interface BundledPluginRecord {
   previewType?: string;
   /** Preview video URL when `previewType === 'video'` (Cloudflare Stream MP4). */
   previewVideo?: string;
+  /**
+   * Lead-in hold span (ms) for baked hover-pan clips: the clip loops `[0,
+   * holdMs]` in place while idle and plays the pan `[holdMs, end]` on hover.
+   * Null for plain authored video clips (no hold/pan split).
+   */
+  previewHoldMs?: number;
   /**
    * Public URL for the runnable preview entry when the manifest
    * carries `od.preview.entry` and `od.preview.type === 'html'`.
@@ -330,9 +391,22 @@ function loadOne(opts: {
   // `previewPoster` URL and doesn't have to know which path it came
   // from.
   const remotePoster = asString(raw.od?.preview?.poster);
+  const authoredVideo = asString(raw.od?.preview?.video);
+  const authoredType = asString(raw.od?.preview?.type);
+  // Fall back to the baked preview index (R2) when the manifest ships no
+  // authored video — gives prototype/HTML plugins a real clip (with the card
+  // hover-autoplay and a detail-page hero) instead of a blank/placeholder.
+  // Authored video wins; the baked poster also backfills a missing poster.
+  const baked = authoredVideo ? undefined : bakedPreviews().get(manifestId);
+  const previewVideo = authoredVideo ?? baked?.video;
+  const previewHoldMs = baked?.holdMs ?? undefined;
   const previewPoster =
     remotePoster ??
+    baked?.poster ??
     (hasLocalPreview(manifestId) ? `/previews/plugins/${manifestId}.png` : undefined);
+  // A baked clip means the card/detail render as a video; otherwise keep the
+  // manifest's declared type (image/html/…).
+  const previewType = previewVideo ? 'video' : authoredType;
 
   return {
     slug,
@@ -352,10 +426,11 @@ function loadOne(opts: {
     surface: asString(raw.od?.surface),
     kind: asString(raw.od?.kind),
     previewPoster,
-    previewType: asString(raw.od?.preview?.type),
-    previewVideo: asString(raw.od?.preview?.video),
+    previewType,
+    previewVideo,
+    previewHoldMs,
     previewEntryUrl:
-      asString(raw.od?.preview?.type) === 'html'
+      authoredType === 'html'
         ? entryRelativeUrl(manifestId, asString(raw.od?.preview?.entry), slugDir)
         : undefined,
     detailSlug: pluginDetailSlug(slugBasis),
@@ -401,8 +476,6 @@ export function getBundledPlugins(): ReadonlyArray<BundledPluginRecord> {
       // out. Mirror that filter here so our public-library counts
       // match what users see in the picker.
       if (record.kind === 'atom') continue;
-      // Onboarding/scenario examples that aren't visual templates.
-      if (HIDDEN_PUBLIC_LIBRARY_IDS.has(record.manifestId)) continue;
       out.push(record);
     }
   }

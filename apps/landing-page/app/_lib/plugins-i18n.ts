@@ -223,7 +223,7 @@ const en: PluginsCopy = {
     hyperframes: {
       label: 'HyperFrames',
       description:
-        'Free, open-source HyperFrames templates and skills for Open Design — agent-built motion video. Every HyperFrames template is a render-ready HTML + CSS + GSAP composition your local agent repaints and renders to MP4: kinetic typography, data charts, logo outros, product promos, glitch titles and more.',
+        'HyperFrames-ready motion compositions — agent-built video that blends template HTML with frame-level keyframes.',
     },
     audio: {
       label: 'Audio',
@@ -391,7 +391,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       deck: { label: '幻灯片', description: '从叙事简报生成的精致 deck——融资 deck、课程模块、周报、产品发布。' },
       image: { label: '图像', description: '从结构化创意指令生成的图像——UI 稿、品牌视觉、分镜、社媒、插画。' },
       video: { label: '视频', description: '视频提示词、分镜与可渲染的动态产物——短视频、营销片段、动效图形、电影感故事。' },
-      hyperframes: { label: 'HyperFrames', description: '为 Open Design 打造的免费开源 HyperFrames 模板与技能——agent 构建的动效视频。每个 HyperFrames 模板都是可直接渲染的 HTML + CSS + GSAP 合成，由你的本地 agent 重绘并渲染为 MP4：动态排版、数据图表、Logo 片尾、产品宣传、故障字幕等。' },
+      hyperframes: { label: 'HyperFrames', description: 'HyperFrames 就绪的动效合成——agent 构建的视频，融合模板 HTML 与帧级关键帧。' },
       audio: { label: '音频', description: '从简报生成的音频、人声与声音设计——播客片头、音乐衬底、环境音。' },
     },
     subcategory: {
@@ -578,7 +578,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          '為 Open Design 打造的免費開源 HyperFrames 範本與技能——Agent 生成的動效影片。每個 HyperFrames 範本都是可直接算繪的 HTML + CSS + GSAP 合成，由你的本機 Agent 重繪並算繪為 MP4：動態排版、資料圖表、Logo 片尾、產品宣傳、故障字幕等。',
+          'HyperFrames 就緒的動畫編排 — Agent 生成的影片，融合範本提示、場景指導和品牌線索成可呈現的時間線。',
       },
       audio: {
         label: '音訊',
@@ -727,7 +727,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Open Design 向けの無料・オープンソースな HyperFrames テンプレートとスキル——エージェントが構築するモーション動画。すべての HyperFrames テンプレートはレンダリング可能な HTML + CSS + GSAP コンポジションで、ローカルエージェントが描き替えて MP4 にレンダリングします：キネティックタイポグラフィ、データチャート、ロゴアウトロ、プロダクトプロモ、グリッチタイトルなど。',
+          'HyperFrames対応モーションコンポジション — テンプレートプロンプト、シーンディレクション、ブランドキューをレンダリング可能なタイムラインにブレンドしたエージェント生成動画。',
       },
       audio: {
         label: 'オーディオ',
@@ -876,7 +876,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Open Design를 위한 무료 오픈소스 HyperFrames 템플릿과 스킬——에이전트가 구축하는 모션 비디오. 모든 HyperFrames 템플릿은 렌더링 가능한 HTML + CSS + GSAP 컴포지션으로, 로컬 에이전트가 다시 그려 MP4로 렌더링합니다: 키네틱 타이포그래피, 데이터 차트, 로고 아웃트로, 제품 프로모, 글리치 타이틀 등.',
+          'HyperFrames 준비 완료된 모션 컴포지션 — 템플릿 프롬프트, 씬 방향, 브랜드 큐를 렌더링 가능한 타임라인으로 혼합한 에이전트 구축 비디오.',
       },
       audio: {
         label: '오디오',
@@ -1025,7 +1025,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Kostenlose, quelloffene HyperFrames-Templates und -Skills für Open Design — agentengebautes Motion-Video. Jedes HyperFrames-Template ist eine renderfertige HTML + CSS + GSAP-Komposition, die dein lokaler Agent neu zeichnet und als MP4 rendert: kinetische Typografie, Datendiagramme, Logo-Outros, Produkt-Promos, Glitch-Titel und mehr.',
+          'HyperFrames-ready Motion-Kompositionen — Agent-erstelltes Video, das Template-Prompts, Szenen-Richtung und Brand-Cues zu einer renderbaren Timeline verbindet.',
       },
       audio: {
         label: 'Audio',
@@ -1174,7 +1174,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Templates et skills HyperFrames gratuits et open source pour Open Design — vidéo de motion construite par agent. Chaque template HyperFrames est une composition HTML + CSS + GSAP prête à rendre que votre agent local repeint et rend en MP4 : typographie cinétique, graphiques de données, outros de logo, promos produit, titres glitch et plus encore.',
+          'Compositions de mouvement HyperFrames — vidéo construite par agent qui fusionne les prompts de modèle, les directives de scène et les indices de marque en une timeline rendable.',
       },
       audio: {
         label: 'Audio',
@@ -1323,7 +1323,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Бесплатные шаблоны и навыки HyperFrames с открытым кодом для Open Design — motion-видео, создаваемое агентом. Каждый шаблон HyperFrames — это готовая к рендерингу композиция HTML + CSS + GSAP, которую ваш локальный агент перерисовывает и рендерит в MP4: кинетическая типографика, графики данных, лого-аутро, промо продукта, глитч-заголовки и многое другое.',
+          'HyperFrames-готовые motion-композиции — видео, созданное агентом, которое объединяет промпты шаблонов, направление сцены и токены бренда в рендеримую временную шкалу.',
       },
       audio: {
         label: 'Аудио',
@@ -1472,7 +1472,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Plantillas y skills de HyperFrames gratuitas y de código abierto para Open Design — vídeo de motion construido por agentes. Cada plantilla de HyperFrames es una composición HTML + CSS + GSAP lista para renderizar que tu agente local repinta y renderiza a MP4: tipografía cinética, gráficos de datos, outros de logo, promos de producto, títulos glitch y más.',
+          'Composiciones de movimiento listas para HyperFrames — vídeo construido por agentes que combina prompts de plantilla, dirección de escena y pistas de marca en una línea de tiempo renderizable.',
       },
       audio: {
         label: 'Audio',
@@ -1621,7 +1621,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Templates e skills HyperFrames gratuitos e de código aberto para o Open Design — vídeo de motion construído por agentes. Cada template HyperFrames é uma composição HTML + CSS + GSAP pronta para renderizar que seu agente local repinta e renderiza em MP4: tipografia cinética, gráficos de dados, outros de logo, promos de produto, títulos glitch e mais.',
+          'Composições de motion prontas para HyperFrames — vídeo construído por agentes que mescla prompts de template, direção de cena e dicas de marca em uma timeline renderizável.',
       },
       audio: {
         label: 'Áudio',
@@ -1770,7 +1770,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Template e skill HyperFrames gratuiti e open source per Open Design — video di motion costruito da agenti. Ogni template HyperFrames è una composizione HTML + CSS + GSAP pronta al rendering che il tuo agente locale ridipinge e renderizza in MP4: tipografia cinetica, grafici di dati, outro di logo, promo di prodotto, titoli glitch e altro.',
+          'Composizioni di motion pronte per HyperFrames — video costruito da agenti che unisce prompt di template, direzione di scena e indicazioni di brand in una timeline renderizzabile.',
       },
       audio: {
         label: 'Audio',
@@ -1919,7 +1919,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Template dan skill HyperFrames gratis dan open source untuk Open Design — video motion buatan agen. Setiap template HyperFrames adalah komposisi HTML + CSS + GSAP siap render yang dilukis ulang oleh agen lokal Anda dan dirender ke MP4: tipografi kinetik, grafik data, outro logo, promo produk, judul glitch, dan lainnya.',
+          'Komposisi motion siap HyperFrames — video buatan agen yang memadukan prompt template, arahan scene, dan isyarat brand menjadi timeline yang dapat dirender.',
       },
       audio: {
         label: 'Audio',
@@ -2068,7 +2068,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Darmowe szablony i umiejętności HyperFrames o otwartym kodzie dla Open Design — wideo motion tworzone przez agenta. Każdy szablon HyperFrames to gotowa do renderowania kompozycja HTML + CSS + GSAP, którą Twój lokalny agent przemalowuje i renderuje do MP4: typografia kinetyczna, wykresy danych, outra z logo, promocje produktów, tytuły glitch i więcej.',
+          'Kompozycje motion gotowe dla HyperFrames — wideo tworzone przez agentów, które łączą prompty szablonów, kierunek sceny i wskazówki brandowe w renderowalną oś czasu.',
       },
       audio: {
         label: 'Audio',
@@ -2217,7 +2217,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'قوالب ومهارات HyperFrames مجانية ومفتوحة المصدر لـ Open Design — فيديو حركي مبني بواسطة الوكيل. كل قالب HyperFrames هو تركيب HTML + CSS + GSAP جاهز للعرض يعيد وكيلك المحلي رسمه ويعرضه إلى MP4: طباعة حركية، ومخططات بيانات، وخواتم شعار، وعروض ترويجية للمنتجات، وعناوين غليتش والمزيد.',
+          'مركبات حركة جاهزة لـ HyperFrames — فيديو مبني بواسطة الوكيل يمزج موجزات القالب واتجاه المشهد ورموز العلامة التجارية في جدول زمني قابل للعرض.',
       },
       audio: {
         label: 'صوت',
@@ -2366,7 +2366,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          "Open Design için ücretsiz, açık kaynaklı HyperFrames şablonları ve becerileri — aracı tarafından oluşturulan hareketli video. Her HyperFrames şablonu, yerel aracınızın yeniden boyayıp MP4'e işlediği render'a hazır bir HTML + CSS + GSAP kompozisyonudur: kinetik tipografi, veri grafikleri, logo çıkışları, ürün tanıtımları, glitch başlıkları ve daha fazlası.",
+          "HyperFrames'e hazır hareket композиcileri — şablon promptlarını, sahne yönetimini ve marka ipuçlarını render'a uygun zaman çizelgesine birleştiren aracı tarafından oluşturulan video.",
       },
       audio: {
         label: 'Ses',
@@ -2515,7 +2515,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Безкоштовні шаблони та навички HyperFrames з відкритим кодом для Open Design — motion-відео, створене агентом. Кожен шаблон HyperFrames — це готова до рендерингу композиція HTML + CSS + GSAP, яку ваш локальний агент перемальовує та рендерить у MP4: кінетична типографіка, графіки даних, лого-аутро, промо продукту, глітч-заголовки та інше.',
+          'HyperFrames-готові motion-композиції — відео, створене агентом, що поєднує промпти шаблонів, режисуру сцен та бренд-сигнали в рендерований таймлайн.',
       },
       audio: {
         label: 'Аудіо',
@@ -2664,7 +2664,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Các template và skill HyperFrames miễn phí, mã nguồn mở cho Open Design — video motion được tạo bởi agent. Mỗi template HyperFrames là một composition HTML + CSS + GSAP sẵn sàng render mà agent cục bộ của bạn vẽ lại và render thành MP4: typography động, biểu đồ dữ liệu, logo outro, quảng bá sản phẩm, tiêu đề glitch và hơn thế nữa.',
+          'Các motion composition sẵn sàng cho HyperFrames — video được tạo bởi agent kết hợp các template prompt, scene direction, và brand cue thành một timeline có thể render được.',
       },
       audio: {
         label: 'Audio',
@@ -2813,7 +2813,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
       hyperframes: {
         label: 'HyperFrames',
         description:
-          'Gratis, open-source HyperFrames-templates en -skills voor Open Design — door agents gebouwde motion-video. Elke HyperFrames-template is een renderklare HTML + CSS + GSAP-compositie die je lokale agent opnieuw inkleurt en naar MP4 rendert: kinetische typografie, datagrafieken, logo-outro\'s, productpromo\'s, glitch-titels en meer.',
+          'HyperFrames-ready motion compositions — agent-gebouwde video die sjabloonprompts, scene direction en brand cues samenvoegt tot een renderable timeline.',
       },
       audio: {
         label: 'Audio',

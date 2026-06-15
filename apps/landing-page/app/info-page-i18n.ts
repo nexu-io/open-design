@@ -1957,7 +1957,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
         { label: 'Windows', body: '10 or 11 (x64) — installer or portable zip.' },
         { label: 'Linux', body: 'AppImage, or Docker / Podman Compose one-click setup.' },
       ],
-      allReleasesTitle: 'All releases & checksums',
+      allReleasesTitle: 'All releases',
       allReleasesBody:
         'Every build, checksum, and past version lives on GitHub Releases and releases.open-design.ai.',
       ctaTitle: 'Prefer the terminal?',
@@ -2785,7 +2785,7 @@ INFO_PAGE_COPY.zh = {
       { label: 'Windows', body: '10 或 11（x64）——安装版或便携版 zip。' },
       { label: 'Linux', body: 'AppImage，或 Docker / Podman Compose 一键搭建。' },
     ],
-    allReleasesTitle: '全部版本与校验和',
+    allReleasesTitle: '全部版本',
     allReleasesBody: '每个构建、校验和与历史版本都在 GitHub Releases 与 releases.open-design.ai 上。',
     ctaTitle: '更喜欢用终端？',
     ctaBody: '三条命令从源码安装，或用你现有的编码 agent 以 headless 方式驱动 Open Design。',

@@ -45,7 +45,7 @@ Für die Desktop-Shell und alle verwalteten Sidecars im Hintergrund:
 pnpm tools-dev # startet daemon + web + desktop im Hintergrund
 ```
 
-Beim ersten Laden erkennt die App Ihre installierte Code-Agent-CLI (Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen), wählt sie automatisch und nutzt standardmäßig den `web-prototype` Skill sowie das `Neutral Modern` Design System. Geben Sie einen Prompt ein und klicken Sie auf **Senden**. Der Agent streamt in den linken Bereich; das `<artifact>` Tag wird herausgeparst und das HTML rechts live gerendert. Nach Abschluss können Sie das Artifact mit **Auf Datenträger speichern** unter `./.od/artifacts/<timestamp>-<slug>/index.html` speichern.
+Beim ersten Laden erkennt die App Ihre installierte Code-Agent-CLI (Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen), wählt sie automatisch und nutzt standardmäßig den `web-prototype` Skill sowie das `Neutral Modern` Design System. Geben Sie einen Prompt ein und klicken Sie auf **Senden**. Der Agent streamt in den linken Bereich; das `<artifact>` Tag wird herausgeparst und das HTML rechts live gerendert. Nach Abschluss können Sie das Artifact mit **Auf Datenträger speichern** speichern. Bevor Sie einen Artifact-Speicherpfad dokumentieren oder ändern, MÜSSEN Sie `AGENTS.md` im Repository-Stamm lesen, Abschnitt **Daemon data directory contract**.
 
 Das Dropdown **Designsystem** enthält 71 integrierte Systeme: 2 handgeschriebene Starter (Neutral Modern, Warm Editorial) und 69 Produktsysteme, importiert aus [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md), gruppiert nach Kategorie (AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive). Wählen Sie eines aus, um jeden Prototyp in der Ästhetik dieser Marke zu gestalten.
 
@@ -196,25 +196,9 @@ OD_API_TOKEN=
 
 ## Dauerhafter Speicher
 
-Open Design speichert Projekte und SQLite-Daten in einem Docker-Volume:
-
-```text
-open_design_data
-```
-
-Das Volume wird gemountet auf:
-
-```text
-/app/.od
-```
-
-Die Daten bleiben über Container-Neustarts und Image-Updates hinweg erhalten.
-
-Volume inspizieren:
-
-```bash
-docker volume inspect open-design_open_design_data
-```
+Bevor Sie einen persistenten Daemon-Speicherpfad dokumentieren, ändern oder auswählen,
+MÜSSEN Sie `AGENTS.md` im Repository-Stamm lesen, Abschnitt **Daemon data directory contract**.
+Dieser Quickstart DARF diesen Vertrag NICHT wiederholen oder Speicherpfade definieren.
 
 ---
 
@@ -353,10 +337,6 @@ open-design/
 │   └── …69 product systems    # claude · cohere · linear-app · vercel · stripe · airbnb …
 ├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
 ├── docs/                      # product vision + spec
-├── .od/                       # runtime data (gitignored, auto-created)
-│   ├── app.sqlite              #   projects / conversations / messages / tabs
-│   ├── artifacts/              #   one-off "Save to disk" renders
-│   └── projects/<id>/          #   per-project working dir + agent cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # root quality scripts + `od` bin
 ```

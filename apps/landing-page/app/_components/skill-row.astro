@@ -1,0 +1,56 @@
+---
+/*
+ * Shared skill row used on `/skills/`, `/skills/mode/<slug>/`,
+ * `/skills/scenario/<slug>/`, and any future faceted view.
+ *
+ * Renders a `<li class="catalog-row catalog-row-skill">` with the
+ * canonical 5-column grid (index, thumb, body, meta, arrow). Centralizes
+ * the markup so all faceted views stay visually identical to the
+ * unfiltered index.
+ */
+import type { SkillRecord } from '../_lib/catalog';
+import { localeFromPath, localizedHref } from '../i18n';
+import LazyImg from './lazy-img.astro';
+
+export interface Props {
+  skill: SkillRecord;
+  index: number;
+}
+
+const { skill, index } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+// The first ~4 rows are visible above the fold on a typical laptop and
+// always render at the top of the first catalog list a visitor sees.
+// Skip the IntersectionObserver round-trip for them; everything below
+// uses precise lazy loading (rootMargin 300px) via the global script.
+const aboveFold = index < 4;
+---
+
+<li class="catalog-row catalog-row-skill">
+  <a href={href(`/skills/${skill.slug}/`)}>
+    <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
+    <span class="row-thumb">
+      {skill.previewUrl ? (
+        <LazyImg
+          src={skill.previewUrl}
+          alt=""
+          loading={aboveFold ? 'eager' : 'precise'}
+        />
+      ) : (
+        <span class="row-thumb-empty" aria-hidden="true" />
+      )}
+    </span>
+    <span class="row-body">
+      <span class="row-name">{skill.name}</span>
+      <span class="row-desc">{skill.description}</span>
+    </span>
+    <span class="row-meta">
+      {skill.modeLabel && <span class="meta-tag">{skill.modeLabel}</span>}
+      {skill.scenarioLabel && <span class="meta-tag muted">{skill.scenarioLabel}</span>}
+      {skill.platformLabel && <span class="meta-tag muted">{skill.platformLabel}</span>}
+    </span>
+    <span class="row-arrow" aria-hidden="true">→</span>
+  </a>
+</li>

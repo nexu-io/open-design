@@ -46,7 +46,7 @@ const jsonLd = {
     <span aria-current="page">{pcopy.tileSkills}</span>
   </nav>
 
-  <header class="catalog-head">
+  <header class="catalog-head plugin-skills-head">
     <span class="label">{pcopy.skillsLabel}</span>
     <h1 class="display">{pcopy.skillsHeading(skills.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.skillsLead}</p>
@@ -59,4 +59,14 @@ const jsonLd = {
       ))}
     </ol>
   </section>
+
+  <style>
+    .plugin-skills-head {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .plugin-skills-head .label {
+      display: none;
+    }
+  </style>
 </Layout>

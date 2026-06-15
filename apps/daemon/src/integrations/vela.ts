@@ -83,6 +83,13 @@ export interface AmrEntryAnalyticsPayload {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   entryOccurredAt: string;
+  // Optional self-reported onboarding profile, forwarded to AMR for paid-
+  // conversion segmentation. Open strings (not a union) so a new onboarding
+  // option never forces a contract bump on either side. useCase is multi-select.
+  odRole?: string;
+  odOrgSize?: string;
+  odUseCase?: string[];
+  odSource?: string;
 }
 
 export interface AmrEntryAnalyticsContext {
@@ -318,6 +325,7 @@ export interface SpawnVelaLoginDeps {
   configuredEnv?: Record<string, string>;
   baseEnv?: NodeJS.ProcessEnv;
   attribution?: AmrEntryAttribution | null;
+  defaultApiUrl?: string | null;
 }
 
 async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> {
@@ -378,7 +386,11 @@ export async function spawnVelaLogin(
   const def = getAgentDef('amr');
   if (!def) throw new Error('AMR runtime def not registered');
   const baseEnv = deps.baseEnv ?? process.env;
-  const configuredEnv = deps.configuredEnv ?? {};
+  const configuredEnv = withDefaultVelaApiUrl(
+    deps.configuredEnv ?? {},
+    baseEnv,
+    deps.defaultApiUrl,
+  );
   const launch = resolveAgentLaunch(def, configuredEnv);
   const bin = launch.selectedPath;
   if (!bin) {
@@ -420,6 +432,18 @@ export async function spawnVelaLogin(
   };
 }
 
+function withDefaultVelaApiUrl(
+  configuredEnv: Record<string, string>,
+  baseEnv: NodeJS.ProcessEnv,
+  defaultApiUrl: string | null | undefined,
+): Record<string, string> {
+  const trimmed = defaultApiUrl?.trim();
+  if (!trimmed) return configuredEnv;
+  if ((configuredEnv.VELA_API_URL ?? '').trim()) return configuredEnv;
+  if ((baseEnv.VELA_API_URL ?? '').trim()) return configuredEnv;
+  return { ...configuredEnv, VELA_API_URL: trimmed };
+}
+
 export function parseVelaLoginAttribution(input: unknown): AmrEntryAttribution | null {
   const raw = input && typeof input === 'object' && 'attribution' in input
     ? (input as { attribution?: unknown }).attribution
@@ -459,6 +483,10 @@ export function parseAmrEntryAnalyticsPayload(
   const sourceProduct = raw.sourceProduct;
   const sourceDetail = raw.sourceDetail;
   const entryOccurredAt = raw.entryOccurredAt;
+  const odRole = sanitizeOptionalProfileValue(raw.odRole);
+  const odOrgSize = sanitizeOptionalProfileValue(raw.odOrgSize);
+  const odSource = sanitizeOptionalProfileValue(raw.odSource);
+  const odUseCase = sanitizeOptionalProfileList(raw.odUseCase);
   if (
     pageName !== 'open_design'
     || typeof sourcePageName !== 'string'
@@ -477,6 +505,10 @@ export function parseAmrEntryAnalyticsPayload(
       !== AMR_ENTRY_SOURCE_PAGE_BY_SOURCE[sourceDetail as TrackingAmrEntrySource]
     || typeof entryOccurredAt !== 'string'
     || !Number.isFinite(Date.parse(entryOccurredAt))
+    || odRole === INVALID_PROFILE_VALUE
+    || odOrgSize === INVALID_PROFILE_VALUE
+    || odSource === INVALID_PROFILE_VALUE
+    || odUseCase === INVALID_PROFILE_VALUE
   ) {
     return null;
   }
@@ -490,7 +522,45 @@ export function parseAmrEntryAnalyticsPayload(
     sourceProduct,
     sourceDetail: sourceDetail as TrackingAmrEntrySource,
     entryOccurredAt,
+    ...(odRole ? { odRole } : {}),
+    ...(odOrgSize ? { odOrgSize } : {}),
+    ...(odUseCase ? { odUseCase } : {}),
+    ...(odSource ? { odSource } : {}),
   };
+}
+
+// Optional profile values are open strings; we accept absent/undefined, reject
+// a present-but-wrong type or an over-long value (matches AMR's 64-char cap),
+// and otherwise pass the trimmed string through.
+const INVALID_PROFILE_VALUE = Symbol('invalid_profile_value');
+
+function sanitizeOptionalProfileValue(
+  value: unknown,
+): string | undefined | typeof INVALID_PROFILE_VALUE {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') return INVALID_PROFILE_VALUE;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > 64) return INVALID_PROFILE_VALUE;
+  return trimmed;
+}
+
+// useCase is multi-select: accept absent/undefined, reject a non-array or any
+// element that fails the open-string check, cap the count (matches AMR's array
+// bound), and pass the trimmed list through.
+function sanitizeOptionalProfileList(
+  value: unknown,
+): string[] | undefined | typeof INVALID_PROFILE_VALUE {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.length > 20) return INVALID_PROFILE_VALUE;
+  const cleaned: string[] = [];
+  for (const entry of value) {
+    const sanitized = sanitizeOptionalProfileValue(entry);
+    if (sanitized === INVALID_PROFILE_VALUE || sanitized === undefined) {
+      return INVALID_PROFILE_VALUE;
+    }
+    cleaned.push(sanitized);
+  }
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 export async function mirrorAmrEntryAnalytics(

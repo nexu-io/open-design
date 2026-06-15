@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -233,7 +234,7 @@ export function defaultDesignSystemSelection(
   designSystems: DesignSystemSummary[],
 ): string[] {
   if (!defaultDesignSystemId) return [];
-  return designSystems.some((d) => d.id === defaultDesignSystemId)
+  return designSystems.some((d) => d.id === defaultDesignSystemId && (d.status ?? 'published') !== 'draft')
     ? [defaultDesignSystemId]
     : [];
 }
@@ -1561,6 +1562,7 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const deleteTemplateTitleId = useId();
   const [confirmDelete, setConfirmDelete] = useState<
     { id: string; name: string } | null
   >(null);
@@ -1626,41 +1628,36 @@ function TemplatePicker({
         </div>
       )}
       {confirmDelete ? (
-        <div
-          className="modal-backdrop"
-          onClick={deleting ? undefined : closeConfirm}
+        <Dialog
+          className="modal-confirm"
+          role="alertdialog"
+          onClose={deleting ? undefined : closeConfirm}
+          ariaLabelledBy={deleteTemplateTitleId}
         >
-          <div
-            className="modal modal-confirm"
-            onClick={(e) => e.stopPropagation()}
-            role="alertdialog"
-            aria-modal="true"
-          >
-            <h2>{t('newproj.deleteTemplateTitle')}</h2>
-            <p className="modal-confirm-message">
-              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          <DialogTitle id={deleteTemplateTitleId}>{t('newproj.deleteTemplateTitle')}</DialogTitle>
+          <DialogDescription className="modal-confirm-message">
+            {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+          </DialogDescription>
+          {deleteError ? (
+            <p className="modal-confirm-error" role="alert">
+              {t('newproj.deleteTemplateError')}
             </p>
-            {deleteError ? (
-              <p className="modal-confirm-error" role="alert">
-                {t('newproj.deleteTemplateError')}
-              </p>
-            ) : null}
-            <div className="row">
-              <button type="button" onClick={closeConfirm} disabled={deleting}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="primary danger"
-                autoFocus
-                disabled={deleting}
-                onClick={runDelete}
-              >
-                {t('newproj.deleteTemplateConfirmCta')}
-              </button>
-            </div>
-          </div>
-        </div>
+          ) : null}
+          <DialogFooter className="row">
+            <button type="button" onClick={closeConfirm} disabled={deleting}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="primary danger"
+              autoFocus
+              disabled={deleting}
+              onClick={runDelete}
+            >
+              {t('newproj.deleteTemplateConfirmCta')}
+            </button>
+          </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -2048,7 +2045,7 @@ function DesignSystemPicker({
       .filter((d): d is DesignSystemSummary => Boolean(d));
     const pickedSet = new Set(picked.map((d) => d.id));
     const rest = designSystems
-      .filter((d) => !pickedSet.has(d.id))
+      .filter((d) => (d.status ?? 'published') !== 'draft' && !pickedSet.has(d.id))
       .sort((a, b) => {
         if (a.id === defaultDesignSystemId) return -1;
         if (b.id === defaultDesignSystemId) return 1;
@@ -2508,7 +2505,7 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
+    image: new Set(['openai', 'codex', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix']),
     video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
@@ -2545,6 +2542,8 @@ function MediaModelCards({
       providerId: string;
       providerLabel: string;
       status: 'configured' | 'integrated' | 'unsupported';
+      sortIndex: number;
+      sortPriority: number;
       models: MediaModel[];
     }> = [];
     for (const model of models) {
@@ -2552,9 +2551,7 @@ function MediaModelCards({
       const providerId = provider?.id ?? model.provider;
       if (!isMediaProviderPickerReady(providerId, mediaProviders)) continue;
       const entry = mediaProviders?.[providerId];
-      const configured =
-        provider?.credentialsRequired === false ||
-        isStoredMediaProviderEntryPresent(entry);
+      const configured = provider?.credentialsRequired !== false && isStoredMediaProviderEntryPresent(entry);
       let group = out.find((g) => g.providerId === providerId);
       if (!group) {
         group = {
@@ -2565,13 +2562,15 @@ function MediaModelCards({
             : provider?.integrated
               ? 'integrated'
               : 'unsupported',
+          sortIndex: out.length,
+          sortPriority: configured ? 0 : provider?.credentialsRequired === false ? 1 : 2,
           models: [],
         };
         out.push(group);
       }
       group.models.push(model);
     }
-    return out;
+    return out.sort((a, b) => a.sortPriority - b.sortPriority || a.sortIndex - b.sortIndex);
   }, [models, mediaProviders]);
 
   const selected = useMemo(() => {

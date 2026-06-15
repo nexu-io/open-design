@@ -212,7 +212,7 @@ design-systems/your-brand/
 ## コミットとプルリクエスト
 
 - **PR 1 つにつき 1 つの関心事。** Skill の追加 + パーサーのリファクタリング + 依存関係のバンプは 3 つの PR です。
-- **タイトルは命令形 + スコープ。** `add dating-web skill`、`fix daemon SSE backpressure when CLI hangs`、`docs: clarify .od layout`。
+- **タイトルは命令形 + スコープ。** `add dating-web skill`、`fix daemon SSE backpressure when CLI hangs`、`docs: clarify storage contract`。
 - **PR テンプレートを使用する。** [`.github/pull_request_template.md`](../../.github/pull_request_template.md) の各セクション（Why、What users will see、Surface area、Screenshots（UI の場合）、Bug fix verification（バグ修正の場合）、Validation）をすべて埋めてください。空欄のセクションには "please fill in" のコメントが付きます。
 - **本文は「なぜ」を説明。** 「何をするか」は通常 diff から明らかです。「なぜこれが必要か」はほとんどの場合そうではありません。
 - **issue がある場合は参照。** ない場合で、PR が自明でないなら、先に issue を作成して変更が求められていることを合意してから時間を費やしてください。

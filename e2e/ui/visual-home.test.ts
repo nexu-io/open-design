@@ -4,6 +4,7 @@ import {
   captureVisual,
   configureVisualPage,
   gotoVisualHome,
+  scrollVisualLocatorIntoStableView,
   waitForVisualFonts,
   waitForVisualProjects,
 } from '@/playwright/visual';
@@ -107,7 +108,7 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   const community = home.getByTestId('plugins-home-section');
   await expect(community).toBeVisible();
-  await community.scrollIntoViewIfNeeded();
+  await scrollVisualLocatorIntoStableView(page, community);
   await expect(home.locator('article.plugins-home__card--gallery').first()).toBeVisible();
   await expect(home.getByTestId('plugins-home-search')).toBeVisible();
 

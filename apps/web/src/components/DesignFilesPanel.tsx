@@ -11,6 +11,7 @@ import {
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { isVisualStabilityMode } from '../utils/visualStability';
 import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
@@ -201,6 +202,11 @@ function RotatingTip() {
   useEffect(() => {
     const tips = tipsRef.current;
     const full = tips[index] ?? '';
+    if (isVisualStabilityMode()) {
+      setIndex(0);
+      setTyped(tips[0] ?? '');
+      return;
+    }
     if (prefersReducedMotion()) {
       setTyped(full);
       if (tips.length < 2) return;
