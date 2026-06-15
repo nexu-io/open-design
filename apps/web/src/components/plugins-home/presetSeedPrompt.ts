@@ -99,6 +99,51 @@ export function isMetaInstructionSeed(value: string): boolean {
   return /逐字注入|以\s*en\s*字段为准|verbatim|example\.html/iu.test(value);
 }
 
+// Markers that introduce a source-provenance sentence ("Based on …", "移植自 …").
+const ATTRIBUTION_MARKERS = [
+  'Based on', 'Adapted from', 'Ported from', 'Inspired by',
+  '移植自', '改编自', '基于', '源自', '参考自',
+];
+
+// Start index of the final sentence. A Latin '.'/'!'/'?' ends a sentence only
+// when it terminates the string or is followed by whitespace, so tokens like
+// "STYLE_PRESETS.md" or "github.com/foo" don't split mid-word; CJK enders
+// (。！？) always split.
+function lastSentenceStart(text: string): number {
+  const bounds: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    if (ch === '。' || ch === '！' || ch === '？') bounds.push(i);
+    else if (ch === '.' || ch === '!' || ch === '?') {
+      const next = text[i + 1];
+      if (next === undefined || /\s/.test(next)) bounds.push(i);
+    }
+  }
+  if (bounds.length === 0) return 0;
+  const last = bounds[bounds.length - 1]!;
+  // If the last boundary is the final char, the trailing sentence starts after
+  // the previous boundary; otherwise it starts after the last one.
+  if (last === text.length - 1) {
+    return bounds.length >= 2 ? bounds[bounds.length - 2]! + 1 : 0;
+  }
+  return last + 1;
+}
+
+// Drop a trailing source-attribution sentence ("…。移植自 foo/bar 的 baz 模板。")
+// so the composer seed doesn't end on provenance boilerplate. Conservative: only
+// fires when the FINAL sentence opens with an attribution marker AND real
+// description precedes it — never blanks the whole text, and leaves attribution
+// that is woven mid-description (followed by a use-case sentence) untouched.
+export function stripAttributionTail(text: string): string {
+  const trimmed = text.trimEnd();
+  const start = lastSentenceStart(trimmed);
+  if (start === 0) return text;
+  const sentence = trimmed.slice(start).replace(/^\s+/, '');
+  if (!ATTRIBUTION_MARKERS.some((m) => sentence.startsWith(m))) return text;
+  const kept = trimmed.slice(0, start).trimEnd();
+  return kept.length > 0 ? kept : text;
+}
+
 // Non-global twin of INPUT_PLACEHOLDER_PATTERN — `.test()` on a /g/ regex is
 // stateful (lastIndex), so probing uses this one.
 const HAS_INPUT_PLACEHOLDER_PATTERN = /\{\{\s*[a-zA-Z_][\w-]*\s*\}\}/;
@@ -130,7 +175,7 @@ export function examplePresetSeedPrompt(
   locale: Locale,
   fallback: () => string,
 ): PresetSeed {
-  const description = localizePluginDescription(locale, record).trim();
+  const description = stripAttributionTail(localizePluginDescription(locale, record).trim());
   // zh: the localized useCase.query is a generator-facing meta-instruction
   // ("follow the en field verbatim; start from example.html"), useless as a
   // human seed — surface the curated one-line description instead.

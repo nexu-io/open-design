@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Design · Product Story — Luxe Whitespace</title>
+<style>
+  /* ============================================================
+     Luxe Whitespace
+     Locked design tokens — re-theme by changing VALUES only.
+     70%+ whitespace, Inter 200–600, one warm gold (#D4A574),
+     hairline gradients, ultra-thin floating numerals.
+     Based on huashu-design ppt-build by huashu (alchaincyf).
+     ============================================================ */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&display=swap');
+
+  :root {
+    --bg:       #FAFAF8;   /* warm off-white page             */
+    --ink:      #2A2A2A;   /* primary ink                     */
+    --gold:     #D4A574;   /* THE warm gold — the only accent */
+    --hairline: #E0DCD6;   /* gradient hairline separators    */
+    --rule:     #EEECE8;   /* horizontal section rules        */
+    --track:    #EEECEA;   /* comparison bar track            */
+    --bar:      #D8D5D0;   /* baseline / losing bar           */
+    --muted:    #696963;   /* metric names / strong captions  */
+    --soft:     #74746E;   /* subtitles                       */
+    --faint:    #B8B4AE;   /* tertiary captions               */
+    --ghost:    #C8C4BC;   /* brand text / source notes       */
+    --body:     #6E6E68;   /* insight body copy               */
+    --sans: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: #EFEEEA;
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  /* ---- fixed 1920×1080 stage, letterboxed by fit() ---- */
+  #stage {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 1920px;
+    height: 1080px;
+    transform: translate(-50%, -50%) scale(1);
+    transform-origin: center center;
+    background: var(--bg);
+    box-shadow: 0 0 80px rgba(0,0,0,0.06);
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    background: var(--bg);
+    color: var(--ink);
+    overflow: hidden;
+    padding: 64px 96px 48px 96px;
+    flex-direction: column;
+  }
+  .slide.active { display: flex; }
+
+  /* ---- entrance: staggered rise, transform/opacity only ---- */
+  @keyframes slide-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .slide.active > * { animation: slide-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+  .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+  .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+  /* ---- page chrome: eyebrow row + bottom brand mark ---- */
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .eyebrow {
+    font-size: 10px; font-weight: 400;
+    letter-spacing: 4px; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .source-note {
+    font-size: 10px; font-weight: 300;
+    color: var(--ghost);
+    text-align: right; line-height: 1.6;
+  }
+
+  .bottom-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-top: 24px;
+    margin-top: auto;
+  }
+  .insight-text {
+    font-size: 13px; font-weight: 300;
+    color: var(--body); line-height: 1.8;
+    max-width: 640px;
+  }
+  .insight-text strong { font-weight: 500; color: #666; }
+  .brand-mark { display: flex; align-items: center; gap: 16px; }
+  .brand-line { width: 32px; height: 1px; background: var(--gold); opacity: 0.6; }
+  .brand-text {
+    font-size: 10px; font-weight: 400;
+    letter-spacing: 3px; color: var(--ghost);
+    text-transform: uppercase;
+  }
+
+  /* ---- title block (hairline-ruled) ---- */
+  .title-area { padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+  .main-title {
+    font-size: 40px; font-weight: 200;
+    letter-spacing: -0.5px; line-height: 1.2;
+    color: var(--ink);
+  }
+  .main-title .mid { font-weight: 400; }
+  .main-title .gold-dot { color: var(--gold); font-weight: 300; font-size: 48px; }
+  .subtitle {
+    font-size: 14px; font-weight: 300;
+    color: var(--soft); margin-top: 8px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ---- signature: vertical gradient hairline separators ---- */
+  .v-hairline {
+    width: 1px; align-self: stretch;
+    background: linear-gradient(to bottom, transparent, var(--hairline) 50%, transparent);
+  }
+
+  /* ---- ultra-thin floating numerals ---- */
+  .metric-value {
+    font-size: 120px; font-weight: 200;
+    letter-spacing: -4px; line-height: 1;
+    color: var(--ink);
+  }
+  .metric-value .dot { color: var(--gold); font-weight: 300; }
+  .metric-unit {
+    font-size: 28px; font-weight: 200;
+    color: var(--gold); vertical-align: super;
+    margin-left: 2px; opacity: 0.8;
+  }
+  .metric-name {
+    font-size: 12px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); margin-top: 16px; margin-bottom: 8px;
+  }
+  .metric-category {
+    font-size: 11px; font-weight: 300;
+    color: var(--faint); letter-spacing: 0.5px;
+  }
+
+  /* ---- hero data: metric card columns ---- */
+  .hero-data {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .metric-card {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    position: relative;
+    padding: 32px 24px;
+  }
+  .metric-card::after {
+    content: '';
+    position: absolute; right: 0; top: 25%;
+    height: 50%; width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--hairline) 50%, transparent);
+  }
+  .metric-card:last-child::after { display: none; }
+
+  /* ---- signature: gold-vs-grey comparison bars ---- */
+  .comparison-group { margin-top: 24px; width: 280px; }
+  .comp-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+  .comp-label {
+    font-size: 11px; font-weight: 400; color: var(--muted);
+    width: 80px; text-align: right; flex-shrink: 0;
+  }
+  .comp-track {
+    flex: 1; height: 2px; background: var(--track);
+    border-radius: 1px; position: relative;
+  }
+  .comp-fill { height: 100%; border-radius: 1px; background: var(--bar); }
+  .comp-fill.gold { background: var(--gold); height: 3px; margin-top: -0.5px; }
+  .comp-val {
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    width: 44px; flex-shrink: 0;
+  }
+  .comp-val.gold { color: var(--gold); }
+
+  /* ---- cover ---- */
+  .cover-body {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: center; align-items: flex-start;
+    position: relative;
+  }
+  .cover-title {
+    font-size: 104px; font-weight: 200;
+    letter-spacing: -2px; line-height: 1.15;
+    color: var(--ink);
+  }
+  .cover-title .gold-dot { color: var(--gold); font-weight: 300; }
+  .cover-sub {
+    font-size: 16px; font-weight: 300;
+    color: var(--soft); margin-top: 32px;
+    letter-spacing: 2px;
+  }
+  .cover-rule {
+    width: 64px; height: 1px; background: var(--gold);
+    opacity: 0.7; margin-top: 48px;
+  }
+  .cover-year {
+    position: absolute; right: 0; bottom: -24px;
+    font-size: 280px; font-weight: 200;
+    letter-spacing: -10px; line-height: 1;
+    color: var(--ink); opacity: 0.05;
+    pointer-events: none;
+  }
+
+  /* ---- contents ---- */
+  .toc { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 1100px; }
+  .toc-row {
+    display: flex; align-items: baseline; gap: 48px;
+    padding: 26px 0; border-bottom: 1px solid var(--rule);
+  }
+  .toc-row:first-child { border-top: 1px solid var(--rule); }
+  .toc-num {
+    font-size: 32px; font-weight: 200;
+    color: var(--gold); width: 72px;
+    letter-spacing: -1px; flex-shrink: 0;
+  }
+  .toc-title { font-size: 22px; font-weight: 300; color: var(--ink); letter-spacing: 0.5px; }
+  .toc-desc { font-size: 12px; font-weight: 300; color: var(--faint); margin-left: auto; letter-spacing: 1px; }
+
+  /* ---- big number hero ---- */
+  .big-hero {
+    flex: 1; display: flex;
+    align-items: center; justify-content: center; gap: 96px;
+  }
+  .big-number {
+    font-size: 240px; font-weight: 200;
+    letter-spacing: -10px; line-height: 0.95;
+    color: var(--ink);
+  }
+  .big-number .dot { color: var(--gold); font-weight: 300; }
+  .big-number .unit {
+    font-size: 56px; font-weight: 200;
+    color: var(--gold); vertical-align: super; opacity: 0.8;
+    letter-spacing: 0;
+  }
+  .big-side { max-width: 380px; }
+  .big-side-label {
+    font-size: 12px; font-weight: 500;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 20px;
+  }
+  .big-side-text {
+    font-size: 15px; font-weight: 300;
+    color: var(--body); line-height: 2;
+  }
+  .big-side-text strong { font-weight: 500; color: #666; }
+  .big-side-rule { width: 40px; height: 1px; background: var(--gold); opacity: 0.6; margin-bottom: 20px; }
+
+  /* ---- horizontal channel bars (chart page) ---- */
+  .channel-list { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 40px; max-width: 1240px; margin: 0 auto; width: 100%; }
+  .channel-row { display: flex; align-items: center; gap: 32px; }
+  .channel-name { width: 200px; font-size: 15px; font-weight: 300; color: var(--ink); flex-shrink: 0; }
+  .channel-name small { display: block; font-size: 10px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; color: var(--faint); margin-top: 4px; }
+  .channel-track { flex: 1; height: 2px; background: var(--track); position: relative; }
+  .channel-fill { position: absolute; left: 0; top: 0; height: 2px; background: var(--bar); }
+  .channel-fill.gold { background: linear-gradient(to right, var(--gold), rgba(212,165,116,0.35)); height: 3px; top: -0.5px; }
+  .channel-val { width: 150px; text-align: right; font-size: 32px; font-weight: 200; letter-spacing: -1px; color: var(--ink); flex-shrink: 0; }
+  .channel-val .dot { color: var(--gold); font-weight: 300; }
+  .channel-val small { font-size: 12px; font-weight: 300; color: var(--faint); letter-spacing: 0; margin-left: 6px; }
+
+  /* ---- timeline ---- */
+  .timeline { flex: 1; display: flex; align-items: center; }
+  .tl-col {
+    flex: 1; position: relative;
+    padding: 0 40px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .tl-col::after {
+    content: '';
+    position: absolute; right: 0; top: 15%;
+    height: 70%; width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--hairline) 50%, transparent);
+  }
+  .tl-col:last-child::after { display: none; }
+  .tl-year {
+    font-size: 88px; font-weight: 200;
+    letter-spacing: -3px; line-height: 1;
+  }
+  .tl-col:nth-child(1) .tl-year { color: var(--ghost); }
+  .tl-col:nth-child(2) .tl-year { color: var(--faint); }
+  .tl-col:nth-child(3) .tl-year { color: var(--muted); }
+  .tl-col:nth-child(4) .tl-year { color: var(--ink); }
+  .tl-col:nth-child(4) .tl-year .dot { color: var(--gold); font-weight: 300; }
+  .tl-title { font-size: 16px; font-weight: 500; color: var(--ink); letter-spacing: 0.5px; }
+  .tl-text { font-size: 13px; font-weight: 300; color: var(--body); line-height: 1.9; }
+  .tl-rule { width: 32px; height: 1px; background: var(--gold); opacity: 0.6; }
+
+  /* ---- quote ---- */
+  .quote-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .quote-hairline { width: 1px; height: 88px; background: linear-gradient(to bottom, transparent, var(--gold)); opacity: 0.7; }
+  .quote-text {
+    font-size: 52px; font-weight: 200;
+    line-height: 1.6; letter-spacing: 0.5px;
+    color: var(--ink); max-width: 1240px;
+    margin: 56px 0;
+  }
+  .quote-text .gold { color: var(--gold); font-weight: 300; }
+  .quote-attr {
+    font-size: 12px; font-weight: 400;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--faint);
+  }
+  .quote-attr strong { font-weight: 500; color: var(--muted); }
+
+  /* ---- two-column before / after ---- */
+  .duo { flex: 1; display: flex; align-items: stretch; gap: 0; }
+  .duo-col { flex: 1; padding: 48px 64px; display: flex; flex-direction: column; justify-content: center; }
+  .duo-label {
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 3px; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 36px;
+  }
+  .duo-col.after .duo-label { color: var(--gold); }
+  .duo-item { margin-bottom: 36px; }
+  .duo-item:last-child { margin-bottom: 0; }
+  .duo-num { font-size: 56px; font-weight: 200; letter-spacing: -2px; line-height: 1; color: var(--ghost); }
+  .duo-col.after .duo-num { color: var(--ink); }
+  .duo-col.after .duo-num .dot { color: var(--gold); font-weight: 300; }
+  .duo-num .unit { font-size: 20px; font-weight: 200; vertical-align: super; margin-left: 2px; }
+  .duo-col.after .duo-num .unit { color: var(--gold); opacity: 0.8; }
+  .duo-cap { font-size: 12px; font-weight: 400; letter-spacing: 1px; color: var(--soft); margin-top: 10px; }
+
+  /* ---- stats grid 2×2 ---- */
+  .stats-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    align-items: center;
+    position: relative;
+  }
+  .stats-grid::before {
+    content: '';
+    position: absolute; left: 50%; top: 8%;
+    height: 84%; width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--hairline) 50%, transparent);
+  }
+  .stats-grid::after {
+    content: '';
+    position: absolute; top: 50%; left: 8%;
+    width: 84%; height: 1px;
+    background: linear-gradient(to right, transparent, var(--hairline) 50%, transparent);
+  }
+  .stat-cell { text-align: center; padding: 32px; }
+  .stat-num {
+    font-size: 96px; font-weight: 200;
+    letter-spacing: -3px; line-height: 1;
+    color: var(--ink);
+  }
+  .stat-num .dot { color: var(--gold); font-weight: 300; }
+  .stat-num .unit { font-size: 26px; font-weight: 200; color: var(--gold); vertical-align: super; opacity: 0.8; }
+  .stat-cap {
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--muted); margin-top: 18px;
+  }
+  .stat-sub { font-size: 11px; font-weight: 300; color: var(--faint); margin-top: 6px; }
+
+  /* ---- closing ---- */
+  .closing-body {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+  }
+  .closing-title {
+    font-size: 120px; font-weight: 200;
+    letter-spacing: -2px; line-height: 1.2;
+    color: var(--ink);
+  }
+  .closing-title .gold-dot { color: var(--gold); font-weight: 300; }
+  .closing-sub {
+    font-size: 14px; font-weight: 300;
+    color: var(--soft); margin-top: 40px;
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+  .closing-rule { width: 64px; height: 1px; background: var(--gold); opacity: 0.7; margin-top: 48px; }
+
+  /* ---- deck runtime: slide-dot indicator / counter / key hint ---- */
+  #dots {
+    position: absolute; top: 32px; right: 96px;
+    display: flex; gap: 6px; align-items: center;
+    z-index: 30;
+  }
+  .slide-dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--hairline);
+    transition: width 0.25s cubic-bezier(0.23, 1, 0.32, 1),
+                background-color 0.25s cubic-bezier(0.23, 1, 0.32, 1),
+                border-radius 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .slide-dot.active { background: var(--gold); width: 16px; border-radius: 2px; }
+
+  #counter {
+    position: absolute; right: 32px; bottom: 12px;
+    z-index: 30;
+    font-size: 11px; font-weight: 300;
+    letter-spacing: 2px; color: var(--faint);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 6px 16px;
+    background: rgba(250,250,248,0.9);
+  }
+  #counter b { color: var(--gold); font-weight: 400; }
+
+  #keyhint {
+    position: absolute; left: 32px; bottom: 12px;
+    z-index: 30;
+    font-size: 10px; font-weight: 300;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ghost);
+  }
+  #keyhint b { color: var(--faint); font-weight: 400; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+<div id="stage">
+
+  <!-- ① Cover -->
+  <section class="slide active" data-screen-label="01 Cover">
+    <div class="top-row">
+      <div class="eyebrow">Open Design · Open Source</div>
+      <div class="source-note">Product Story<br>2026 · Apache-2.0</div>
+    </div>
+    <div class="cover-body">
+      <div class="cover-year">26</div>
+      <div class="cover-title">Open Design<span class="gold-dot">.</span></div>
+      <div class="cover-sub">The open-source, local, agent-driven design platform · 2026 Product Story</div>
+      <div class="cover-rule"></div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">From idea to prototypes, pages, slides, and HTML video — the entire product-design workflow, on your own machine. <strong>Apache-2.0 · Runs locally · BYOK · No sign-up</strong>.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ② Contents -->
+  <section class="slide" data-screen-label="02 Contents">
+    <div class="top-row">
+      <div class="eyebrow">Contents</div>
+      <div class="source-note">Open Design Product Story<br>7 Chapters</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">This product story, <span class="mid">in brief</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">From a single number to an open ecosystem — a reading map of the seven chapters</div>
+    </div>
+    <div class="toc">
+      <div class="toc-row"><span class="toc-num">01</span><span class="toc-title">A single number</span><span class="toc-desc">One Number</span></div>
+      <div class="toc-row"><span class="toc-num">02</span><span class="toc-title">Three ecosystem metrics</span><span class="toc-desc">Key Metrics</span></div>
+      <div class="toc-row"><span class="toc-num">03</span><span class="toc-title">Output type mix</span><span class="toc-desc">Outputs</span></div>
+      <div class="toc-row"><span class="toc-num">04</span><span class="toc-title">From idea to delivery</span><span class="toc-desc">Workflow</span></div>
+      <div class="toc-row"><span class="toc-num">05</span><span class="toc-title">Voices from the community</span><span class="toc-desc">Voices</span></div>
+      <div class="toc-row"><span class="toc-num">06</span><span class="toc-title">Cost, before and after</span><span class="toc-desc">Before / After</span></div>
+      <div class="toc-row"><span class="toc-num">07</span><span class="toc-title">The open-ecosystem scoreboard</span><span class="toc-desc">Open Numbers</span></div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Suggested reading order: the numbers first, then the workflow.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ③ Big number -->
+  <section class="slide" data-screen-label="03 A Single Number">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 01 · One Number</div>
+      <div class="source-note">Public GitHub data<br>Apache-2.0 open source</div>
+    </div>
+    <div class="big-hero">
+      <div class="big-number">60K<span class="unit">+</span></div>
+      <div class="big-side">
+        <div class="big-side-rule"></div>
+        <div class="big-side-label">GitHub Stars</div>
+        <div class="big-side-text">In April 2026, Claude Design proved for the first time that an LLM can truly design — but it is closed-source, paid, and cloud-only. <strong>Open Design makes that capability open</strong>: open-source, local, agent-driven. 60K+ stars is the community's answer.</div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Source: public repository data at github.com/nexu-io/open-design, Apache-2.0 licensed.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ④ Three-metric data theater (upstream master) -->
+  <section class="slide" data-screen-label="04 Ecosystem Metrics">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 02 · Key Metrics</div>
+      <div class="source-note">Source: public GitHub repository data<br>Share splits are illustrative demo data</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">The ecosystem in <span class="mid">three key metrics</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">Plugins, design systems, and coding agents — the three growth lines of an open ecosystem</div>
+    </div>
+    <div class="hero-data">
+      <div class="metric-card">
+        <div class="metric-value">217<span class="metric-unit">+</span></div>
+        <div class="metric-name">Plugins</div>
+        <div class="metric-category">Plugin Ecosystem</div>
+        <div class="comparison-group">
+          <div class="comp-row"><span class="comp-label">Slides</span><div class="comp-track"><div class="comp-fill gold" style="width: 100%;"></div></div><span class="comp-val gold">38%</span></div>
+          <div class="comp-row"><span class="comp-label">Prototypes</span><div class="comp-track"><div class="comp-fill" style="width: 76%;"></div></div><span class="comp-val">29%</span></div>
+          <div class="comp-row"><span class="comp-label">Image & video</span><div class="comp-track"><div class="comp-fill" style="width: 60%;"></div></div><span class="comp-val">23%</span></div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">129</div>
+        <div class="metric-name">Design Systems</div>
+        <div class="metric-category">Design Systems</div>
+        <div class="comparison-group">
+          <div class="comp-row"><span class="comp-label">From GitHub</span><div class="comp-track"><div class="comp-fill gold" style="width: 100%;"></div></div><span class="comp-val gold">52%</span></div>
+          <div class="comp-row"><span class="comp-label">From Figma</span><div class="comp-track"><div class="comp-fill" style="width: 65%;"></div></div><span class="comp-val">34%</span></div>
+          <div class="comp-row"><span class="comp-label">From local</span><div class="comp-track"><div class="comp-fill" style="width: 27%;"></div></div><span class="comp-val">14%</span></div>
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">21</div>
+        <div class="metric-name">Coding Agents</div>
+        <div class="metric-category">Zero Config · BYOK</div>
+        <div class="comparison-group">
+          <div class="comp-row"><span class="comp-label">Coding agents</span><div class="comp-track"><div class="comp-fill gold" style="width: 100%;"></div></div><span class="comp-val gold">21</span></div>
+          <div class="comp-row"><span class="comp-label">Media providers</span><div class="comp-track"><div class="comp-fill" style="width: 67%;"></div></div><span class="comp-val">14</span></div>
+          <div class="comp-row"><span class="comp-label">Model vendors</span><div class="comp-track"><div class="comp-fill" style="width: 19%;"></div></div><span class="comp-val">4</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">All 217+ plugins and 129 design systems are <strong>open source and forkable</strong>; shares are illustrative demo data — see the GitHub repo for the full list. The ecosystem itself is the best acquisition channel.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑤ Output mix -->
+  <section class="slide" data-screen-label="05 Output Mix">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 03 · Outputs</div>
+      <div class="source-note">217+ plugins split by output type<br>Shares are illustrative demo data</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">Output types: <span class="mid">one workflow, many deliverables</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">From prototypes and slides to images and HTML video — gold marks the direction with the most plugins (illustrative demo data)</div>
+    </div>
+    <div class="channel-list">
+      <div class="channel-row">
+        <div class="channel-name">Decks / research reports<small>Slides</small></div>
+        <div class="channel-track"><div class="channel-fill gold" style="width: 100%;"></div></div>
+        <div class="channel-val">36<span class="dot">.</span>8<small>%</small></div>
+      </div>
+      <div class="channel-row">
+        <div class="channel-name">High-fidelity prototypes<small>Prototype</small></div>
+        <div class="channel-track"><div class="channel-fill" style="width: 77%;"></div></div>
+        <div class="channel-val">28<span class="dot">.</span>4<small>%</small></div>
+      </div>
+      <div class="channel-row">
+        <div class="channel-name">Posters &amp; mockups<small>Image</small></div>
+        <div class="channel-track"><div class="channel-fill" style="width: 58%;"></div></div>
+        <div class="channel-val">21<span class="dot">.</span>2<small>%</small></div>
+      </div>
+      <div class="channel-row">
+        <div class="channel-name">HTML marketing video<small>HyperFrames</small></div>
+        <div class="channel-track"><div class="channel-fill" style="width: 37%;"></div></div>
+        <div class="channel-val">13<span class="dot">.</span>6<small>%</small></div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">One shared context can produce all six artifact types: prototypes, live artifacts, slides, images, HyperFrames video, and generative clips — <strong>shares are illustrative demo data</strong>.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑥ Timeline -->
+  <section class="slide" data-screen-label="06 Workflow">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 04 · Workflow</div>
+      <div class="source-note">From idea to delivery<br>Memory compounds throughout</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">From idea to delivery, <span class="mid">in four steps</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">Pick a start, set a direction, generate, deliver — every choice becomes context for the next run</div>
+    </div>
+    <div class="timeline">
+      <div class="tl-col">
+        <div class="tl-year">01</div>
+        <div class="tl-rule"></div>
+        <div class="tl-title">Choose a starting point</div>
+        <div class="tl-text">Describe the goal in one sentence, or start straight from a template or plugin.</div>
+      </div>
+      <div class="tl-col">
+        <div class="tl-year">02</div>
+        <div class="tl-rule"></div>
+        <div class="tl-title">Set the visual direction</div>
+        <div class="tl-text">Once chosen, palettes, type, and spacing flow into the generation pipeline.</div>
+      </div>
+      <div class="tl-col">
+        <div class="tl-year">03</div>
+        <div class="tl-rule"></div>
+        <div class="tl-title">Generate the artifact</div>
+        <div class="tl-text">The agent reads the full context and produces real, runnable files — preview and edit instantly in a sandbox.</div>
+      </div>
+      <div class="tl-col">
+        <div class="tl-year">04<span class="dot">.</span></div>
+        <div class="tl-rule"></div>
+        <div class="tl-title">Deliver, or make a video</div>
+        <div class="tl-text">Export to engineering, or turn it into a marketing video with HyperFrames.</div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Step five happens in the background: <strong>memory settles</strong> — every choice becomes context for the next generation, more precise with every use.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑦ Quote -->
+  <section class="slide" data-screen-label="07 Community Voices">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 05 · Voices</div>
+      <div class="source-note">From community users<br>Excerpt</div>
+    </div>
+    <div class="quote-body">
+      <div class="quote-hairline"></div>
+      <div class="quote-text">File-system semantics, plus design artifacts you can git diff —<br>design is finally under <span class="gold">version control</span>.</div>
+      <div class="quote-attr"><strong>Indie developer</strong> · Open Design community user</div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">More community voices on GitHub Discussions and the Discord community.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑧ Two-column comparison -->
+  <section class="slide" data-screen-label="08 Cost Comparison">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 06 · Cost</div>
+      <div class="source-note">vs. the Claude Design subscription<br>BYOK usage-based pricing</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">Cost: <span class="mid">from subscription to BYOK</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">The same AI design capability — closed cloud subscription vs. local open-source BYOK, in three pairs</div>
+    </div>
+    <div class="duo">
+      <div class="duo-col">
+        <div class="duo-label">Claude Design · Before</div>
+        <div class="duo-item"><div class="duo-num">$500<span class="unit">/mo</span></div><div class="duo-cap">Fixed subscription cost</div></div>
+        <div class="duo-item"><div class="duo-num">1<span class="unit">model</span></div><div class="duo-cap">Locked to a single vendor</div></div>
+        <div class="duo-item"><div class="duo-num">0<span class="unit">options</span></div><div class="duo-cap">No agent swap, self-hosting, or BYOK</div></div>
+      </div>
+      <div class="v-hairline"></div>
+      <div class="duo-col after">
+        <div class="duo-label">Open Design · After</div>
+        <div class="duo-item"><div class="duo-num">$73<span class="unit">/mo</span></div><div class="duo-cap">BYOK, usage-based · over 80% lower</div></div>
+        <div class="duo-item"><div class="duo-num">21<span class="unit">agents</span></div><div class="duo-cap">Coding agents supported · zero config</div></div>
+        <div class="duo-item"><div class="duo-num">217<span class="unit">+</span></div><div class="duo-cap">Plugin ecosystem · fully open, Apache-2.0</div></div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Models, agents, and media providers are all BYOK: <strong>monthly cost falls from $500 to ~$73, a drop of over 80%</strong> — and your code and data stay local.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑨ Open numbers grid -->
+  <section class="slide" data-screen-label="09 Open Numbers">
+    <div class="top-row">
+      <div class="eyebrow">Chapter 07 · Open Numbers</div>
+      <div class="source-note">Public GitHub figures<br>Still growing</div>
+    </div>
+    <div class="title-area">
+      <div class="main-title">Open ecosystem: <span class="mid">four numbers, still growing</span><span class="gold-dot">.</span></div>
+      <div class="subtitle">No model lock-in, no agent lock-in, no data lock-in — openness itself is the growth engine</div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-cell">
+        <div class="stat-num">300<span class="unit">+</span></div>
+        <div class="stat-cap">Contributors</div>
+        <div class="stat-sub">From the global open-source community</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num">217<span class="unit">+</span></div>
+        <div class="stat-cap">Plugins</div>
+        <div class="stat-sub">Built by the team and the community</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num">129</div>
+        <div class="stat-cap">Design Systems</div>
+        <div class="stat-sub">Import from GitHub / Figma / local</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num">21</div>
+        <div class="stat-cap">Coding Agents</div>
+        <div class="stat-sub">Auto-detected on PATH, zero config</div>
+      </div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Every number is publicly verifiable — fork it, self-host it, ship it commercially. <strong>Apache-2.0, no strings attached</strong>.</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <!-- ⑩ Closing -->
+  <section class="slide" data-screen-label="10 Closing">
+    <div class="top-row">
+      <div class="eyebrow">Open Design · Open Source</div>
+      <div class="source-note">Product Story<br>2026 · Fin</div>
+    </div>
+    <div class="closing-body">
+      <div class="closing-title">Open is the answer<span class="gold-dot">.</span></div>
+      <div class="closing-sub">Open · Local · Agent-Native</div>
+      <div class="closing-rule"></div>
+    </div>
+    <div class="bottom-section">
+      <div class="insight-text">Bring frontier AI design capability back to every creator's desk. <strong>Download Open Design (macOS / Windows) · Star on GitHub</strong> — github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</div>
+      <div class="brand-mark"><div class="brand-line"></div><span class="brand-text">Open Design</span></div>
+    </div>
+  </section>
+
+  <div id="dots"></div>
+  <div id="counter">01 <b>/</b> 10</div>
+  <div id="keyhint"><b>← →</b> Space to navigate · <b>#/N</b> to jump</div>
+</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var counter = document.getElementById('counter');
+  var dotsWrap = document.getElementById('dots');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var current = 0;
+  var dots = [];
+
+  // build the gold slide-dot indicator (signature device, top-right)
+  for (var d = 0; d < total; d++) {
+    var dot = document.createElement('span');
+    dot.className = 'slide-dot';
+    dotsWrap.appendChild(dot);
+    dots.push(dot);
+  }
+
+  // fit(): scale the fixed 1920×1080 canvas into the viewport (letterbox)
+  function fit() {
+    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  // go(i): activate slide i, sync dots + counter + hash (#/N, 1-indexed)
+  function go(i, skipHash) {
+    current = Math.max(0, Math.min(total - 1, i));
+    for (var k = 0; k < total; k++) {
+      slides[k].classList.toggle('active', k === current);
+      dots[k].classList.toggle('active', k === current);
+    }
+    counter.innerHTML = pad(current + 1) + ' <b>/</b> ' + pad(total);
+    if (!skipHash) {
+      var target = '#/' + (current + 1);
+      if (location.hash !== target) {
+        try { history.replaceState(null, '', target); }
+        catch (err) { location.hash = target; }
+      }
+    }
+  }
+
+  function fromHash() {
+    var m = location.hash.match(/^#\/(\d+)$/);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      if (n >= 1 && n <= total) { go(n - 1, true); return; }
+    }
+    go(0, true);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        go(current + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        go(current - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        go(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        go(total - 1);
+        break;
+    }
+  });
+
+  // click: left third of the window goes back, the rest goes forward
+  stage.addEventListener('click', function (e) {
+    if (e.clientX < window.innerWidth / 3) { go(current - 1); }
+    else { go(current + 1); }
+  });
+
+  window.addEventListener('hashchange', fromHash);
+  window.addEventListener('resize', fit);
+
+  fit();
+  fromHash();
+})();
+</script>
+</body>
+</html>

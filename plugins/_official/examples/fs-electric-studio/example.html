@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Design · Electric Studio Deck</title>
+
+<!-- Fonts: Electric Studio is all-Manrope — 800 for display, 400/500 for body -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;800&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   CSS CUSTOM PROPERTIES (THEME)
+   Electric Studio preset — bold split panels,
+   white over cobalt #4361ee, all Manrope.
+   =========================================== */
+:root {
+    --bg-dark: #0a0a0a;
+    --bg-white: #ffffff;
+    --accent-blue: #4361ee;
+    --text-dark: #0a0a0a;
+    --text-light: #ffffff;
+    --text-dark-soft: rgba(10, 10, 10, 0.58);
+    --text-light-soft: rgba(255, 255, 255, 0.72);
+    --line-dark: rgba(10, 10, 10, 0.14);
+    --line-light: rgba(255, 255, 255, 0.28);
+    --blue-soft: rgba(67, 97, 238, 0.10);
+
+    --stage-bg: var(--bg-dark);
+    --slide-bg: var(--bg-white);
+
+    /* Typography — authored at the 1920×1080 stage size */
+    --font: 'Manrope', sans-serif;
+    --title-size: 152px;
+    --h2-size: 88px;
+    --lede-size: 33px;
+    --body-size: 27px;
+
+    /* Spacing — authored at the 1920×1080 stage size */
+    --slide-pad-x: 110px;
+    --edge-bar-h: 14px;
+
+    /* Animation */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-normal: 0.7s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   (full contents of viewport-base.css)
+   Slides are authored at 1920×1080 and scaled as a whole.
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+/* Fixed 16:9 design canvas. JavaScript sets transform: translate(...) scale(...). */
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+/* Slides stack inside the fixed stage. Content laid out at 1920×1080, never reflowed per device. */
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+img, video, canvas, svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+/* Presentation chrome stays outside the slide design system */
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+/* ===========================================
+   SLIDE SHELL — Electric Studio split panels
+   White panel above, cobalt panel below, a dark
+   edge bar on the seam, brand marks in corners.
+   =========================================== */
+.slide {
+    font-family: var(--font);
+    color: var(--text-dark);
+    transition: opacity 0.55s var(--ease-out-expo);
+}
+.split {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+}
+.panel { position: relative; overflow: hidden; }
+.panel-white { background: var(--bg-white); color: var(--text-dark); }
+.panel-blue { background: var(--accent-blue); color: var(--text-light); }
+.panel-pad { padding: 0 var(--slide-pad-x); }
+/* Signature device: accent bar on the panel edge (seam between panels) */
+.edge-bar { flex: none; height: var(--edge-bar-h); background: var(--bg-dark); }
+.edge-bar.light { background: var(--bg-white); }
+
+/* Brand marks in the four corners — Electric Studio chrome */
+.mark {
+    position: absolute;
+    z-index: 6;
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.mark-tl { top: 52px; left: 64px; }
+.mark-tr { top: 52px; right: 64px; }
+.mark-bl { bottom: 48px; left: 64px; }
+.mark-br { bottom: 48px; right: 64px; }
+.mark.dark { color: var(--text-dark); }
+.mark.dark .soft { color: var(--text-dark-soft); }
+.mark.light { color: var(--text-light); }
+.mark.light .soft { color: var(--text-light-soft); }
+.mark .chip {
+    width: 16px;
+    height: 16px;
+    background: var(--accent-blue);
+    display: inline-block;
+}
+.mark.light .chip { background: var(--bg-white); }
+
+/* ===========================================
+   TYPOGRAPHY
+   =========================================== */
+.display {
+    font-weight: 800;
+    font-size: var(--title-size);
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+}
+.h2 {
+    font-weight: 800;
+    font-size: var(--h2-size);
+    line-height: 1.0;
+    letter-spacing: -0.025em;
+}
+.kicker {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 28px;
+}
+.panel-blue .kicker { color: var(--text-light); }
+.lede {
+    font-size: var(--lede-size);
+    line-height: 1.5;
+    font-weight: 400;
+    /* Body copy on cobalt uses full --text-light for WCAG AA contrast;
+       soft alpha stays reserved for bold uppercase chrome (marks, hints). */
+    color: var(--text-light);
+    max-width: 56ch;
+}
+.blue { color: var(--accent-blue); }
+
+/* ===========================================
+   ANIMATIONS — trigger via .visible on the slide
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(36px);
+    transition: opacity var(--duration-normal) var(--ease-out-expo),
+                transform var(--duration-normal) var(--ease-out-expo);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.reveal:nth-child(1) { transition-delay: 0.08s; }
+.reveal:nth-child(2) { transition-delay: 0.18s; }
+.reveal:nth-child(3) { transition-delay: 0.28s; }
+.reveal:nth-child(4) { transition-delay: 0.38s; }
+.reveal:nth-child(5) { transition-delay: 0.48s; }
+.reveal:nth-child(6) { transition-delay: 0.58s; }
+
+/* ===========================================
+   S1 · TITLE — 50/50 split, statement type on white
+   =========================================== */
+.s-title .panel-white { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 64px; }
+.s-title .panel-blue { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.s-title .meta-row {
+    display: flex;
+    gap: 56px;
+    margin-top: 52px;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-light);
+}
+.s-title .meta-row .soft { color: var(--text-light-soft); font-weight: 500; }
+
+/* ===========================================
+   S2 · AGENDA — heading on white, numbered list on blue
+   =========================================== */
+.s-agenda .panel-white { flex: none; height: 348px; display: flex; align-items: flex-end; padding-bottom: 56px; }
+.s-agenda .panel-blue { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.agenda-rows { display: flex; flex-direction: column; }
+.agenda-row {
+    display: flex;
+    align-items: baseline;
+    gap: 56px;
+    padding: 30px 0;
+    border-top: 1px solid var(--line-light);
+    font-size: 42px;
+    font-weight: 500;
+}
+.agenda-row:last-child { border-bottom: 1px solid var(--line-light); }
+.agenda-row .idx { font-weight: 800; font-size: 26px; min-width: 86px; letter-spacing: 0.1em; }
+.agenda-row .hint {
+    margin-left: auto;
+    font-size: 21px;
+    font-weight: 800;
+    color: var(--text-light-soft);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+/* ===========================================
+   S3 · SECTION DIVIDER — full cobalt, outlined giant number
+   =========================================== */
+.s-divider .panel-white { flex: none; height: 150px; display: flex; align-items: center; }
+.s-divider .panel-blue { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.divider-no {
+    font-weight: 800;
+    font-size: 430px;
+    line-height: 0.86;
+    letter-spacing: -0.04em;
+    color: transparent;
+    -webkit-text-stroke: 3px var(--bg-white);
+}
+.divider-label { margin-top: 30px; font-size: 84px; font-weight: 800; letter-spacing: -0.02em; }
+
+/* ===========================================
+   S4 · BULLETS — proofs on white, takeaway on blue
+   =========================================== */
+.s-bullets .panel-white { flex: 1; padding-top: 108px; }
+.s-bullets .panel-blue { flex: none; height: 240px; display: flex; align-items: center; }
+.points { margin-top: 44px; display: grid; gap: 34px; max-width: 1420px; }
+.point { display: flex; gap: 38px; align-items: flex-start; }
+.point .tick {
+    flex: none;
+    width: 54px;
+    height: 54px;
+    background: var(--blue-soft);
+    border: 2px solid var(--accent-blue);
+    display: grid;
+    place-items: center;
+}
+.point .tick svg { width: 24px; height: 24px; }
+.point h3 { font-size: 33px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.01em; }
+.point p { font-size: 25px; line-height: 1.5; font-weight: 400; color: var(--text-dark-soft); }
+.takeaway { font-size: 30px; font-weight: 500; line-height: 1.4; max-width: 60ch; }
+.takeaway strong { font-weight: 800; }
+
+/* ===========================================
+   S5 · BIG STAT — oversized cobalt number on white
+   =========================================== */
+.s-stat .panel-white { flex: 1; display: flex; align-items: center; }
+.s-stat .panel-blue { flex: none; height: 300px; display: flex; align-items: center; }
+.stat-num {
+    font-weight: 800;
+    font-size: 400px;
+    line-height: 0.9;
+    letter-spacing: -0.05em;
+    color: var(--accent-blue);
+}
+.stat-num .unit { font-size: 150px; letter-spacing: -0.02em; }
+.stat-side { max-width: 980px; display: flex; gap: 64px; align-items: baseline; }
+.stat-side h3 { font-size: 40px; font-weight: 800; flex: none; }
+.stat-side p { font-size: 26px; line-height: 1.5; color: var(--text-light); }
+
+/* ===========================================
+   S6 · QUOTE HERO — typography as the visual
+   =========================================== */
+.s-quote .panel-white { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.s-quote .panel-blue { flex: none; height: 220px; display: flex; align-items: center; }
+.quote-mark {
+    font-weight: 800;
+    font-size: 220px;
+    line-height: 0.55;
+    color: var(--accent-blue);
+}
+.quote-text {
+    font-size: 92px;
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    max-width: 1560px;
+    margin-top: 44px;
+}
+.quote-attr {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+.quote-attr .soft { color: var(--text-light); font-weight: 500; margin-left: 24px; letter-spacing: 0.14em; }
+
+/* ===========================================
+   S7 · COMPARISON — the split itself is the contrast
+   =========================================== */
+.s-compare .panel { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.cmp-head { display: flex; align-items: baseline; gap: 40px; margin-bottom: 30px; }
+.cmp-head h3 { font-size: 46px; font-weight: 800; letter-spacing: -0.01em; }
+.cmp-head .tag {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    padding: 8px 18px;
+}
+.panel-white .cmp-head .tag { border: 2px solid var(--line-dark); color: var(--text-dark-soft); }
+.panel-blue .cmp-head .tag { border: 2px solid var(--line-light); color: var(--text-light); }
+.cmp-list { list-style: none; display: flex; gap: 70px; }
+.cmp-list li { font-size: 25px; line-height: 1.45; max-width: 360px; padding-top: 20px; position: relative; }
+.panel-white .cmp-list li { color: var(--text-dark-soft); }
+.panel-blue .cmp-list li { color: var(--text-light); font-weight: 500; }
+.cmp-list li::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 44px;
+    height: 4px;
+    background: var(--accent-blue);
+}
+.panel-blue .cmp-list li::before { background: var(--bg-white); }
+
+/* ===========================================
+   S8 · PRINCIPLE GRID — 2×2 cards on cobalt
+   =========================================== */
+.s-grid .panel-white { flex: none; height: 300px; display: flex; align-items: flex-end; padding-bottom: 52px; }
+.s-grid .panel-blue { flex: 1; display: flex; align-items: center; }
+.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; width: 100%; }
+.gcard { border: 2px solid var(--line-light); padding: 42px 48px; }
+.gcard .gno { font-weight: 800; font-size: 24px; letter-spacing: 0.18em; margin-bottom: 18px; }
+.gcard h3 { font-size: 31px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.01em; }
+.gcard p { font-size: 25px; line-height: 1.45; color: var(--text-light); }
+
+/* ===========================================
+   S9 · BAR CHART — pure CSS, cobalt bars on white
+   =========================================== */
+.s-chart .panel-white { flex: 1; padding-top: 140px; display: flex; flex-direction: column; }
+.s-chart .panel-blue { flex: none; height: 200px; display: flex; align-items: center; }
+.chart { flex: 1; display: flex; align-items: flex-end; gap: 70px; padding: 80px 0 64px; }
+.bar-group { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 18px; }
+.bar {
+    background: var(--blue-soft);
+    border: 2px solid var(--accent-blue);
+    position: relative;
+    transform-origin: bottom;
+    transform: scaleY(0);
+    transition: transform 0.9s var(--ease-out-expo);
+}
+.bar.solid { background: var(--accent-blue); }
+.slide.visible .bar { transform: scaleY(1); }
+.slide.visible .bar-group:nth-child(1) .bar { transition-delay: 0.15s; }
+.slide.visible .bar-group:nth-child(2) .bar { transition-delay: 0.25s; }
+.slide.visible .bar-group:nth-child(3) .bar { transition-delay: 0.35s; }
+.slide.visible .bar-group:nth-child(4) .bar { transition-delay: 0.45s; }
+.bar-val {
+    position: absolute;
+    top: -52px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-weight: 800;
+    font-size: 30px;
+    color: var(--text-dark);
+}
+.bar-label {
+    text-align: center;
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dark-soft);
+}
+
+/* ===========================================
+   S10 · CLOSING — cobalt dominant, statement type
+   =========================================== */
+.s-close .panel-white { flex: none; height: 150px; display: flex; align-items: center; }
+.s-close .panel-blue { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.close-links {
+    display: flex;
+    gap: 64px;
+    margin-top: 72px;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+.close-links .lk { display: flex; align-items: center; gap: 16px; color: var(--text-light); }
+.close-links svg { width: 30px; height: 30px; flex: none; }
+
+/* ===========================================
+   DECK CHROME — page counter (outside the stage)
+   =========================================== */
+.deck-controls {
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    color: rgba(255, 255, 255, 0.72);
+    background: rgba(10, 10, 10, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    padding: 8px 18px;
+    border-radius: 999px;
+    user-select: none;
+}
+.deck-controls .cur { color: var(--text-light); font-weight: 800; }
+
+/* ===========================================
+   REDUCED MOTION - strict degrade (supplements
+   the base block): no slide-up, no bar scale,
+   no stagger delays; content appears in place.
+   =========================================== */
+@media (prefers-reduced-motion: reduce) {
+    .reveal { transform: none; transition-delay: 0s !important; }
+    .bar,
+    .slide.visible .bar { transform: none; transition-delay: 0s !important; }
+}
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+<div class="deck-viewport">
+    <main class="deck-stage" id="deckStage" aria-label="Slide deck">
+
+        <!-- === SLIDE 1: TITLE === -->
+        <section class="slide s-title active visible">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <p class="kicker reveal">Product Story · 2026</p>
+                    <h1 class="display reveal">Open<br>Design<span class="blue">.</span></h1>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <p class="lede reveal">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — the full workflow, on your own machine.</p>
+                    <div class="meta-row reveal"><span>Apache-2.0</span><span class="soft">/</span><span>Runs Locally</span><span class="soft">/</span><span>BYOK</span></div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">No Sign-up</span></div>
+            <div class="mark mark-bl light"><span class="soft">Electric Studio</span></div>
+            <div class="mark mark-br light">01 / 10</div>
+        </section>
+
+        <!-- === SLIDE 2: AGENDA === -->
+        <section class="slide s-agenda">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <h2 class="h2 reveal">What's inside<span class="blue">.</span></h2>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <div class="agenda-rows">
+                        <div class="agenda-row reveal"><span class="idx">01</span>Why Open Design exists<span class="hint">Why</span></div>
+                        <div class="agenda-row reveal"><span class="idx">02</span>The platform, by the numbers<span class="hint">Numbers</span></div>
+                        <div class="agenda-row reveal"><span class="idx">03</span>Capabilities &amp; ecosystem<span class="hint">Capabilities</span></div>
+                        <div class="agenda-row reveal"><span class="idx">04</span>Getting started<span class="hint">CTA</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Agenda</span></div>
+            <div class="mark mark-bl light"><span class="soft">Product Story 2026</span></div>
+            <div class="mark mark-br light">02 / 10</div>
+        </section>
+
+        <!-- === SLIDE 3: SECTION DIVIDER === -->
+        <section class="slide s-divider">
+            <div class="split">
+                <div class="panel panel-white panel-pad"></div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <div class="divider-no reveal">01</div>
+                    <div class="divider-label reveal">Why Open Design</div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Section</span></div>
+            <div class="mark mark-bl light"><span class="soft">Product Story 2026</span></div>
+            <div class="mark mark-br light">03 / 10</div>
+        </section>
+
+        <!-- === SLIDE 4: BULLETS === -->
+        <section class="slide s-bullets">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <p class="kicker reveal">Three principles</p>
+                    <h2 class="h2 reveal" style="font-size: 66px;">Open, local,<br>agent-driven</h2>
+                    <div class="points">
+                        <div class="point reveal">
+                            <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#4361ee" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                            <div><h3>Desktop-native</h3><p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable; agents get full terminal power.</p></div>
+                        </div>
+                        <div class="point reveal">
+                            <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#4361ee" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                            <div><h3>Plug in agents, don't rebuild them</h3><p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p></div>
+                        </div>
+                        <div class="point reveal">
+                            <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#4361ee" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                            <div><h3>It learns your taste</h3><p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <p class="takeaway reveal">In April 2026, Claude Design proved an LLM can truly design — <strong>Open Design sets that capability free.</strong></p>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Why</span></div>
+            <div class="mark mark-br light">04 / 10</div>
+        </section>
+
+        <!-- === SLIDE 5: BIG STAT === -->
+        <section class="slide s-stat">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <div class="stat-num reveal">60K<span class="unit">+ stars</span></div>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <div class="stat-side reveal">
+                        <h3>on GitHub</h3>
+                        <p>Open source under Apache-2.0 — built with 300+ contributors, 217+ plugins, 129 design systems, and 21 coding agents plugged in.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">By the numbers</span></div>
+            <div class="mark mark-br light">05 / 10</div>
+        </section>
+
+        <!-- === SLIDE 6: QUOTE HERO === -->
+        <section class="slide s-quote">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <div class="quote-mark reveal">&ldquo;</div>
+                    <p class="quote-text reveal">Design is finally under <span class="blue">version control.</span></p>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <p class="quote-attr reveal">Indie developer<span class="soft">On file-system semantics &amp; git-diffable design artifacts</span></p>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Community</span></div>
+            <div class="mark mark-br light">06 / 10</div>
+        </section>
+
+        <!-- === SLIDE 7: COMPARISON — split is the contrast === -->
+        <section class="slide s-compare">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <div class="cmp-head reveal"><h3>Claude Design</h3><span class="tag">Closed</span></div>
+                    <ul class="cmp-list reveal">
+                        <li>Closed-source, paid, and cloud-only</li>
+                        <li>Locked to one model — no agent choice</li>
+                        <li>No self-hosting, no BYOK</li>
+                    </ul>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <div class="cmp-head reveal"><h3>Open Design</h3><span class="tag">Open</span></div>
+                    <ul class="cmp-list reveal">
+                        <li>Apache-2.0 — fork, self-host, commercial use allowed</li>
+                        <li>21 coding agents, auto-detected, zero config</li>
+                        <li>Full BYOK — monthly cost from $500 to ~$73, -80%</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Why</span></div>
+            <div class="mark mark-br light">07 / 10</div>
+        </section>
+
+        <!-- === SLIDE 8: PRINCIPLE GRID === -->
+        <section class="slide s-grid">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <h2 class="h2 reveal" style="font-size: 64px;">Core capabilities<span class="blue">.</span></h2>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <div class="grid4">
+                        <div class="gcard reveal"><div class="gno">A</div><h3>HTML video pipeline</h3><p>Programmatic video via HyperFrames — HTML in, MP4 out, for marketing shorts and product demos.</p></div>
+                        <div class="gcard reveal"><div class="gno">B</div><h3>129 design systems</h3><p>Import from GitHub, Figma, or local files; markdown systems keep brand tokens from drifting.</p></div>
+                        <div class="gcard reveal"><div class="gno">C</div><h3>Plugin ecosystem</h3><p>217+ plugins covering prototypes, slides, posters, and dashboards — and growing.</p></div>
+                        <div class="gcard reveal"><div class="gno">D</div><h3>Full-stack BYOK</h3><p>Anthropic, OpenAI, Azure, and Google endpoints, plus 14 media providers — your keys, your bill.</p></div>
+                    </div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Capabilities</span></div>
+            <div class="mark mark-br light">08 / 10</div>
+        </section>
+
+        <!-- === SLIDE 9: BAR CHART === -->
+        <section class="slide s-chart">
+            <div class="split">
+                <div class="panel panel-white panel-pad">
+                    <p class="kicker reveal">217+ plugins · demo split</p>
+                    <h2 class="h2 reveal" style="font-size: 60px;">Where the plugins land</h2>
+                    <div class="chart">
+                        <div class="bar-group reveal">
+                            <div class="bar" style="height: 53%;"><span class="bar-val">43</span></div>
+                            <div class="bar-label">Dashboards</div>
+                        </div>
+                        <div class="bar-group reveal">
+                            <div class="bar solid" style="height: 84%;"><span class="bar-val">68</span></div>
+                            <div class="bar-label">Slides &amp; decks</div>
+                        </div>
+                        <div class="bar-group reveal">
+                            <div class="bar solid" style="height: 70%;"><span class="bar-val">57</span></div>
+                            <div class="bar-label">Prototypes</div>
+                        </div>
+                        <div class="bar-group reveal">
+                            <div class="bar" style="height: 60%;"><span class="bar-val">49</span></div>
+                            <div class="bar-label">Posters &amp; image</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <p class="takeaway reveal"><strong>217+ plugins, one ecosystem</strong> — every artifact type covered, from decks to dashboards (demo data).</p>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">By the numbers</span></div>
+            <div class="mark mark-br light">09 / 10</div>
+        </section>
+
+        <!-- === SLIDE 10: CLOSING === -->
+        <section class="slide s-close">
+            <div class="split">
+                <div class="panel panel-white panel-pad"></div>
+                <div class="edge-bar"></div>
+                <div class="panel panel-blue panel-pad">
+                    <h2 class="display reveal" style="color: var(--text-light);">Open. Local.<br>Agent-native<span style="color: var(--bg-dark);">.</span></h2>
+                    <div class="close-links reveal">
+                        <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2"><path d="M3 8l9 6 9-6M4 19h16a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1z"/></svg>Download Open Design</span>
+                        <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.6 3.8 9S14.5 18.5 12 21c-2.5-2.5-3.8-5.6-3.8-9S9.5 5.5 12 3z"/></svg>github.com/nexu-io/open-design</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mark mark-tl dark"><span class="chip"></span>Open Design</div>
+            <div class="mark mark-tr dark"><span class="soft">Thank you</span></div>
+            <div class="mark mark-bl light"><span class="soft">Product Story 2026</span></div>
+            <div class="mark mark-br light">10 / 10</div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Page counter lives outside the scaled stage -->
+<div class="deck-controls" aria-hidden="true"><span class="cur" id="pageCur">1</span>&nbsp;/&nbsp;<span id="pageTotal">10</span></div>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Fixed 1920×1080 stage, scaled uniformly to the viewport.
+   Navigation: ← → Space PageUp/PageDown Home/End, wheel,
+   touch swipe. Current slide is mirrored into the URL hash.
+   =========================================== */
+(function () {
+    'use strict';
+
+    var STAGE_W = 1920;
+    var STAGE_H = 1080;
+
+    var stage = document.getElementById('deckStage');
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var pageCur = document.getElementById('pageCur');
+    var pageTotal = document.getElementById('pageTotal');
+    var current = 0;
+    var wheelLockUntil = 0;
+
+    pageTotal.textContent = String(slides.length);
+
+    /* --- Stage scaling: one transform, letterbox as needed --- */
+    function fitStage() {
+        var factor = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+        var x = (window.innerWidth - STAGE_W * factor) / 2;
+        var y = (window.innerHeight - STAGE_H * factor) / 2;
+        stage.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + factor + ')';
+    }
+
+    /* --- Hash routing: #/3 means slide index 3 (0-based) --- */
+    function indexFromHash() {
+        var m = /^#\/(\d+)$/.exec(window.location.hash);
+        if (!m) return null;
+        var idx = parseInt(m[1], 10);
+        return isNaN(idx) ? null : idx;
+    }
+
+    function show(index, skipHash) {
+        current = Math.max(0, Math.min(index, slides.length - 1));
+        slides.forEach(function (slide, i) {
+            slide.classList.toggle('active', i === current);
+            slide.classList.toggle('visible', i === current);
+        });
+        pageCur.textContent = String(current + 1);
+        if (!skipHash) {
+            var target = '#/' + current;
+            if (window.location.hash !== target) {
+                window.history.replaceState(null, '', target);
+            }
+        }
+    }
+
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    /* --- Keyboard --- */
+    document.addEventListener('keydown', function (e) {
+        if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable')) return;
+        switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+            case ' ':
+            case 'PageDown':
+                e.preventDefault(); next(); break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+            case 'PageUp':
+                e.preventDefault(); prev(); break;
+            case 'Home':
+                e.preventDefault(); show(0); break;
+            case 'End':
+                e.preventDefault(); show(slides.length - 1); break;
+        }
+    });
+
+    /* --- Mouse wheel (debounced) --- */
+    document.addEventListener('wheel', function (e) {
+        var now = Date.now();
+        if (now < wheelLockUntil) return;
+        if (Math.abs(e.deltaY) < 12) return;
+        wheelLockUntil = now + 650;
+        if (e.deltaY > 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Touch swipe --- */
+    var touchX = null;
+    document.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 1) touchX = e.touches[0].clientX;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+        if (touchX === null) return;
+        var dx = e.changedTouches[0].clientX - touchX;
+        touchX = null;
+        if (Math.abs(dx) < 40) return;
+        if (dx < 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Hash navigation (back/forward, deep links) --- */
+    window.addEventListener('hashchange', function () {
+        var idx = indexFromHash();
+        if (idx !== null && idx !== current) show(idx, true);
+    });
+
+    window.addEventListener('resize', fitStage);
+
+    fitStage();
+    var initial = indexFromHash();
+    show(initial !== null ? initial : 0, initial === null);
+})();
+</script>
+</body>
+</html>

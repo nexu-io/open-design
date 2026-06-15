@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Design · Frontend Slides</title>
+
+<!-- Fonts: distinctive pairing from the Bold Signal preset — never system fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   CSS CUSTOM PROPERTIES (THEME)
+   Bold Signal preset — change these to retheme
+   =========================================== */
+:root {
+    --stage-bg: #0d0d0d;
+    --slide-bg: #1a1a1a;
+    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+    --card-bg: #FF5722;
+    --card-bg-soft: rgba(255, 87, 34, 0.12);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.72);
+    --text-faint: rgba(255, 255, 255, 0.58);
+    --text-on-card: #1a1a1a;
+    --line: rgba(255, 255, 255, 0.14);
+
+    /* Typography — authored at the 1920×1080 stage size */
+    --font-display: 'Archivo Black', sans-serif;
+    --font-body: 'Space Grotesk', sans-serif;
+    --title-size: 128px;
+    --h2-size: 84px;
+    --subtitle-size: 34px;
+    --body-size: 28px;
+
+    /* Spacing — authored at the 1920×1080 stage size */
+    --slide-pad: 96px;
+
+    /* Animation */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-normal: 0.7s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   (full contents of viewport-base.css)
+   Slides are authored at 1920×1080 and scaled as a whole.
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+/* Fixed 16:9 design canvas. JavaScript sets transform: translate(...) scale(...). */
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+/* Slides stack inside the fixed stage. Content laid out at 1920×1080, never reflowed per device. */
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+img, video, canvas, svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+/* Presentation chrome stays outside the slide design system */
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+        transition-delay: 0s !important;
+    }
+    .reveal { transform: none; }
+    .bar { transform: scaleY(1); }
+}
+
+/* ===========================================
+   SLIDE SHELL — shared chrome inside every slide
+   =========================================== */
+.slide {
+    background: var(--bg-gradient);
+    font-family: var(--font-body);
+    color: var(--text-primary);
+    transition: opacity 0.55s var(--ease-out-expo);
+}
+.slide-inner {
+    position: absolute;
+    inset: 0;
+    padding: var(--slide-pad);
+    display: flex;
+    flex-direction: column;
+}
+/* Slide number, top-left — Bold Signal signature */
+.slide-no {
+    position: absolute;
+    top: 56px;
+    left: var(--slide-pad);
+    font-family: var(--font-display);
+    font-size: 30px;
+    letter-spacing: 0.08em;
+    color: var(--card-bg);
+}
+/* Breadcrumb nav, top-right — active section at full opacity */
+.crumbs {
+    position: absolute;
+    top: 62px;
+    right: var(--slide-pad);
+    display: flex;
+    gap: 36px;
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+.crumbs .on { color: var(--text-primary); }
+/* Baseline rule across the bottom of each slide */
+.baseline {
+    position: absolute;
+    left: var(--slide-pad);
+    right: var(--slide-pad);
+    bottom: 64px;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 19px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+/* ===========================================
+   TYPOGRAPHY
+   =========================================== */
+.display {
+    font-family: var(--font-display);
+    font-size: var(--title-size);
+    line-height: 0.98;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+}
+.h2 {
+    font-family: var(--font-display);
+    font-size: var(--h2-size);
+    line-height: 1.02;
+    text-transform: uppercase;
+}
+.kicker {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--card-bg);
+    margin-bottom: 30px;
+}
+.lede {
+    font-size: var(--subtitle-size);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    max-width: 60ch;
+}
+
+/* ===========================================
+   ANIMATIONS — trigger via .visible on the slide
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(34px);
+    transition: opacity var(--duration-normal) var(--ease-out-expo),
+                transform var(--duration-normal) var(--ease-out-expo);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.reveal:nth-child(1) { transition-delay: 0.08s; }
+.reveal:nth-child(2) { transition-delay: 0.18s; }
+.reveal:nth-child(3) { transition-delay: 0.28s; }
+.reveal:nth-child(4) { transition-delay: 0.38s; }
+.reveal:nth-child(5) { transition-delay: 0.48s; }
+.reveal:nth-child(6) { transition-delay: 0.58s; }
+/* Nested reveal groups enter after the slide heading, top-down */
+.agenda .reveal:nth-child(1),
+.points .reveal:nth-child(1),
+.compare .reveal:nth-child(1),
+.grid4 .reveal:nth-child(1),
+.chart .reveal:nth-child(1) { transition-delay: 0.46s; }
+.agenda .reveal:nth-child(2),
+.points .reveal:nth-child(2),
+.compare .reveal:nth-child(2),
+.grid4 .reveal:nth-child(2),
+.chart .reveal:nth-child(2) { transition-delay: 0.54s; }
+.agenda .reveal:nth-child(3),
+.points .reveal:nth-child(3),
+.grid4 .reveal:nth-child(3),
+.chart .reveal:nth-child(3) { transition-delay: 0.62s; }
+.agenda .reveal:nth-child(4),
+.grid4 .reveal:nth-child(4),
+.chart .reveal:nth-child(4) { transition-delay: 0.7s; }
+
+/* ===========================================
+   S1 · TITLE — orange card focal point
+   =========================================== */
+.title-card {
+    margin: auto 0;
+    background: var(--card-bg);
+    color: var(--text-on-card);
+    padding: 90px 100px 84px;
+    width: 1300px;
+}
+.title-card .display { color: var(--text-on-card); }
+.title-card .meta {
+    display: flex;
+    gap: 48px;
+    margin-top: 44px;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+/* ===========================================
+   S2 · AGENDA — numbered editorial list
+   =========================================== */
+.agenda { margin-top: 56px; display: flex; flex-direction: column; }
+.agenda-row {
+    display: flex;
+    align-items: baseline;
+    gap: 56px;
+    padding: 34px 0;
+    border-top: 1px solid var(--line);
+    font-size: 44px;
+    font-weight: 500;
+}
+.agenda-row:last-child { border-bottom: 1px solid var(--line); }
+.agenda-row .idx {
+    font-family: var(--font-display);
+    font-size: 30px;
+    color: var(--card-bg);
+    min-width: 90px;
+}
+.agenda-row .hint {
+    margin-left: auto;
+    font-size: 23px;
+    color: var(--text-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* ===========================================
+   S3 · SECTION DIVIDER — giant number
+   =========================================== */
+.divider-no {
+    font-family: var(--font-display);
+    font-size: 460px;
+    line-height: 0.9;
+    color: transparent;
+    -webkit-text-stroke: 3px var(--card-bg);
+}
+
+/* ===========================================
+   S4 · BULLETS — one idea, three proofs
+   =========================================== */
+.points { margin-top: 64px; display: grid; gap: 44px; max-width: 1380px; }
+.point { display: flex; gap: 40px; align-items: flex-start; }
+.point .tick {
+    flex: none;
+    width: 56px; height: 56px;
+    background: var(--card-bg-soft);
+    border: 2px solid var(--card-bg);
+    display: grid;
+    place-items: center;
+}
+.point .tick svg { width: 26px; height: 26px; stroke: var(--card-bg); }
+.point h3 { font-size: 35px; font-weight: 700; margin-bottom: 8px; }
+.point p { font-size: 26px; line-height: 1.5; color: var(--text-secondary); }
+
+/* ===========================================
+   S5 · BIG STAT
+   =========================================== */
+.stat-wrap { margin: auto 0; display: flex; align-items: baseline; gap: 72px; }
+.stat-num {
+    font-family: var(--font-display);
+    font-size: 380px;
+    line-height: 0.9;
+    color: var(--card-bg);
+}
+.stat-side { max-width: 560px; }
+.stat-side h3 { font-size: 44px; font-weight: 700; margin-bottom: 20px; line-height: 1.15; }
+.stat-side p { font-size: 26px; line-height: 1.55; color: var(--text-secondary); }
+
+/* ===========================================
+   S6 · QUOTE
+   =========================================== */
+.quote-mark {
+    font-family: var(--font-display);
+    font-size: 200px;
+    line-height: 0.6;
+    color: var(--card-bg);
+}
+.quote-text {
+    font-size: 66px;
+    font-weight: 500;
+    line-height: 1.28;
+    max-width: 1480px;
+    margin-top: 36px;
+}
+.quote-attr { margin-top: 52px; font-size: 26px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; }
+.quote-attr strong { color: var(--card-bg); }
+
+/* ===========================================
+   S7 · TWO-COLUMN COMPARISON
+   =========================================== */
+.compare { margin-top: 60px; margin-bottom: 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; flex: 1; min-height: 0; }
+.compare .col { border: 1px solid var(--line); padding: 56px 60px; display: flex; flex-direction: column; }
+.compare .col.hot { background: var(--card-bg); color: var(--text-on-card); border-color: var(--card-bg); }
+.compare h3 { font-family: var(--font-display); font-size: 40px; text-transform: uppercase; margin-bottom: 36px; }
+.compare ul { list-style: none; display: grid; gap: 24px; font-size: 27px; line-height: 1.45; }
+.compare .col li { padding-left: 40px; position: relative; color: var(--text-secondary); }
+.compare .col.hot li { color: rgba(26, 26, 26, 0.92); }
+.compare li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 16px;
+    width: 18px; height: 3px;
+    background: var(--card-bg);
+}
+.compare .col.hot li::before { background: var(--text-on-card); }
+
+/* ===========================================
+   S8 · PRINCIPLE GRID — 4 cards
+   =========================================== */
+.grid4 { margin-top: 60px; margin-bottom: 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 36px; flex: 1; min-height: 0; }
+.gcard { border: 1px solid var(--line); padding: 48px 52px; position: relative; }
+.gcard .gno {
+    font-family: var(--font-display);
+    font-size: 27px;
+    color: var(--card-bg);
+    margin-bottom: 22px;
+}
+.gcard h3 { font-size: 33px; font-weight: 700; margin-bottom: 12px; }
+.gcard p { font-size: 24px; line-height: 1.5; color: var(--text-secondary); }
+
+/* ===========================================
+   S9 · BAR CHART — pure CSS data viz
+   =========================================== */
+.chart { margin-top: 70px; flex: 1; display: flex; align-items: flex-end; gap: 64px; padding-bottom: 70px; }
+.bar-group { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 20px; }
+.bar {
+    background: var(--card-bg-soft);
+    border: 2px solid var(--card-bg);
+    position: relative;
+    transform-origin: bottom;
+    transform: scaleY(0);
+    transition: transform 0.9s var(--ease-out-expo);
+}
+.bar.solid { background: var(--card-bg); }
+.slide.visible .bar { transform: scaleY(1); }
+.slide.visible .bar-group:nth-child(1) .bar { transition-delay: 0.5s; }
+.slide.visible .bar-group:nth-child(2) .bar { transition-delay: 0.62s; }
+.slide.visible .bar-group:nth-child(3) .bar { transition-delay: 0.74s; }
+.slide.visible .bar-group:nth-child(4) .bar { transition-delay: 0.86s; }
+.bar-val {
+    position: absolute;
+    top: -52px; left: 0; right: 0;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 30px;
+    color: var(--text-primary);
+}
+.bar-label { text-align: center; font-size: 23px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); }
+
+/* ===========================================
+   S10 · CLOSING — inverted card
+   =========================================== */
+.close-card { margin: auto 0; }
+.close-card .display span { color: var(--card-bg); }
+.close-links { display: flex; gap: 56px; margin-top: 64px; font-size: 26px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.close-links .lk { display: flex; align-items: center; gap: 16px; color: var(--text-secondary); }
+.close-links svg { width: 30px; height: 30px; stroke: var(--card-bg); }
+
+/* ===========================================
+   DECK CHROME — page counter (outside the stage)
+   =========================================== */
+.deck-controls {
+    font-family: var(--font-body);
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: rgba(255, 255, 255, 0.72);
+    background: rgba(13, 13, 13, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 8px 18px;
+    border-radius: 999px;
+    user-select: none;
+}
+.deck-controls .cur { color: var(--card-bg); font-weight: 700; }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+<div class="deck-viewport">
+    <main class="deck-stage" id="deckStage" aria-label="Slide deck">
+
+        <!-- === SLIDE 1: TITLE === -->
+        <section class="slide active visible">
+            <div class="slide-inner">
+                <div class="slide-no">01</div>
+                <nav class="crumbs"><span class="on">Intro</span><span>Why</span><span>How</span><span>Next</span></nav>
+                <div class="title-card reveal">
+                    <h1 class="display">Open<br>Design</h1>
+                    <div class="meta"><span>Apache-2.0</span><span>·</span><span>Runs Locally</span><span>·</span><span>BYOK</span></div>
+                </div>
+                <div class="baseline"><span>Open Design</span><span>github.com/nexu-io/open-design</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 2: AGENDA === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">02</div>
+                <nav class="crumbs"><span class="on">Intro</span><span>Why</span><span>How</span><span>Next</span></nav>
+                <h2 class="h2 reveal">Agenda</h2>
+                <div class="agenda">
+                    <div class="agenda-row reveal"><span class="idx">01</span>Why design should be open<span class="hint">Why</span></div>
+                    <div class="agenda-row reveal"><span class="idx">02</span>The numbers behind the project<span class="hint">Stats</span></div>
+                    <div class="agenda-row reveal"><span class="idx">03</span>Open Design vs. closed cloud<span class="hint">How</span></div>
+                    <div class="agenda-row reveal"><span class="idx">04</span>Core capabilities &amp; what's next<span class="hint">Next</span></div>
+                </div>
+                <div class="baseline"><span>Agenda</span><span>02 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 3: SECTION DIVIDER === -->
+        <section class="slide">
+            <div class="slide-inner" style="justify-content: center;">
+                <nav class="crumbs"><span>Intro</span><span class="on">Why</span><span>How</span><span>Next</span></nav>
+                <div class="divider-no reveal">01</div>
+                <h2 class="h2 reveal" style="margin-top: 28px;">Why design<br>should be open</h2>
+                <div class="baseline"><span>Section</span><span>03 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 4: BULLETS === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">04</div>
+                <nav class="crumbs"><span>Intro</span><span class="on">Why</span><span>How</span><span>Next</span></nav>
+                <p class="kicker reveal">Three claims</p>
+                <h2 class="h2 reveal" style="font-size: 64px;">Open, local,<br>agent-native</h2>
+                <div class="points">
+                    <div class="point reveal">
+                        <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#FF5722" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                        <div><h3>Desktop-native</h3><p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable; agents get full terminal power.</p></div>
+                    </div>
+                    <div class="point reveal">
+                        <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#FF5722" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                        <div><h3>Plug in agents, don't rebuild them</h3><p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p></div>
+                    </div>
+                    <div class="point reveal">
+                        <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#FF5722" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+                        <div><h3>It learns your taste</h3><p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p></div>
+                    </div>
+                </div>
+                <div class="baseline"><span>Why open</span><span>04 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 5: BIG STAT === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">05</div>
+                <nav class="crumbs"><span>Intro</span><span class="on">Why</span><span>How</span><span>Next</span></nav>
+                <div class="stat-wrap">
+                    <div class="stat-num reveal">60K<span style="font-size: 160px;">+</span></div>
+                    <div class="stat-side reveal">
+                        <h3>GitHub Stars</h3>
+                        <p>Open source under Apache-2.0, built with 300+ contributors — plus 217+ plugins, 129 design systems, and 21 coding agents on board.</p>
+                    </div>
+                </div>
+                <div class="baseline"><span>By the numbers</span><span>05 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 6: QUOTE === -->
+        <section class="slide">
+            <div class="slide-inner" style="justify-content: center;">
+                <nav class="crumbs"><span>Intro</span><span class="on">Why</span><span>How</span><span>Next</span></nav>
+                <div class="quote-mark reveal">&ldquo;</div>
+                <p class="quote-text reveal">File-system semantics plus git-diffable design artifacts — design is finally under version control.</p>
+                <p class="quote-attr reveal"><strong>—</strong> Indie developer</p>
+                <div class="baseline"><span>Quote</span><span>06 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 7: COMPARISON === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">07</div>
+                <nav class="crumbs"><span>Intro</span><span>Why</span><span class="on">How</span><span>Next</span></nav>
+                <h2 class="h2 reveal" style="font-size: 60px;">Closed cloud vs. Open Design</h2>
+                <div class="compare">
+                    <div class="col reveal">
+                        <h3>Closed cloud</h3>
+                        <ul>
+                            <li>Closed-source, paid, cloud-only</li>
+                            <li>Locked to a single model vendor</li>
+                            <li>No agent choice, no self-hosting, no BYOK</li>
+                            <li>Around $500 a month per seat</li>
+                        </ul>
+                    </div>
+                    <div class="col hot reveal">
+                        <h3>Open Design</h3>
+                        <ul>
+                            <li>Apache-2.0, runs on your own machine</li>
+                            <li>21 coding agents, auto-detected from PATH</li>
+                            <li>Full-stack BYOK and self-hosting allowed</li>
+                            <li>Around $73 a month — over 80% less</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="baseline"><span>Open vs. closed</span><span>07 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 8: PRINCIPLE GRID === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">08</div>
+                <nav class="crumbs"><span>Intro</span><span>Why</span><span class="on">How</span><span>Next</span></nav>
+                <h2 class="h2 reveal" style="font-size: 60px;">Core capabilities</h2>
+                <div class="grid4">
+                    <div class="gcard reveal"><div class="gno">A</div><h3>Desktop-first</h3><p>Local files, Figma, and code repos readable in place — agents work where your design actually lives.</p></div>
+                    <div class="gcard reveal"><div class="gno">B</div><h3>HTML video pipeline</h3><p>Programmatic video via HyperFrames: HTML-to-MP4 marketing shorts and product demos, end to end.</p></div>
+                    <div class="gcard reveal"><div class="gno">C</div><h3>129 design systems</h3><p>Import from GitHub, Figma, or local. Markdown design systems keep tokens from drifting.</p></div>
+                    <div class="gcard reveal"><div class="gno">D</div><h3>217+ plugins</h3><p>Prototypes, slides, posters, dashboards — a growing ecosystem, all under Apache-2.0.</p></div>
+                </div>
+                <div class="baseline"><span>Capabilities</span><span>08 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 9: BAR CHART === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">09</div>
+                <nav class="crumbs"><span>Intro</span><span>Why</span><span class="on">How</span><span>Next</span></nav>
+                <p class="kicker reveal">Demo data</p>
+                <h2 class="h2 reveal" style="font-size: 60px;">Where 217+ plugins cluster</h2>
+                <div class="chart">
+                    <div class="bar-group reveal">
+                        <div class="bar solid" style="height: 78%;"><span class="bar-val">52%</span></div>
+                        <div class="bar-label">Prototypes</div>
+                    </div>
+                    <div class="bar-group reveal">
+                        <div class="bar" style="height: 42%;"><span class="bar-val">28%</span></div>
+                        <div class="bar-label">Slides &amp; decks</div>
+                    </div>
+                    <div class="bar-group reveal">
+                        <div class="bar" style="height: 20%;"><span class="bar-val">13%</span></div>
+                        <div class="bar-label">Posters &amp; images</div>
+                    </div>
+                    <div class="bar-group reveal">
+                        <div class="bar" style="height: 11%;"><span class="bar-val">7%</span></div>
+                        <div class="bar-label">Video &amp; more</div>
+                    </div>
+                </div>
+                <div class="baseline"><span>Plugin ecosystem</span><span>09 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 10: CLOSING === -->
+        <section class="slide">
+            <div class="slide-inner">
+                <div class="slide-no">10</div>
+                <nav class="crumbs"><span>Intro</span><span>Why</span><span>How</span><span class="on">Next</span></nav>
+                <div class="close-card">
+                    <h2 class="display reveal" style="font-size: 150px;">Set design<br><span>free.</span></h2>
+                    <div class="close-links reveal">
+                        <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#FF5722" stroke-width="2"><path d="M12 .5C5.7.5.7 5.6.7 11.9c0 5 3.2 9.3 7.7 10.8.6.1.8-.2.8-.5v-2c-3.1.7-3.8-1.3-3.8-1.3-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.6 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.2-1.3-5.2-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.1 1.2a10.7 10.7 0 0 1 5.7 0c2.2-1.5 3.1-1.2 3.1-1.2.6 1.5.2 2.7.1 3 .8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.3.7 1 .7 2v3c0 .3.2.6.8.5a11.3 11.3 0 0 0 7.7-10.8C23.3 5.6 18.3.5 12 .5z"/></svg>nexu-io/open-design</span>
+                        <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#FF5722" stroke-width="2"><path d="M3 8l9 6 9-6M4 19h16a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1z"/></svg>discord.gg/qhbcCH8Am4</span>
+                    </div>
+                </div>
+                <div class="baseline"><span>Thank you</span><span>10 / 10</span></div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Page counter lives outside the scaled stage -->
+<div class="deck-controls" aria-hidden="true"><span class="cur" id="pageCur">1</span>&nbsp;/&nbsp;<span id="pageTotal">10</span></div>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Fixed 1920×1080 stage, scaled uniformly to the viewport.
+   Navigation: ← → Space PageUp/PageDown Home/End, wheel,
+   touch swipe. Current slide is mirrored into the URL hash.
+   =========================================== */
+(function () {
+    'use strict';
+
+    var STAGE_W = 1920;
+    var STAGE_H = 1080;
+
+    var stage = document.getElementById('deckStage');
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var pageCur = document.getElementById('pageCur');
+    var pageTotal = document.getElementById('pageTotal');
+    var current = 0;
+    var wheelLockUntil = 0;
+
+    pageTotal.textContent = String(slides.length);
+
+    /* --- Stage scaling: one transform, letterbox as needed --- */
+    function fitStage() {
+        var factor = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+        var x = (window.innerWidth - STAGE_W * factor) / 2;
+        var y = (window.innerHeight - STAGE_H * factor) / 2;
+        stage.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + factor + ')';
+    }
+
+    /* --- Hash routing: #/3 means slide index 3 (0-based) --- */
+    function indexFromHash() {
+        var m = /^#\/(\d+)$/.exec(window.location.hash);
+        if (!m) return null;
+        var idx = parseInt(m[1], 10);
+        return isNaN(idx) ? null : idx;
+    }
+
+    function show(index, skipHash) {
+        current = Math.max(0, Math.min(index, slides.length - 1));
+        slides.forEach(function (slide, i) {
+            slide.classList.toggle('active', i === current);
+            slide.classList.toggle('visible', i === current);
+        });
+        pageCur.textContent = String(current + 1);
+        if (!skipHash) {
+            var target = '#/' + current;
+            if (window.location.hash !== target) {
+                window.history.replaceState(null, '', target);
+            }
+        }
+    }
+
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    /* --- Keyboard --- */
+    document.addEventListener('keydown', function (e) {
+        if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable')) return;
+        switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+            case ' ':
+            case 'PageDown':
+                e.preventDefault(); next(); break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+            case 'PageUp':
+                e.preventDefault(); prev(); break;
+            case 'Home':
+                e.preventDefault(); show(0); break;
+            case 'End':
+                e.preventDefault(); show(slides.length - 1); break;
+        }
+    });
+
+    /* --- Mouse wheel (debounced) --- */
+    document.addEventListener('wheel', function (e) {
+        var now = Date.now();
+        if (now < wheelLockUntil) return;
+        if (Math.abs(e.deltaY) < 12) return;
+        wheelLockUntil = now + 650;
+        if (e.deltaY > 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Touch swipe --- */
+    var touchX = null;
+    document.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 1) touchX = e.touches[0].clientX;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+        if (touchX === null) return;
+        var dx = e.changedTouches[0].clientX - touchX;
+        touchX = null;
+        if (Math.abs(dx) < 40) return;
+        if (dx < 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Hash navigation (back/forward, deep links) --- */
+    window.addEventListener('hashchange', function () {
+        var idx = indexFromHash();
+        if (idx !== null && idx !== current) show(idx, true);
+    });
+
+    window.addEventListener('resize', fitStage);
+
+    fitStage();
+    var initial = indexFromHash();
+    show(initial !== null ? initial : 0, initial === null);
+})();
+</script>
+</body>
+</html>

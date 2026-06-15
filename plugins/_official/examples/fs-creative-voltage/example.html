@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Open Design · Creative Voltage Slides</title>
+
+<!-- Fonts: Creative Voltage locked pairing — Syne display, Space Mono body, Yellowtail script accents -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Yellowtail&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   CSS CUSTOM PROPERTIES (THEME)
+   Creative Voltage preset — locked tokens.
+   Electric blue × deep navy split, neon yellow accents,
+   halftone dot textures, script flourishes.
+   =========================================== */
+:root {
+    --stage-bg: #10101f;
+    --slide-bg: #1a1a2e;
+
+    --bg-primary: #0066ff;            /* electric blue panel */
+    --bg-primary-deep: #0052cc;       /* blue gradient stop */
+    --bg-dark: #1a1a2e;               /* deep navy panel */
+    --bg-dark-2: #23234a;             /* lifted navy card */
+    --accent-neon: #d4ff00;           /* neon yellow badge/highlight */
+    --accent-neon-soft: rgba(212, 255, 0, 0.14);
+
+    --text-light: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.64);
+    --text-faint: rgba(255, 255, 255, 0.34);
+    --text-on-neon: #1a1a2e;
+    --line: rgba(255, 255, 255, 0.18);
+    --line-blue: rgba(255, 255, 255, 0.28);
+
+    /* Typography — authored at the 1920×1080 stage size */
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+    --font-script: 'Yellowtail', cursive;
+    --title-size: 138px;
+    --h2-size: 88px;
+    --subtitle-size: 32px;
+    --body-size: 27px;
+    --label-size: 20px;
+
+    /* Spacing — authored at the 1920×1080 stage size */
+    --slide-pad: 96px;
+
+    /* Animation */
+    --ease-volt: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-normal: 0.7s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   (full contents of viewport-base.css)
+   Slides are authored at 1920×1080 and scaled as a whole.
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+/* Fixed 16:9 design canvas. JavaScript sets transform: translate(...) scale(...). */
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+/* Slides stack inside the fixed stage. Content laid out at 1920×1080, never reflowed per device. */
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+img, video, canvas, svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+/* Presentation chrome stays outside the slide design system */
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+        /* Stagger delays must collapse too, or reduced-motion users still wait for the cascade */
+        transition-delay: 0s !important;
+    }
+}
+
+/* ===========================================
+   SLIDE SHELL — shared chrome inside every slide
+   =========================================== */
+.slide {
+    background: var(--bg-dark);
+    font-family: var(--font-mono);
+    color: var(--text-light);
+    transition: opacity 0.55s var(--ease-volt);
+}
+.slide-inner {
+    position: absolute;
+    inset: 0;
+    padding: var(--slide-pad);
+    display: flex;
+    flex-direction: column;
+}
+/* Slide number, top-left — mono, neon — Creative Voltage signature */
+.slide-no {
+    position: absolute;
+    top: 56px;
+    left: var(--slide-pad);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 24px;
+    letter-spacing: 0.12em;
+    color: var(--accent-neon);
+    z-index: 4;
+}
+/* Breadcrumb nav, top-right — active section at full opacity */
+.crumbs {
+    position: absolute;
+    top: 60px;
+    right: var(--slide-pad);
+    display: flex;
+    gap: 34px;
+    font-family: var(--font-mono);
+    font-size: 19px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    z-index: 4;
+}
+/* Bold active crumb: neon on electric blue is ~4.2:1, which clears WCAG AA
+   only at the bold large-text threshold (>= 18.66px). Mono metrics keep width stable. */
+.crumbs .on { color: var(--accent-neon); font-weight: 700; }
+/* Contrast fix: chrome that overlaps an electric-blue panel needs full white
+   (dim white over #0066ff lands below WCAG AA). Tokens unchanged. */
+.panel-blue ~ .baseline,
+.panel-blue.right ~ .crumbs { color: var(--text-light); }
+.panel-blue.right ~ .crumbs .on { color: var(--accent-neon); }
+/* Baseline rule across the bottom of each slide */
+.baseline {
+    position: absolute;
+    left: var(--slide-pad);
+    right: var(--slide-pad);
+    bottom: 58px;
+    padding-top: 18px;
+    border-top: 2px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    z-index: 4;
+}
+
+/* ===========================================
+   SIGNATURE DEVICES — halftone, panels, badges, script
+   =========================================== */
+/* Halftone dot texture — pure CSS radial-gradient grid */
+.halftone {
+    position: absolute;
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.30) 2.2px, transparent 2.9px);
+    background-size: 22px 22px;
+    pointer-events: none;
+    z-index: 1;
+}
+.halftone.neon {
+    background-image: radial-gradient(circle, rgba(212, 255, 0, 0.45) 2.2px, transparent 2.9px);
+}
+.halftone.fade {
+    -webkit-mask-image: linear-gradient(135deg, #000 30%, transparent 85%);
+    mask-image: linear-gradient(135deg, #000 30%, transparent 85%);
+}
+/* Electric blue side panel for split layouts */
+.panel-blue {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 46%;
+    background: linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-primary-deep) 100%);
+    z-index: 0;
+}
+.panel-blue.right { left: auto; right: 0; }
+/* Neon badge — rotated mono sticker */
+.badge {
+    display: inline-block;
+    background: var(--accent-neon);
+    color: var(--text-on-neon);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 12px 26px;
+    transform: rotate(-2deg);
+    box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.35);
+}
+/* Script flourish — Yellowtail accents */
+.script {
+    font-family: var(--font-script);
+    font-weight: 400;
+    color: var(--accent-neon);
+    text-transform: none;
+    letter-spacing: 0;
+}
+/* Display headline helper */
+.display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.015em;
+    text-transform: uppercase;
+}
+/* Outlined giant numeral for section dividers */
+.ghost-num {
+    font-family: var(--font-display);
+    font-weight: 800;
+    color: transparent;
+    -webkit-text-stroke: 4px var(--accent-neon);
+    line-height: 0.85;
+}
+
+/* ===========================================
+   REVEAL ANIMATION — staggered entrances
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity var(--duration-normal) var(--ease-volt),
+                transform var(--duration-normal) var(--ease-volt);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.slide.visible .reveal:nth-child(1) { transition-delay: 0.05s; }
+.slide.visible .reveal:nth-child(2) { transition-delay: 0.15s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: 0.25s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: 0.35s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: 0.45s; }
+.slide.visible .reveal:nth-child(6) { transition-delay: 0.55s; }
+
+/* ===========================================
+   SLIDE 1 — COVER (split blue/dark)
+   =========================================== */
+.cover-left {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 46%;
+    z-index: 2;
+    padding: 150px 80px 140px var(--slide-pad);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 36px;
+}
+.cover-title {
+    font-size: var(--title-size);
+    color: var(--text-light);
+}
+.cover-title .volt { color: var(--accent-neon); }
+.cover-script {
+    font-family: var(--font-script);
+    font-size: 64px;
+    color: var(--accent-neon);
+    transform: rotate(-3deg);
+    margin-left: 8px;
+}
+.cover-right {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 54%;
+    z-index: 2;
+    padding: 150px var(--slide-pad) 140px 90px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 28px;
+}
+.cover-meta {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    line-height: 2.1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+.cover-meta strong { color: var(--text-light); font-weight: 700; }
+.cover-rule { width: 120px; height: 6px; background: var(--accent-neon); }
+
+/* ===========================================
+   SLIDE 2 — AGENDA
+   =========================================== */
+.agenda-wrap {
+    margin-top: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    z-index: 2;
+}
+.agenda-head { font-size: 72px; margin-bottom: 56px; }
+.agenda-row {
+    display: flex;
+    align-items: baseline;
+    gap: 48px;
+    padding: 30px 0;
+    border-top: 2px solid var(--line);
+}
+.agenda-row .num {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--accent-neon);
+    width: 70px;
+}
+.agenda-row .name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 46px;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    flex: 1;
+}
+.agenda-row .hint {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* ===========================================
+   SLIDE 3 — SECTION DIVIDER (giant outlined numeral on blue)
+   =========================================== */
+.divider-num {
+    position: absolute;
+    left: 64px;
+    bottom: 30px;
+    font-size: 560px;
+    z-index: 2;
+}
+.divider-body {
+    position: absolute;
+    right: var(--slide-pad);
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 30px;
+}
+.divider-body h2 { font-size: var(--h2-size); }
+.divider-body p {
+    font-family: var(--font-mono);
+    font-size: var(--body-size);
+    line-height: 1.7;
+    color: var(--text-dim);
+    max-width: 720px;
+}
+
+/* ===========================================
+   SLIDE 4 — BULLETS (problem list)
+   =========================================== */
+.bullets-head { margin-top: 140px; font-size: 76px; z-index: 2; }
+.bullets-head .script { font-size: 66px; }
+.bullet-list {
+    margin-top: 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    max-width: 1280px;
+    z-index: 2;
+}
+.bullet {
+    display: flex;
+    gap: 36px;
+    align-items: flex-start;
+}
+.bullet .tick {
+    flex: 0 0 56px;
+    height: 56px;
+    background: var(--accent-neon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: rotate(-2deg);
+    box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.35);
+}
+.bullet h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 38px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.bullet p {
+    font-family: var(--font-mono);
+    font-size: 25px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    max-width: 1050px;
+}
+
+/* ===========================================
+   SLIDE 5 — BIG STAT
+   =========================================== */
+.stat-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--slide-pad);
+    gap: 90px;
+}
+.stat-big {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 480px;
+    line-height: 0.9;
+    color: var(--accent-neon);
+    letter-spacing: -0.03em;
+}
+.stat-side { display: flex; flex-direction: column; gap: 28px; max-width: 640px; }
+.stat-side h2 { font-size: 60px; }
+.stat-side p {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    line-height: 1.7;
+    color: var(--text-dim);
+}
+
+/* ===========================================
+   SLIDE 6 — PRINCIPLE GRID (2×2 cards)
+   =========================================== */
+.grid-head { margin-top: 140px; font-size: 68px; z-index: 2; }
+.grid2x2 {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    z-index: 2;
+}
+.gcard {
+    background: var(--bg-dark-2);
+    border: 2px solid var(--line);
+    padding: 40px 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 240px;
+}
+.gcard.hot { background: var(--bg-primary); border-color: var(--line-blue); }
+.gcard .ic { width: 52px; height: 52px; }
+.gcard h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 33px;
+    text-transform: uppercase;
+}
+.gcard p {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    line-height: 1.55;
+    color: var(--text-dim);
+}
+.gcard.hot p { color: var(--text-light); }
+
+/* ===========================================
+   SLIDE 7 — CSS BAR CHART
+   =========================================== */
+.chart-head { margin-top: 140px; font-size: 64px; z-index: 2; }
+.chart-area {
+    margin-top: 70px;
+    display: flex;
+    align-items: flex-end;
+    gap: 70px;
+    height: 480px;
+    border-bottom: 3px solid var(--line);
+    padding: 0 40px;
+    z-index: 2;
+}
+.bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 18px;
+    height: 100%;
+}
+.bar-val {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--text-light);
+}
+.bar {
+    width: 100%;
+    background: var(--bg-dark-2);
+    border: 2px solid var(--line);
+    transform-origin: bottom;
+    transform: scaleY(0);
+    transition: transform 0.9s var(--ease-volt);
+}
+.bar.neon { background: var(--accent-neon); border-color: var(--accent-neon); }
+.bar.blue { background: var(--bg-primary); border-color: var(--bg-primary); }
+.slide.visible .bar { transform: scaleY(1); }
+.slide.visible .bar-col:nth-child(1) .bar { transition-delay: 0.15s; }
+.slide.visible .bar-col:nth-child(2) .bar { transition-delay: 0.30s; }
+.slide.visible .bar-col:nth-child(3) .bar { transition-delay: 0.45s; }
+.slide.visible .bar-col:nth-child(4) .bar { transition-delay: 0.60s; }
+.slide.visible .bar-col:nth-child(5) .bar { transition-delay: 0.75s; }
+.bar-label {
+    font-family: var(--font-mono);
+    font-size: 19px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 6px;
+}
+.chart-row { display: flex; gap: 70px; padding: 0 40px; z-index: 2; }
+.chart-row .bar-label { flex: 1; text-align: center; }
+
+/* ===========================================
+   SLIDE 8 — QUOTE
+   =========================================== */
+.quote-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 170px;
+    gap: 44px;
+}
+.quote-mark { font-family: var(--font-display); font-size: 140px; color: var(--accent-neon); line-height: 0.5; }
+.quote-text {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 66px;
+    line-height: 1.18;
+    text-transform: none;
+    letter-spacing: -0.01em;
+    max-width: 1480px;
+}
+.quote-text em { font-style: normal; color: var(--accent-neon); }
+.quote-by {
+    font-family: var(--font-script);
+    font-size: 52px;
+    line-height: 1.3; /* Yellowtail's tight line box collides with the role line otherwise */
+    color: var(--accent-neon);
+    transform: rotate(-2deg);
+    margin-bottom: 26px;
+}
+.quote-role {
+    font-family: var(--font-mono);
+    font-size: 21px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* ===========================================
+   SLIDE 9 — TWO-COLUMN COMPARISON
+   =========================================== */
+.cmp-head { margin-top: 140px; font-size: 64px; z-index: 2; }
+.cmp-cols {
+    margin-top: 56px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    z-index: 2;
+}
+.cmp-col { padding: 44px 48px; min-height: 480px; }
+.cmp-col.old { background: var(--bg-dark-2); border: 2px solid var(--line); }
+.cmp-col.new { background: linear-gradient(160deg, var(--bg-primary) 0%, var(--bg-primary-deep) 100%); position: relative; overflow: hidden; }
+.cmp-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    margin-bottom: 34px;
+}
+.cmp-col.old .cmp-tag { border: 2px solid var(--line); color: var(--text-dim); }
+.cmp-col.new .cmp-tag { background: var(--accent-neon); color: var(--text-on-neon); transform: rotate(-2deg); }
+.cmp-li {
+    display: flex;
+    gap: 20px;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 24px;
+    line-height: 1.55;
+    padding: 16px 0;
+    color: var(--text-dim);
+}
+.cmp-col.new .cmp-li { color: var(--text-light); }
+.cmp-li .dot { color: var(--accent-neon); font-weight: 700; }
+
+/* ===========================================
+   SLIDE 10 — CLOSING
+   =========================================== */
+.close-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 0 var(--slide-pad);
+    gap: 44px;
+}
+.close-title { font-size: 168px; }
+.close-title .script { font-size: 150px; text-transform: none; letter-spacing: 0; }
+.close-links {
+    display: flex;
+    gap: 56px;
+    font-family: var(--font-mono);
+    font-size: 24px;
+    letter-spacing: 0.1em;
+    color: var(--text-light); /* sits over the blue panel; dim white fails AA there */
+}
+.close-links .lk { display: flex; align-items: center; gap: 14px; }
+.close-links svg { width: 30px; height: 30px; flex: 0 0 30px; }
+
+/* ===========================================
+   PAGE COUNTER CHROME (outside the scaled stage)
+   =========================================== */
+.deck-controls {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.5);
+    user-select: none;
+}
+.deck-controls .cur { color: #d4ff00; font-weight: 700; }
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div class="deck-viewport">
+    <main class="deck-stage" id="deckStage">
+
+        <!-- === SLIDE 1: COVER — split blue/dark === -->
+        <section class="slide active visible">
+            <div class="panel-blue"></div>
+            <div class="halftone fade" style="left:0; top:0; width:46%; height:46%;"></div>
+            <div class="slide-no">01 / OPEN</div>
+            <nav class="crumbs"><span class="on">Intro</span><span>Problem</span><span>Product</span><span>Proof</span></nav>
+            <div class="cover-left">
+                <div class="reveal"><span class="badge">Apache-2.0 · BYOK</span></div>
+                <h1 class="display cover-title reveal">Open<br><span class="volt">Design</span></h1>
+                <div class="cover-script reveal">design, set free!</div>
+            </div>
+            <div class="cover-right">
+                <div class="cover-rule reveal"></div>
+                <p class="cover-meta reveal">
+                    The <strong>open-source</strong>, local,<br>
+                    <strong>agent-driven</strong> design<br>
+                    platform.
+                </p>
+                <p class="cover-meta reveal">RUNS LOCALLY — NO SIGN-UP<br>GITHUB.COM/NEXU-IO/OPEN-DESIGN</p>
+            </div>
+            <div class="baseline"><span>Open Design — Product Story</span><span>01 / 10</span></div>
+        </section>
+
+        <!-- === SLIDE 2: AGENDA === -->
+        <section class="slide">
+            <div class="halftone neon fade" style="right:0; top:0; width:34%; height:40%;"></div>
+            <div class="slide-no">02 / OPEN</div>
+            <nav class="crumbs"><span class="on">Intro</span><span>Problem</span><span>Product</span><span>Proof</span></nav>
+            <div class="slide-inner">
+                <div class="agenda-wrap">
+                    <h2 class="display agenda-head reveal">On the <span class="script" style="font-size:62px;">menu</span></h2>
+                    <div class="agenda-row reveal">
+                        <span class="num">A.</span><span class="name">Why open design</span><span class="hint">Problem</span>
+                    </div>
+                    <div class="agenda-row reveal">
+                        <span class="num">B.</span><span class="name">What it does</span><span class="hint">Product</span>
+                    </div>
+                    <div class="agenda-row reveal">
+                        <span class="num">C.</span><span class="name">Community proof</span><span class="hint">Numbers</span>
+                    </div>
+                    <div class="agenda-row reveal">
+                        <span class="num">D.</span><span class="name">Get started</span><span class="hint">Next</span>
+                    </div>
+                </div>
+                <div class="baseline"><span>Agenda</span><span>02 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 3: SECTION DIVIDER — giant outlined numeral on blue === -->
+        <section class="slide">
+            <div class="panel-blue"></div>
+            <div class="halftone" style="left:0; bottom:0; width:46%; height:34%; -webkit-mask-image:linear-gradient(0deg,#000 20%,transparent 90%); mask-image:linear-gradient(0deg,#000 20%,transparent 90%);"></div>
+            <div class="slide-no">03 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span class="on">Problem</span><span>Product</span><span>Proof</span></nav>
+            <div class="ghost-num divider-num reveal">A</div>
+            <div class="divider-body">
+                <div class="reveal"><span class="badge">Section A</span></div>
+                <h2 class="display reveal">Why open design</h2>
+                <p class="reveal">In April 2026, Claude Design proved an LLM can truly design — real artifacts, not essays. But it is closed-source, paid, and cloud-only. Open Design sets that capability free.</p>
+            </div>
+            <div class="baseline"><span>Section A — Problem</span><span>03 / 10</span></div>
+        </section>
+
+        <!-- === SLIDE 4: BULLETS — the problem === -->
+        <section class="slide">
+            <div class="halftone fade" style="right:0; bottom:0; width:30%; height:44%; -webkit-mask-image:linear-gradient(315deg,#000 25%,transparent 85%); mask-image:linear-gradient(315deg,#000 25%,transparent 85%);"></div>
+            <div class="slide-no">04 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span class="on">Problem</span><span>Product</span><span>Proof</span></nav>
+            <div class="slide-inner">
+                <h2 class="display bullets-head reveal">Three locked <span class="script">doors</span></h2>
+                <div class="bullet-list">
+                    <div class="bullet reveal">
+                        <div class="tick"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></div>
+                        <div>
+                            <h3>Closed source</h3>
+                            <p>Frontier AI design exists — but sealed shut. You cannot fork it, audit it, or extend it with your own tools.</p>
+                        </div>
+                    </div>
+                    <div class="bullet reveal">
+                        <div class="tick"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 3"/></svg></div>
+                        <div>
+                            <h3>Cloud-only, one model</h3>
+                            <p>Your files leave your machine, and the model is locked to a single vendor. No agent choice, no self-hosting, no BYOK.</p>
+                        </div>
+                    </div>
+                    <div class="bullet reveal">
+                        <div class="tick"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg></div>
+                        <div>
+                            <h3>Priced for the few</h3>
+                            <p>At $500 a month, frontier design capability stays out of reach for most indie creators and small teams.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="baseline"><span>The problem</span><span>04 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 5: BIG STAT === -->
+        <section class="slide">
+            <div class="halftone neon fade" style="left:0; top:0; width:40%; height:50%;"></div>
+            <div class="slide-no">05 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span class="on">Problem</span><span>Product</span><span>Proof</span></nav>
+            <div class="stat-wrap">
+                <div class="stat-big reveal">21</div>
+                <div class="stat-side">
+                    <div class="reveal"><span class="badge">Agent-native</span></div>
+                    <h2 class="display reveal">Coding agents,<br>zero config</h2>
+                    <p class="reveal">Open Design auto-detects the agent CLIs already on your PATH — Claude Code, Codex, Cursor, and more. Any OpenAI / Azure / Google-compatible endpoint plugs in via BYOK.</p>
+                </div>
+            </div>
+            <div class="baseline"><span>Why it matters</span><span>05 / 10</span></div>
+        </section>
+
+        <!-- === SLIDE 6: PRINCIPLE GRID — the kit, 2×2 === -->
+        <section class="slide">
+            <div class="halftone fade" style="left:0; bottom:0; width:26%; height:34%; -webkit-mask-image:linear-gradient(45deg,#000 25%,transparent 85%); mask-image:linear-gradient(45deg,#000 25%,transparent 85%);"></div>
+            <div class="slide-no">06 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span>Problem</span><span class="on">Product</span><span>Proof</span></nav>
+            <div class="slide-inner">
+                <h2 class="display grid-head reveal">Four core <span class="script" style="font-size:58px;">powers</span></h2>
+                <div class="grid2x2">
+                    <div class="gcard hot reveal">
+                        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+                        <h3>Desktop-native</h3>
+                        <p>Local files, Figma exports, and code repos are directly readable — agents get full terminal power.</p>
+                    </div>
+                    <div class="gcard reveal">
+                        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/><path d="M13 7h8M7 13v8"/></svg>
+                        <h3>Plug in agents</h3>
+                        <p>Claude Code, Codex, and Cursor are already powerful. Open Design wires them into a full design workflow.</p>
+                    </div>
+                    <div class="gcard reveal">
+                        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+                        <h3>It learns your taste</h3>
+                        <p>Every choice becomes design systems, preferences, and memory — the next run lands closer to what you want.</p>
+                    </div>
+                    <div class="gcard reveal">
+                        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+                        <h3>HTML video pipeline</h3>
+                        <p>Turn any artifact into an MP4 marketing short with HyperFrames, the HTML-first video pipeline.</p>
+                    </div>
+                </div>
+                <div class="baseline"><span>Section B — Product</span><span>06 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 7: CSS BAR CHART === -->
+        <section class="slide">
+            <div class="halftone neon fade" style="right:0; top:0; width:30%; height:36%; -webkit-mask-image:linear-gradient(225deg,#000 25%,transparent 85%); mask-image:linear-gradient(225deg,#000 25%,transparent 85%);"></div>
+            <div class="slide-no">07 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span>Problem</span><span class="on">Product</span><span>Proof</span></nav>
+            <div class="slide-inner">
+                <h2 class="display chart-head reveal">GitHub stars over time</h2>
+                <div class="chart-area">
+                    <div class="bar-col"><span class="bar-val">6K</span><div class="bar" style="height:10%;"></div></div>
+                    <div class="bar-col"><span class="bar-val">14K</span><div class="bar" style="height:21%;"></div></div>
+                    <div class="bar-col"><span class="bar-val">27K</span><div class="bar blue" style="height:40%;"></div></div>
+                    <div class="bar-col"><span class="bar-val">42K</span><div class="bar blue" style="height:62%;"></div></div>
+                    <div class="bar-col"><span class="bar-val">60K+</span><div class="bar neon" style="height:88%;"></div></div>
+                </div>
+                <div class="chart-row">
+                    <span class="bar-label">Launch</span>
+                    <span class="bar-label">+30 days</span>
+                    <span class="bar-label">+60 days</span>
+                    <span class="bar-label">+90 days</span>
+                    <span class="bar-label">Today</span>
+                </div>
+                <div class="baseline"><span>Section C — Proof · demo data</span><span>07 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 8: QUOTE === -->
+        <section class="slide">
+            <div class="panel-blue right" style="width:30%;"></div>
+            <div class="halftone" style="right:0; top:0; width:30%; height:100%; -webkit-mask-image:linear-gradient(270deg,#000 10%,transparent 80%); mask-image:linear-gradient(270deg,#000 10%,transparent 80%);"></div>
+            <div class="slide-no">08 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span>Problem</span><span class="on">Product</span><span>Proof</span></nav>
+            <div class="quote-wrap">
+                <div class="quote-mark reveal">“</div>
+                <p class="quote-text reveal">File-system semantics plus git-diffable artifacts — <em>design is finally under version control</em>.</p>
+                <div class="reveal">
+                    <div class="quote-by">from the community</div>
+                    <div class="quote-role">Indie developer — Open Design user</div>
+                </div>
+            </div>
+            <div class="baseline"><span>Community voice</span><span>08 / 10</span></div>
+        </section>
+
+        <!-- === SLIDE 9: COMPARISON — before vs after === -->
+        <section class="slide">
+            <div class="slide-no">09 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span>Problem</span><span>Product</span><span class="on">Proof</span></nav>
+            <div class="slide-inner">
+                <h2 class="display cmp-head reveal">Closed / <span class="script" style="font-size:56px;">open</span></h2>
+                <div class="cmp-cols">
+                    <div class="cmp-col old reveal">
+                        <span class="cmp-tag">Closed cloud</span>
+                        <div class="cmp-li"><span class="dot">×</span><span>Closed-source — no fork, no audit</span></div>
+                        <div class="cmp-li"><span class="dot">×</span><span>Cloud-only — files leave your machine</span></div>
+                        <div class="cmp-li"><span class="dot">×</span><span>One model, one vendor, no agent choice</span></div>
+                        <div class="cmp-li"><span class="dot">×</span><span>$500 / month subscription</span></div>
+                    </div>
+                    <div class="cmp-col new reveal">
+                        <div class="halftone" style="right:0; bottom:0; width:60%; height:50%; -webkit-mask-image:linear-gradient(315deg,#000 20%,transparent 80%); mask-image:linear-gradient(315deg,#000 20%,transparent 80%);"></div>
+                        <span class="cmp-tag">Open Design</span>
+                        <div class="cmp-li"><span class="dot">→</span><span>Apache-2.0 — fork, self-host, go commercial</span></div>
+                        <div class="cmp-li"><span class="dot">→</span><span>Runs locally — BYOK, no sign-up</span></div>
+                        <div class="cmp-li"><span class="dot">→</span><span>21 coding agents, auto-detected, zero config</span></div>
+                        <div class="cmp-li"><span class="dot">→</span><span>~$73 / month with BYOK — 80% less</span></div>
+                    </div>
+                </div>
+                <div class="baseline"><span>Closed / open</span><span>09 / 10</span></div>
+            </div>
+        </section>
+
+        <!-- === SLIDE 10: CLOSING === -->
+        <section class="slide">
+            <div class="panel-blue" style="width:38%;"></div>
+            <div class="halftone fade" style="left:0; top:0; width:38%; height:60%;"></div>
+            <div class="slide-no">10 / OPEN</div>
+            <nav class="crumbs"><span>Intro</span><span>Problem</span><span>Product</span><span class="on">Next</span></nav>
+            <div class="close-wrap">
+                <div class="reveal"><span class="badge">Download · macOS / Windows</span></div>
+                <h2 class="display close-title reveal">Stay<br><span class="script">open.</span></h2>
+                <div class="close-links reveal">
+                    <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>github.com/nexu-io/open-design</span>
+                    <span class="lk"><svg viewBox="0 0 24 24" fill="none" stroke="#d4ff00" stroke-width="2" stroke-linecap="round"><path d="M3 8l9 6 9-6M4 19h16a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1z"/></svg>discord.gg/qhbcCH8Am4</span>
+                </div>
+            </div>
+            <div class="baseline"><span>Open · Local · Agent-native</span><span>10 / 10</span></div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Page counter lives outside the scaled stage -->
+<div class="deck-controls" aria-hidden="true"><span class="cur" id="pageCur">1</span>&nbsp;/&nbsp;<span id="pageTotal">10</span></div>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Fixed 1920×1080 stage, scaled uniformly to the viewport.
+   Navigation: ← → Space PageUp/PageDown Home/End, wheel,
+   touch swipe. Current slide is mirrored into the URL hash.
+   =========================================== */
+(function () {
+    'use strict';
+
+    var STAGE_W = 1920;
+    var STAGE_H = 1080;
+
+    var stage = document.getElementById('deckStage');
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var pageCur = document.getElementById('pageCur');
+    var pageTotal = document.getElementById('pageTotal');
+    var current = 0;
+    var wheelLockUntil = 0;
+
+    pageTotal.textContent = String(slides.length);
+
+    /* --- Stage scaling: one transform, letterbox as needed --- */
+    function fitStage() {
+        var factor = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+        var x = (window.innerWidth - STAGE_W * factor) / 2;
+        var y = (window.innerHeight - STAGE_H * factor) / 2;
+        stage.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + factor + ')';
+    }
+
+    /* --- Hash routing: #/3 means slide index 3 (0-based) --- */
+    function indexFromHash() {
+        var m = /^#\/(\d+)$/.exec(window.location.hash);
+        if (!m) return null;
+        var idx = parseInt(m[1], 10);
+        return isNaN(idx) ? null : idx;
+    }
+
+    function show(index, skipHash) {
+        current = Math.max(0, Math.min(index, slides.length - 1));
+        slides.forEach(function (slide, i) {
+            slide.classList.toggle('active', i === current);
+            slide.classList.toggle('visible', i === current);
+        });
+        pageCur.textContent = String(current + 1);
+        if (!skipHash) {
+            var target = '#/' + current;
+            if (window.location.hash !== target) {
+                window.history.replaceState(null, '', target);
+            }
+        }
+    }
+
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    /* --- Keyboard --- */
+    document.addEventListener('keydown', function (e) {
+        if (e.target && e.target.getAttribute && e.target.getAttribute('contenteditable')) return;
+        switch (e.key) {
+            case 'ArrowRight':
+            case 'ArrowDown':
+            case ' ':
+            case 'PageDown':
+                e.preventDefault(); next(); break;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+            case 'PageUp':
+                e.preventDefault(); prev(); break;
+            case 'Home':
+                e.preventDefault(); show(0); break;
+            case 'End':
+                e.preventDefault(); show(slides.length - 1); break;
+        }
+    });
+
+    /* --- Mouse wheel (debounced) --- */
+    document.addEventListener('wheel', function (e) {
+        var now = Date.now();
+        if (now < wheelLockUntil) return;
+        if (Math.abs(e.deltaY) < 12) return;
+        wheelLockUntil = now + 650;
+        if (e.deltaY > 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Touch swipe --- */
+    var touchX = null;
+    document.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 1) touchX = e.touches[0].clientX;
+    }, { passive: true });
+    document.addEventListener('touchend', function (e) {
+        if (touchX === null) return;
+        var dx = e.changedTouches[0].clientX - touchX;
+        touchX = null;
+        if (Math.abs(dx) < 40) return;
+        if (dx < 0) { next(); } else { prev(); }
+    }, { passive: true });
+
+    /* --- Hash navigation (back/forward, deep links) --- */
+    window.addEventListener('hashchange', function () {
+        var idx = indexFromHash();
+        if (idx !== null && idx !== current) show(idx, true);
+    });
+
+    window.addEventListener('resize', fitStage);
+
+    fitStage();
+    var initial = indexFromHash();
+    show(initial !== null ? initial : 0, initial === null);
+})();
+</script>
+</body>
+</html>

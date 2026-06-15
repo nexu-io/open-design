@@ -1,0 +1,156 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-slides",
+  "title": "Huashu Slides",
+  "title_i18n": {
+    "en": "Huashu Slides",
+    "zh-CN": "花叔幻灯片"
+  },
+  "version": "1.0.0",
+  "description": "Publication-grade single-file HTML decks from the slides workflow of 花叔's huashu-design skill: editorial masthead/kicker/serif-display grammar on a fixed 1920×1080 auto-fit canvas, one terracotta accent, light/dark rhythm, keyboard + hash navigation, anti-AI-slop rules, and an optional editable-PPTX path.",
+  "description_i18n": {
+    "en": "Publication-grade single-file HTML decks from the slides workflow of 花叔's huashu-design skill: editorial masthead/kicker/serif-display grammar on a fixed 1920×1080 auto-fit canvas, one terracotta accent, light/dark rhythm, keyboard + hash navigation, anti-AI-slop rules, and an optional editable-PPTX path.",
+    "zh-CN": "出版物级单文件 HTML 幻灯片，裁剪自花叔 huashu-design skill 的 slides 工作流：1920×1080 固定画布自适应缩放、报刊式 masthead/kicker/衬线大字版式、单一赤陶橙 accent、亮暗节奏交替、键盘翻页 + #/N hash 跳页、反 AI slop 守则，并可选导出可编辑 PPTX。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "pptx",
+    "editorial",
+    "huashu"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a publication-grade {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Huashu Slides system: a fixed 1920×1080 canvas auto-scaled to the viewport, editorial grammar on every page (masthead strip, kicker with accent bar, giant Noto Serif SC display headings, hairline footer with page numbers), one terracotta-style accent reused at most 3 times per page, alternating light/dark page rhythm with never 3+ same theme in a row, and layouts drawn from the locked enumeration (cover / divider / content / data / quote / two-column / closing). Build a single self-contained HTML file by copying `example.html` and replacing content only — keep its design tokens, navigation script (←/→/Space keys, #/N hash routing, click zones, counter pill) and chrome intact. Use the user's real content, never lorem ipsum or invented data; body text stays ≥24px; Chinese copy uses 「」 quotes. For decks of 5+ pages, show the 2 structurally most different pages first as a showcase before batching the rest. PPTX export: {{pptxExport}} — if an editable PPTX is needed, follow the strict export-friendly HTML constraints in SKILL.md from the first line.",
+        "zh-CN": "用「花叔幻灯片」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}，页数 {{slideCount}}：1920×1080 固定画布自适应缩放，每页报刊式版式（masthead、accent 短横 kicker、衬线大字标题、细线页脚页码），单一赤陶橙系 accent 每页最多用 3 处，亮暗页节奏交替（绝不连续 3 页同色），版式从锁定枚举（封面/章节/观点/数据/引语/对比/结尾）中取用。从 example.html 复制出单个自包含 HTML 文件、只换内容——保留设计 token、导航脚本（←/→/空格、#/N hash 跳页、点击翻页、页码胶囊）和页面框架。用用户真实内容，禁止 lorem ipsum 和编造数据；正文 ≥24px；中文用「」引号。5 页以上先做 2 页 showcase 确认 grammar 再批量。PPTX 导出：{{pptxExport}}——若需要可编辑 PPTX，从第一行 HTML 起就按 SKILL.md 的导出友好硬约束写。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Huashu Slides",
+          "title_i18n": {
+            "en": "Huashu Slides",
+            "zh-CN": "花叔幻灯片"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product launch deck",
+          "pitch deck",
+          "lecture / course deck",
+          "data report deck",
+          "brand brochure deck"
+        ],
+        "default": "product launch deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：AI 设计工作流的下一步",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "投资人 / 团队全员 / 大会听众",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "6-8 pages",
+          "8-12 pages",
+          "12-16 pages",
+          "16-20 pages"
+        ],
+        "default": "8-12 pages"
+      },
+      {
+        "name": "pptxExport",
+        "label": "Editable PPTX",
+        "type": "select",
+        "options": [
+          "HTML only",
+          "also need editable PPTX"
+        ],
+        "default": "HTML only"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

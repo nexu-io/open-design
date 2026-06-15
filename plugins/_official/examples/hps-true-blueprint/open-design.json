@@ -1,0 +1,143 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hps-true-blueprint",
+  "title": "True Blueprint",
+  "title_i18n": {
+    "en": "True Blueprint",
+    "zh-CN": "工程蓝图"
+  },
+  "version": "1.0.0",
+  "description": "True-blueprint deck theme: a blueprint-blue #0b3a6f full-bleed field under a 40px white drafting grid, dashed-border translucent cards, white and ice-blue #aee1ff ink lines with amber #ffd27a annotations, every glyph in JetBrains Mono, 2px corners, zero shadows. Drawing-sheet chrome (title block, sheet index, construction-line section numbers, hatched CSS bars, inline-SVG schematics) makes it the natural skin for system-architecture and engineering-design decks. Single self-contained HTML file, zero external JS. Based on lewislulu/html-ppt-skill blueprint theme.",
+  "description_i18n": {
+    "en": "True-blueprint deck theme: a blueprint-blue #0b3a6f full-bleed field under a 40px white drafting grid, dashed-border translucent cards, white and ice-blue #aee1ff ink lines with amber #ffd27a annotations, every glyph in JetBrains Mono, 2px corners, zero shadows. Drawing-sheet chrome (title block, sheet index, construction-line section numbers, hatched CSS bars, inline-SVG schematics) makes it the natural skin for system-architecture and engineering-design decks. Single self-contained HTML file, zero external JS. Based on lewislulu/html-ppt-skill blueprint theme.",
+    "zh-CN": "「工程蓝图」幻灯片主题：蓝图蓝 #0b3a6f 满底 + 40px 白色绘图网格，虚线边框半透明卡片，白/冰蓝 #aee1ff 墨线 + 琥珀 #ffd27a 标注，全 JetBrains Mono，2px 圆角、零阴影。图纸式装置（标题栏、图纸索引、轮廓线巨型章节号、斜纹填充 CSS 柱图、内联 SVG 系统简图）天生适合系统架构与工程设计 deck。零外部 JS 的自包含单文件 HTML。移植自 lewislulu/html-ppt-skill 的 blueprint 主题。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "lewislulu",
+    "url": "https://github.com/lewislulu"
+  },
+  "homepage": "https://github.com/lewislulu/html-ppt-skill",
+  "plugin": {
+    "repo": "https://github.com/lewislulu/html-ppt-skill"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "blueprint",
+    "engineering",
+    "architecture",
+    "mono",
+    "dark",
+    "html-ppt"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a True Blueprint deck about {{topic}} for {{audience}} ({{slideCount}}, {{density}}): a dark engineering-drawing presentation in the locked blueprint theme from lewislulu/html-ppt-skill. Output one self-contained single-file HTML deck — all CSS/JS inline, no build step, no external JS libraries, no CDN scripts; only the JetBrains Mono Google Fonts @import may be remote. THEME IS LOCKED — reproduce exactly: (a) Tokens: --bg:#0b3a6f; --bg-soft:#0a3260; --surface:rgba(255,255,255,.06); --surface-2:rgba(255,255,255,.1); --border:rgba(190,220,255,.3); --border-strong:rgba(190,220,255,.55); --text-1:#e8f3ff; --text-2:#b8d4f0; --text-3:#7da8cf; --accent:#ffffff; --accent-2:#aee1ff; --accent-3:#ffd27a; --good:#8ef0a6; --warn:#ffd27a; --bad:#ff8a96; --grad:linear-gradient(135deg,#ffffff,#aee1ff); --radius:2px (lg 4px); --shadow:none; every font slot (sans/serif/mono/display) is 'JetBrains Mono', monospace. No other hues, no soft corners, no drop shadows. (b) Signature canvas: the body background is the 40px white drafting grid — two 1px linear-gradient layers at rgba(255,255,255,.06) over solid #0b3a6f. Never replace it with a flat fill or an image. (c) Drawing-sheet chrome on every slide: a 1px solid inner frame (inset 28px, rgba(190,220,255,.45)) plus a 1px dashed second frame (inset 34px) drawn via .slide::before/::after; fixed header (project name left, 'theme: true-blueprint [locked]' chip right), fixed footer (attribution + 'N / total' counter), 2px ice-blue progress bar. (d) Blueprint devices: cards are rgba(255,255,255,.04) with a 1px DASHED rgba(190,220,255,.45) border; section numbers are giant transparent digits with a 1.5px -webkit-text-stroke construction outline; the cover carries a title block strip (DWG NO. / REV. / SCALE / DATE cells with 1px borders); bar charts are filled with repeating-linear-gradient 45° cross-hatching (ice-blue, amber for the highlighted bar); diagrams are inline SVG schematics — dashed component rects, ice-blue connectors with arrowhead markers, amber dimension-line annotations; headings are UPPERCASE; kickers are '// slash-comment' style in ice-blue; amber #ffd27a is reserved for annotations and callouts only. (e) Slide system: each page is <section class=\"slide\" data-title=\"...\"> inside <div class=\"deck\" id=\"deck\">, a horizontal scroll-snap strip — each slide flex:0 0 100vw at 100vh, 72px 96px padding, one screen per slide, no internal scrolling; fluid type via clamp() at a 1280x720 16:9 baseline. (f) Navigation: keep the seed runtime script verbatim — ArrowLeft/ArrowRight/Space/PageUp/PageDown/Home/End keys with dual window/document capture-phase listeners deduped by Event identity, #/N hash routing through try/catch-wrapped history.replaceState (srcdoc-safe), scroll sync, resize re-snap, body auto-focus. There is no theme cycling: the theme is locked. (g) Layout masters to compose from (all present in example.html): drawing-sheet cover with title block, sheet-index toc cards, construction-line section divider, inline-SVG architecture schematic, two-column notes + dashed spec table, KPI grid, hatched bar chart, bracketed [01]-[04] process steps, rev-comparison two cards, mono pull-quote sign-off closer. (h) Charts and icons are pure CSS or inline SVG — no Chart.js, no mermaid, no remote images. Real content only, no lorem ipsum; put 1-3 sentences of speaker notes in each slide's hidden .notes div. No slide may overflow vertically — split content into more slides instead of shrinking type. Start from the example.html seed shipped in this plugin: keep its :root token sheet, base/slide CSS, drawing-frame chrome, and the entire navigation script verbatim; replace only the slide content. Do not introduce any color or font outside this specification and do not redesign the theme.",
+        "zh-CN": "用「工程蓝图 True Blueprint」主题为 {{audience}} 创作一套关于 {{topic}} 的演示（{{slideCount}}，{{density}}）：蓝图蓝 #0b3a6f 满底 + 40px 白色绘图网格，虚线边框半透明卡片，白/冰蓝 #aee1ff 墨线 + 琥珀 #ffd27a 标注，全 JetBrains Mono，2px 圆角零阴影。每页带双层图框（内 1px 实线 + 1px 虚线），封面有 DWG NO./REV./SCALE/DATE 标题栏，章节号用轮廓线描边巨字，柱图用 45° 斜纹填充，架构图用内联 SVG 虚线框 + 冰蓝箭头连线。零依赖单文件 HTML，section.slide 横向 scroll-snap，键盘方向键/空格翻页 + #/N 哈希路由。从插件内 example.html 种子出发：保留全部 token、图框装置和导航脚本，只替换内容；主题锁定，禁止引入规格之外的颜色和字体。完整硬性规格以英文 prompt 为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Meridian Grid control-plane review — True Blueprint deck",
+          "title_i18n": {
+            "en": "Meridian Grid control-plane review — True Blueprint deck",
+            "zh-CN": "Meridian Grid 控制平面评审 · 工程蓝图风格"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "A system architecture, an infra migration, an engineering design review...",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Engineers, architects, a design-review board...",
+        "default": "an engineering audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Length",
+        "type": "select",
+        "required": true,
+        "options": [
+          "short 5-10 slides",
+          "medium 10-20 slides",
+          "long 20+ slides"
+        ],
+        "default": "short 5-10 slides"
+      },
+      {
+        "name": "density",
+        "label": "Density",
+        "type": "select",
+        "required": true,
+        "options": [
+          "low density / speaker-led",
+          "high density / reading-first"
+        ],
+        "default": "low density / speaker-led"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

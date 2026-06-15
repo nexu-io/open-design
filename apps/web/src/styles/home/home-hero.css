@@ -2134,6 +2134,23 @@
   transform: scale(0.172);
 }
 
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport, so the
+   default preview frame letterboxes them with a dark --stage-bg band on top.
+   Give deck preset tiles a 16:9 preview the iframe fills natively (no scale),
+   so the stage sits edge-to-edge with no band. */
+.home-hero__plugin-preset[data-od-mode="deck"] {
+  grid-template-rows: auto minmax(0, auto);
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview {
+  aspect-ratio: 16 / 9;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-iframe {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+}
+
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
    would otherwise object-fit:cover-crop the hero out of the middle. Anchor to
    the top so the hero headline stays in frame. Scoped to the preset cards. */
