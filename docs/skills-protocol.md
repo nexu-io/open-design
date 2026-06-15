@@ -151,16 +151,11 @@ Conflicts by `name` resolve to the higher-priority version. All locations are wa
 
 ### Symlink strategy (borrowed from [cc-switch](https://github.com/farion1231/cc-switch))
 
-`cc-switch` maintains a central skill dir at `~/.cc-switch/skills/` and symlinks it into each agent's expected location (`~/.claude/skills/`, `~/.codex/skills/`, etc.). OD can opt into the same model:
-
-```
-~/.open-design/skills/
-    magazine-web-ppt/      (canonical location)
-~/.claude/skills/
-    magazine-web-ppt → ~/.open-design/skills/magazine-web-ppt
-~/.codex/skills/
-    magazine-web-ppt → ~/.open-design/skills/magazine-web-ppt
-```
+`cc-switch` maintains a central skill dir and symlinks it into each agent's
+expected location (`~/.claude/skills/`, `~/.codex/skills/`, etc.). OD can opt
+into the same model, but this protocol MUST NOT define Open Design daemon data
+paths. Read the root `AGENTS.md` section **Daemon data directory contract**
+before changing or documenting any Open Design-owned storage location.
 
 One install → every agent sees the skill. This is optional; users who only use one agent don't need it.
 
@@ -261,7 +256,7 @@ The split keeps DESIGN.md authors free of universal-craft duplication and keeps 
 
 ```sh
 od skill add https://github.com/op7418/guizang-ppt-skill
-# → clones into ~/.open-design/skills/magazine-web-ppt
+# → installs into daemon-managed storage; read root AGENTS.md -> "Daemon data directory contract" before documenting paths
 # → symlinks into ~/.claude/skills/ (and any other active agent dirs)
 # → re-indexes registry
 
@@ -289,7 +284,9 @@ The skill is unchanged. Here's the full path:
 4. User types "给我做一份杂志风 8 页投资人 PPT".
 5. Daemon dispatches to active agent (Claude Code) with:
    - system message: skill's `SKILL.md` body
-   - cwd: `./.od/artifacts/2026-04-24-pitch-deck/`
+   - cwd: daemon-managed artifact workspace. This protocol MUST NOT define
+     daemon data paths; read root `AGENTS.md` -> **Daemon data directory
+     contract** before changing or documenting artifact storage.
    - files already placed in cwd: `template.html` (from skill's `assets/`)
 6. Agent runs its 6-step workflow (clarify → copy template → populate → self-check → preview → refine).
 7. OD streams the agent's tool calls as UI events; artifact dir grows.

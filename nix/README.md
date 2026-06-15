@@ -57,7 +57,9 @@ What this wires up:
   `open-design-web.service`. `systemctl --user status open-design`.
 - macOS: `launchd` agents `io.nexu.open-design` and (optionally)
   `io.nexu.open-design-web`. `launchctl print gui/$UID/io.nexu.open-design`.
-- Data lives in `$HOME/.od/` by default — override `dataDir` to relocate.
+- Before documenting or changing daemon storage, you MUST read root
+  [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**. This README
+  MUST NOT restate it.
 
 ## (2) NixOS — for shared/server installs
 

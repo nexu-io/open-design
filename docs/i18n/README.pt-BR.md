@@ -264,7 +264,7 @@ O Open Design (OD) é a alternativa open-source. Mesmo loop, mesmo modelo mental
 
 - 🤖 **Agent-native, agnóstico de modelo.** Não entregamos um agente. O `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` que já está no seu `PATH` é o motor de design. Troque com um clique.
 - 🧠 **Nível profissional de marca por padrão.** Toda renderização lê o `DESIGN.md` ativo — um schema de 9 seções cobrindo paleta, tipografia, espaçamento, motion, voz e anti-padrões. 150 sistemas vêm com o repositório (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Solte uma pasta e o seletor a encontra.
-- 🖥️ **Local-first, BYOK em todas as camadas.** Apps de desktop nativos para macOS (Apple Silicon + Intel) e Windows (x64). AppImage de Linux na trilha de release opcional. SQLite em `.od/app.sqlite`, arquivos em `.od/projects/<id>/`, sem telemetria, sem ida e volta à nuvem.
+- 🖥️ **Local-first, BYOK em todas as camadas.** Apps de desktop nativos continuam local-first, sem ida e volta à nuvem. Antes de descrever caminhos de dados do daemon, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
 - 🌍 **Componível em três planos.** **Plugins** carregam fluxos de trabalho executáveis · **skills** carregam o gosto de design do agente · **design systems** carregam a marca. Todos os três são arquivos simples que qualquer pessoa pode escrever, versionar e publicar.
 - 🔁 **Renove uma base de código existente.** Entregue um repositório `git` + `DESIGN.md` ao agente e ele refatora seus componentes reais para a especificação de marca. Plugins dedicados migram fluxos do Figma / Pencil para código React / Next.js / Vue.
 - 🔒 **Privacidade por convicção.** Tudo roda onde seus dados vivem — seu laptop, o servidor do seu time, seu projeto na Vercel. Quando a rede é necessária, o proxy BYOK é protegido contra SSRF.
@@ -536,7 +536,7 @@ Endpoint do registry de plugins: `GET /api/plugins`. Visão geral do diretório 
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -550,7 +550,7 @@ Endpoint do registry de plugins: `GET /api/plugins`. Visão geral do diretório 
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · streaming SSE · `better-sqlite3` |
-| Armazenamento | Arquivos em `.od/projects/<id>/` + SQLite em `.od/app.sqlite` + `media-config.json` (no gitignore, criado automaticamente). `OD_DATA_DIR` realoca tudo. |
+| Armazenamento | Antes de alterar ou documentar caminhos de armazenamento do daemon, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**. Este README NÃO DEVE repeti-lo. |
 | Preview | Iframe `srcdoc` em sandbox + parser de `<artifact>` em streaming |
 | Exportação | HTML (embutido) · PDF (impressão do navegador) · PPTX (conduzido pelo agente) · ZIP · Markdown · MP4 (HyperFrames) |
 | Desktop | Electron shell + renderer em sandbox + IPC sidecar (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |

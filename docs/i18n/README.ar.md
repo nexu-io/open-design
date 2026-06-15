@@ -266,7 +266,7 @@
 
 - 🤖 **أصيل للوكلاء، محايد تجاه النموذج.** نحن لا نشحن وكيلًا. أدوات `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` الموجودة أصلًا في `PATH` لديك هي محرك التصميم. بدّلها بنقرة واحدة.
 - 🧠 **بجودة العلامة التجارية افتراضيًا.** كل عملية تصيير تقرأ ملف `DESIGN.md` النشِط — وهو مخطط من 9 أقسام يغطي لوحة الألوان والخطوط والمباعدة والحركة والنبرة والأنماط المضادة. يُشحَن مع المستودع 150 نظامًا (Linear وStripe وVercel وAirbnb وApple وTesla وNotion وAnthropic وCursor وSupabase وFigma…). أسقِط مجلدًا، فيعثر عليه المُنتقي.
-- 🖥️ **محلي أولًا، BYOK في كل طبقة.** تطبيقات سطح مكتب أصلية لـ macOS (Apple Silicon + Intel) وWindows (x64). Linux AppImage على مسار الإصدار الاختياري. SQLite في `.od/app.sqlite`، والملفات في `.od/projects/<id>/`، بلا قياس عن بُعد، بلا ذهاب وإياب سحابي.
+- 🖥️ **محلي أولًا، BYOK في كل طبقة.** تظل تطبيقات سطح المكتب الأصلية محلية أولًا بلا ذهاب وإياب إلى السحابة. قبل وصف مسارات بيانات الـ daemon، يجب قراءة `AGENTS.md` في جذر المستودع، قسم **Daemon data directory contract**.
 - 🌍 **قابل للتركيب على ثلاثة مستويات.** **الإضافات** تحمل سير عمل قابلًا للتشغيل · **المهارات** تحمل ذوق الوكيل التصميمي · **أنظمة التصميم** تحمل العلامة التجارية. وكلها ملفات عادية يمكن لأي شخص تأليفها وإصدارها ونشرها.
 - 🔁 **حدِّث قاعدة شفرة موجودة.** سلّم مستودع `git` + ملف `DESIGN.md` إلى الوكيل، فيعيد هيكلة مكوناتك الحقيقية وفق مواصفة العلامة التجارية. تنقل إضافات مخصّصة سير عمل Figma / Pencil إلى شفرة React / Next.js / Vue.
 - 🔒 **الخصوصية عن قناعة.** كل شيء يعمل حيث تقيم بياناتك — حاسوبك المحمول، أو خادم فريقك، أو مشروع Vercel الخاص بك. وعند الحاجة إلى الشبكة، يكون وكيل BYOK محميًا ضد SSRF.
@@ -538,7 +538,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -552,7 +552,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | الواجهة الأمامية | Next.js 16 App Router + React 18 + TypeScript |
 | الـ Daemon | Node 24 · Express · بثّ SSE · `better-sqlite3` |
-| التخزين | الملفات في `.od/projects/<id>/` + SQLite في `.od/app.sqlite` + `media-config.json` (مستبعَد من git، يُنشَأ تلقائيًا). يعيد `OD_DATA_DIR` تحديد موقع كل شيء. |
+| التخزين | قبل تغيير أو توثيق مسارات تخزين الـ daemon، يجب قراءة `AGENTS.md` في جذر المستودع، قسم **Daemon data directory contract**. يجب ألا يعيد هذا README صياغته. |
 | المعاينة | iframe معزول بـ `srcdoc` + محلّل `<artifact>` يعمل بالبثّ |
 | التصدير | HTML (مضمَّن) · PDF (طباعة المتصفح) · PPTX (يقوده الوكيل) · ZIP · Markdown · MP4 (HyperFrames) |
 | سطح المكتب | غلاف Electron + مُصيِّر معزول + IPC جانبي (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |

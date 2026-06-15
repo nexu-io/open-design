@@ -4,10 +4,12 @@
 > Status: **values + templates shipped; per-cloud override files pending.**
 
 The chart's `templates/` covers the canonical Kubernetes shape:
-Deployment, Service, Secret, ConfigMap, two PVCs (`/data/od` +
-`/data/config`), and an optional Ingress. Every parameter is
-exposed in `values.yaml` so the per-cloud override files can stay
-small (volume + secret backend differences only).
+Deployment, Service, Secret, ConfigMap, persistent storage, and an optional
+Ingress. Before documenting or changing daemon storage paths, you MUST read
+root [`AGENTS.md`](../../../../AGENTS.md) → **Daemon data directory contract**.
+This README MUST NOT restate it. Every parameter is exposed in `values.yaml` so
+the per-cloud override files can stay small (volume + secret backend differences
+only).
 
 ## Cloud overrides (planned values files)
 

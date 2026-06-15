@@ -26,7 +26,7 @@ registry / distribution / website / multi-source 的细分用例。
 | REG-012 | version range / dist-tag / yank resolution | `vendor/plugin@1.0.0`、`@latest`、`@^1.0.0` 可解析；yanked beta 不参与新解析 | `apps/daemon/tests/plugins-marketplaces.test.ts` |
 | REG-013 | archive integrity fail closed | HTTPS/GitHub tarball 下载会计算 `sha256:`；entry integrity 不匹配时拒绝解包，匹配/缺省时写入 installed record | `apps/daemon/tests/plugins-installer-archive.test.ts` |
 | REG-014 | registry backend parity | static/GitHub/DB backend 共享 list/search/resolve/publish contract；GitHub publish 产出稳定 PR mutation paths | `apps/daemon/tests/registry-backends.test.ts` |
-| REG-015 | install lockfile | installed plugin 可生成稳定 `.od/od-plugin-lock.json` entry，包含 marketplace id、resolved ref、digest、integrity | `apps/daemon/tests/plugins-lockfile.test.ts`, `apps/daemon/tests/plugins-installer.test.ts` |
+| REG-015 | install lockfile | installed plugin 可生成稳定 lockfile entry，包含 marketplace id、resolved ref、digest、integrity；测试文档不得定义 daemon 数据路径，必须阅读 root `AGENTS.md` → **Daemon data directory contract** | `apps/daemon/tests/plugins-lockfile.test.ts`, `apps/daemon/tests/plugins-installer.test.ts` |
 | REG-016 | marketplace doctor | invalid name、missing source、missing capability/license、yank reason 等会被 doctor 报告，并支持 strict warning-as-error | `apps/daemon/tests/plugins-marketplace-doctor.test.ts` |
 | REG-017 | static marketplace-json publish | `od plugin publish --to marketplace-json` 的纯 upsert 逻辑强制 `vendor/plugin-name`，从 GitHub URL 推导 reproducible source，并稳定更新 catalog | `apps/daemon/tests/plugins-publish.test.ts` |
 | REG-018 | public plugin SEO/search renderer | `/plugins/search.json` 和 per-plugin detail pages 可静态构建，包含 official/community registry entry | `apps/landing-page` `typecheck` + `build` |

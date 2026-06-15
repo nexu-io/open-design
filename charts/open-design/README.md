@@ -22,7 +22,11 @@ These commands deploy an Open Design application on the Kubernetes cluster in th
 ### Architecture and Configuration Notes
 
 #### SQLite State & Concurrency Limitations
-The current Open Design runtime stores state in local files and SQLite under `/app/.od`. Because SQLite does not support concurrent writes from multiple network replicas, **this chart is strictly limited to 1 replica**. 
+The current Open Design runtime stores state in local files and SQLite. Before
+documenting or changing persistent daemon storage, you MUST read root
+[`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. This chart
+README MUST NOT restate it. Because SQLite does not support concurrent writes
+from multiple network replicas, **this chart is strictly limited to 1 replica**.
 
 Horizontal Pod Autoscaling (HPA) is disabled by default. Do not enable HPA or scale the deployment beyond `replicas: 1` unless you have modified the application to externalize the state to a standalone database.
 

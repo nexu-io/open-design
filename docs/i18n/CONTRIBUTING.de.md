@@ -216,7 +216,7 @@ Außerdem:
 ## Commits & Pull Requests
 
 - **Ein Anliegen pro PR.**
-- **Titel ist imperativ + Scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`.
+- **Titel ist imperativ + Scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
 - **Nutzen Sie das PR-Template.** Füllen Sie jeden Abschnitt von [`.github/pull_request_template.md`](../../.github/pull_request_template.md) aus — Why, What users will see, Surface area, Screenshots (bei UI), Bug fix verification (bei Bugfix), Validation. Leere Abschnitte ergeben einen "please fill in"-Kommentar.
 - **Body erklärt das Warum.** Der Diff zeigt oft das Was, aber selten den Grund.
 - **Issue referenzieren**, falls vorhanden. Bei nicht-trivialen PRs ohne Issue bitte zuerst eines öffnen.

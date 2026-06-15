@@ -91,8 +91,8 @@ The three topologies share the same web bundle; the difference is which transpor
   │                                                │
   ▼                                                ▼
 ┌─ agent CLIs ─┐                           ┌─ filesystem ─┐
-│ claude       │                           │ ./.od/      │
-│ codex        │                           │ ~/.od/      │
+│ claude       │                           │ daemon data │
+│ codex        │                           │ root        │
 │ cursor-agent │                           │ skills/      │
 │ gemini       │                           │ DESIGN.md    │
 │ opencode     │                           └──────────────┘
@@ -152,24 +152,13 @@ Conflicts resolve by priority (higher wins). Each skill parsed once; watched for
 
 ### 3.6 Artifact store
 
-Plain files on disk. Conventional layout per project:
-
-```
-./.od/
-├── config.json                  # project-level daemon config
-├── artifacts/
-│   ├── 2026-04-24T10-03-12-landing/
-│   │   ├── artifact.json        # metadata (skill, mode, prompt, parent)
-│   │   ├── index.html           # primary output (or .jsx, .md, .pptx.json)
-│   │   └── assets/              # skill-generated images, fonts, etc.
-│   └── …
-├── history.jsonl                # append-only action log (generations, edits, comments)
-└── sessions/
-    └── <session-id>.json        # transient; garbage-collected after 24h
-```
+Plain files on disk under daemon-managed storage. This historical architecture
+draft does not define current data paths. Current path rules live only in root
+`AGENTS.md` → **Daemon data directory contract**; read it before changing or
+documenting any storage path.
 
 Rationale:
-- **Plain files** → users can `git add ./.od/artifacts/` and review designs in PRs.
+- **Plain files** → artifacts can be inspected and exported without a proprietary binary format.
 - **`artifact.json` metadata** → OD can reconstruct the artifact tree without a DB.
 - **`history.jsonl` not SQLite** → append-only, git-friendly, greppable. [Open CoDesign][ocod] uses SQLite; we deliberately don't.
 - **Sessions separate from artifacts** → sessions are ephemeral UI state; artifacts are durable.
@@ -195,7 +184,7 @@ Rationale:
 3. Daemon:
      a. picks active skill (prototype-skill)
      b. loads design-system (DESIGN.md)
-     c. materializes a new artifact dir under ./.od/artifacts/<slug>/
+     c. materializes a new artifact through daemon-managed storage
      d. invokes agent adapter with:
           - system: skill's SKILL.md contents + DESIGN.md
           - user: original prompt
@@ -242,13 +231,11 @@ Rationale:
 
 | File | Purpose |
 |---|---|
-| `~/.open-design/config.toml` | daemon-global: default agent preference, keys (optional, BYOK), telemetry opt-in (default off) |
-| `~/.open-design/agents.json` | cached agent detection results |
-| `./.od/config.json` | project-local: active design system, preferred skills, preferred mode |
 | `./skills/<skill>/SKILL.md` | skill manifest (standard Claude Code format) |
 | `./DESIGN.md` | active design system ([awesome-claude-design][acd] format) |
 
-All config is plain text / TOML / JSON — no binary formats, no sqlite. Reviewable in PRs.
+Daemon data paths are governed only by root `AGENTS.md` → **Daemon data
+directory contract**. Do not add config-path examples here.
 
 ## 7. Protocol between web and daemon
 
@@ -273,7 +260,7 @@ POST /api/artifacts/save
 ### Folder import
 
 `POST /api/import/folder` creates a project rooted at an existing local
-folder instead of the default `.od/projects/<id>/`. The submitted
+folder instead of a daemon-managed project cwd. The submitted
 `baseDir` is stored on `metadata.baseDir` and OD reads / writes directly
 inside it — there is no copy or shadow tree. The user owns the workspace
 and is responsible for their own version control (git, time machine,
@@ -285,11 +272,12 @@ Safety:
   storage, so user-controlled symlinks cannot redirect later writes.
 - Standard `resolveSafe` / `sanitizePath` checks apply on every write —
   `metadata.baseDir` only changes the project root, not the bounds check.
-- Imports inside `RUNTIME_DATA_DIR` (the daemon's own data directory) are
-  refused after symlink resolution.
+- Imports inside daemon-owned storage are refused after symlink resolution.
+  Before documenting daemon storage paths, you MUST read root `AGENTS.md` →
+  **Daemon data directory contract**.
 - The file panel hides the conventional build / install dirs
   (`node_modules .git dist build .next .nuxt .turbo .cache .output out
-  coverage __pycache__ .venv vendor target .od .tmp`) so the listing
+  coverage __pycache__ .venv vendor target .tmp`) so the listing
   stays focused on design content.
 
 Request / response types: `ImportFolderRequest`, `ImportFolderResponse`
@@ -408,7 +396,7 @@ When a reverse proxy sits in front of the daemon, `/api/*` includes SSE streams 
 services:
   daemon:
     image: openclaudedesign/daemon
-    volumes: [ "~/.open-design:/root/.open-design", "./:/workspace" ]
+    volumes: [ "./:/workspace" ]
     ports: ["7456:7456"]
   web:
     image: openclaudedesign/web

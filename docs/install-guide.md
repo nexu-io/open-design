@@ -153,19 +153,19 @@ The update script:
 ## Uninstall
 
 ```bash
-# Remove containers and data
+# Remove containers and persistent daemon storage
 bash deploy/scripts/uninstall.sh
 
-# Remove containers but keep data volume
+# Remove containers but keep persistent daemon storage
 bash deploy/scripts/uninstall.sh --keep-data
 ```
 
 The uninstaller:
-1. Stops and removes containers (`docker compose down`), then removes the data volume separately.
+1. Stops and removes containers (`docker compose down`), then removes persistent daemon storage separately.
 2. On Linux: disables and removes the systemd unit.
 3. Removes `deploy/.env`.
 
-> **Data:** By default, the `open_design_data` volume (projects, artifacts, config) is also deleted. Pass `--keep-data` to preserve it. Remove the volume manually later: `docker volume rm open_design_data`.
+> **Data:** Before documenting, changing, deleting, or preserving persistent daemon storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**. This guide MUST NOT restate that contract or define storage paths.
 
 ## Configuration
 
