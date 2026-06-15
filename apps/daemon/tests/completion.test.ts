@@ -285,6 +285,7 @@ const KNOWN_SUBCOMMANDS: Record<string, string[]> = {
   ],
   skills: ['list', 'show'],
   craft: ['list', 'show'],
+  diagnostics: ['export'],
   'design-systems': [
     'rename', 'import-local', 'import-github', 'import-shadcn',
     'rebuild-token-contract', 'list', 'show',

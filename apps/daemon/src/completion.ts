@@ -128,7 +128,7 @@ export const COMMAND_SPEC: Record<string, CommandSpec> = {
     ],
   },
   craft: { subcommands: ['list', 'show'] },
-  diagnostics: { subcommands: [] },
+  diagnostics: { subcommands: ['export'] },
   status: { subcommands: [] },
   version: { subcommands: [] },
   doctor: { subcommands: [] },
