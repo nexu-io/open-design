@@ -347,10 +347,22 @@ process.stdin.on('end', () => {
           };
         };
 
-        expect(parsed.permission?.external_directory).toMatchObject({
-          [effectiveCwd]: 'allow',
-          [`${effectiveCwd}/*`]: 'allow',
-          [`${effectiveCwd}/**`]: 'allow',
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const effectiveCwdReal = realpathSync.native(effectiveCwd);
+        const allowedCwd = Object.keys(externalDirectory).find((entry) => {
+          if (entry.endsWith('*')) return false;
+          try {
+            return realpathSync.native(entry) === effectiveCwdReal;
+          } catch {
+            return false;
+          }
+        });
+
+        expect(allowedCwd).toBeDefined();
+        expect(externalDirectory).toMatchObject({
+          [allowedCwd!]: 'allow',
+          [join(allowedCwd!, '*')]: 'allow',
+          [join(allowedCwd!, '**')]: 'allow',
         });
       },
     );
