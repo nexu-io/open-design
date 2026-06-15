@@ -367,6 +367,97 @@ describe('buildTracePayload', () => {
     );
   });
 
+  it('adds prompt-stack byte and cache-token blame metadata for TTFT diagnosis', () => {
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt: ['a'.repeat(1000), 'b'.repeat(500), 'c'.repeat(100)].join('\n'),
+      sections: [
+        { kind: 'daemonSystemPrompt', content: 'a'.repeat(1000) },
+        { kind: 'pluginStagePrompt', content: 'b'.repeat(500) },
+        { kind: 'userRequest', content: 'c'.repeat(100) },
+      ],
+    });
+    const ctx = makeCtx({
+      prefs: { metrics: true, content: true, artifactManifest: false },
+      promptTelemetry,
+    });
+    ctx.run = {
+      ...ctx.run,
+      timings: {
+        tool_call_count: 0,
+        total_duration_ms: 89_162,
+        time_to_first_token_ms: 26_613,
+        spawn_to_first_token_ms: 26_491,
+      },
+    };
+
+    const batch = buildTracePayload(ctx);
+    const trace = bodyOf(batch, 'trace-create');
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.metadata.promptStack_topSectionsByBytes).toEqual([
+      expect.objectContaining({
+        kind: 'daemonSystemPrompt',
+        rawBytes: 1000,
+        redactedBytes: 1000,
+        attributionBytes: 1000,
+        attributionShare: 0.625,
+        estimatedInputEffectiveTokens: 929,
+        estimatedCacheCreationInputTokens: 32,
+        estimatedCacheReadInputTokens: 126,
+        estimatedUncachedInputTokens: 772,
+      }),
+      expect.objectContaining({
+        kind: 'pluginStagePrompt',
+        rawBytes: 500,
+        attributionShare: 0.3125,
+        estimatedCacheCreationInputTokens: 15,
+      }),
+      expect.objectContaining({
+        kind: 'userRequest',
+        rawBytes: 100,
+        attributionShare: 0.0625,
+        estimatedCacheCreationInputTokens: 3,
+      }),
+    ]);
+    expect(trace.metadata.cacheCreationTokensBySection).toEqual([
+      {
+        kind: 'daemonSystemPrompt',
+        ordinal: 0,
+        attributionBytes: 1000,
+        estimatedCacheCreationInputTokens: 32,
+      },
+      {
+        kind: 'pluginStagePrompt',
+        ordinal: 1,
+        attributionBytes: 500,
+        estimatedCacheCreationInputTokens: 15,
+      },
+      {
+        kind: 'userRequest',
+        ordinal: 2,
+        attributionBytes: 100,
+        estimatedCacheCreationInputTokens: 3,
+      },
+    ]);
+    expect(trace.metadata.promptStack_ttftAttribution).toMatchObject({
+      method: 'proportional_by_prompt_section_redacted_bytes',
+      time_to_first_token_ms: 26_613,
+      spawn_to_first_token_ms: 26_491,
+      totalAttributionBytes: 1600,
+      sectionCount: 3,
+      primarySectionKind: 'daemonSystemPrompt',
+      primarySectionAttributionShare: 0.625,
+      primarySectionEstimatedCacheCreationInputTokens: 32,
+      cacheTokenSource: 'anthropic',
+    });
+    expect(generation.metadata.promptStack_topSectionsByBytes).toEqual(
+      trace.metadata.promptStack_topSectionsByBytes,
+    );
+    expect(generation.metadata.promptStack_ttftAttribution).toEqual(
+      trace.metadata.promptStack_ttftAttribution,
+    );
+  });
+
   it('omits prompt-stack redactedContent when metrics or content consent is off', () => {
     const promptTelemetry = buildPromptStackTelemetry({
       composedPrompt: '# User request\n\nBuild a card',
