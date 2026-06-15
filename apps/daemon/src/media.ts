@@ -2695,24 +2695,42 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 // ---------------------------------------------------------------------------
 // Provider: MiniMax — image-01 text-to-image (synchronous).
 //
-// Docs: https://platform.minimaxi.com — POST /v1/image_generation with a
-// JSON body describing the model + prompt + aspect ratio. The response
-// embeds one or more image URLs under `image_urls` (or, when
-// `response_format: 'base64'`, under `data.image_base64`), wrapped in the
-// same `base_resp` envelope used by the TTS path — an HTTP 200 can still
-// encode a logical failure (`status_code !== 0`).
+// Docs: https://platform.minimax.io/docs/guides/image-generation
+//   POST https://api.minimax.io/v1/image_generation
+//   Authorization: Bearer <MINIMAX_API_KEY>
 //
-// We default to `response_format: 'url'` so the dispatched bytes mirror
-// how the rest of the renderer fleet fetches remote media: a single GET
-// against the returned URL. Switching to base64 is a one-line change
-// (`response_format: 'base64'`) and removes one network hop.
+// Request body (text-to-image):
+//   {
+//     "model": "image-01",
+//     "prompt": "...",
+//     "aspect_ratio": "16:9",
+//     "response_format": "base64"
+//   }
+//
+// Response body (response_format=base64):
+//   { "data": { "image_base64": ["<base64-jpeg>", ...] }, ... }
+//
+// Image-to-image adds `subject_reference: [{ type: "character",
+// image_file: "<url>" }]`; we don't synthesize that path on the
+// dispatcher side yet (the agent passes --image to i2v models
+// elsewhere in the catalogue).
+//
+// Note: this surface is hosted on a different host (api.minimax.io)
+// from the TTS path (api.minimaxi.chat). Both share the
+// `minimax` provider slot, so a user-set base URL via Settings
+// overrides both; users who only want image can leave the
+// default and just have to know the two surfaces talk to
+// different gateways.
 // ---------------------------------------------------------------------------
 
+const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io/v1';
+
 function minimaxImageAspect(aspect?: string): string {
-  // MiniMax's image-01 accepts the standard aspect ratios our MEDIA_ASPECTS
-  // vocabulary already speaks. Pass known values through, fall back to
-  // '1:1' (the gateway default) for anything else so a hallucinated
-  // "21:9" string doesn't get rejected upstream.
+  // The MiniMax docs only explicitly list "16:9", but the standard
+  // MEDIA_ASPECTS vocabulary (1:1 / 16:9 / 9:16 / 4:3 / 3:4) maps
+  // cleanly. Pass known values through, fall back to '1:1' for
+  // anything else so a hallucinated "21:9" string doesn't get
+  // rejected upstream.
   if (
     aspect === '1:1'
     || aspect === '16:9'
@@ -2731,15 +2749,15 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
       'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
     );
   }
-  const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
+  const baseUrl = (credentials.baseUrl || MINIMAX_IMAGE_DEFAULT_BASE_URL).replace(
     /\/$/,
     '',
   );
-  // Wire-name precedence mirrors renderMinimaxTTS: an explicit alias from
-  // issue #1277 wins, otherwise the catalog id is the wire name. The
-  // `minimax-image-01` catalog slot maps 1:1 to MiniMax's `image-01`
-  // model name; we still send `ctx.wireModel` so user aliases reach the
-  // wire cleanly.
+  // Wire-name precedence mirrors renderMinimaxTTS: an explicit alias
+  // from issue #1277 wins, otherwise the catalog id is the wire name.
+  // The `minimax-image-01` catalog slot maps 1:1 to MiniMax's
+  // `image-01` model name; we still send `ctx.wireModel` so user
+  // aliases reach the wire cleanly.
   const wireModel = ctx.wireModel || ctx.model;
   const aspect = minimaxImageAspect(ctx.aspect);
   const prompt = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
@@ -2748,11 +2766,10 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
     model: wireModel,
     prompt,
     aspect_ratio: aspect,
-    response_format: 'url',
-    n: 1,
+    response_format: 'base64',
   };
 
-  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+  const resp = await fetch(`${baseUrl}/image_generation`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${credentials.apiKey}`,
@@ -2770,32 +2787,29 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   } catch {
     throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
   }
-  // Mirror the TTS base_resp check: HTTP 200 can still encode a logical
-  // failure, so surface the upstream message verbatim.
+  // The image docs don't show a base_resp envelope, but MiniMax's
+  // TTS path does — be defensive: only fail if base_resp is
+  // present AND signals an error. Missing base_resp is fine and
+  // means success.
   if (data?.base_resp && data.base_resp.status_code !== 0) {
     throw new Error(
       `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
     );
   }
-  // `response_format: 'url'` puts links under `image_urls`; the alternate
-  // `response_format: 'base64'` path is left wired in for parity with
-  // MiniMax's other surfaces, so accept either shape.
-  const imageUrl: string | undefined =
-    (Array.isArray(data?.image_urls) ? data.image_urls[0] : null)
-    ?? (Array.isArray(data?.data?.image_urls) ? data.data.image_urls[0] : null)
-    ?? undefined;
-  if (!imageUrl) {
+  // Documented shape (response_format=base64):
+  //   { data: { image_base64: ["<b64>", ...] } }.
+  // The first entry is the rendered image; subsequent entries (if
+  // any) are alternate generations. We take [0] for the dispatch.
+  const b64List: unknown = data?.data?.image_base64;
+  const b64: string | undefined = Array.isArray(b64List) ? b64List[0] : undefined;
+  if (typeof b64 !== 'string' || !b64) {
     throw new Error(
-      `minimax image response missing image_urls[0]: ${truncate(respText, 200)}`,
+      `minimax image response missing data.image_base64[0]: ${truncate(respText, 200)}`,
     );
   }
-  const dlResp = await fetch(imageUrl, withMediaRequestInit(ctx));
-  if (!dlResp.ok) {
-    throw new Error(`minimax image download ${dlResp.status}`);
-  }
-  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  const bytes = Buffer.from(b64, 'base64');
   if (bytes.length === 0) {
-    throw new Error('minimax image downloaded zero bytes');
+    throw new Error('minimax image decoded zero bytes');
   }
 
   return {
