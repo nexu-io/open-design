@@ -2954,7 +2954,6 @@ export function ProjectView({
                     artifactHtml: artifactToPersist.html,
                     producedFiles: producedBeforeFallback,
                     readProjectHtml,
-                    allowAnyHtmlWrite: message.agentId === 'claude',
                   });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
@@ -3970,7 +3969,6 @@ export function ProjectView({
                 artifactHtml: artifactToPersist.html,
                 producedFiles: producedBeforeFallback,
                 readProjectHtml,
-                allowAnyHtmlWrite: assistantAgentId === 'claude',
               });
               if (sameTurnHtmlWrite) {
                 savedArtifactRef.current = sameTurnHtmlWrite.name;
@@ -6848,24 +6846,29 @@ export async function findSameTurnHtmlWriteForRecoveredArtifact({
   artifactHtml,
   producedFiles,
   readProjectHtml,
-  allowAnyHtmlWrite = false,
 }: {
   artifactHtml: string;
   producedFiles: readonly ProjectFile[];
   readProjectHtml: (name: string) => Promise<string | null>;
-  allowAnyHtmlWrite?: boolean;
 }): Promise<ProjectFile | null> {
   const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
   if (!recovered) return null;
   const candidates = producedFiles.filter(isHtmlProjectFile);
-  for (const file of candidates) {
-    const text = await readProjectHtml(file.name);
-    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
-      return file;
-    }
-  }
-  if (allowAnyHtmlWrite) return candidates[0] ?? null;
-  return null;
+  if (candidates.length === 0) return null;
+  const contents = await Promise.all(candidates.map((file) => readProjectHtml(file.name)));
+  const normalized = contents.map(normalizeHtmlForRecoveredArtifactComparison);
+  // Exact content match is unambiguous — safe for any agent.
+  const exact = candidates.find((_file, i) => normalized[i] === recovered);
+  if (exact) return exact;
+  // No exact match, but this turn produced HTML file(s) and the assistant
+  // echoed an HTML artifact (#4308: phenomenon-based, agent-agnostic — was
+  // previously gated behind allowAnyHtmlWrite=agentId==='claude'). Bind to the
+  // same-turn write to avoid persisting a duplicate, but only when the choice
+  // is unambiguous: exactly one HTML file, or several with identical content.
+  // Multiple differing same-turn HTML files → avoid arbitrary selection.
+  if (candidates.length === 1) return candidates[0] ?? null;
+  const allIdentical = normalized.every((c) => c !== '' && c === normalized[0]);
+  return allIdentical ? (candidates[0] ?? null) : null;
 }
 
 function isHtmlProjectFile(file: ProjectFile): boolean {

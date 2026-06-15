@@ -224,7 +224,12 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
     })).resolves.toBe(indexFile);
   });
 
-  it('does not treat different same-turn HTML files as duplicates', async () => {
+  // #4308: agent-agnostic recovery. When a turn produced exactly one HTML file
+  // and the assistant echoed an HTML artifact, bind to that same-turn write even
+  // if the echo differs slightly — regardless of which agent ran (previously
+  // gated behind allowAnyHtmlWrite=agentId==='claude'). This is the duplicate
+  // the issue targets for non-Claude filesystem-backed CLIs.
+  it('binds a single same-turn HTML write when the echoed artifact differs (agent-agnostic)', async () => {
     const indexFile = {
       name: 'index.html',
       path: 'index.html',
@@ -238,7 +243,35 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
       artifactHtml: html,
       producedFiles: [indexFile] as never,
       readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
+    })).resolves.toBe(indexFile);
+  });
+
+  // ...but never arbitrarily pick when several same-turn HTML files differ —
+  // binding the wrong one could clobber the user's other in-flight artifact.
+  it('avoids arbitrary selection when multiple same-turn HTML files differ', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'a.html' ? html.replace('Demo', 'AAA') : html.replace('Demo', 'BBB'),
+      ),
     })).resolves.toBeNull();
+  });
+
+  // Multiple same-turn HTML files with identical content are unambiguous — bind.
+  it('binds the first when multiple same-turn HTML files share identical content', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+    const sameContent = html.replace('Demo', 'SAME');
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async () => sameContent),
+    })).resolves.toBe(a);
   });
 
   it('ignores non-HTML same-turn files', async () => {
