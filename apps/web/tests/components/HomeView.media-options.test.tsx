@@ -209,7 +209,7 @@ describe('HomeView media composer options', () => {
     await clickHomeRailChip('image');
     await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
 
-    setHomePrompt('Generate a product image.');
+    await setHomePrompt('Generate a product image.');
     await submitHome();
 
     await waitFor(() => {
@@ -221,7 +221,7 @@ describe('HomeView media composer options', () => {
     });
   });
 
-  it('keeps Home image metadata model-less when no image model is ready', () => {
+  it('keeps Home image metadata on credential-free Codex when no keyed image provider is ready', () => {
     const inputs = normalizeHomeMediaInputs(
       'image',
       { model: 'gpt-image-2' },
@@ -230,14 +230,15 @@ describe('HomeView media composer options', () => {
       { mediaProviders: {} },
     );
 
-    expect(inputs.model).toBe('');
+    expect(inputs.model).toBe('codex-gpt-image-2');
     expect(metadataForHomeMediaComposer('image', inputs, PROMPT_TEMPLATES)).toEqual({
       kind: 'image',
+      imageModel: 'codex-gpt-image-2',
       promptTemplate: expect.objectContaining({ id: 'image-product' }),
     });
   });
 
-  it('blocks Home image submit when no image provider has a runnable model', async () => {
+  it('allows Home image submit with credential-free Codex when no keyed image provider is ready', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit, mediaProviders: {} });
@@ -245,13 +246,19 @@ describe('HomeView media composer options', () => {
     await clickHomeRailChip('image');
     await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy());
 
-    setHomePrompt('Generate a product image.');
+    await setHomePrompt('Generate a product image.');
 
     await waitFor(() => {
-      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
     });
-    fireEvent.click(screen.getByTestId('home-hero-submit'));
-    expect(onSubmit).not.toHaveBeenCalled();
+    await submitHome();
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          imageModel: 'codex-gpt-image-2',
+        }),
+      }));
+    });
   });
 
   it('keeps Home video and audio metadata model-less when no provider has a runnable model', () => {

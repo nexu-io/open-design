@@ -463,6 +463,8 @@ function validImageModel(
     return readyModelIds.find((modelId) => customModels.includes(modelId)) ?? readyModelIds[0]!;
   }
   if (readyModelIds.includes(raw)) return raw;
+  const readyCustomModel = readyModelIds.find((modelId) => customModels.includes(modelId));
+  if (readyCustomModel) return readyCustomModel;
   return readyModelIds[0] ?? '';
 }
 
