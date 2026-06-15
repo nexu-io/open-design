@@ -544,8 +544,11 @@
    --stage-bg band above/below the slide. Give deck tiles a 16:9 frame and let
    the iframe fill it natively (no transform), so the stage fits edge-to-edge
    with no band, and skip the scroll-pan (there is nothing below to reveal). */
-.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-frame {
-  flex: none;
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
+  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the deck
+     stage fills it exactly — no dark letterbox band, and no leftover white
+     strip below the slide. */
+  height: auto;
   aspect-ratio: 16 / 9;
 }
 .plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
