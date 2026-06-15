@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rust 异步运行时内部机制 · Tech Sharing</title>
+<title>Open Design · Tech Sharing</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -369,11 +369,11 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- 1. Cover -->
   <section class="slide" data-title="Cover">
-    <p class="kicker">tech-sharing / 2026-04-15</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">Rust 异步运行时<br>到底在<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">调度什么</span>?</h1>
-    <p class="lede mt-m">从 <span class="mono">Future::poll</span> 到 tokio 的 work-stealing，一次讲清楚。</p>
-    <div class="speaker"><div class="av"></div><div><b>@lewis</b><span>platform infra · 45 min + Q&amp;A</span></div></div>
-    <div class="deck-footer"><span class="mono">#async #rust #tokio</span><span class="slide-number" data-current="1" data-total="8"></span></div>
+    <p class="kicker">tech-sharing / open-design</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Open Design<br>开源、本地、<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Agent 驱动</span></h1>
+    <p class="lede mt-m">从想法到原型、网页、Slides、HTML 视频——产品设计全流程，在你自己的设备上完成。</p>
+    <div class="speaker"><div class="av"></div><div><b>Open Design</b><span>github.com/nexu-io/open-design · 45 min + Q&amp;A</span></div></div>
+    <div class="deck-footer"><span class="mono">#apache-2.0 #local #byok</span><span class="slide-number" data-current="1" data-total="8"></span></div>
   </section>
 
   <!-- 2. Agenda -->
@@ -381,48 +381,49 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <p class="kicker">agenda.toml</p>
     <h2 class="h2">今天的路线图</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">Context: 为什么需要 async</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">Deep dive 1: Future &amp; Waker</span><span class="d">~12min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">Deep dive 2: Tokio scheduler</span><span class="d">~15min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Code: 手写一个 mini-runtime</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why: 设计能力为什么要开放</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Agents: 接入 21+ Coding Agent</span><span class="d">~10min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Workflow: 从想法到交付 5 步</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Design System as Markdown</span><span class="d">~8min</span></div>
       <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~5min</span></div>
     </div>
   </section>
 
   <!-- 3. Context -->
   <section class="slide" data-title="Context">
-    <p class="kicker">// context</p>
-    <h2 class="h2">问题：一个线程一个连接，<br>撑不住 10 万并发。</h2>
+    <p class="kicker">// why-open</p>
+    <h2 class="h2">问题：最前沿的 AI 设计能力，<br>被锁在了云端。</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>Thread-per-conn</h4><p class="dim">每条连接一根 OS 线程，栈 2–8MB。10 万连接 = 几百 GB RAM。</p><span class="tag mt-s">❌ 不现实</span></div>
-      <div class="card card-accent"><h4>Event loop (C)</h4><p class="dim">epoll/kqueue + 回调地狱。快，但写起来痛苦且容易出 bug。</p><span class="tag mt-s">😩 callback hell</span></div>
-      <div class="card card-accent"><h4>Async / await</h4><p class="dim">看起来像同步代码，编译成状态机。一根线程跑几千任务。</p><span class="tag mt-s">✅ Rust 选这个</span></div>
+      <div class="card card-accent"><h4>Claude Design</h4><p class="dim">2026 年 4 月首次证明 LLM 能真正做设计。但闭源、付费、只跑云端，换 Agent、自部署、BYOK 全做不到。</p><span class="tag mt-s">❌ 锁死在云端</span></div>
+      <div class="card card-accent"><h4>裸用 Coding Agent</h4><p class="dim">Claude Code / Codex 已经够强，但缺设计工作流：没有视觉方向、设计系统和沙盒预览。</p><span class="tag mt-s">😩 缺设计工作流</span></div>
+      <div class="card card-accent"><h4>Open Design</h4><p class="dim">开源、本地、接入你已有的 Agent。月成本从 $500 降到约 $73，降幅超 80%。</p><span class="tag mt-s">✅ Apache-2.0 开源</span></div>
     </div>
   </section>
 
   <!-- 4. Deep dive 1 -->
   <section class="slide" data-title="Deep Dive 1">
     <p class="kicker">deep-dive · 1 / 2</p>
-    <h2 class="h2">Future 其实只有一个方法。</h2>
+    <h2 class="h2">不造 Agent，接入 Agent。</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">编译器把 <span class="mono">async fn</span> 变成一个实现了 <span class="mono">Future</span> trait 的匿名状态机。运行时只做一件事：反复 <span class="mono">poll</span> 它，直到返回 <span class="mono">Ready</span>。</p>
+        <p class="lede">你电脑上的 <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> 已经够强。Open Design 自动检测 PATH 上已安装的 CLI，把它们接进完整设计工作流——零配置。</p>
         <div class="mt-l">
-          <span class="tag">Pending</span> <span class="tag">Ready(T)</span> <span class="tag">Waker.wake()</span>
+          <span class="tag">21 个 Coding Agent</span> <span class="tag">零配置</span> <span class="tag">全链路 BYOK</span>
         </div>
       </div>
       <div class="terminal">
-        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>future.rs</span></div>
-<pre><span class="kw">pub trait</span> <span class="fn">Future</span> {
-    <span class="kw">type</span> Output;
-    <span class="kw">fn</span> <span class="fn">poll</span>(
-        <span class="kw">self</span>: Pin&lt;&amp;<span class="kw">mut Self</span>&gt;,
-        cx: &amp;<span class="kw">mut</span> Context&lt;<span class="str">'_</span>&gt;,
-    ) -&gt; Poll&lt;<span class="kw">Self</span>::Output&gt;;
-}
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>agents.sh</span></div>
+<pre><span class="cmt"># 自动检测 PATH 上已安装的 CLI</span>
+<span class="kw">$</span> <span class="fn">od</span> agents
 
-<span class="cmt">// Poll::Pending   → 挂起，等 waker 唤醒</span>
-<span class="cmt">// Poll::Ready(v)  → 完成，产出 v</span></pre>
+  <span class="str">✓</span> Claude Code     <span class="str">✓</span> Codex CLI
+  <span class="str">✓</span> Cursor Agent    <span class="str">✓</span> OpenClaw
+  <span class="str">✓</span> Hermes Agent    <span class="str">✓</span> Gemini CLI
+  <span class="str">✓</span> Kimi            <span class="str">✓</span> Copilot CLI
+  …
+
+<span class="cmt">// 共 21 个 agent，零配置</span>
+<span class="cmt">// OpenAI / Azure / Google 兼容端点经 BYOK 接入</span></pre>
       </div>
     </div>
   </section>
@@ -430,25 +431,25 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 5. Deep dive 2 -->
   <section class="slide" data-title="Deep Dive 2">
     <p class="kicker">deep-dive · 2 / 2</p>
-    <h2 class="h2">Tokio 是一个偷任务的小工。</h2>
+    <h2 class="h2">从想法到交付，5 步完成。</h2>
     <div class="grid g2 mt-l" style="align-items:start">
       <div>
-        <p class="lede">Multi-thread runtime = N 个 worker，每个 worker 有自己的本地队列。空闲的 worker 会去别人队列里"偷"任务。</p>
+        <p class="lede">Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览和修改。每次选择都成为下次生成的上下文，越用越精准。</p>
         <div class="stack mt-m">
-          <div class="tag">✦ local queue · 256 slots</div>
-          <div class="tag">✦ global injection queue</div>
-          <div class="tag">✦ work-stealing @ 50% steal ratio</div>
-          <div class="tag">✦ LIFO slot for cache locality</div>
+          <div class="tag">✦ 217+ plugins 起点模板</div>
+          <div class="tag">✦ 沙盒即时预览与修改</div>
+          <div class="tag">✦ HyperFrames HTML→MP4</div>
+          <div class="tag">✦ 自进化设计记忆</div>
         </div>
       </div>
       <div class="card" style="padding:32px">
-        <h4 class="mono" style="color:var(--accent-2)">scheduler tick loop</h4>
+        <h4 class="mono" style="color:var(--accent-2)">workflow · 5 steps</h4>
         <div class="stack mt-m" style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.9;color:var(--text-2)">
-          <div><span style="color:var(--accent)">1.</span> pop from LIFO slot</div>
-          <div><span style="color:var(--accent)">2.</span> else pop from local queue</div>
-          <div><span style="color:var(--accent)">3.</span> else drain global queue (every 61 ticks)</div>
-          <div><span style="color:var(--accent)">4.</span> else steal from random victim</div>
-          <div><span style="color:var(--accent)">5.</span> else park the thread</div>
+          <div><span style="color:var(--accent)">1.</span> 选择起点——一句话描述目标，或从模板 / Plugin 起步</div>
+          <div><span style="color:var(--accent)">2.</span> 确定视觉方向——色板、字体、间距自动带入</div>
+          <div><span style="color:var(--accent)">3.</span> 生成 Artifact——真实可运行的文件，沙盒预览</div>
+          <div><span style="color:var(--accent)">4.</span> 交付或制作视频——工程接手，或转营销短片</div>
+          <div><span style="color:var(--accent)">5.</span> 记忆沉淀——成为下次生成的上下文</div>
         </div>
       </div>
     </div>
@@ -456,29 +457,24 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- 6. Code example -->
   <section class="slide" data-title="Code">
-    <p class="kicker">mini-runtime.rs · ~40 LOC</p>
-    <h2 class="h2">手写一个最小 runtime。</h2>
+    <p class="kicker">design-systems/DESIGN.md</p>
+    <h2 class="h2">设计系统，是一个能 git diff 的 Markdown。</h2>
     <div class="terminal mt-m">
-      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>src/main.rs</span></div>
-<pre><span class="kw">use</span> std::collections::VecDeque;
-<span class="kw">use</span> std::sync::{Arc, Mutex};
-<span class="kw">use</span> std::task::{Context, Poll, Wake, Waker};
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>DESIGN.md</span></div>
+<pre><span class="kw">## Palette</span>
+- primary:   <span class="num">#3B6CFF</span>
+- surface:   <span class="num">#0D1117</span>
 
-<span class="kw">struct</span> Task(Mutex&lt;Pin&lt;Box&lt;<span class="kw">dyn</span> Future&lt;Output = ()&gt; + Send&gt;&gt;&gt;);
+<span class="kw">## Typography</span>
+- display: <span class="str">Inter / 600</span>
+- body:    <span class="str">Noto Sans SC / 400</span>
 
-<span class="kw">impl</span> Wake <span class="kw">for</span> Task {
-    <span class="kw">fn</span> <span class="fn">wake</span>(<span class="kw">self</span>: Arc&lt;<span class="kw">Self</span>&gt;) { QUEUE.lock().unwrap().push_back(<span class="kw">self</span>); }
-}
+<span class="kw">## Rules</span>
+- 圆角统一 <span class="num">12px</span>，间距用 <span class="num">8</span> 的倍数
+- 营销页可用渐变，产品页禁用
 
-<span class="kw">fn</span> <span class="fn">block_on</span>&lt;F: Future&lt;Output = ()&gt; + Send + <span class="str">'static</span>&gt;(fut: F) {
-    <span class="fn">spawn</span>(fut);
-    <span class="kw">while let Some</span>(task) = QUEUE.lock().unwrap().pop_front() {
-        <span class="kw">let</span> waker = Waker::from(task.clone());
-        <span class="kw">let mut</span> cx = Context::from_waker(&amp;waker);
-        <span class="kw">let mut</span> fut = task.<span class="num">0</span>.lock().unwrap();
-        <span class="kw">let</span> _ = fut.as_mut().<span class="fn">poll</span>(&amp;<span class="kw">mut</span> cx); <span class="cmt">// 就是这一行</span>
-    }
-}</pre>
+<span class="cmt"># 129 个 Design System：GitHub / Figma / 本地导入</span>
+<span class="cmt"># Markdown 避免 token 漂移，品牌一致性可控、可版本化</span></pre>
     </div>
   </section>
 
@@ -487,22 +483,22 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <p class="kicker">// takeaways</p>
     <h2 class="h2">三件事带回去。</h2>
     <div class="grid g3 mt-l">
-      <div class="card card-accent"><h4>1 · async 是零成本抽象</h4><p class="dim">编译成状态机，没有运行时虚表，没有 GC。</p></div>
-      <div class="card card-accent"><h4>2 · Waker 是脉搏</h4><p class="dim">Future 不主动做事，运行时靠 waker 决定"什么时候再 poll"。</p></div>
-      <div class="card card-accent"><h4>3 · 别在 async 里阻塞</h4><p class="dim">一行 <span class="mono">std::fs::read</span> 能让整个 worker 停摆。用 <span class="mono">spawn_blocking</span>。</p></div>
+      <div class="card card-accent"><h4>1 · 桌面端原生</h4><p class="dim">设计在桌面端发生。本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力。</p></div>
+      <div class="card card-accent"><h4>2 · 不造 Agent，接入 Agent</h4><p class="dim">你电脑上的 <span class="mono">Claude Code</span> / <span class="mono">Codex</span> / <span class="mono">Cursor</span> 已经够强，Open Design 把它们接进完整设计工作流。</p></div>
+      <div class="card card-accent"><h4>3 · 越用越懂你</h4><p class="dim">每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果。</p></div>
     </div>
-    <p class="lede mt-l">延伸阅读：<span class="mono">tokio.rs/blog/2019-10-scheduler</span> · <span class="mono">rust-lang.github.io/async-book</span></p>
+    <p class="lede mt-l">延伸阅读：<span class="mono">github.com/nexu-io/open-design</span> · <span class="mono">discord.gg/qhbcCH8Am4</span></p>
   </section>
 
   <!-- 8. Q&A -->
   <section class="slide center tc" data-title="Q and A">
     <div>
-      <div class="mono" style="font-size:120px;color:var(--accent);font-weight:800;letter-spacing:-.04em">?</div>
-      <h2 class="h2">Questions?</h2>
-      <p class="lede" style="margin:14px auto">github.com/lewis · @lewis on slack</p>
+      <div class="mono" style="font-size:120px;color:var(--accent);font-weight:800;letter-spacing:-.04em">&gt;_</div>
+      <h2 class="h2">让最前沿的 AI 设计能力<br>回到每一个创作者的桌上</h2>
+      <p class="lede" style="margin:14px auto">Open · Local · Agent-native</p>
       <div class="row mt-l" style="justify-content:center">
-        <span class="tag">slides: git.co/rt-deck</span>
-        <span class="tag">code: git.co/mini-rt</span>
+        <span class="tag">download: macOS / Windows</span>
+        <span class="tag">star: github.com/nexu-io/open-design · 60K+</span>
       </div>
     </div>
   </section>

@@ -239,19 +239,19 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-vignette"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>~/hermes · zsh · 118x42 · 01:37:04</div></div>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>~/open-design · zsh · 118x42 · 01:37:04</div></div>
     <div style="margin:auto 0">
-      <p class="hc-prompt">whoami --hermes</p>
-      <h1 class="hc-h1">HERMES<br>AGENT / v0.9.2<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">一个号称能「自主跑完整软件工程任务」的命令行 agent。<br>真的好用？还是又一轮营销？—— 我连续跑了 72 小时，告诉你答案。</p>
+      <p class="hc-prompt">od --version</p>
+      <h1 class="hc-h1">OPEN<br>DESIGN<span class="hc-cursor"></span></h1>
+      <p class="hc-lede">开源、本地、Agent 驱动的设计平台。<br>从想法到原型、网页、Slides、HTML 视频——产品设计全流程，在你自己的设备上完成。</p>
       <div style="margin-top:26px">
-        <span class="hc-tag">rust-core</span>
-        <span class="hc-tag">mcp-native</span>
-        <span class="hc-tag amber">72h-benchmark</span>
-        <span class="hc-tag red">honest-review</span>
+        <span class="hc-tag">local-first</span>
+        <span class="hc-tag">byok</span>
+        <span class="hc-tag amber">apache-2.0</span>
+        <span class="hc-tag red">no-signup</span>
       </div>
     </div>
-    <div class="hc-footer"><span>hermes-review · lewis · 2026</span><span>01 / 08</span></div>
+    <div class="hc-footer"><span>github.com/nexu-io/open-design · 2026</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION DIVIDER -->
@@ -260,109 +260,97 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>section · 01/04</div></div>
     <div style="margin:auto 0">
-      <p class="hc-prompt">cat chapter_01.md</p>
-      <h1 class="hc-h1" style="font-size:110px">// Setup</h1>
-      <p class="hc-lede">从 <code style="color:var(--hc-amber)">brew install hermes</code> 到第一次 prompt —— 一共 4 分 22 秒。</p>
+      <p class="hc-prompt">cat why_open_design.md</p>
+      <h1 class="hc-h1" style="font-size:110px">// Why</h1>
+      <p class="hc-lede">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计。但它 <code style="color:var(--hc-amber)">closed-source · cloud-only</code> ——换 Agent、自部署、BYOK 全做不到。Open Design 让这套能力变得开放。</p>
     </div>
-    <div class="hc-footer"><span>section · setup</span><span>02 / 08</span></div>
+    <div class="hc-footer"><span>section · why</span><span>02 / 08</span></div>
   </section>
 
   <!-- 3. CONTENT — spec cards -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · cold-start</div></div>
-    <h2 class="hc-h2">开箱数据</h2>
-    <p class="hc-lede">cold start → first-successful-task 三次平均</p>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>stats · ecosystem</div></div>
+    <h2 class="hc-h2">生态数字</h2>
+    <p class="hc-lede">GitHub 公开口径 · Apache-2.0 开源</p>
     <div class="hc-grid-3">
-      <div class="hc-card"><div class="lbl">install time</div><div class="val">42s</div><div class="desc">单 binary，无 docker，无 python env。</div></div>
-      <div class="hc-card"><div class="lbl">first token</div><div class="val">1.8s</div><div class="desc">接入 claude-opus-4-6，无预热。</div></div>
-      <div class="hc-card"><div class="lbl">first PR merged</div><div class="val">4m22s</div><div class="desc">跑的是 fix-a-typo 级别的低难度任务。</div></div>
+      <div class="hc-card"><div class="lbl">github stars</div><div class="val">60K+</div><div class="desc">300+ 贡献者共同维护的开源项目。</div></div>
+      <div class="hc-card"><div class="lbl">plugins</div><div class="val">217+</div><div class="desc">原型、Slides、海报、仪表盘、周报、OKR。</div></div>
+      <div class="hc-card"><div class="lbl">coding agents</div><div class="val">21</div><div class="desc">自动检测 PATH 上已安装的 CLI，零配置。</div></div>
     </div>
     <div class="hc-grid-2">
-      <div class="hc-card"><div class="lbl">// verdict +</div><div class="val" style="color:var(--hc-green);font-size:18px">冷启动是真的快</div><div class="desc">和 OpenClaw 的 docker + pip 流程比，快不止一个数量级。</div></div>
-      <div class="hc-card"><div class="lbl">// verdict -</div><div class="val" style="color:var(--hc-red);font-size:18px">MCP 服务器配置不够友好</div><div class="desc">env 变量需要手动塞进 ~/.hermes/env，文档几乎没写。</div></div>
+      <div class="hc-card"><div class="lbl">// open design</div><div class="val" style="color:var(--hc-green);font-size:18px">桌面端原生 · 本地运行</div><div class="desc">本地文件、Figma 导出、代码仓库直接可读，Agent 拥有终端执行全部能力。</div></div>
+      <div class="hc-card"><div class="lbl">// closed alternatives</div><div class="val" style="color:var(--hc-red);font-size:18px">模型锁定 · 只跑云端</div><div class="desc">换 Agent、自部署、BYOK 全做不到，每一次生成都离开你的机器。</div></div>
     </div>
-    <div class="hc-footer"><span>data · verified 3 runs</span><span>03 / 08</span></div>
+    <div class="hc-footer"><span>data · github public</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · hermes run</div></div>
-    <p class="hc-prompt">hermes run "refactor auth module to use pkce"</p>
-    <h3 class="hc-h3" style="margin-top:12px">↓ 真实 trace (节选)</h3>
-    <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># hermes v0.9.2 · session 42a1</span>
-[<span class="fn">plan</span>]    <span class="st">"分析 src/auth/*.ts → 找 oauth flow → 抽成 pkce"</span>
-[<span class="fn">read</span>]    src/auth/oauth.ts       <span class="cm">// 214 lines</span>
-[<span class="fn">read</span>]    src/auth/token.ts       <span class="cm">// 88 lines</span>
-[<span class="kw">think</span>]   <span class="st">"发现 implicit flow，改为 code+pkce，需新 state param"</span>
-[<span class="fn">edit</span>]    src/auth/oauth.ts       <span class="hl">+43 -17</span>
-[<span class="fn">edit</span>]    src/auth/token.ts       <span class="hl">+12 -4</span>
-[<span class="fn">test</span>]    pnpm vitest auth        <span class="st">PASS 18/18</span>
-[<span class="fn">commit</span>]  <span class="var">"feat(auth): migrate to oauth2 code+pkce"</span>
-[<span class="fn">push</span>]    origin feat/pkce-auth   <span class="st">ok</span>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>trace · od run</div></div>
+    <p class="hc-prompt">od run "为新品发布做一个 landing page"</p>
+    <h3 class="hc-h3" style="margin-top:12px">↓ 从想法到交付，5 步完成</h3>
+    <pre class="hc-codebox" style="margin-top:10px"><span class="cm"># open design · session 42a1</span>
+[<span class="fn">start</span>]   <span class="st">"选择起点：一句话目标，或从模板 / Plugin 直接选"</span>
+[<span class="fn">style</span>]   design-systems/DESIGN.md   <span class="cm">// 色板·字体·间距自动带入</span>
+[<span class="kw">think</span>]   <span class="st">"Agent 读取本地文件 + Figma 导出 + 代码仓库全部上下文"</span>
+[<span class="fn">gen</span>]     artifacts/landing.html     <span class="hl">真实可运行文件</span>
+[<span class="fn">preview</span>] sandbox                    <span class="st">即时预览 · 即时修改</span>
+[<span class="fn">ship</span>]    <span class="var">"导出给工程，或用 HyperFrames 直接转为营销视频"</span>
+[<span class="fn">memory</span>]  偏好已沉淀                 <span class="st">ok</span>
 
-<span class="cm"># 总耗时 3m 14s · 14k tokens · $0.21</span></pre>
-    <div class="hc-footer"><span>trace · live</span><span>04 / 08</span></div>
+<span class="cm"># 每次选择都成为下次生成的上下文，越用越精准</span></pre>
+    <div class="hc-footer"><span>trace · workflow</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. CHART -->
   <section class="slide">
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
-    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · hermes vs openclaw</div></div>
-    <h2 class="hc-h2">72 小时对比</h2>
-    <p class="hc-lede">同一组 48 个 GitHub issue，两个 agent 各跑一遍</p>
+    <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>benchmark · monthly cost</div></div>
+    <h2 class="hc-h2">月成本 -80%</h2>
+    <p class="hc-lede">对比 Claude Design：$500 → ~$73（BYOK 实测口径，demo data）</p>
     <svg viewBox="0 0 1000 380" style="width:100%;max-width:1040px;margin-top:24px" xmlns="http://www.w3.org/2000/svg">
       <g font-family="JetBrains Mono, monospace" font-size="13" fill="#8a8892">
         <!-- axis -->
         <line x1="80" y1="40" x2="80" y2="320" stroke="rgba(126,211,164,.2)"/>
         <line x1="80" y1="320" x2="960" y2="320" stroke="rgba(126,211,164,.2)"/>
         <!-- y labels -->
-        <text x="70" y="46" text-anchor="end">100%</text>
-        <text x="70" y="116" text-anchor="end">75%</text>
-        <text x="70" y="186" text-anchor="end">50%</text>
-        <text x="70" y="256" text-anchor="end">25%</text>
+        <text x="70" y="46" text-anchor="end">$500</text>
+        <text x="70" y="116" text-anchor="end">$375</text>
+        <text x="70" y="186" text-anchor="end">$250</text>
+        <text x="70" y="256" text-anchor="end">$125</text>
         <text x="70" y="324" text-anchor="end">0</text>
-        <!-- bars: hermes -->
+        <!-- bar: claude design -->
         <g>
-          <rect x="130" y="80"  width="80" height="240" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
-          <text x="170" y="76" text-anchor="middle" fill="#7ed3a4" font-weight="700">82%</text>
-          <text x="170" y="345" text-anchor="middle">resolved</text>
-          <rect x="240" y="146" width="80" height="174" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
-          <text x="280" y="142" text-anchor="middle" fill="#7ed3a4" font-weight="700">58%</text>
-          <text x="280" y="345" text-anchor="middle">one-shot</text>
-          <rect x="350" y="60"  width="80" height="260" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
-          <text x="390" y="56" text-anchor="middle" fill="#7ed3a4" font-weight="700">89%</text>
-          <text x="390" y="345" text-anchor="middle">test-pass</text>
-          <rect x="460" y="110" width="80" height="210" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
-          <text x="500" y="106" text-anchor="middle" fill="#7ed3a4" font-weight="700">71%</text>
-          <text x="500" y="345" text-anchor="middle">pr-merged</text>
+          <rect x="240" y="40" width="140" height="280" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
+          <text x="310" y="34" text-anchor="middle" fill="#e9c58a" font-weight="700">$500 / mo</text>
+          <text x="310" y="345" text-anchor="middle">claude design</text>
         </g>
-        <!-- bars: openclaw -->
+        <!-- bar: open design -->
         <g>
-          <rect x="570" y="150" width="80" height="170" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
-          <text x="610" y="146" text-anchor="middle" fill="#e9c58a" font-weight="700">60%</text>
-          <text x="610" y="345" text-anchor="middle">resolved</text>
-          <rect x="680" y="212" width="80" height="108" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
-          <text x="720" y="208" text-anchor="middle" fill="#e9c58a" font-weight="700">38%</text>
-          <text x="720" y="345" text-anchor="middle">one-shot</text>
-          <rect x="790" y="130" width="80" height="190" fill="rgba(233,197,138,.12)" stroke="#e9c58a" stroke-width="1.5"/>
-          <text x="830" y="126" text-anchor="middle" fill="#e9c58a" font-weight="700">67%</text>
-          <text x="830" y="345" text-anchor="middle">test-pass</text>
+          <rect x="560" y="279" width="140" height="41" fill="rgba(126,211,164,.15)" stroke="#7ed3a4" stroke-width="1.5"/>
+          <text x="630" y="273" text-anchor="middle" fill="#7ed3a4" font-weight="700">~$73 / mo</text>
+          <text x="630" y="345" text-anchor="middle">open design (byok)</text>
+        </g>
+        <!-- delta annotation -->
+        <g>
+          <text x="470" y="150" text-anchor="middle" fill="#7ed3a4" font-size="34" font-weight="700">-80%</text>
+          <text x="470" y="176" text-anchor="middle" fill="#8a8892">同等用量，月账单降幅</text>
         </g>
         <!-- legend -->
-        <g transform="translate(820,50)">
-          <rect x="0" y="0" width="14" height="14" fill="rgba(126,211,164,.15)" stroke="#7ed3a4"/>
-          <text x="22" y="12" fill="#7ed3a4">hermes 0.9.2</text>
-          <rect x="0" y="22" width="14" height="14" fill="rgba(233,197,138,.12)" stroke="#e9c58a"/>
-          <text x="22" y="34" fill="#e9c58a">openclaw 2.1</text>
+        <g transform="translate(800,50)">
+          <rect x="0" y="0" width="14" height="14" fill="rgba(233,197,138,.12)" stroke="#e9c58a"/>
+          <text x="22" y="12" fill="#e9c58a">订阅制 · 云端</text>
+          <rect x="0" y="22" width="14" height="14" fill="rgba(126,211,164,.15)" stroke="#7ed3a4"/>
+          <text x="22" y="34" fill="#7ed3a4">byok · 本地</text>
         </g>
       </g>
     </svg>
-    <div class="hc-footer"><span>benchmark · n=48</span><span>05 / 08</span></div>
+    <div class="hc-footer"><span>benchmark · $500 → ~$73</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. STATS -->
@@ -370,14 +358,14 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-grid"></div>
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>tldr</div></div>
-    <p class="hc-prompt">echo $VERDICT</p>
-    <div class="hc-big">7.8<span style="font-size:60px;color:var(--hc-ink2)">/ 10</span></div>
-    <p class="hc-lede" style="margin-top:14px">值得装，还不值得完全依赖。</p>
+    <p class="hc-prompt">echo $STARS</p>
+    <div class="hc-big">60K+<span style="font-size:60px;color:var(--hc-ink2)"> stars</span></div>
+    <p class="hc-lede" style="margin-top:14px">Apache-2.0 开源 · 300+ 贡献者共建。</p>
     <div class="hc-grid-2" style="margin-top:24px">
-      <div class="hc-card"><div class="lbl">+ strong points</div><div class="desc">• rust 本体冷启快<br>• trace 可读性极强<br>• diff 审核友好，commit message 也写得合格</div></div>
-      <div class="hc-card"><div class="lbl">- weak points</div><div class="desc">• plan 阶段偶尔跳步<br>• 超 50k LoC 仓库会 OOM<br>• MCP 配置需要手动塞 env</div></div>
+      <div class="hc-card"><div class="lbl">+ core capabilities</div><div class="desc">• 129 个 Design System：GitHub / Figma / 本地导入<br>• HyperFrames：HTML→MP4 视频全流程<br>• 自进化设计记忆，越用越懂你</div></div>
+      <div class="hc-card"><div class="lbl">+ open by default</div><div class="desc">• 全链路 BYOK：Anthropic / OpenAI / Azure / Google<br>• 数据全在本地，无需注册<br>• Fork、自部署、商用全部允许</div></div>
     </div>
-    <div class="hc-footer"><span>verdict · honest</span><span>06 / 08</span></div>
+    <div class="hc-footer"><span>numbers · canonical</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
@@ -386,19 +374,19 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div class="hc-scanlines"></div>
     <div class="hc-chrome"><div class="dots"><span></span><span></span><span></span></div><div>install</div></div>
     <h2 class="hc-h2">想自己跑一遍？</h2>
-    <p class="hc-lede">三条命令，不到 5 分钟就能看见它干第一件事。</p>
-    <pre class="hc-codebox" style="margin-top:22px"><span class="cm"># 1. install</span>
-<span class="kw">$</span> brew install hermes-agent/tap/hermes
+    <p class="hc-lede">下载 Open Design（macOS / Windows），或三条命令从源码启动。</p>
+    <pre class="hc-codebox" style="margin-top:22px"><span class="cm"># 1. clone (apache-2.0)</span>
+<span class="kw">$</span> git clone https://github.com/nexu-io/open-design
 
-<span class="cm"># 2. auth (先准备好 anthropic api key)</span>
-<span class="kw">$</span> hermes auth login
+<span class="cm"># 2. install (node 24 + pnpm)</span>
+<span class="kw">$</span> cd open-design && pnpm install
 
-<span class="cm"># 3. first task</span>
-<span class="kw">$</span> cd ~/your-repo && hermes run <span class="st">"add a CHANGELOG.md from git log"</span></pre>
+<span class="cm"># 3. start (byok：用你自己的 api key)</span>
+<span class="kw">$</span> pnpm tools-dev</pre>
     <div style="margin-top:26px">
-      <span class="hc-tag">brew-ready</span>
-      <span class="hc-tag">opus-4.6</span>
-      <span class="hc-tag amber">needs-api-key</span>
+      <span class="hc-tag">local-first</span>
+      <span class="hc-tag">21-coding-agents</span>
+      <span class="hc-tag amber">byok</span>
     </div>
     <div class="hc-footer"><span>try-it-now</span><span>07 / 08</span></div>
   </section>
@@ -411,9 +399,9 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <div style="margin:auto 0">
       <p class="hc-prompt">exit 0</p>
       <h1 class="hc-h1" style="font-size:120px">// thanks<span class="hc-cursor"></span></h1>
-      <p class="hc-lede">完整 trace、48 个任务的 PR 列表、benchmark 脚本都在 <span style="color:var(--hc-amber)">github.com/lewis/hermes-review</span></p>
+      <p class="hc-lede">让最前沿的 AI 设计能力回到每一个创作者的桌上。<br><span style="color:var(--hc-amber)">github.com/nexu-io/open-design</span> · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
     </div>
-    <div class="hc-footer"><span>session closed</span><span>08 / 08</span></div>
+    <div class="hc-footer"><span>open · local · agent-native</span><span>08 / 08</span></div>
   </section>
 
 </div>

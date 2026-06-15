@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>演讲者模式示例 · Presenter Mode Deck</title>
+<title>Open Design · Presenter Mode Deck</title>
 <style>/* html-ppt :: shared webfonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
@@ -554,21 +554,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- ============ 1. COVER ============ -->
   <section class="slide" data-title="Cover">
     <p class="kicker">presenter-mode / demo</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">如何做一场<br><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">有逐字稿</span>的技术分享</h1>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Open Design</span><br>开源、本地、Agent 驱动的设计平台</h1>
     <p class="lede mt-m">按 <span class="mono">S</span> 进入演讲者视图 · <span class="mono">T</span> 切换主题 · <span class="mono">← →</span> 翻页</p>
     <div class="speaker">
       <div class="av"></div>
-      <div><b>@lewis</b><span>sharing talk · 30 min</span></div>
+      <div><b>Open Design</b><span>github.com/nexu-io/open-design · 30 min</span></div>
     </div>
     <div class="deck-footer">
-      <span class="mono">#presenter #逐字稿 #tech-talk</span>
+      <span class="mono">Apache-2.0 · 本地运行 · BYOK · 无需注册</span>
       <span class="slide-number" data-current="1" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>大家好，欢迎来到今天的技术分享。我是 lewis，今天想跟大家聊一个很多人忽略但其实非常影响演讲效果的话题——<strong>如何让一场技术分享既有深度，又讲得不卡壳</strong>。</p>
-      <p>在正式开始之前，先跟大家介绍一下这份 deck 本身：这是一个支持<em>演讲者模式</em>的 HTML 幻灯片模板。现在你们看到的是观众视图，但我自己的屏幕上看到的是完全不一样的东西——当前页、下一页、完整逐字稿、计时器，全在一块屏幕上。</p>
-      <p>为什么我要专门做这个？因为我发现自己做技术分享时最大的痛点不是 PPT 不够好看，而是<strong>讲到某一页突然不知道该说什么，或者忘了过渡怎么接</strong>。今天这份分享既是内容本身，也是个演示——我会一直开着演讲者模式讲，你们可以观察我讲得有多流畅。</p>
-      <p>今天分享大概 30 分钟，分 5 个部分。有问题随时打断。Let's go.</p>
+      <p>大家好，欢迎来到今天的分享。今天想跟大家介绍 <strong>Open Design——一个开源、本地、Agent 驱动的设计平台</strong>：从想法到原型、网页、Slides、HTML 视频，产品设计全流程都在你自己的设备上完成。</p>
+      <p>正式开始前先说一下这份 deck 本身：它支持<em>演讲者模式</em>。你们看到的是观众视图，而我的屏幕上是当前页、下一页、完整逐字稿和计时器——这正是 Open Design 用 Plugin 产出 Slides 的一个例子。</p>
+      <p>四个关键词先记住：<strong>Apache-2.0 开源、本地运行、BYOK、无需注册</strong>。这不是又一个云端订阅工具，而是跑在你自己机器上的设计工作流。</p>
+      <p>今天大概 30 分钟，分 5 个部分。有问题随时打断。Let's go.</p>
     </aside>
   </section>
 
@@ -577,18 +577,18 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
     <p class="kicker">agenda</p>
     <h2 class="h2">今天要讲的 5 件事</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">为什么 PPT 本身做得好还不够</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">演讲者模式到底该有哪些信息</span><span class="d">~6min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">逐字稿怎么写才不像念稿</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · html-ppt skill 怎么用</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~3min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why · Claude Design 证明了什么，又锁住了什么</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">工作流 · 从想法到交付几步完成</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">三大主张 · Open Design 凭什么不一样</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · 现场用演讲者模式讲完这份 deck</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">CTA + Q&amp;A</span><span class="d">~3min</span></div>
     </div>
     <aside class="notes">
       <p>先过一下今天的议程。</p>
-      <p>第一部分我想先说服你们<strong>"PPT 做得漂亮≠讲得好"</strong>。我见过太多很精致的 deck，但讲的人一上去就开始 "嗯…这个…就是…"。</p>
-      <p>第二部分聊演讲者视图。业界的产品其实差别蛮大的，Keynote、PowerPoint、reveal.js 都有各自的方案，但真正好用的设计逻辑是什么，我会给出我的答案。</p>
-      <p>第三部分是今天的<em>核心</em>——逐字稿。很多人以为逐字稿就是把要说的话一字不差写下来，错。逐字稿的目的是让你<strong>"看一眼就接得上"</strong>，写法完全不一样。</p>
-      <p>第四部分会现场 demo 我自己用的 html-ppt skill，展示如何 30 分钟出一份带逐字稿的 deck。</p>
+      <p>第一部分讲 <strong>Why</strong>——2026 年 4 月 Claude Design 证明了 LLM 能真正做设计，但它闭源、付费、只跑云端。这是 Open Design 存在的理由。</p>
+      <p>第二部分讲<strong>工作流</strong>：从一句话想法到可交付的 Artifact，整条链路在本地怎么跑通。</p>
+      <p>第三部分是今天的<em>核心</em>——Open Design 的三大主张：桌面端原生、不造 Agent 而是接入 Agent、越用越懂你。</p>
+      <p>第四部分是现场 demo——其实 demo 从第一页就开始了：这份 deck 本身就是 Open Design 产出的，我全程开着演讲者模式在讲。</p>
       <p>最后收尾 + 答疑。</p>
       <p>OK，进入第一部分。</p>
     </aside>
@@ -596,121 +596,118 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
   <!-- ============ 3. PROBLEM ============ -->
   <section class="slide" data-title="Problem">
-    <p class="kicker">// part 01 · problem</p>
-    <h2 class="h2">做 PPT 和讲 PPT，<br>是<span class="accent">两件事</span>。</h2>
+    <p class="kicker">// part 01 · why</p>
+    <h2 class="h2">AI 能做设计了，<br>但能力被<span class="accent">锁在云端</span>。</h2>
     <div class="grid g3 mt-l">
       <div class="card card-accent">
-        <h4>✅ PPT 做得好</h4>
-        <p class="dim">主题统一、排版干净、图表清晰、动效克制。这些是"静态作品"的质量。</p>
+        <h4>✅ 它证明了</h4>
+        <p class="dim">2026 年 4 月，Claude Design 首次证明 LLM 能真正做设计——不是写文章，是直接产出设计稿。</p>
       </div>
       <div class="card card-accent">
-        <h4>❌ 讲得好</h4>
-        <p class="dim">逻辑连贯、语速稳定、不 "嗯啊"、能接住问题、能当场调整节奏。</p>
+        <h4>❌ 但它锁住了</h4>
+        <p class="dim">闭源、付费、只跑云端：模型锁 Anthropic，换 Agent、自部署、BYOK 全做不到。</p>
       </div>
       <div class="card card-accent">
-        <h4>💡 差别在哪</h4>
-        <p class="dim">前者是<strong>纸上功夫</strong>，后者需要你<strong>"看一眼幻灯片就知道下句话说什么"</strong>。</p>
+        <h4>💡 Open Design</h4>
+        <p class="dim">让这套能力变得开放——<strong>让最前沿的 AI 设计能力，回到每一个创作者的桌上</strong>。</p>
       </div>
     </div>
     <aside class="notes">
-      <p>我先抛一个可能有争议的观点——<strong>做 PPT 和讲 PPT 是两件完全不同的事</strong>。</p>
-      <p>大家看左边这张卡片，"PPT 做得好" 意味着什么？主题统一、排版干净、图表清晰、动效克制——这些都是<em>静态作品</em>的质量标准，可以离线评判。</p>
-      <p>但中间这张卡片就不一样了："讲得好" 意味着逻辑连贯、语速稳定、不卡壳、能接住提问、能根据现场反应调整节奏——这些是<strong>临场能力</strong>，跟 PPT 好不好看基本没关系。</p>
-      <p>最关键的是右边这句话——讲得好的人，本质上是"<strong>看一眼幻灯片就知道下句话说什么</strong>"。这个能力靠什么？不是背稿，也不是即兴发挥，而是靠<em>合理设计的提词器系统</em>。</p>
-      <p>今天接下来 25 分钟，我就是围绕这个核心问题展开的。</p>
+      <p>先从一个时间点说起——<strong>2026 年 4 月，Claude Design 发布</strong>。</p>
+      <p>大家看左边这张卡片，它证明了什么？LLM 能<em>真正做设计</em>——不是写一篇关于设计的文章，而是直接产出可用的设计稿。这是质变。</p>
+      <p>但中间这张卡片是问题所在：它<strong>闭源、付费、只跑在云端</strong>。模型被锁死在 Anthropic 一家，你想换个 Agent 不行，想自部署不行，想用自己的 API Key——也就是 BYOK——还是不行。能力很强，但你拿不到手。</p>
+      <p>所以才有了右边这张卡片——<strong>Open Design 的使命就是把这套能力放开</strong>：开源、跑在本地、Agent 随便换。一句话：让最前沿的 AI 设计能力，回到每一个创作者的桌上。</p>
+      <p>那它具体怎么工作？看下一部分。</p>
     </aside>
   </section>
 
   <!-- ============ 4. SOLUTION ============ -->
   <section class="slide" data-title="Presenter View">
-    <p class="kicker">// part 02 · presenter view</p>
-    <h2 class="h2">演讲者视图应该有<span class="accent">四块信息</span></h2>
+    <p class="kicker">// part 02 · workflow</p>
+    <h2 class="h2">从想法到交付，<span class="accent">四步</span>完成</h2>
     <div class="grid g2 mt-l">
       <div>
-        <div class="feature-row"><span class="num blue">①</span><div><b>当前页大图</b><p class="dim">占视图一半以上，保证你能扫一眼就知道观众现在看到什么。</p></div></div>
-        <div class="feature-row"><span class="num green">②</span><div><b>下一页预览</b><p class="dim">帮你提前准备过渡句，避免"下一页我忘了讲什么了"。</p></div></div>
+        <div class="feature-row"><span class="num blue">①</span><div><b>选择起点</b><p class="dim">一句话描述目标，或从模板 / Plugin 直接选起点。</p></div></div>
+        <div class="feature-row"><span class="num green">②</span><div><b>确定视觉方向</b><p class="dim">选定方向后，色板、字体、间距自动带入生成流程。</p></div></div>
       </div>
       <div>
-        <div class="feature-row"><span class="num orange">③</span><div><b>逐字稿区域</b><p class="dim">大字号、高对比度、支持滚动，这才是演讲者真正在看的东西。</p></div></div>
-        <div class="feature-row"><span class="num purple">④</span><div><b>计时器 + 页码</b><p class="dim">知道自己讲了多久、还剩几页，节奏全凭这个。</p></div></div>
+        <div class="feature-row"><span class="num orange">③</span><div><b>生成 Artifact</b><p class="dim">Agent 读取全部上下文，产出真实可运行的文件，沙盒内即时预览和修改。</p></div></div>
+        <div class="feature-row"><span class="num purple">④</span><div><b>交付 + 记忆沉淀</b><p class="dim">导出给工程继续开发，或用 HyperFrames 转为视频；每次选择都成为下次生成的上下文。</p></div></div>
       </div>
     </div>
     <aside class="notes">
-      <p>演讲者模式应该给你四块信息。我按重要性排序。</p>
-      <p>第一块，<strong>当前页大图</strong>。这个必须占据视图一半以上空间，因为它是你跟观众的"同步锚"——观众看到什么，你脑子里也得是什么。</p>
-      <p>第二块，<strong>下一页预览</strong>。这个很多人不理解为什么要放，我解释一下：演讲最卡的瞬间不是讲某一页，而是<em>翻到下一页的那 2 秒</em>。如果你提前看到下一页长什么样，过渡句自然就有了。</p>
-      <p>第三块，<strong>逐字稿区域</strong>——这是今天的重点，下一部分我会专门讲。这里先说一个硬性要求：字号必须大、对比度必须高、必须能滚动。因为你讲的时候<em>只有余光瞄一下</em>，字小了根本来不及读。</p>
-      <p>第四块，<strong>计时器和页码</strong>。知道自己讲了多久、还剩几页——节奏感全靠它。Keynote 做得最好，reveal.js 默认不够清楚。</p>
-      <p>这四块缺一不可。今天这个 deck 我把这四块都做出来了，按 S 大家可以试试。</p>
+      <p>Open Design 的工作流就四步。我按顺序过一遍。</p>
+      <p>第一步，<strong>选择起点</strong>。一句话描述你要什么，或者直接从模板和 Plugin 里挑一个起点——比如今天这份 deck，起点就是一个演讲者模式的 Slides Plugin。</p>
+      <p>第二步，<strong>确定视觉方向</strong>。方向一旦选定，色板、字体、间距会自动带进后面的生成流程，不用每页手调。</p>
+      <p>第三步，<strong>生成 Artifact</strong>——这是最关键的一步。Agent 读取全部上下文，产出的是<em>真实可运行的文件</em>，不是截图也不是预览图，在沙盒里可以即时预览和修改。</p>
+      <p>第四步，<strong>交付加记忆沉淀</strong>。文件可以直接交给工程继续开发，也可以用 HyperFrames 转成营销视频；同时你的每次选择都沉淀为记忆，下次生成更接近你要的结果。</p>
+      <p>那支撑这套工作流的理念是什么？看下一部分。</p>
     </aside>
   </section>
 
   <!-- ============ 5. SCRIPT ============ -->
   <section class="slide" data-title="Script">
-    <p class="kicker">// part 03 · script</p>
-    <h2 class="h2">逐字稿的<span class="accent">3 条铁律</span></h2>
+    <p class="kicker">// part 03 · principles</p>
+    <h2 class="h2">Open Design 的<span class="accent">三大主张</span></h2>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num red">01</span>
         <div>
-          <b>不是一字不差的讲稿，是<span class="accent">"提示信号"</span></b>
-          <p class="dim">把要讲的核心点加粗，把过渡句单独成段，把数据和名字列清楚——<em>让你看一眼就接得上</em>。</p>
+          <b>🖥️ <span class="accent">桌面端</span>原生</b>
+          <p class="dim">设计在桌面端发生。本地文件、Figma 导出、代码仓库直接可读，<em>Agent 拥有终端执行全部能力</em>。</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">02</span>
         <div>
-          <b>每页 <span class="accent">150–300 字</span>，不多不少</b>
-          <p class="dim">少于 150 字提示不够，多于 300 字你没时间读。按 2–3 分钟/页的节奏控制。</p>
+          <b>🤖 不造 Agent，<span class="accent">接入 Agent</span></b>
+          <p class="dim">你电脑上的 Claude Code / Codex / Cursor 已经够强。Open Design 把它们接进完整设计工作流。</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">03</span>
         <div>
-          <b>用<span class="accent">口语</span>写，不用书面语</b>
-          <p class="dim">"因此" → "所以"；"该方案" → "这个方案"。写的时候读一遍，听起来像说话才对。</p>
+          <b>🧠 越用越<span class="accent">懂你</span></b>
+          <p class="dim">每次选择都沉淀为 Design System、偏好和记忆，下次生成更接近你要的结果。</p>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>进入最核心的一部分——逐字稿怎么写。我总结了 3 条铁律。</p>
-      <p><strong>第一条，逐字稿不是讲稿</strong>。很多人一听"逐字稿"就以为要把每句话一字不差写下来。错。如果你照着稿念，观众会立刻看出来，信任感瞬间崩塌。</p>
-      <p>逐字稿的真实作用是<em>"提示信号"</em>——把核心要点加粗，把过渡句单独成段，把数据和专有名词列清楚。这样你讲的时候<strong>瞄一眼就能接得上</strong>，但说出来的还是你自己的话。</p>
-      <p><strong>第二条，每页控制在 150 到 300 字</strong>。这个是我做了十几场分享摸出来的经验值。少于 150 字提示不够，讲到一半卡住；多于 300 字你根本来不及扫完。按一页讲 2 到 3 分钟算，这个字数刚好。</p>
-      <p><strong>第三条，用口语写</strong>。这条最多人栽跟头。你写"因此"，讲出来会变成"所以"；你写"该方案"，讲出来会变成"这个方案"。<em>写的时候读一遍</em>，不拗口才对。</p>
-      <p>这三条配合起来，你会发现讲 PPT 突然变成了一件很舒服的事。</p>
+      <p>进入最核心的一部分——Open Design 的三大主张。</p>
+      <p><strong>第一条，桌面端原生</strong>。设计真正发生的地方是桌面：本地文件、Figma 导出、代码仓库，全部直接可读。更重要的是，Agent 在这里拥有<em>终端执行的全部能力</em>——这是云端工具给不了的。</p>
+      <p><strong>第二条，不造 Agent，接入 Agent</strong>。我们不重新发明轮子。你电脑上的 Claude Code、Codex、Cursor 已经够强了，Open Design 做的是把它们接进完整的设计工作流——目前已经接入 <strong>21 个 Coding Agent</strong>，自动检测 PATH 上的 CLI，零配置。</p>
+      <p><strong>第三条，越用越懂你</strong>。每一次选择都沉淀为 Design System、偏好和记忆，下次生成会更接近你要的结果。这就是自进化的设计系统。</p>
+      <p>三条合起来：开放、本地、Agent 原生。最后看怎么上手。</p>
     </aside>
   </section>
 
   <!-- ============ 6. DEMO + CLOSING ============ -->
   <section class="slide" data-title="Demo & Close">
     <p class="kicker">// part 04-05 · demo + close</p>
-    <h2 class="h2">现在<span class="accent">你也能做到</span></h2>
+    <h2 class="h2">让最前沿的 AI 设计能力<span class="accent">回到你桌上</span></h2>
     <div class="code-block mt-m">
-<span class="comment"># 安装 html-ppt skill</span>
-<span class="cmd">npx</span> skills add <span class="flag">https://github.com/lewislulu/html-ppt-skill</span>
+<span class="comment"># 获取 Open Design（macOS / Windows · Apache-2.0）</span>
+<span class="cmd">open</span> <span class="flag">https://github.com/nexu-io/open-design</span>
 
-<span class="comment"># 复制演讲者模式模板</span>
-<span class="cmd">cp -r</span> templates/full-decks/presenter-mode-reveal examples/my-talk
-<span class="cmd">open</span> examples/my-talk/index.html
+<span class="comment"># 60K+ Stars · 300+ Contributors · 217+ Plugins · 129 Design Systems</span>
 
-<span class="comment"># 键盘操作</span>
+<span class="comment"># 本 deck 键盘操作（演讲者模式演示）</span>
 <span class="flag">S</span>  <span class="comment">→ 进入演讲者视图</span>
 <span class="flag">T</span>  <span class="comment">→ 切换主题（5 种预设）</span>
 <span class="flag">← →</span> <span class="comment">→ 翻页</span>
 <span class="flag">R</span>  <span class="comment">→ 重置计时器</span>
     </div>
-    <p class="lede mt-m tc">关键是：<strong>每一页 &lt;aside class="notes"&gt; 里写 150–300 字逐字稿</strong>。</p>
+    <p class="lede mt-m tc"><strong>Open · Local · Agent-native</strong> — Download Open Design ｜ Star on GitHub · discord.gg/qhbcCH8Am4</p>
     <div class="deck-footer">
       <span class="mono">#thanks · Q&amp;A</span>
       <span class="slide-number" data-current="6" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>最后我演示一下这个 skill 怎么用，给大家省点时间自己摸索。</p>
-      <p>第一步，装 html-ppt skill，一行命令。第二步，把我这个 <code>presenter-mode-reveal</code> 模板复制到你自己的 examples 目录。第三步，打开 html，按 S。</p>
-      <p>键盘操作我列在这里了。<strong>S 进入演讲者视图、T 切换主题、左右键翻页、R 重置计时器</strong>。主题默认带 5 个——tokyo-night、dracula、catppuccin-mocha、nord、corporate-clean——基本覆盖了深色技术分享、浅色商务汇报两种常见场景。</p>
-      <p>最关键的一步——<em>每一页底部的 <code>&lt;aside class="notes"&gt;</code> 里，老老实实写 150 到 300 字的逐字稿</em>。这是整个方法论的交付物。AI 可以帮你写初稿，但你一定要自己过一遍，读出来听听是不是你会说的话。</p>
-      <p>好，我今天就讲到这里。如果你做下一场分享的时候想起了这个"演讲者视图 + 逐字稿"的组合，并且觉得讲得比以前顺——那就是我最大的收获。谢谢大家，有问题现在开始。</p>
+      <p>最后是行动召唤，给大家省点时间自己摸索。</p>
+      <p>上手很简单：打开 GitHub 仓库 <code>nexu-io/open-design</code>，下载 macOS 或 Windows 客户端就能用。<strong>Apache-2.0 开源，无需注册，BYOK 用自己的 Key</strong>。社区现在是 60K+ Stars、300+ 贡献者、217+ Plugins、129 个 Design System——生态已经很热闹了。</p>
+      <p>键盘操作我列在这里了。<strong>S 进入演讲者视图、T 切换主题、左右键翻页、R 重置计时器</strong>。主题默认带 5 个——tokyo-night、dracula、catppuccin-mocha、nord、corporate-clean——深色技术分享、浅色商务汇报都覆盖了。</p>
+      <p>别忘了，这份 deck 本身就是 Open Design 的产物——<em>演讲者模式、逐字稿、主题切换，全是它生成的 HTML</em>。你看到的 demo 就是产品本身。</p>
+      <p>好，我今天就讲到这里。一句话带走：<strong>开放、本地、Agent 原生</strong>。谢谢大家，有问题现在开始。</p>
     </aside>
   </section>
 
