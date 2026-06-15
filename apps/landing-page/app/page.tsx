@@ -432,7 +432,13 @@ export default function Page({
                     the platform can't be named (Linux / undetermined / API
                     rate-limited) it falls back to the /download/ page (the
                     per-platform picker) rather than the GitHub releases list. */}
-                <a className='btn btn-primary' href={href('/download/')} data-download-cta data-download-chip-target>
+                <a
+                  className='btn btn-primary'
+                  href={href('/download/')}
+                  data-download-cta
+                  data-download-chip-target
+                  data-download-placement='hero'
+                >
                   <span className='arrow'>{iconDownload}</span>
                   {home.hero.download}
                 </a>
@@ -932,6 +938,7 @@ export default function Page({
                     href={href('/download/')}
                     data-download-cta
                     data-download-chip-target
+                    data-download-placement='cta'
                   >
                     <span className='arrow'>{iconDownload}</span>
                     {home.hero.download}

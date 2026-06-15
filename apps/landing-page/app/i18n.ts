@@ -6796,6 +6796,21 @@ export function localeFromPath(pathname = '/'): LandingLocaleCode {
   return stripLocaleFromPath(pathname).locale;
 }
 
+/**
+ * Stable, locale-independent `page_name` for analytics (the 埋点文档 2.0
+ * page_name/area/element triplet). The marketing trackers are injected on
+ * every page, so each must report which page it is rather than a hardcoded
+ * value. The home page is `landing_home`; every other route flattens its
+ * locale-stripped path segments (e.g. `/zh/solutions/prototype/` →
+ * `solutions_prototype`, `/download/` → `download`).
+ */
+export function pageNameFromPath(pathname = '/'): string {
+  const { pathname: localPath } = stripLocaleFromPath(pathname);
+  const segments = localPath.split('/').filter(Boolean);
+  if (segments.length === 0) return 'landing_home';
+  return segments.join('_').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+}
+
 export function localizedHref(
   href: string,
   locale: LandingLocaleCode,

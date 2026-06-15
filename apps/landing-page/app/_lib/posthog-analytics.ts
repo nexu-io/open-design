@@ -24,7 +24,7 @@ const DEFAULT_HOST = 'https://us.i.posthog.com';
  * the same source ships to every page). Anchors to hooks that already exist
  * in the markup; the only added attribute is `data-carousel-dir`.
  */
-function buildTrackerScript(): string {
+function buildTrackerScript(pageName: string): string {
   return `
   (function () {
     if (typeof window.posthog === 'undefined') return;
@@ -38,7 +38,7 @@ function buildTrackerScript(): string {
     };
 
     var REPO = 'github.com/nexu-io/open-design';
-    var PAGE = 'landing_home';
+    var PAGE = ${JSON.stringify(pageName)};
 
     var localeNow = function () {
       return (document.documentElement.getAttribute('lang') || 'en').toLowerCase();
@@ -67,12 +67,14 @@ function buildTrackerScript(): string {
       return t.trim().replace(/\\s+/g, ' ').slice(0, 80);
     };
 
-    // Unified click event matching the埋点文档2.0 schema:
-    // event = 'landing_home_click', distinguished by area + element.
+    // Unified click event matching the埋点文档2.0 schema: a single 'ui_click'
+    // event distinguished by the page_name / area / element triplet (the page
+    // is now carried as a property, not baked into the event name, so every
+    // landing route reports correctly instead of masquerading as the home page).
     var click = function (el, element, extra) {
       var props = { page_name: PAGE, locale: localeNow(), area: areaOf(el), element: element };
       if (extra) for (var k in extra) props[k] = extra[k];
-      window.__odTrack('landing_home_click', props);
+      window.__odTrack('ui_click', props);
     };
 
     // Semantic page_view (in addition to PostHog's auto $pageview) so the
@@ -121,8 +123,21 @@ function buildTrackerScript(): string {
       var lowerHref = href.toLowerCase();
       var lowerLabel = textOf(link).toLowerCase();
 
+      // Explicit placement (hero / cta / nav) so the multiple desktop-download
+      // buttons are distinguishable in PostHog without decoding section ids;
+      // falls back to the section area when the attribute is absent.
+      var placementOf = function (el) { return (el.getAttribute && el.getAttribute('data-download-placement')) || areaOf(el); };
       if (lowerHref.indexOf(REPO + '/releases') !== -1 || /\\.(dmg|exe|appimage|deb|zip)(\\?|$)/.test(lowerHref)) {
-        click(link, 'download_desktop', { platform: platformNow(), link_url: href });
+        click(link, 'download_desktop', { platform: platformNow(), link_url: href, download_target: 'direct', placement: placementOf(link) });
+        return;
+      }
+      // Download CTAs that route to the /download/ installer-matrix page instead
+      // of a direct asset (the header nav button opts out of direct-asset
+      // rewriting via data-download-page; sub-page CTAs link to /download/
+      // outright). Still a download intent — emit under the same element so the
+      // funnel is complete, distinguished by download_target.
+      if (link.getAttribute('data-download-page') !== null || /\\/download\\/?$/.test((link.pathname || '').toLowerCase())) {
+        click(link, 'download_desktop', { platform: platformNow(), link_url: href, download_target: 'download_page', placement: placementOf(link) });
         return;
       }
       if (lowerHref === 'https://' + REPO || lowerHref === 'https://' + REPO + '/' || lowerLabel.indexOf('star') !== -1) {
@@ -146,7 +161,11 @@ function buildTrackerScript(): string {
   })();`;
 }
 
-export function posthogHeadHtml(apiKey: string | undefined, host: string | undefined): string {
+export function posthogHeadHtml(
+  apiKey: string | undefined,
+  host: string | undefined,
+  pageName = 'landing_home',
+): string {
   const key = apiKey || DEFAULT_KEY;
   if (!key) return '';
   const apiHost = host || DEFAULT_HOST;
@@ -162,7 +181,7 @@ export function posthogHeadHtml(apiKey: string | undefined, host: string | undef
     disable_session_recording: true,
     persistence: 'localStorage+cookie'
   });
-${buildTrackerScript()}
+${buildTrackerScript(pageName)}
 </script>`;
 }
 
