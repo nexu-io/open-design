@@ -14,6 +14,9 @@ import { buttonVariants } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { cn, compactNumber } from "@/lib/utils";
 
+// Renderiza sob demanda (lê contagens do banco a cada acesso).
+export const dynamic = "force-dynamic";
+
 async function getStats() {
   try {
     const [players, tournaments, heroes, matches] = await Promise.all([
