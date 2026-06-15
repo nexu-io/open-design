@@ -27,20 +27,20 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$provider" ] || [ -z "$mode" ]; then
-  echo "usage: $0 --provider <runner|hosted> --mode <default|nix|full> [--results-path <path>]" >&2
+  echo "usage: $0 --provider <owned|github> --mode <default|nix|full> [--results-path <path>]" >&2
   exit 2
 fi
 
 case "$provider" in
-  runner)
+  owned)
     if [ "$mode" != "default" ]; then
-      echo "runner only supports --mode default" >&2
+      echo "owned only supports --mode default" >&2
       exit 2
     fi
     ;;
-  hosted)
+  github)
     if [ "$mode" != "nix" ] && [ "$mode" != "full" ]; then
-      echo "hosted only supports --mode nix|full" >&2
+      echo "github only supports --mode nix|full" >&2
       exit 2
     fi
     ;;
@@ -119,13 +119,13 @@ append_result() {
 is_real_action() {
   local action="$1"
   case "$provider:$mode:$action" in
-    runner:default:nix)
+    owned:default:nix)
       return 1
       ;;
-    hosted:nix:nix)
+    github:nix:nix)
       return 0
       ;;
-    hosted:nix:*)
+    github:nix:*)
       return 1
       ;;
     *)

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-type Provider = "runner" | "hosted";
+type Provider = "owned" | "github";
 type ActionName =
   | "nix"
   | "guard"
@@ -72,10 +72,10 @@ const token = process.env.GITHUB_TOKEN ?? "";
 const repository = process.env.GITHUB_REPOSITORY ?? "";
 let targetSha = process.env.TARGET_SHA ?? "";
 let targetEvent = process.env.TARGET_EVENT ?? "";
-const runnerWorkflow = process.env.RUNNER_WORKFLOW ?? "ci-runner";
-const hostedWorkflow = process.env.HOSTED_WORKFLOW ?? "ci-hosted";
-const runnerRunId = process.env.RUNNER_RUN_ID ?? "";
-const hostedRunId = process.env.HOSTED_RUN_ID ?? "";
+const ownedWorkflow = process.env.OWNED_WORKFLOW ?? "ci-owned";
+const githubWorkflow = process.env.GITHUB_HOSTED_WORKFLOW ?? "ci-github";
+const ownedRunId = process.env.OWNED_RUN_ID ?? "";
+const githubRunId = process.env.GITHUB_RUN_ID_OVERRIDE ?? "";
 const timeoutSeconds = Number(process.env.POLL_TIMEOUT_SECONDS ?? "3600");
 const pollIntervalSeconds = Number(process.env.POLL_INTERVAL_SECONDS ?? "20");
 const summaryPath = process.env.GITHUB_STEP_SUMMARY ?? "";
@@ -210,7 +210,7 @@ function parseWorkflowResult(raw: unknown): WorkflowResult {
   if (data.schemaVersion !== 1) {
     throw new Error(`unsupported schemaVersion: ${String(data.schemaVersion)}`);
   }
-  if (data.provider !== "runner" && data.provider !== "hosted") {
+  if (data.provider !== "owned" && data.provider !== "github") {
     throw new Error(`unsupported provider: ${String(data.provider)}`);
   }
   if (!Array.isArray(data.actions)) {
@@ -290,7 +290,7 @@ function validateIdentity(result: WorkflowResult, provider: Provider): void {
   if (result.headSha !== targetSha) {
     throw new Error(`${provider} result headSha ${result.headSha} does not match target ${targetSha}`);
   }
-  const explicitRunId = provider === "runner" ? runnerRunId : hostedRunId;
+  const explicitRunId = provider === "owned" ? ownedRunId : githubRunId;
   const skipStrictEventMatch = targetEvent === "workflow_dispatch" && explicitRunId !== "";
   if (!skipStrictEventMatch && result.eventName !== targetEvent && result.eventName !== "workflow_dispatch") {
     throw new Error(`${provider} result event ${result.eventName} does not match target ${targetEvent}`);
@@ -301,11 +301,11 @@ function validateIdentity(result: WorkflowResult, provider: Provider): void {
   }
 }
 
-function summarizeAction(action: ActionName, runner: WorkflowResult, hosted: WorkflowResult): {
+function summarizeAction(action: ActionName, owned: WorkflowResult, github: WorkflowResult): {
   passed: boolean;
   reason: string;
 } {
-  const candidates = [runner, hosted]
+  const candidates = [owned, github]
     .flatMap((result) => result.actions.filter((entry) => entry.action === action).map((entry) => ({ ...entry, provider: result.provider })));
   const realCandidates = candidates.filter((entry) => entry.kind === "real");
   if (realCandidates.some((entry) => entry.status === "success")) {
@@ -326,23 +326,23 @@ async function appendSummary(lines: string[]): Promise<void> {
 
 async function main(): Promise<void> {
   if (!targetSha || !targetEvent) {
-    const seedRunId = runnerRunId || hostedRunId;
+    const seedRunId = ownedRunId || githubRunId;
     if (!seedRunId) {
-      throw new Error("TARGET_SHA and TARGET_EVENT are required unless a runner_run_id or hosted_run_id is provided");
+      throw new Error("TARGET_SHA and TARGET_EVENT are required unless an owned_run_id or github_run_id is provided");
     }
     const seedRun = await fetchRunById(seedRunId);
     targetSha ||= seedRun.head_sha;
     targetEvent ||= seedRun.event;
   }
 
-  const runnerRun = await waitForRun(runnerWorkflow, runnerRunId);
-  const hostedRun = await waitForRun(hostedWorkflow, hostedRunId);
+  const ownedRun = await waitForRun(ownedWorkflow, ownedRunId);
+  const githubRun = await waitForRun(githubWorkflow, githubRunId);
 
-  const runnerResult = await downloadResultArtifact("runner", runnerRun.id);
-  const hostedResult = await downloadResultArtifact("hosted", hostedRun.id);
+  const ownedResult = await downloadResultArtifact("owned", ownedRun.id);
+  const githubResult = await downloadResultArtifact("github", githubRun.id);
 
-  validateIdentity(runnerResult, "runner");
-  validateIdentity(hostedResult, "hosted");
+  validateIdentity(ownedResult, "owned");
+  validateIdentity(githubResult, "github");
 
   const failures: string[] = [];
   const summaryLines = [
@@ -350,15 +350,15 @@ async function main(): Promise<void> {
     "",
     `Target SHA: \`${targetSha}\``,
     `Target event: \`${targetEvent}\``,
-    `Runner run: [${runnerRun.id}](${runnerRun.html_url}) conclusion=\`${runnerRun.conclusion ?? "null"}\``,
-    `Hosted run: [${hostedRun.id}](${hostedRun.html_url}) conclusion=\`${hostedRun.conclusion ?? "null"}\` mode=\`${hostedResult.mode}\``,
+    `Owned run: [${ownedRun.id}](${ownedRun.html_url}) conclusion=\`${ownedRun.conclusion ?? "null"}\``,
+    `GitHub-hosted run: [${githubRun.id}](${githubRun.html_url}) conclusion=\`${githubRun.conclusion ?? "null"}\` mode=\`${githubResult.mode}\``,
     "",
     "| Action | Result | Reason |",
     "| --- | --- | --- |",
   ];
 
   for (const action of ACTIONS) {
-    const outcome = summarizeAction(action, runnerResult, hostedResult);
+    const outcome = summarizeAction(action, ownedResult, githubResult);
     summaryLines.push(`| \`${action}\` | ${outcome.passed ? "pass" : "fail"} | ${outcome.reason} |`);
     if (!outcome.passed) {
       failures.push(`${action}: ${outcome.reason}`);

@@ -1,4 +1,4 @@
-name: ci-runner
+name: ci-owned
 
 on:
   workflow_dispatch:
@@ -7,12 +7,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-runner-${{ github.event.pull_request.number || github.ref }}
+  group: ci-owned-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  runner:
-    name: Runner CI
+  owned:
+    name: Owned CI
     runs-on: [self-hosted, Linux, ARM64, nexu-spark, open-design-ci]
     timeout-minutes: 120
     env:
@@ -24,15 +24,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Run runner CI protocol
-        run: .github/workflows/scripts/ci-gate.sh --provider runner --mode default --results-path .od/ci-gate/ci-results.json
+      - name: Run owned CI protocol
+        run: .github/workflows/scripts/ci-gate.sh --provider owned --mode default --results-path .od/ci-gate/ci-results.json
 
-      - name: Upload runner CI results
+      - name: Upload owned CI results
         if: ${{ always() }}
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: ci-results-runner
+          name: ci-results-owned
           path: .od/ci-gate/ci-results.json
           if-no-files-found: error
           retention-days: 7

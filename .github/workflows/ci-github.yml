@@ -1,10 +1,10 @@
-name: ci-hosted
+name: ci-github
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Hosted CI mode
+        description: GitHub-hosted CI mode
         required: true
         type: choice
         default: nix
@@ -16,16 +16,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-hosted-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
+  group: ci-github-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
   cancel-in-progress: true
 
 jobs:
-  hosted:
-    name: Hosted CI
+  github:
+    name: GitHub-hosted CI
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      CI_GATE_HOSTED_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
+      CI_GATE_GITHUB_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'nix' }}
       CI_GATE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       CI_GATE_PLAYWRIGHT_INSTALL_FLAGS: --with-deps chromium
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
@@ -46,15 +46,15 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = true
 
-      - name: Run hosted CI protocol
-        run: .github/workflows/scripts/ci-gate.sh --provider hosted --mode "$CI_GATE_HOSTED_MODE" --results-path .od/ci-gate/ci-results.json
+      - name: Run GitHub-hosted CI protocol
+        run: .github/workflows/scripts/ci-gate.sh --provider github --mode "$CI_GATE_GITHUB_MODE" --results-path .od/ci-gate/ci-results.json
 
-      - name: Upload hosted CI results
+      - name: Upload GitHub-hosted CI results
         if: ${{ always() }}
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
-          name: ci-results-hosted
+          name: ci-results-github
           path: .od/ci-gate/ci-results.json
           if-no-files-found: error
           retention-days: 7
