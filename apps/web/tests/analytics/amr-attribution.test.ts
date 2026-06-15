@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  amrHandoffDeviceId,
   attributedAmrUrl,
   readAmrAttribution,
   recordAmrEntry,
@@ -206,5 +207,40 @@ describe('AMR attribution helper', () => {
     expect(
       attributedAmrUrl('https://open-design.ai/amr/wallet', attribution, null),
     ).not.toContain('od_device_id');
+  });
+
+  it('resolves the AMR handoff device id to the canonical id, gated on consent', () => {
+    // Consent off: never forwarded, regardless of available ids.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: false,
+        resolvedDeviceId: 'od-install-abc',
+        installationId: 'od-install-abc',
+      }),
+    ).toBeNull();
+    // Consent on: prefer the resolved (canonical telemetry) device id.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: true,
+        resolvedDeviceId: 'od-install-abc',
+        installationId: 'config-install-xyz',
+      }),
+    ).toBe('od-install-abc');
+    // Consent on, resolved id not hydrated yet: fall back to installationId.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: true,
+        resolvedDeviceId: null,
+        installationId: 'config-install-xyz',
+      }),
+    ).toBe('config-install-xyz');
+    // Consent on but neither available: omit rather than invent one.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: true,
+        resolvedDeviceId: null,
+        installationId: null,
+      }),
+    ).toBeNull();
   });
 });

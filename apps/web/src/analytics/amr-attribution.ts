@@ -97,6 +97,22 @@ export function readAmrAttribution(now: Date = new Date()): AmrEntryAttribution 
   }
 }
 
+// Resolves the device id to forward to AMR on a handoff. Returns the canonical
+// resolved device id (= installationId once daemon config hydrates, the value
+// telemetry / PostHog / Langfuse key on) ONLY when the user has opted into
+// metrics; otherwise null. Falls back to config.installationId before the
+// resolved id is available, never the mount-time bootstrap UUID — so the AMR
+// join key always matches the telemetry device identity (including after a
+// Delete-my-data installationId rotation), not a value that diverges from it.
+export function amrHandoffDeviceId(input: {
+  metricsConsent: boolean;
+  resolvedDeviceId: string | null;
+  installationId: string | null | undefined;
+}): string | null {
+  if (!input.metricsConsent) return null;
+  return input.resolvedDeviceId ?? input.installationId ?? null;
+}
+
 // Builds the AMR handoff URL with Open Design attribution params. When
 // `deviceId` is provided it is added as `od_device_id`, so AMR can link the
 // landing/registration directly back to this Open Design install instead of
