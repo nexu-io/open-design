@@ -224,12 +224,15 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
     })).resolves.toBe(indexFile);
   });
 
-  // #4308: agent-agnostic recovery. When a turn produced exactly one HTML file
-  // and the assistant echoed an HTML artifact, bind to that same-turn write even
-  // if the echo differs slightly — regardless of which agent ran (previously
-  // gated behind allowAnyHtmlWrite=agentId==='claude'). This is the duplicate
-  // the issue targets for non-Claude filesystem-backed CLIs.
-  it('binds a single same-turn HTML write when the echoed artifact differs (agent-agnostic)', async () => {
+  // #4308: agent-agnostic recovery is the *normalized exact content match* —
+  // it already binds for any filesystem-backed CLI (not just Claude) when the
+  // written file and the echoed artifact are the same document. We deliberately
+  // do NOT bind on a content *mismatch*: a same-turn HTML file whose content
+  // differs from the echo is a genuinely different document and must persist on
+  // its own. (A blind single-file bind also mis-fired across queued runs, where
+  // a prior run's artifact is still reported as "produced this turn" — the
+  // app-restoration regression that motivated dropping it.)
+  it('does not bind a single same-turn HTML file whose content differs from the echo', async () => {
     const indexFile = {
       name: 'index.html',
       path: 'index.html',
@@ -243,12 +246,12 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
       artifactHtml: html,
       producedFiles: [indexFile] as never,
       readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
-    })).resolves.toBe(indexFile);
+    })).resolves.toBeNull();
   });
 
-  // ...but never arbitrarily pick when several same-turn HTML files differ —
-  // binding the wrong one could clobber the user's other in-flight artifact.
-  it('avoids arbitrary selection when multiple same-turn HTML files differ', async () => {
+  // ...and never bind when several same-turn HTML files all differ from the
+  // echo — binding the wrong one could clobber the user's other in-flight work.
+  it('avoids selection when multiple same-turn HTML files differ from the echo', async () => {
     const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
     const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
 
@@ -261,17 +264,19 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
     })).resolves.toBeNull();
   });
 
-  // Multiple same-turn HTML files with identical content are unambiguous — bind.
-  it('binds the first when multiple same-turn HTML files share identical content', async () => {
+  // When multiple same-turn HTML files exist, bind the one whose normalized
+  // content matches the echo — unambiguous regardless of which agent ran.
+  it('binds the exact normalized match among multiple same-turn HTML files', async () => {
     const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
     const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
-    const sameContent = html.replace('Demo', 'SAME');
 
     await expect(findSameTurnHtmlWriteForRecoveredArtifact({
       artifactHtml: html,
       producedFiles: [a, b] as never,
-      readProjectHtml: vi.fn(async () => sameContent),
-    })).resolves.toBe(a);
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'b.html' ? `﻿${html}\r\n` : html.replace('Demo', 'AAA'),
+      ),
+    })).resolves.toBe(b);
   });
 
   it('ignores non-HTML same-turn files', async () => {

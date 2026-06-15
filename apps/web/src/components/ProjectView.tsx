@@ -6857,18 +6857,19 @@ export async function findSameTurnHtmlWriteForRecoveredArtifact({
   if (candidates.length === 0) return null;
   const contents = await Promise.all(candidates.map((file) => readProjectHtml(file.name)));
   const normalized = contents.map(normalizeHtmlForRecoveredArtifactComparison);
-  // Exact content match is unambiguous — safe for any agent.
+  // Bind only on an exact normalized-content match. This is inherently
+  // agent-agnostic (#4308): whenever a filesystem-backed CLI writes an HTML
+  // file and echoes the same document as an artifact, the normalized contents
+  // are equal and we suppress the duplicate — no Claude-specific gate needed.
+  //
+  // We deliberately do NOT bind on a content *mismatch*. A differing same-turn
+  // HTML file is a genuinely different document and must persist on its own.
+  // A blind single-file bind also mis-fired across queued runs: the pre-turn
+  // file snapshot for a queued run can predate the previous run's persist, so
+  // computeProducedFiles() reports that earlier artifact as "produced this
+  // turn" and we'd bind the echo to the wrong, unrelated file.
   const exact = candidates.find((_file, i) => normalized[i] === recovered);
-  if (exact) return exact;
-  // No exact match, but this turn produced HTML file(s) and the assistant
-  // echoed an HTML artifact (#4308: phenomenon-based, agent-agnostic — was
-  // previously gated behind allowAnyHtmlWrite=agentId==='claude'). Bind to the
-  // same-turn write to avoid persisting a duplicate, but only when the choice
-  // is unambiguous: exactly one HTML file, or several with identical content.
-  // Multiple differing same-turn HTML files → avoid arbitrary selection.
-  if (candidates.length === 1) return candidates[0] ?? null;
-  const allIdentical = normalized.every((c) => c !== '' && c === normalized[0]);
-  return allIdentical ? (candidates[0] ?? null) : null;
+  return exact ?? null;
 }
 
 function isHtmlProjectFile(file: ProjectFile): boolean {
