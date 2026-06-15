@@ -4257,10 +4257,10 @@ const LANDING_UI_COPY: LandingUiCopy = {
     },
   },
   tutorials: {
-    title: 'Tutorials',
-    seoTitle: 'Tutorials — Open Design',
+    title: 'Open Design Tutorials',
+    seoTitle: 'Open Design Tutorials — How to Use Open Design',
     description:
-      'Watch Open Design from the inside — getting-started walkthroughs, plugin tutorials, demos, and community deep-dives, curated from YouTube and embedded for in-page playback.',
+      'Learn how to use Open Design with step-by-step video tutorials — getting started, plugins, design systems, and real workflows. Every guide plays right on the page.',
     categoriesLabel: 'Tutorial categories',
     categories: {
       all: 'All',
