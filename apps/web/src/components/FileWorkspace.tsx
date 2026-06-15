@@ -4154,6 +4154,7 @@ function Tab({
     <div
       className={[
         'ws-tab',
+        'od-tooltip',
         meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
         active ? 'active' : '',
@@ -4172,6 +4173,8 @@ function Tab({
       aria-selected={active}
       tabIndex={0}
       title={tabTitle}
+      data-tooltip={tabTitle}
+      data-tooltip-placement="bottom"
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
       onDragOver={draggable ? onDragOver : undefined}
