@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import {
   buildManualEditBridge,
+  buildManualEditKeyboardGuard,
   isMeaningfulManualEditElement,
   isManualEditHostNode,
   isSourceMappableManualEditElement,
@@ -422,6 +423,182 @@ describe('manual edit bridge target normalization', () => {
     expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({
       type: 'od-edit-text-commit',
     }), '*');
+
+    dom.window.close();
+  });
+
+  it('removes a window keydown listener registered with the original callback, so the wrapper is not left firing', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+
+    dom.window.addEventListener('keydown', listener);
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    dom.window.removeEventListener('keydown', listener);
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    dom.window.close();
+  });
+
+  it('removes a document keydown listener registered with the original callback, so the wrapper is not left firing', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+
+    dom.window.document.addEventListener('keydown', listener);
+    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    dom.window.document.removeEventListener('keydown', listener);
+    dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    dom.window.close();
+  });
+
+  it('treats duplicate addEventListener with the same callback and capture as a no-op, matching native behavior', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+
+    dom.window.addEventListener('keydown', listener, true);
+    dom.window.addEventListener('keydown', listener, true); // duplicate — should be no-op
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1); // fires once, not twice
+
+    dom.window.removeEventListener('keydown', listener, true); // single remove clears it
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1); // no longer fires
+
+    dom.window.close();
+  });
+
+  it('matches the capture flag when removing a wrapped keydown listener', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const bubbleListener = vi.fn();
+    const captureListener = vi.fn();
+
+    dom.window.addEventListener('keydown', bubbleListener, false);
+    dom.window.addEventListener('keydown', captureListener, true);
+
+    dom.window.removeEventListener('keydown', bubbleListener, false);
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(bubbleListener).not.toHaveBeenCalled();
+    expect(captureListener).toHaveBeenCalledTimes(1);
+
+    dom.window.close();
+  });
+
+  it('cleans up wrapped entry after a once:true listener fires, allowing re-registration', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+
+    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1); // once fires once
+
+    // After once fires, the browser removed the handler; re-adding the same callback should work
+    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
+    expect(listener).toHaveBeenCalledTimes(2); // re-registered and fired again
+
+    dom.window.close();
+  });
+
+  it('cleans up wrapped entry when an AbortSignal aborts, allowing re-registration', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+    const controller = new dom.window.AbortController();
+
+    dom.window.addEventListener('keydown', listener, { signal: controller.signal, capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    controller.abort(); // browser removes the handler; our bookkeeping must also drop the entry
+
+    // Re-adding the same callback/capture should now succeed (not be treated as a duplicate)
+    const controller2 = new dom.window.AbortController();
+    dom.window.addEventListener('keydown', listener, { signal: controller2.signal, capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    dom.window.close();
+  });
+
+  it('allows re-adding a once listener after it was suppressed by the edit guard', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+
+    // Set editingEl so shouldBlock() returns true for events inside it
+    const editable = dom.window.document.createElement('div');
+    editable.setAttribute('data-od-editing', 'true');
+    dom.window.document.body.appendChild(editable);
+    (dom.window as any).__odEditGuard.editingEl = editable;
+
+    // Register a once listener on window (capture phase) — dispatch from inside editable so guard suppresses it
+    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
+    editable.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    expect(listener).not.toHaveBeenCalled(); // suppressed by guard
+
+    // The once handler was consumed (both by browser and our bookkeeping)
+    // Re-adding the same callback should work
+    (dom.window as any).__odEditGuard.editingEl = null; // clear guard so next event fires
+    dom.window.addEventListener('keydown', listener, { once: true, capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
+    expect(listener).toHaveBeenCalledTimes(1); // re-registered and fired
+
+    dom.window.close();
+  });
+
+  it('does not leave a stale entry when addEventListener is called with an already-aborted signal', () => {
+    const guardHtml = buildManualEditKeyboardGuard();
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body>${guardHtml}</body></html>`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const listener = vi.fn();
+    const controller = new dom.window.AbortController();
+    controller.abort(); // already aborted before registration
+
+    // Registering with an already-aborted signal should not leave a stale entry
+    dom.window.addEventListener('keydown', listener, { signal: controller.signal, capture: true });
+
+    // The listener should not fire (browser ignores registration with aborted signal)
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'a' }));
+    expect(listener).not.toHaveBeenCalled();
+
+    // Re-registering the same callback/capture should succeed (not be blocked by a stale dedup entry)
+    dom.window.addEventListener('keydown', listener, { capture: true });
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'b' }));
+    expect(listener).toHaveBeenCalledTimes(1);
 
     dom.window.close();
   });
