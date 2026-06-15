@@ -93,18 +93,20 @@ describe('countNewArtifacts', () => {
     ).toBe(0);
   });
 
-  it('counts generated image / video / audio artifacts (not just HTML)', () => {
+  it('counts generated image / video / audio / svg artifacts (not just HTML)', () => {
     // Media-kind projects produce non-HTML outputs; the old HTML-only
     // counter reported a false zero for these. Each distinct media file
-    // is one artifact.
+    // is one artifact. SVG is a renderable artifact too (kindFor buckets
+    // it as `sketch`), so a run that writes only `logo.svg` must count.
     expect(
       countNewArtifacts([
         ...pair('Write', '/proj/hero.png'),
         ...pair('Write', '/proj/promo.mp4'),
         ...pair('Write', '/proj/jingle.mp3'),
         ...pair('Write', '/proj/cover.webp'),
+        ...pair('Write', '/proj/logo.svg'),
       ]),
-    ).toBe(4);
+    ).toBe(5);
   });
 
   it('counts a single successful Write on a .html path', () => {

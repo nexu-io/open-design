@@ -68,6 +68,11 @@ const ARTIFACT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.gif',
   '.webp',
   '.avif',
+  // SVG renders as a user-facing artifact (`kindFor` buckets it as `sketch`,
+  // and the daemon / web artifact manifests treat `image/svg+xml` as a
+  // renderable output), so a run that writes only `logo.svg` must not report
+  // artifact_count: 0.
+  '.svg',
   // video
   '.mp4',
   '.mov',
