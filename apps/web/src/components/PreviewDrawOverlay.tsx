@@ -732,6 +732,14 @@ export function PreviewDrawOverlay({
   const activePreview = previewIndex !== null ? imagePreviews[previewIndex] ?? null : null;
   const canAddToInput = canSubmit;
   const canSend = canSubmit && !sendDisabled;
+  // The Queue action only differs from Send while a run is in flight: it stages
+  // the mark for the next turn. When the conversation is idle, queuing
+  // immediately drains and executes, so a standalone Queue control just
+  // duplicates Send and reads as a (non-existent) batch-hold — the confusion in
+  // #4367. Surface it only while sending is disabled, matching the comment
+  // composer (BoardComposerPopover), which gates Queue on the same state. To
+  // stage marks without sending at idle, the "add to input" action remains.
+  const showQueue = sendDisabled;
   const canUndo = (undoCount > 0 || hasBox) && !sending;
   const canRedo = redoCount > 0 && !sending;
   const chromeHidden = capturing || hideChrome;
@@ -1028,7 +1036,7 @@ export function PreviewDrawOverlay({
               }}
               onKeyDown={(e) => {
                 if (isImeComposing(e, composingRef.current)) return;
-                if (e.key === 'Enter') void send('queue');
+                if (e.key === 'Enter') void send(showQueue ? 'queue' : 'send');
               }}
             />
             <button
@@ -1051,26 +1059,28 @@ export function PreviewDrawOverlay({
                 <RemixIcon name="input-field" size={15} />
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => void send('queue')}
-              disabled={sending || !canSubmit}
-              aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              className="preview-draw-icon-action"
-              style={{
-                ...drawActionButtonStyle(false),
-                opacity: canSubmit ? 1 : 0.4,
-                cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
-              }}
-            >
-              {pendingAction === 'queue' ? (
-                <Icon name="spinner" size={14} />
-              ) : (
-                <RemixIcon name="list-check-2" size={15} />
-              )}
-            </button>
+            {showQueue ? (
+              <button
+                type="button"
+                onClick={() => void send('queue')}
+                disabled={sending || !canSubmit}
+                aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+                title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+                data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
+                className="preview-draw-icon-action"
+                style={{
+                  ...drawActionButtonStyle(false),
+                  opacity: canSubmit ? 1 : 0.4,
+                  cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
+                }}
+              >
+                {pendingAction === 'queue' ? (
+                  <Icon name="spinner" size={14} />
+                ) : (
+                  <RemixIcon name="list-check-2" size={15} />
+                )}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void send('send')}

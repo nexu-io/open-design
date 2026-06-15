@@ -2861,7 +2861,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Tablet');
   });
 
-  it('keeps the Draw bar open after queueing an annotation', () => {
+  it('keeps the Draw bar open after submitting an annotation', () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -2871,7 +2871,9 @@ describe('FileViewer tweaks toolbar', () => {
     clickAgentTool('draw-overlay-toggle');
     const note = screen.getByPlaceholderText('Add a note for this mark');
     fireEvent.change(note, { target: { value: 'mark this' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+    // The conversation is idle here, so Send is the submit affordance — Queue
+    // only appears while a run is in flight (#4367).
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();

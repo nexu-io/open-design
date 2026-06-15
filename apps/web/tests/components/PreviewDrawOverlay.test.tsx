@@ -106,7 +106,10 @@ describe('PreviewDrawOverlay', () => {
     expect(input?.style.maxWidth).toBe('100%');
   });
 
-  it('queues a note when Enter submits from the draw input', async () => {
+  it('submits a note via the primary Send action when Enter is pressed while idle', async () => {
+    // Enter maps to the primary submit, which is Send while idle — Queue only
+    // exists while a run is in flight (#4367), so Enter must not route through
+    // the now-hidden queue path at idle.
     const annotation = vi.fn();
     window.addEventListener('opendesign:annotation', annotation);
 
@@ -125,7 +128,7 @@ describe('PreviewDrawOverlay', () => {
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0].detail).toMatchObject({
-        action: 'queue',
+        action: 'send',
         note: 'Please inspect this panel.',
       });
     } finally {
