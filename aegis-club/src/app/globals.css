@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Inter", system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-zinc-200 antialiased;
+  background-image:
+    radial-gradient(900px 500px at 10% -10%, rgba(245, 196, 81, 0.06), transparent),
+    radial-gradient(800px 500px at 100% 0%, rgba(226, 54, 54, 0.06), transparent);
+  background-attachment: fixed;
+}
+
+/* Scrollbar discreta no tema escuro */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2f3a;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4150;
+  background-clip: padding-box;
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Cartão base reutilizado em toda a interface */
+  .card {
+    @apply rounded-2xl border border-surface-border bg-surface shadow-card;
+  }
+
+  .link-muted {
+    @apply text-zinc-400 transition-colors hover:text-zinc-100;
+  }
+
+  /* Gradiente de marca para títulos de destaque */
+  .text-brand-gradient {
+    @apply bg-gradient-to-r from-aegis via-aegis-soft to-dire-soft bg-clip-text text-transparent;
+  }
+}
