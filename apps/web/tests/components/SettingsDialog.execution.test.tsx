@@ -2123,17 +2123,17 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
-  it('autosaves CLI config locations from the execution form', async () => {
+  it('autosaves CLI env overrides from the execution form', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       { agents: availableAgents },
     );
 
     expect(
-      screen.getByLabelText('Codex/OpenAI proxy API key (CODEX_API_KEY)'),
+      screen.getByLabelText('Codex/OpenAI CLI API key (CODEX_API_KEY)'),
     ).toBeTruthy();
     expect(
-      screen.getByLabelText('Codex/OpenAI proxy API key (OPENAI_API_KEY · proxy/legacy)'),
+      screen.getByLabelText('Codex/OpenAI CLI API key (OPENAI_API_KEY)'),
     ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Codex home'), {

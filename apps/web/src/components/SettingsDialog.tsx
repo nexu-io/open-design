@@ -631,7 +631,7 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'claude',
     envKey: 'ANTHROPIC_API_KEY',
     labelKey: 'settings.cliEnvClaudeApiKey',
-    placeholder: 'Paste proxy API key',
+    placeholder: 'Paste CLI API key',
     secret: true,
   },
   {
@@ -664,7 +664,7 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    labelSuffix: 'OPENAI_API_KEY · proxy/legacy',
+    labelSuffix: 'OPENAI_API_KEY',
     placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
@@ -792,6 +792,14 @@ export function isValidApiBaseUrl(value: string): boolean {
   return Boolean(result.parsed && !result.error);
 }
 
+const AGENT_CLI_AUTH_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+]);
+const AGENT_CLI_BASE_URL_ENV_KEYS = new Set(['ANTHROPIC_BASE_URL', 'OPENAI_BASE_URL']);
+
 export function updateCurrentApiProtocolConfig(
   config: AppConfig,
   patch: Partial<ApiProtocolConfig>,
@@ -822,11 +830,23 @@ export function updateAgentCliEnvValue(
 ): AppConfig {
   const value = rawValue.trim();
   const agentCliEnv = { ...(config.agentCliEnv ?? {}) };
+  const agentCliEnvIntent = { ...(config.agentCliEnvIntent ?? {}) };
   const nextAgentEnv = { ...(agentCliEnv[agentId] ?? {}) };
+  const nextAgentIntent = { ...(agentCliEnvIntent[agentId] ?? {}) };
   if (value) {
     nextAgentEnv[envKey] = value;
   } else {
     delete nextAgentEnv[envKey];
+  }
+
+  const hasAuthKey = Object.keys(nextAgentEnv).some((key) => AGENT_CLI_AUTH_ENV_KEYS.has(key));
+  if (
+    (AGENT_CLI_AUTH_ENV_KEYS.has(envKey) && value) ||
+    (AGENT_CLI_BASE_URL_ENV_KEYS.has(envKey) && hasAuthKey)
+  ) {
+    nextAgentIntent.apiKeyOverride = true;
+  } else if (AGENT_CLI_AUTH_ENV_KEYS.has(envKey) && !hasAuthKey) {
+    delete nextAgentIntent.apiKeyOverride;
   }
 
   if (Object.keys(nextAgentEnv).length > 0) {
@@ -835,9 +855,16 @@ export function updateAgentCliEnvValue(
     delete agentCliEnv[agentId];
   }
 
+  if (Object.keys(nextAgentEnv).length > 0 && Object.keys(nextAgentIntent).length > 0) {
+    agentCliEnvIntent[agentId] = nextAgentIntent;
+  } else {
+    delete agentCliEnvIntent[agentId];
+  }
+
   return {
     ...config,
     agentCliEnv: Object.keys(agentCliEnv).length > 0 ? agentCliEnv : {},
+    agentCliEnvIntent: Object.keys(agentCliEnvIntent).length > 0 ? agentCliEnvIntent : {},
   };
 }
 

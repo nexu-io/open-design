@@ -4,6 +4,7 @@ export interface AgentModelPrefs {
 }
 
 export type AgentCliEnvPrefs = Record<string, Record<string, string>>;
+export type AgentCliEnvIntentPrefs = Record<string, { apiKeyOverride?: boolean }>;
 
 export interface TelemetryPrefs {
   metrics?: boolean;
@@ -30,6 +31,7 @@ export interface AppConfigPrefs {
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;
   agentCliEnv?: AgentCliEnvPrefs;
+  agentCliEnvIntent?: AgentCliEnvIntentPrefs;
   skillId?: string | null;
   designSystemId?: string | null;
   disabledSkills?: string[];
