@@ -12,6 +12,12 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './design-systems-c
 import { parseDesignSystemRenameArgs } from './design-system-rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
+import {
+  computeDesignSignatureFromText,
+  renderSignatureForTerminal,
+  diffDesignSignatures,
+  renderDiffForTerminal,
+} from './design-signature.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
@@ -277,6 +283,7 @@ const SUBCOMMAND_MAP = {
   'design-systems': runDesignSystems,
   craft: runCraft,
   diagnostics: runDiagnostics,
+  signature: runSignature,
   status: runStatus,
   version: runVersion,
   doctor: runDoctor,
@@ -6580,6 +6587,92 @@ Renames an editable (user-created) design system. Built-in systems are read-only
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
   const renamed = data.designSystem ?? data;
   console.log(`Renamed ${parsed.id} -> ${renamed.title ?? parsed.title}`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od signature <file> [--json]
+//
+// Prints the Design Signature for an artifact: a compact, deterministic
+// readout of its palette / type rhythm / spacing cadence / structural density,
+// plus a stable fingerprint that lets two versions be compared at a glance.
+// Reads from a file path or `-` for stdin. Pure computation — no daemon needed.
+// ---------------------------------------------------------------------------
+
+async function runSignature(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od signature <file>                 Print the design signature of an artifact.
+  od signature -                      Read the artifact from stdin.
+  od signature <file> --against <old> Show what changed since a previous version.
+
+Options:
+  --against <file>           Diff against a previous artifact and list the changes.
+  --json                     Emit the signature (or diff) as JSON.
+
+The signature scores four traits (palette, rhythm, cadence, density) from the
+design tokens the artifact uses, with a composite vitality score and a stable
+fingerprint. With --against, it also prints a plain-language list of what
+changed since the previous version.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+
+  const json = args.includes('--json');
+
+  // Parse --against <file> / --against=<file>, and exclude its value from the
+  // positional scan so the previous-version path isn't read as the target.
+  let against;
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--against') {
+      against = args[i + 1];
+      i++;
+      continue;
+    }
+    if (a.startsWith('--against=')) {
+      against = a.slice('--against='.length);
+      continue;
+    }
+    if (!a.startsWith('-')) positionals.push(a);
+  }
+
+  const target = positionals[0];
+  if (!target) {
+    console.error('Usage: od signature <file> [--against <file>] [--json]');
+    process.exit(2);
+  }
+  if (args.includes('--against') && !against) {
+    console.error('--against requires a file path.');
+    process.exit(2);
+  }
+
+  const read = (path) => {
+    try {
+      return readFileSync(path === '-' ? 0 : path, 'utf8');
+    } catch (err) {
+      console.error(`Cannot read ${path === '-' ? 'stdin' : path}: ${err?.message ?? err}`);
+      process.exit(1);
+    }
+  };
+
+  const signature = computeDesignSignatureFromText(read(target));
+
+  if (against) {
+    const prev = computeDesignSignatureFromText(read(against));
+    const diff = diffDesignSignatures(prev, signature);
+    if (json) {
+      process.stdout.write(JSON.stringify({ signature, diff }, null, 2) + '\n');
+      return;
+    }
+    console.log(renderDiffForTerminal(signature, diff));
+    return;
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify(signature, null, 2) + '\n');
+    return;
+  }
+  console.log(renderSignatureForTerminal(signature));
 }
 
 async function runStatus(args) {
