@@ -1533,6 +1533,7 @@ export const esES: Dict = {
   'chat.attachAria': 'Adjuntar archivos',
   'chat.attachFolderAria': 'Subir carpeta',
   'chat.uploadNoProject': 'Inicia una conversación primero y luego adjunta archivos.',
+  'chat.uploadFolderFiltered': 'Se omitieron {count} archivo(s): carpetas de dependencias/compilación, archivos de más de 1 MB o por encima del límite de 120 archivos.',
   'chat.importTitle': 'Importar fuentes (próximamente)',
   'chat.importLabel': 'Importar',
   'chat.importComingSoon': 'Próximamente',

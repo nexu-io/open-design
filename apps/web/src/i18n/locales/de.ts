@@ -1533,6 +1533,7 @@ export const de: Dict = {
   'chat.attachAria': 'Dateien anhängen',
   'chat.attachFolderAria': 'Ordner hochladen',
   'chat.uploadNoProject': 'Starte zuerst eine Unterhaltung und hänge dann Dateien an.',
+  'chat.uploadFolderFiltered': '{count} Datei(en) übersprungen: Abhängigkeits-/Build-Ordner, Dateien über 1 MB oder mehr als das Limit von 120 Dateien.',
   'chat.importTitle': 'Quellen importieren (demnächst)',
   'chat.importLabel': 'Importieren',
   'chat.importComingSoon': 'Demnächst',

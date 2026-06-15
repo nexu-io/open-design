@@ -1533,6 +1533,7 @@ export const uk: Dict = {
   'chat.attachAria': 'Прикріпити файли',
   'chat.attachFolderAria': 'Завантажити папку',
   'chat.uploadNoProject': 'Спочатку розпочніть розмову, потім прикріпіть файли.',
+  'chat.uploadFolderFiltered': 'Пропущено {count} файл(ів): теки залежностей/збірки, файли понад 1 МБ або понад ліміт у 120 файлів.',
   'chat.importTitle': 'Імпортувати джерела (скоро)',
   'chat.importLabel': 'Імпортувати',
   'chat.importComingSoon': 'Скоро',

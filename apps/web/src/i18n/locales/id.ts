@@ -1533,6 +1533,7 @@ export const id: Dict = {
   'chat.attachAria': 'Lampirkan file atau konteks',
   'chat.attachFolderAria': 'Unggah folder',
   'chat.uploadNoProject': 'Mulai percakapan dulu, lalu lampirkan file.',
+  'chat.uploadFolderFiltered': 'Melewati {count} file: folder dependensi/build, file di atas 1 MB, atau melebihi batas 120 file.',
   'chat.importTitle': 'Impor',
   'chat.importLabel': 'Impor konteks',
   'chat.importComingSoon': 'Segera hadir',

@@ -1533,6 +1533,7 @@ export const tr: Dict = {
   'chat.attachAria': 'Dosyaları iliştirin',
   'chat.attachFolderAria': 'Klasör yükle',
   'chat.uploadNoProject': 'Önce bir sohbet başlatın, ardından dosya ekleyin.',
+  'chat.uploadFolderFiltered': '{count} dosya atlandı: bağımlılık/derleme klasörleri, 1 MB üzerindeki dosyalar veya 120 dosya sınırının üzerindekiler.',
   'chat.importTitle': 'Kaynakları içe aktar (yakında)',
   'chat.importLabel': 'İçe aktar',
   'chat.importComingSoon': 'Yakında',

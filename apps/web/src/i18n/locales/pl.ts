@@ -1533,6 +1533,7 @@ export const pl: Dict = {
   'chat.attachAria': 'Załącz pliki',
   'chat.attachFolderAria': 'Prześlij folder',
   'chat.uploadNoProject': 'Najpierw rozpocznij rozmowę, a następnie załącz pliki.',
+  'chat.uploadFolderFiltered': 'Pominięto {count} plik(ów): foldery zależności/kompilacji, pliki powyżej 1 MB lub powyżej limitu 120 plików.',
   'chat.importTitle': 'Importuj źródła (wkrótce)',
   'chat.importLabel': 'Importuj',
   'chat.importComingSoon': 'Wkrótce',

@@ -1533,6 +1533,7 @@ export const hu: Dict = {
   'chat.attachAria': 'Fájlok csatolása',
   'chat.attachFolderAria': 'Mappa feltöltése',
   'chat.uploadNoProject': 'Először indíts el egy beszélgetést, majd csatolj fájlokat.',
+  'chat.uploadFolderFiltered': '{count} fájl kihagyva: függőségi/build mappák, 1 MB feletti fájlok vagy a 120 fájlos korláton túl.',
   'chat.importTitle': 'Források importálása (hamarosan)',
   'chat.importLabel': 'Importálás',
   'chat.importComingSoon': 'Hamarosan',

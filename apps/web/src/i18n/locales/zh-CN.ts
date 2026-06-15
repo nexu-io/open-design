@@ -1533,6 +1533,7 @@ export const zhCN: Dict = {
   'chat.attachAria': '附加文件',
   'chat.attachFolderAria': '上传文件夹',
   'chat.uploadNoProject': '请先开始对话，再添加文件。',
+  'chat.uploadFolderFiltered': '已跳过 {count} 个文件：依赖/构建文件夹、超过 1 MB 的文件，或超出 120 个文件上限。',
   'chat.importTitle': '导入素材（即将上线）',
   'chat.importLabel': '导入',
   'chat.importComingSoon': '即将上线',

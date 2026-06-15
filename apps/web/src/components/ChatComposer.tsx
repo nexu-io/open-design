@@ -52,6 +52,7 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { selectLocalCodeFiles } from '../utils/localCodeFiles';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -1227,6 +1228,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
+    async function uploadFolderSelection(selected: File[]) {
+      // `webkitdirectory` hands us the whole subtree, so run it through the same
+      // staging filter the design-system flow uses (skips node_modules/.git/dist,
+      // drops >1 MiB blobs, caps at 120 files, dedupes). Without this, "attach a
+      // codebase" would POST thousands of irrelevant files. See #211.
+      const staged = selectLocalCodeFiles(selected);
+      const dropped = selected.length - staged.length;
+      await uploadFiles(staged);
+      if (dropped > 0) {
+        // Don't clobber an upload error; only note the silent count mismatch
+        // when the upload itself was otherwise clean.
+        setUploadError((prev) => prev ?? t('chat.uploadFolderFiltered', { count: dropped }));
+      }
+    }
+
     async function uploadClipboardImagesFromAsyncClipboard() {
       if (!navigator.clipboard?.read) return false;
       try {
@@ -2115,7 +2131,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               style={{ display: 'none' }}
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
-                void uploadFiles(files);
+                void uploadFolderSelection(files);
                 e.target.value = '';
               }}
             />

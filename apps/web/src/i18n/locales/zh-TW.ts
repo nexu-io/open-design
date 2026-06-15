@@ -1533,6 +1533,7 @@ export const zhTW: Dict = {
   'chat.attachAria': '附加檔案',
   'chat.attachFolderAria': '上傳資料夾',
   'chat.uploadNoProject': '請先開始對話，再附加檔案。',
+  'chat.uploadFolderFiltered': '已略過 {count} 個檔案：相依/建置資料夾、超過 1 MB 的檔案，或超出 120 個檔案上限。',
   'chat.importTitle': '匯入素材（即將上線）',
   'chat.importLabel': '匯入',
   'chat.importComingSoon': '即將上線',

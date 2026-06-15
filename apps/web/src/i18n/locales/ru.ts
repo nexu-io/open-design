@@ -1533,6 +1533,7 @@ export const ru: Dict = {
   'chat.attachAria': 'Прикрепить файлы',
   'chat.attachFolderAria': 'Загрузить папку',
   'chat.uploadNoProject': 'Сначала начните разговор, затем прикрепите файлы.',
+  'chat.uploadFolderFiltered': 'Пропущено файлов: {count} — папки зависимостей/сборки, файлы больше 1 МБ или сверх лимита в 120 файлов.',
   'chat.importTitle': 'Импортировать источники (скоро)',
   'chat.importLabel': 'Импорт',
   'chat.importComingSoon': 'Скоро',

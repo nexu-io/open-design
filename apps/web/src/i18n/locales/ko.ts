@@ -1533,6 +1533,7 @@ export const ko: Dict = {
   'chat.attachAria': '파일 첨부',
   'chat.attachFolderAria': '폴더 업로드',
   'chat.uploadNoProject': '먼저 대화를 시작한 후 파일을 첨부하세요.',
+  'chat.uploadFolderFiltered': '{count}개 파일을 건너뛰었습니다: 의존성/빌드 폴더, 1 MB 초과 파일 또는 120개 파일 제한 초과.',
   'chat.importTitle': '소스 가져오기 (곧 지원 예정)',
   'chat.importLabel': '가져오기',
   'chat.importComingSoon': '곧 지원될 예정입니다',

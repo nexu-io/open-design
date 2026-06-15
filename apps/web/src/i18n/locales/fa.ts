@@ -1533,6 +1533,7 @@ export const fa: Dict = {
   'chat.attachAria': 'ضمیمه کردن فایل‌ها',
   'chat.attachFolderAria': 'بارگذاری پوشه',
   'chat.uploadNoProject': 'ابتدا یک گفتگو را شروع کنید، سپس فایل‌ها را پیوست کنید.',
+  'chat.uploadFolderFiltered': '{count} فایل نادیده گرفته شد: پوشه‌های وابستگی/ساخت، فایل‌های بزرگ‌تر از ۱ مگابایت یا بیش از محدودیت ۱۲۰ فایل.',
   'chat.importTitle': 'وارد کردن منابع (به زودی)',
   'chat.importLabel': 'وارد کردن',
   'chat.importComingSoon': 'به زودی',

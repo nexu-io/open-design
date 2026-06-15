@@ -22,6 +22,13 @@ vi.mock('../../src/providers/registry', async () => {
 
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 
+function fileAt(relPath: string, content = 'x'): File {
+  const name = relPath.split('/').pop() ?? relPath;
+  const file = new File([content], name, { type: 'text/plain' });
+  Object.defineProperty(file, 'webkitRelativePath', { value: relPath, configurable: true });
+  return file;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -71,6 +78,63 @@ describe('ChatComposer folder upload (#211)', () => {
 
     await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
     expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [file]);
+  });
+
+  it('drops dependency/build dirs from a folder selection and surfaces the skipped count', async () => {
+    const kept = fileAt('src/index.ts');
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'src/index.ts', name: 'index.ts', kind: 'file', size: 1 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: {
+        files: [kept, fileAt('node_modules/dep/index.js'), fileAt('.git/config')],
+      },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    // Only the real source file reaches the upload path.
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [kept]);
+    // The two skipped entries are reported, not silently dropped.
+    await waitFor(() => expect(screen.getByText(/Skipped 2 file/)).toBeTruthy());
+  });
+
+  it('does not filter the plain file picker (only the directory path is guarded)', async () => {
+    const junk = fileAt('node_modules/dep/index.js');
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'index.js', name: 'index.js', kind: 'file', size: 1 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [junk] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledTimes(1));
+    expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [junk]);
   });
 
   it('shows a hint instead of failing silently when no conversation exists', async () => {

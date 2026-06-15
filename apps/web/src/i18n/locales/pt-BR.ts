@@ -1533,6 +1533,7 @@ export const ptBR: Dict = {
   'chat.attachAria': 'Anexar arquivos',
   'chat.attachFolderAria': 'Enviar pasta',
   'chat.uploadNoProject': 'Inicie uma conversa primeiro e depois anexe arquivos.',
+  'chat.uploadFolderFiltered': '{count} arquivo(s) ignorado(s): pastas de dependências/build, arquivos acima de 1 MB ou além do limite de 120 arquivos.',
   'chat.importTitle': 'Importar fontes (em breve)',
   'chat.importLabel': 'Importar',
   'chat.importComingSoon': 'Em breve',

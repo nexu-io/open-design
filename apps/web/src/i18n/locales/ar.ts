@@ -1533,6 +1533,7 @@ export const ar: Dict = {
   'chat.attachAria': 'إرفاق ملفات',
   'chat.attachFolderAria': 'تحميل مجلد',
   'chat.uploadNoProject': 'ابدأ محادثة أولاً، ثم أرفق الملفات.',
+  'chat.uploadFolderFiltered': 'تم تخطّي {count} ملف: مجلّدات التبعيات/البناء، الملفات الأكبر من 1 ميغابايت، أو ما يتجاوز حدّ 120 ملفًا.',
   'chat.importTitle': 'استيراد المصادر (قريباً)',
   'chat.importLabel': 'استيراد',
   'chat.importComingSoon': 'قريباً',

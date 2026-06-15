@@ -1533,6 +1533,7 @@ export const ja: Dict = {
   'chat.attachAria': 'ファイルを添付',
   'chat.attachFolderAria': 'フォルダをアップロード',
   'chat.uploadNoProject': '先に会話を開始してから、ファイルを添付してください。',
+  'chat.uploadFolderFiltered': '{count} 件のファイルをスキップしました：依存関係・ビルドフォルダー、1 MB を超えるファイル、または 120 ファイルの上限超過。',
   'chat.importTitle': 'ソースをインポート（近日公開）',
   'chat.importLabel': 'インポート',
   'chat.importComingSoon': '近日公開',

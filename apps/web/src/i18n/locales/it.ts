@@ -1533,6 +1533,7 @@ export const it: Dict = {
   'chat.attachAria': 'Allega file',
   'chat.attachFolderAria': 'Carica cartella',
   'chat.uploadNoProject': 'Avvia prima una conversazione, poi allega i file.',
+  'chat.uploadFolderFiltered': '{count} file ignorati: cartelle di dipendenze/build, file oltre 1 MB o oltre il limite di 120 file.',
   'chat.importTitle': 'Importa fonti (presto disponibile)',
   'chat.importLabel': 'Importa',
   'chat.importComingSoon': 'Presto disponibile',

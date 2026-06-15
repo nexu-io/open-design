@@ -1533,6 +1533,7 @@ export const th: Dict = {
   'chat.attachAria': 'แนบไฟล์',
   'chat.attachFolderAria': 'อัปโหลดโฟลเดอร์',
   'chat.uploadNoProject': 'เริ่มการสนทนาก่อน แล้วจึงแนบไฟล์',
+  'chat.uploadFolderFiltered': 'ข้ามไฟล์ {count} รายการ: โฟลเดอร์ dependency/build ไฟล์ที่ใหญ่กว่า 1 MB หรือเกินขีดจำกัด 120 ไฟล์',
   'chat.importTitle': 'นำเข้าจากที่อื่น (เร็วๆ นี้)',
   'chat.importLabel': 'นำเข้า',
   'chat.importComingSoon': 'เร็วๆ นี้',
