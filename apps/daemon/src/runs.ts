@@ -7,6 +7,7 @@ import {
   normalizeRunToolBundleForRun,
   summarizeRunToolBundle,
 } from './run-tool-bundle.js';
+import { createRunLifecycleTracer } from './run-lifecycle-tracer.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -196,10 +197,7 @@ export function createChatRunService({
   };
 
   const start = (run, starter) => {
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      startRequestedAt: Date.now(),
-    };
+    createRunLifecycleTracer(run).mark('start_requested');
     void starter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });

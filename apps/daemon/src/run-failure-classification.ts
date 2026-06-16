@@ -98,6 +98,44 @@ function latestRetryable(
   return undefined;
 }
 
+function inferFailureStageFromEvents(
+  events: RunEventForFailureClassification[] | undefined,
+  fallback: TrackingRunFailureStage,
+): TrackingRunFailureStage {
+  let sawFirstToken = false;
+  let sawToolUse = false;
+  let sawOpenTool = false;
+  let sawArtifact = false;
+  const openTools = new Set<string>();
+
+  for (const rec of events ?? []) {
+    if (rec.event === 'live_artifact') sawArtifact = true;
+    if (rec.event !== 'agent') continue;
+    const data = rec.data && typeof rec.data === 'object'
+      ? rec.data as Record<string, unknown>
+      : {};
+    if (data.type === 'text_delta' || data.type === 'thinking_delta') {
+      sawFirstToken = true;
+    }
+    if (data.type === 'artifact' || data.type === 'live_artifact') {
+      sawArtifact = true;
+    }
+    if (data.type === 'tool_use' && typeof data.id === 'string') {
+      sawToolUse = true;
+      openTools.add(data.id);
+    }
+    if (data.type === 'tool_result' && typeof data.toolUseId === 'string') {
+      openTools.delete(data.toolUseId);
+    }
+  }
+
+  sawOpenTool = openTools.size > 0;
+  if (sawArtifact) return 'artifact_write';
+  if (sawOpenTool || sawToolUse) return 'tool_execution';
+  if (sawFirstToken) return 'child_close';
+  return fallback;
+}
+
 function collectFailureText(input: RunFailureClassificationInput): string {
   const parts: string[] = [];
   const statusError = readString(input.status.error);
@@ -360,7 +398,13 @@ export function classifyRunFailure(
 ): RunFailureClassification | undefined {
   if (input.result === 'success') return undefined;
   if (input.result === 'cancelled') {
-    return classification('user_cancel', 'user_cancelled', 'finalize', false, 'none');
+    return classification(
+      'user_cancel',
+      'user_cancelled',
+      inferFailureStageFromEvents(input.events, 'first_token_wait'),
+      false,
+      'none',
+    );
   }
 
   const errorCode = normalizeCode(input.errorCode ?? input.status.errorCode);
@@ -470,7 +514,7 @@ export function classifyRunFailure(
     return classification(
       'upstream_unavailable',
       upstreamDetail(text),
-      'first_token_wait',
+      inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
     );
@@ -480,7 +524,7 @@ export function classifyRunFailure(
     return classification(
       'empty_output',
       'empty_output',
-      'first_token_wait',
+      inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryableHint ?? true,
       'retry',
     );
@@ -493,7 +537,7 @@ export function classifyRunFailure(
       /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text)
         ? 'inactivity_timeout'
         : 'timeout',
-      'first_token_wait',
+      inferFailureStageFromEvents(input.events, 'first_token_wait'),
       retryable,
       retryable ? 'retry' : 'none',
     );
@@ -543,7 +587,7 @@ export function classifyRunFailure(
     return classification(
       'process_exit',
       processExitDetail(errorCode, text),
-      'child_close',
+      inferFailureStageFromEvents(input.events, 'child_close'),
       retryableHint ?? false,
       retryableHint ? 'retry' : 'none',
     );
