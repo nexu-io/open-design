@@ -636,8 +636,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           });
         }
       },
-      get contaminated() { 
-        return guard.contaminated; 
+      get contaminated() {
+        return guard.contaminated;
       },
     };
   }
@@ -1042,13 +1042,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const delta = extractOpenAIText(data);
-        if (delta) { 
-          guard.sendDelta(delta); 
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            ended = true; 
-            return true; 
-          } 
+        if (delta) {
+          guard.sendDelta(delta);
+          if (guard.contaminated) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
         }
         return false;
       });
@@ -1197,12 +1197,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const delta = extractOpenAIText(data);
-        if (delta) { guard.sendDelta(delta); 
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            ended = true; 
-            return true; 
-          } 
+        if (delta) { guard.sendDelta(delta);
+          if (guard.contaminated) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
         }
         return false;
       });
@@ -1323,13 +1323,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           return true;
         }
         const content = data.message?.content;
-        if (typeof content === 'string' && content) { 
-          guard.sendDelta(content); 
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            ended = true; 
-            return true; 
-          } 
+        if (typeof content === 'string' && content) {
+          guard.sendDelta(content);
+          if (guard.contaminated) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
         }
         return false;
       });
@@ -1589,9 +1589,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         // we want the user to see whatever the model decided to say.
         if (typeof delta.content === 'string' && delta.content) {
           guard.sendDelta(delta.content);
-          if (guard.contaminated) { 
-            sse.send('end', {}); 
-            return true; 
+          if (guard.contaminated) {
+            sse.send('end', {});
+            return true;
           }
         }
 

@@ -5,12 +5,45 @@ import { join } from 'node:path';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 
 const { saveTemplateMock } = vi.hoisted(() => ({
   saveTemplateMock: vi.fn(),
 }));
+
+const { buildSrcdocMock, canActivateSrcDocTransportMock } = vi.hoisted(() => ({
+  buildSrcdocMock: vi.fn(),
+  canActivateSrcDocTransportMock: vi.fn(),
+}));
+
+const { requestPreviewSnapshotMock } = vi.hoisted(() => ({
+  requestPreviewSnapshotMock: vi.fn(),
+}));
+
+vi.mock('../../src/runtime/srcdoc', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/srcdoc')>(
+    '../../src/runtime/srcdoc',
+  );
+  buildSrcdocMock.mockImplementation(actual.buildSrcdoc);
+  canActivateSrcDocTransportMock.mockImplementation(actual.canActivateSrcDocTransport);
+  return {
+    ...actual,
+    buildSrcdoc: buildSrcdocMock,
+    canActivateSrcDocTransport: canActivateSrcDocTransportMock,
+  };
+});
+
+vi.mock('../../src/runtime/exports', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/exports')>(
+    '../../src/runtime/exports',
+  );
+  requestPreviewSnapshotMock.mockImplementation(actual.requestPreviewSnapshot);
+  return {
+    ...actual,
+    requestPreviewSnapshot: requestPreviewSnapshotMock,
+  };
+});
 
 vi.mock('../../src/state/projects', async () => {
   const actual = await vi.importActual<typeof import('../../src/state/projects')>(
@@ -49,6 +82,21 @@ import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 import { emptyManualEditStyles } from '../../src/edit-mode/types';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+
+beforeEach(async () => {
+  const actualSrcdoc = await vi.importActual<typeof import('../../src/runtime/srcdoc')>(
+    '../../src/runtime/srcdoc',
+  );
+  const actualExports = await vi.importActual<typeof import('../../src/runtime/exports')>(
+    '../../src/runtime/exports',
+  );
+  buildSrcdocMock.mockReset();
+  buildSrcdocMock.mockImplementation(actualSrcdoc.buildSrcdoc);
+  canActivateSrcDocTransportMock.mockReset();
+  canActivateSrcDocTransportMock.mockImplementation(actualSrcdoc.canActivateSrcDocTransport);
+  requestPreviewSnapshotMock.mockReset();
+  requestPreviewSnapshotMock.mockImplementation(actualExports.requestPreviewSnapshot);
+});
 
 const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
 
@@ -114,6 +162,42 @@ function srcDocActivationMessages(calls: readonly (readonly unknown[])[]) {
       const data = message as { type?: unknown; html?: unknown };
       return data.type === 'od:srcdoc-transport-activate' && typeof data.html === 'string';
     });
+}
+
+function slideMessages(calls: readonly (readonly unknown[])[]) {
+  return calls
+    .map(([message]) => message)
+    .filter((message): message is { type: 'od:slide'; action: 'next' | 'prev' | 'first' | 'last' | 'go'; index?: number } => {
+      if (typeof message !== 'object' || message === null) return false;
+      const data = message as { type?: unknown; action?: unknown; index?: unknown };
+      return data.type === 'od:slide'
+        && (data.action === 'next' || data.action === 'prev' || data.action === 'first' || data.action === 'last' || data.action === 'go');
+    });
+}
+
+function mockIframeContentWindows(
+  onPostMessage?: (event: { frame: HTMLIFrameElement; message: unknown; win: Window }) => void,
+) {
+  const frameMessages: Array<{ frame: HTMLIFrameElement; message: unknown }> = [];
+  const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+  vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (
+    this: HTMLIFrameElement,
+  ) {
+    const existing = frameWindows.get(this);
+    if (existing) return existing;
+    let win!: Window;
+    const postMessage = vi.fn((message: unknown) => {
+      frameMessages.push({ frame: this, message });
+      onPostMessage?.({ frame: this, message, win });
+    });
+    win = {
+      location: { replace: vi.fn() },
+      postMessage,
+    } as unknown as Window;
+    frameWindows.set(this, win);
+    return win;
+  });
+  return { frameMessages };
 }
 
 function testRect(left: number, top: number, width: number, height: number): DOMRect {
@@ -823,15 +907,15 @@ describe('FileViewer SVG artifacts', () => {
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {
     const file = baseFile({
-      name: 'deck.html',
-      path: 'deck.html',
+      name: 'page.html',
+      path: 'page.html',
       mime: 'text/html',
       kind: 'html',
       artifactManifest: {
         version: 1,
         kind: 'html',
-        title: 'Deck',
-        entry: 'deck.html',
+        title: 'Page',
+        entry: 'page.html',
         renderer: 'html',
         exports: ['html'],
       },
@@ -842,8 +926,7 @@ describe('FileViewer SVG artifacts', () => {
         projectId="project-1"
         projectKind="prototype"
         file={file}
-        isDeck
-        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+        liveHtml={'<html><body><script>localStorage.getItem("preview")</script><main>one</main></body></html>'}
       />,
     );
 
@@ -1336,7 +1419,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(onOpenFileReplacing).toHaveBeenCalledWith('backups.html', 'icons.jsx');
   });
 
-  it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
+  it('URL-loads deck-shaped HTML until a deck bridge action is requested', () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -1360,14 +1443,14 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     expect(markup).toContain('data-testid="artifact-preview-frame"');
+    expect(markup).toContain('data-od-render-mode="url-load"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
-    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
-    expect(markup).not.toContain('data-od-lazy-srcdoc-transport');
+    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
-  it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
+  it('URL-loads inferred deck-shaped HTML until a deck bridge action is requested', () => {
     const file = baseFile({
       name: 'inferred.html',
       path: 'inferred.html',
@@ -1389,9 +1472,613 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
+    expect(markup).toContain('data-od-render-mode="url-load"');
+    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc"');
-    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
-    expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
+    expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
+  });
+
+  it('replays the first deck navigation after direct srcdoc load for a fresh URL-loaded deck', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const frameMessages: Array<{ frame: HTMLIFrameElement; message: unknown }> = [];
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (
+      this: HTMLIFrameElement,
+    ) {
+      return {
+        location: { replace: vi.fn() },
+        postMessage: (message: unknown) => {
+          frameMessages.push({ frame: this, message });
+        },
+      } as unknown as Window;
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+    const initialSrcdocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Next slide' }));
+
+    const activeFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame).not.toBe(initialSrcdocFrame);
+      return frame;
+    });
+
+    fireEvent.load(activeFrame);
+
+    await waitFor(() => {
+      const calls = frameMessages
+        .filter(({ frame }) => frame === activeFrame)
+        .map(({ message }) => [message] as const);
+      expect(srcDocActivationMessages(calls)).toEqual([]);
+      expect(slideMessages(calls)).toEqual([{ type: 'od:slide', action: 'next' }]);
+    });
+  });
+
+  it('requests the deck bridge before replaying a slideNavRequest on a fresh URL-loaded deck', async () => {
+    const file = baseFile({
+      name: 'queued-send-deck.html',
+      path: 'queued-send-deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'queued-send-deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const frameMessages: Array<{ frame: HTMLIFrameElement; message: unknown }> = [];
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (
+      this: HTMLIFrameElement,
+    ) {
+      return {
+        location: { replace: vi.fn() },
+        postMessage: (message: unknown) => {
+          frameMessages.push({ frame: this, message });
+        },
+      } as unknown as Window;
+    });
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="slide-nav-project"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section><section class="slide">three</section></body></html>'}
+      />,
+    );
+    const rawFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(rawFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+
+    rerender(
+      <FileViewer
+        projectId="slide-nav-project"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section><section class="slide">three</section></body></html>'}
+        slideNavRequest={{ slideIndex: 2, nonce: 1701 }}
+      />,
+    );
+
+    const activeFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(activeFrame).not.toBe(rawFrame);
+    fireEvent.load(activeFrame);
+
+    await waitFor(() => {
+      const srcdocCalls = frameMessages
+        .filter(({ frame }) => frame === activeFrame)
+        .map(({ message }) => [message] as const);
+      expect(slideMessages(srcdocCalls)).toContainEqual({ type: 'od:slide', action: 'go', index: 2 });
+    });
+    const rawCalls = frameMessages
+      .filter(({ frame }) => frame === rawFrame)
+      .map(({ message }) => [message] as const);
+    expect(slideMessages(rawCalls)).toEqual([]);
+  });
+
+  it('keeps Download -> Export Image reachable on a fresh deck and falls back through srcdoc transport', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
+      if (iframe.getAttribute('data-od-render-mode') === 'url-load') return null;
+      return {
+        dataUrl: 'data:image/png;base64,AAAA',
+        w: 100,
+        h: 80,
+      };
+    });
+    mockIframeContentWindows(({ frame, message, win }) => {
+      const data = message as { type?: string };
+      if (frame.getAttribute('data-od-render-mode') === 'srcdoc' && data?.type === 'od:srcdoc-transport-activate') {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: win,
+          data: { type: 'od:srcdoc-transport-activated' },
+        }));
+      }
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    const srcdocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    fireEvent.load(srcdocFrame);
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByTestId('share-menu-export-image'));
+
+    expect(screen.getByRole('dialog', { name: /export as image/i })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(urlFrame, 1500);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcdocFrame, 1500);
+    }, { timeout: 4000 });
+    expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('url-load');
+  });
+
+  it('rebuilds srcdoc for Download -> Export Image after a transient wrap failure', async () => {
+    const actualSrcdoc = await vi.importActual<typeof import('../../src/runtime/srcdoc')>(
+      '../../src/runtime/srcdoc',
+    );
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    requestPreviewSnapshotMock.mockImplementation(async (iframe: HTMLIFrameElement) => {
+      if (iframe.getAttribute('data-od-render-mode') === 'url-load') return null;
+      return {
+        dataUrl: 'data:image/png;base64,AAAA',
+        w: 100,
+        h: 80,
+      };
+    });
+    const { frameMessages } = mockIframeContentWindows(({ frame, message, win }) => {
+      const data = message as { type?: string };
+      if (frame.getAttribute('data-od-render-mode') === 'srcdoc' && data?.type === 'od:srcdoc-transport-activate') {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: win,
+          data: { type: 'od:srcdoc-transport-activated' },
+        }));
+      }
+    });
+
+    function Host() {
+      const [html, setHtml] = useState(
+        '<html><body><section class="slide">Initial slide</section></body></html>',
+      );
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="bump-source"
+            onClick={() => setHtml('<html><body><section class="slide">Recovered slide</section></body></html>')}
+          >
+            bump source
+          </button>
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={file}
+            isDeck
+            liveHtml={html}
+          />
+        </>
+      );
+    }
+
+    render(<Host />);
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    const srcdocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    fireEvent.load(srcdocFrame);
+
+    buildSrcdocMock.mockImplementation(() => {
+      throw new Error('wrap failed once');
+    });
+    fireEvent.click(screen.getByTestId('bump-source'));
+    await waitFor(() => {
+      expect(warnSpy).toHaveBeenCalledWith(
+        'open-design preview fallback: srcdoc iframe failed; loading raw URL instead',
+        expect.objectContaining({
+          stage: 'wrap',
+        }),
+      );
+    });
+    buildSrcdocMock.mockImplementation(actualSrcdoc.buildSrcdoc);
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByTestId('share-menu-export-image'));
+
+    await waitFor(() => {
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(urlFrame, 1500);
+      expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(srcdocFrame, 1500);
+    }, { timeout: 4000 });
+    const activations = srcDocActivationMessages(frameMessages.map(({ message }) => [message] as const));
+    expect(activations.at(-1)?.html).toContain('Recovered slide');
+    expect(activations.at(-1)?.html).not.toBe('<!doctype html><html><body></body></html>');
+  });
+
+  it('aborts Download -> Export Image when hidden srcdoc transport activation reports a write failure', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    requestPreviewSnapshotMock.mockResolvedValue(null);
+    mockIframeContentWindows(({ frame, message, win }) => {
+      const data = message as { type?: string };
+      if (frame.getAttribute('data-od-render-mode') === 'srcdoc' && data?.type === 'od:srcdoc-transport-activate') {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: win,
+          data: {
+            type: 'od:preview-error',
+            stage: 'srcdoc-transport-activate',
+            message: 'write failed',
+          },
+        }));
+      }
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcdocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    fireEvent.load(srcdocFrame);
+
+    fireEvent.click(screen.getByRole('button', { name: /download/i }));
+    fireEvent.click(await screen.findByTestId('share-menu-export-image'));
+
+    expect(screen.getByRole('dialog', { name: /export as image/i })).toBeTruthy();
+    expect(await screen.findByText(/Image capture failed/i)).toBeTruthy();
+    expect(requestPreviewSnapshotMock).toHaveBeenCalledWith(urlFrame, 1500);
+    expect(requestPreviewSnapshotMock).not.toHaveBeenCalledWith(srcdocFrame, 1500);
+  });
+
+  it('falls back to URL-load when srcdoc transport activation reports a write failure', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'deck',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'deck-html',
+        exports: ['html'],
+      },
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section></body></html>'}
+      />,
+    );
+    canActivateSrcDocTransportMock.mockReturnValue(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next slide' }));
+
+    const srcdocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcdocFrame.contentWindow,
+      data: {
+        type: 'od:preview-error',
+        stage: 'srcdoc-transport-activate',
+        message: 'write failed',
+      },
+    }));
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(frame.getAttribute('src')).toContain('/api/projects/project-1/raw/deck.html');
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      'open-design preview fallback: srcdoc iframe failed; loading raw URL instead',
+      expect.objectContaining({
+        stage: 'srcdoc-transport-activate',
+        detail: 'write failed',
+      }),
+    );
+  });
+
+  it('clears Draw when a srcdoc preview error falls back to URL-load', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    const srcdocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcdocFrame.contentWindow,
+      data: { type: 'od:preview-error', stage: 'srcdoc', message: 'boot failed' },
+    }));
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+  });
+
+  it('clears Draw when srcdoc wrapping falls back to URL-load', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    function Host() {
+      const [html, setHtml] = useState('<html><body><main data-od-id="hero">Hero</main></body></html>');
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="bump-source"
+            onClick={() => setHtml('<html><body><main data-od-id="hero">Updated</main></body></html>')}
+          >
+            bump source
+          </button>
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={file}
+            liveHtml={html}
+          />
+        </>
+      );
+    }
+
+    render(<Host />);
+
+    fireEvent.click(screen.getByTestId('draw-overlay-toggle'));
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    buildSrcdocMock.mockImplementation(() => {
+      throw new Error('wrap failed');
+    });
+    fireEvent.click(screen.getByTestId('bump-source'));
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+  });
+
+  it('clears Edit when a srcdoc preview error falls back to URL-load', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    const srcdocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcdocFrame.contentWindow,
+      data: { type: 'od:preview-error', stage: 'srcdoc', message: 'boot failed' },
+    }));
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  it('clears Comment mode when a srcdoc preview error falls back to URL-load', async () => {
+    const file = baseFile({
+      name: 'page.html',
+      path: 'page.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'page.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('board-mode-toggle');
+    const srcdocFrame = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      return frame;
+    });
+    expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+
+    window.dispatchEvent(new MessageEvent('message', {
+      source: srcdocFrame.contentWindow,
+      data: { type: 'od:preview-error', stage: 'srcdoc', message: 'boot failed' },
+    }));
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('false');
+    });
+    expect(screen.queryByTestId('comment-popover-input')).toBeNull();
+
+    clickAgentTool('board-mode-toggle');
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(screen.getByTestId('board-mode-toggle').getAttribute('aria-pressed')).toBe('true');
+    });
   });
 
   it('hides preview-only toolbar controls when switching an HTML deck to source view', async () => {

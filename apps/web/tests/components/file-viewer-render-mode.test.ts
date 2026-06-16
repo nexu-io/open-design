@@ -16,8 +16,16 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview(base)).toBe(true);
   });
 
-  it('falls back to srcDoc when the file is a deck (deck bridge required)', () => {
+  it('falls back to srcDoc when the file is a deck and bridge need is unspecified', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(false);
+  });
+
+  it('URL-loads a deck when the deck bridge is not requested', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, deckBridge: false })).toBe(true);
+  });
+
+  it('falls back to srcDoc for a deck once the deck bridge is requested', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, deckBridge: true })).toBe(false);
   });
 
   it('falls back to srcDoc when comment mode is active without a URL bridge', () => {

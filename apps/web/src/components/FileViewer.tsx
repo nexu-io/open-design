@@ -247,6 +247,7 @@ function previewViewportIcon(viewport: PreviewViewportId): string {
 }
 
 const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
+const SRC_DOC_PREVIEW_WRAP_FAILURE_PLACEHOLDER = '<!doctype html><html><body></body></html>';
 const COMMENT_SIDE_DOCK_WIDTH = 320;
 const COMMENT_SIDE_DOCK_RAIL_WIDTH = 42;
 const COMMENT_SIDE_DOCK_GAP = 12;
@@ -884,6 +885,42 @@ function waitForIframeLoadOrTimeout(iframe: HTMLIFrameElement, timeout = 750): P
     };
     const timer = window.setTimeout(finish, timeout);
     iframe.addEventListener('load', finish, { once: true });
+  });
+}
+
+function activateSrcDocTransportAndWait(
+  iframe: HTMLIFrameElement,
+  html: string,
+  timeout = 750,
+): Promise<boolean> {
+  const win = iframe.contentWindow;
+  if (!win || !html || html === SRC_DOC_PREVIEW_WRAP_FAILURE_PLACEHOLDER) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      window.clearTimeout(timer);
+      resolve(ok);
+    };
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.source !== win) return;
+      const data = ev.data as { type?: string; stage?: string } | null;
+      if (data?.type === 'od:srcdoc-transport-activated') {
+        finish(true);
+        return;
+      }
+      if (data?.type === 'od:preview-error') {
+        const stage = String(data.stage || '');
+        if (stage.startsWith('srcdoc-transport')) finish(false);
+      }
+    };
+    const timer = window.setTimeout(() => finish(false), timeout);
+    window.addEventListener('message', onMessage);
+    win.postMessage({ type: 'od:srcdoc-transport-activate', html }, '*');
   });
 }
 
@@ -4628,6 +4665,11 @@ function HtmlViewer({
     setPreviewViewportCached(fileViewportKey, viewport);
     setPreviewViewportState(viewport);
   }, [fileViewportKey]);
+  const [srcDocWrapFailure, setSrcDocWrapFailure] = useState<string | null>(null);
+  const [deckBridgeRequested, setDeckBridgeRequested] = useState(false);
+  const [srcDocPreviewFailedSource, setSrcDocPreviewFailedSource] = useState<string | null>(null);
+  const pendingDeckBridgeActionRef = useRef<'next' | 'prev' | 'first' | 'last' | null>(null);
+  const pendingPreviewSnapshotRef = useRef<((iframe: HTMLIFrameElement | null) => void) | null>(null);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
@@ -5243,18 +5285,21 @@ function HtmlViewer({
     [source],
   );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
-    mode,
-    isDeck: effectiveDeck,
-    commentMode: boardMode,
-    urlCommentBridge: urlSelectionBridgeReady,
-    editMode: manualEditMode,
-    urlModeBridge,
-    inspectMode,
-    drawMode: drawOverlayOpen,
-    forceInline: forceInline || needsSandboxShim,
-    needsFocusGuard,
-  }) && !manualEditRequiresSrcDoc;
+  const useUrlLoadPreview = (
+    shouldUrlLoadHtmlPreview({
+      mode,
+      isDeck: effectiveDeck,
+      deckBridge: deckBridgeRequested,
+      commentMode: boardMode,
+      urlCommentBridge: urlSelectionBridgeReady,
+      editMode: manualEditMode,
+      urlModeBridge,
+      inspectMode,
+      drawMode: drawOverlayOpen,
+      forceInline: forceInline || needsSandboxShim,
+      needsFocusGuard,
+    }) || srcDocPreviewFailedSource === previewSource || srcDocWrapFailure === previewSource
+  ) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
@@ -5266,6 +5311,69 @@ function HtmlViewer({
   )
     ? previewSrcUrl
     : basePreviewSrcUrl;
+
+  const clearSrcDocOnlyPreviewModes = useCallback(() => {
+    setBoardMode(false);
+    setInspectMode(false);
+    setActiveInspectTarget(null);
+    setManualEditSrcDocActive(false);
+    setManualEditMode(false);
+    setDrawOverlayOpen(false);
+  }, [setManualEditMode]);
+
+  const fallbackToUrlLoadPreview = useCallback((stage: string, detail?: unknown) => {
+    pendingDeckBridgeActionRef.current = null;
+    pendingPreviewSnapshotRef.current = null;
+    setDeckBridgeRequested(false);
+    clearSrcDocOnlyPreviewModes();
+    if (previewSource !== null) setSrcDocPreviewFailedSource(previewSource);
+    console.warn(
+      'open-design preview fallback: srcdoc iframe failed; loading raw URL instead',
+      { stage, detail },
+    );
+  }, [clearSrcDocOnlyPreviewModes, previewSource]);
+
+  useEffect(() => {
+    setDeckBridgeRequested(false);
+    setSrcDocPreviewFailedSource(null);
+    setSrcDocWrapFailure(null);
+    pendingDeckBridgeActionRef.current = null;
+    pendingPreviewSnapshotRef.current = null;
+  }, [previewStateKey]);
+
+  const previousSrcdocBridgeModesRef = useRef({
+    board: false,
+    inspect: false,
+    edit: false,
+    draw: false,
+  });
+  useEffect(() => {
+    const previous = previousSrcdocBridgeModesRef.current;
+    const next = {
+      board: boardMode,
+      inspect: inspectMode,
+      edit: manualEditMode,
+      draw: drawOverlayOpen,
+    };
+    previousSrcdocBridgeModesRef.current = next;
+    const enteringSrcdocMode =
+      (next.board && !previous.board)
+      || (next.inspect && !previous.inspect)
+      || (next.edit && !previous.edit)
+      || (next.draw && !previous.draw);
+    if (!enteringSrcdocMode) return;
+    if (srcDocPreviewFailedSource === previewSource) setSrcDocPreviewFailedSource(null);
+    if (srcDocWrapFailure === previewSource) setSrcDocWrapFailure(null);
+  }, [
+    boardMode,
+    drawOverlayOpen,
+    inspectMode,
+    manualEditMode,
+    previewSource,
+    srcDocPreviewFailedSource,
+    srcDocWrapFailure,
+  ]);
+
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
@@ -5300,8 +5408,9 @@ function HtmlViewer({
     };
   }, [source, effectiveDeck, projectId, file.name, reloadKey, useUrlLoadPreview]);
 
-  const srcDoc = useMemo(
-    () => (previewSource ? buildSrcdoc(previewSource, {
+  const buildPreviewSrcDoc = useCallback(() => {
+    if (!previewSource) return '';
+    return buildSrcdoc(previewSource, {
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
@@ -5309,9 +5418,48 @@ function HtmlViewer({
       editBridge: manualEditRequiresSrcDoc,
       paletteBridge: false,
       previewFocusGuard: true,
-    }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
-  );
+    });
+  }, [
+    previewSource,
+    effectiveDeck,
+    projectId,
+    file.name,
+    previewStateKey,
+    manualEditRequiresSrcDoc,
+  ]);
+
+  const srcDoc = useMemo(() => {
+    if (!previewSource) return '';
+    if (srcDocWrapFailure === previewSource) return SRC_DOC_PREVIEW_WRAP_FAILURE_PLACEHOLDER;
+    try {
+      return buildPreviewSrcDoc();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn(
+        'open-design preview fallback: srcdoc iframe failed; loading raw URL instead',
+        {
+          file: file.name,
+          stage: 'wrap',
+          fallback: 'url-load',
+          src: activePreviewSrcUrl,
+          detail,
+        },
+      );
+      pendingDeckBridgeActionRef.current = null;
+      pendingPreviewSnapshotRef.current = null;
+      setDeckBridgeRequested(false);
+      clearSrcDocOnlyPreviewModes();
+      setSrcDocWrapFailure(previewSource);
+      return SRC_DOC_PREVIEW_WRAP_FAILURE_PLACEHOLDER;
+    }
+  }, [
+    activePreviewSrcUrl,
+    previewSource,
+    srcDocWrapFailure,
+    buildPreviewSrcDoc,
+    file.name,
+    clearSrcDocOnlyPreviewModes,
+  ]);
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
@@ -5405,12 +5553,28 @@ function HtmlViewer({
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
   }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
-  const activateSrcDocSnapshotTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
-    if (!srcDoc) return false;
+  const replayPendingDeckBridgeAction = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    const action = pendingDeckBridgeActionRef.current;
+    if (!action) return false;
     const win = target?.contentWindow;
     if (!win) return false;
-    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    win.postMessage({ type: 'od:slide', action }, '*');
+    pendingDeckBridgeActionRef.current = null;
     return true;
+  }, []);
+  const runPendingPreviewSnapshot = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    const run = pendingPreviewSnapshotRef.current;
+    if (!run) return false;
+    pendingPreviewSnapshotRef.current = null;
+    run(target);
+    return true;
+  }, []);
+  const activateSrcDocSnapshotTransport = useCallback((
+    target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current,
+    html = srcDoc,
+  ) => {
+    if (!target) return Promise.resolve(false);
+    return activateSrcDocTransportAndWait(target, html);
   }, [srcDoc]);
   useEffect(() => {
     if (useUrlLoadPreview) {
@@ -5426,8 +5590,11 @@ function HtmlViewer({
       activatedSrcDocTransportHtmlRef.current = null;
     }
     wasUrlLoadPreviewRef.current = false;
-    activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview]);
+    if (activateSrcDocTransport()) {
+      replayPendingDeckBridgeAction();
+      runPendingPreviewSnapshot();
+    }
+  }, [activateSrcDocTransport, replayPendingDeckBridgeAction, runPendingPreviewSnapshot, useUrlLoadPreview]);
   
   useEffect(() => {
     restorePreviewScrollPosition();
@@ -5522,6 +5689,21 @@ function HtmlViewer({
       window.removeEventListener('message', onDcViewportMessage);
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+
+  useEffect(() => {
+    function onPreviewError(ev: MessageEvent) {
+      if (useUrlLoadPreview) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; stage?: string; message?: string } | null;
+      if (!data || data.type !== 'od:preview-error') return;
+      const stage = data.stage || 'srcdoc';
+      if (stage !== 'srcdoc' && !stage.startsWith('srcdoc-transport')) return;
+      fallbackToUrlLoadPreview(stage, data.message);
+    }
+    window.addEventListener('message', onPreviewError);
+    return () => window.removeEventListener('message', onPreviewError);
+  }, [fallbackToUrlLoadPreview, isActivePreviewIframeSource, isOurPreviewIframeSource, useUrlLoadPreview]);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -6358,11 +6540,23 @@ function HtmlViewer({
     return () => window.removeEventListener('message', onMessage);
   }, [inspectMode, isOurPreviewIframeSource]);
 
-  function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
+  const requestDeckBridgeHandoff = useCallback((action: 'next' | 'prev' | 'first' | 'last' | null) => {
+    pendingDeckBridgeActionRef.current = action;
+    pendingPreviewSnapshotRef.current = null;
+    setSrcDocPreviewFailedSource(null);
+    setSrcDocWrapFailure(null);
+    setDeckBridgeRequested(true);
+  }, []);
+
+  const postSlide = useCallback((action: 'next' | 'prev' | 'first' | 'last') => {
+    if (useUrlLoadPreview && effectiveDeck && !deckBridgeRequested) {
+      requestDeckBridgeHandoff(action);
+      return;
+    }
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:slide', action }, '*');
-  }
+  }, [deckBridgeRequested, effectiveDeck, requestDeckBridgeHandoff, useUrlLoadPreview]);
 
   function syncCachedSlideStateToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
     const active = htmlPreviewSlideState.get(previewStateKey)?.active;
@@ -6482,7 +6676,7 @@ function HtmlViewer({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [effectiveDeck, mode]);
+  }, [effectiveDeck, mode, postSlide]);
 
   useEffect(() => {
     if (!presentMenuOpen) return;
@@ -7255,8 +7449,20 @@ function HtmlViewer({
     const count = slideState?.count ?? cachedCount ?? target + 1;
     setSlideStateCached(previewStateKey, { active: target, count });
     setSlideState({ active: target, count });
+    if (useUrlLoadPreview) {
+      requestDeckBridgeHandoff(null);
+      return;
+    }
     syncCachedSlideStateToIframe();
-  }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
+  }, [
+    slideNavRequest?.nonce,
+    slideNavRequest?.slideIndex,
+    effectiveDeck,
+    previewStateKey,
+    requestDeckBridgeHandoff,
+    slideState?.count,
+    useUrlLoadPreview,
+  ]);
 
   const openDownloadMenu = () => {
     fireArtifactHeaderClick('download_dropdown');
@@ -7313,10 +7519,24 @@ function HtmlViewer({
       return requestPreviewSnapshotWithRetry(activeIframe);
     }
 
+    let snapshotSrcDoc = srcDoc;
+    if (srcDocWrapFailure === previewSource || snapshotSrcDoc === SRC_DOC_PREVIEW_WRAP_FAILURE_PLACEHOLDER) {
+      if (!previewSource) return null;
+      try {
+        snapshotSrcDoc = buildPreviewSrcDoc();
+        setSrcDocWrapFailure((current) => (current === previewSource ? null : current));
+      } catch (err) {
+        console.warn('[exportAsImage] failed to rebuild srcdoc snapshot after wrap failure:', err);
+        return null;
+      }
+    }
+
     if (useLazySrcDocTransport && !srcDocShellReady) {
       await waitForIframeLoadOrTimeout(srcDocIframe, 500);
     }
-    if (useLazySrcDocTransport && activateSrcDocSnapshotTransport(srcDocIframe)) {
+    if (useLazySrcDocTransport) {
+      const activated = await activateSrcDocSnapshotTransport(srcDocIframe, snapshotSrcDoc);
+      if (!activated) return null;
       await waitForIframeLoadOrTimeout(srcDocIframe);
     }
     const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
@@ -7328,7 +7548,11 @@ function HtmlViewer({
     }
   }, [
     activateSrcDocSnapshotTransport,
+    buildPreviewSrcDoc,
+    previewSource,
+    srcDoc,
     srcDocShellReady,
+    srcDocWrapFailure,
     useLazySrcDocTransport,
     useUrlLoadPreview,
   ]);
@@ -8420,6 +8644,7 @@ function HtmlViewer({
                       type="button"
                       className="share-menu-item"
                       role="menuitem"
+                      data-testid="share-menu-export-image"
                       onClick={openImageExportModal}
                     >
                       <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
@@ -8642,7 +8867,7 @@ function HtmlViewer({
                             activatedSrcDocTransportHtmlRef.current = null;
                           }
                           if (useLazySrcDocTransport) setSrcDocShellReady(true);
-                          activateLoadedSrcDocTransport(frame);
+                          const activatedSrcDocTransport = activateLoadedSrcDocTransport(frame);
                           dcViewportRestoreAtRef.current = Date.now();
                           frame?.contentWindow?.postMessage({
                             type: '__dc_set_viewport',
@@ -8650,6 +8875,8 @@ function HtmlViewer({
                           }, '*');
                           replayInspectOverridesToIframe(frame);
                           syncBridgeModes(frame);
+                          if (!useUrlLoadPreview) replayPendingDeckBridgeAction(frame);
+                          if (!useUrlLoadPreview && activatedSrcDocTransport) runPendingPreviewSnapshot(frame);
                           syncCachedSlideStateToIframe(frame);
                           if (!useUrlLoadPreview) restorePreviewScrollPosition();
                         }}

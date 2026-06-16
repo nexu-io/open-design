@@ -70,6 +70,15 @@ function renderHtmlPreview() {
   expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
   const srcDocFrame = container.querySelector<HTMLIFrameElement>('iframe[data-od-render-mode="srcdoc"]');
   expect(srcDocFrame).toBeTruthy();
+  vi.spyOn((srcDocFrame as HTMLIFrameElement).contentWindow!, 'postMessage').mockImplementation((message) => {
+    const data = message as { type?: string };
+    if (data?.type === 'od:srcdoc-transport-activate') {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: (srcDocFrame as HTMLIFrameElement).contentWindow,
+        data: { type: 'od:srcdoc-transport-activated' },
+      }));
+    }
+  });
   fireEvent.load(srcDocFrame as HTMLIFrameElement);
   return { ...view, activeFrame, srcDocFrame: srcDocFrame as HTMLIFrameElement };
 }

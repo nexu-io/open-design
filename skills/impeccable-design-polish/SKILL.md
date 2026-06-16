@@ -66,4 +66,3 @@ Use this skill as the post-generation pass for an existing design. It should not
 - Pair with `design-taste-frontend` or `gpt-taste` for stronger anti-slop redesign work.
 - Pair with `emilkowalski-motion` or GSAP skills for motion-specific polish.
 - Pair with image/video skills when the artifact needs real visual assets rather than CSS-only decoration.
-
