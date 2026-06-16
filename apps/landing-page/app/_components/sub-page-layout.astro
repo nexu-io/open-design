@@ -44,6 +44,8 @@ export interface Props {
   description: string;
   active?: HeaderProps['active'];
   ogImage?: string;
+  /** Optional comma-separated meta keywords. Emitted only when provided. */
+  keywords?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
   /**
    * Set on pages that are NOT generated per-locale (e.g. plugin detail pages,
@@ -60,6 +62,7 @@ const {
   description,
   active = 'home',
   ogImage,
+  keywords,
   jsonLd,
   localeCanonicalOnly = false,
 } = Astro.props;
@@ -113,6 +116,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {keywords && <meta name="keywords" content={keywords} />}
     <link rel="canonical" href={canonical} />
     {alternateLinks.map((entry) => (
       <link rel="alternate" hreflang={entry.hreflang} href={entry.href} />

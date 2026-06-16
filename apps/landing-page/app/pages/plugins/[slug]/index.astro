@@ -79,9 +79,14 @@ const headingTitle = isDesignSystem
   ? `${pluginTitle} ${pcopy.detailSystemLabel}`
   : pluginTitle;
 const title = isDesignSystem
-  ? `${pluginTitle} ${pcopy.detailSystemLabel} — palette, typography & tokens for your agent · Open Design`
+  ? `${pluginTitle} ${pcopy.detailSystemLabel} — ${pcopy.detailSystemTitleSuffix}`
   : `${pluginTitle} · Open Design plugin`;
-const description = pluginDescription;
+// Lead the meta description with the keyword ("<Brand> design system —") then
+// the system's own unique tagline, so every page stays distinct AND on-keyword.
+const description = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel} — ${pluginDescription}`
+  : pluginDescription;
+const keywords = isDesignSystem ? pcopy.detailSystemKeywords(pluginTitle) : undefined;
 
 const ui = getLandingUiCopy(locale);
 /*
@@ -212,6 +217,7 @@ const jsonLd = [
   description={description}
   active="plugins"
   jsonLd={jsonLd}
+  keywords={keywords}
   localeCanonicalOnly={!isDesignSystem}
 >
   <article class:list={['detail', isDesignSystem && 'detail-ds']}>
