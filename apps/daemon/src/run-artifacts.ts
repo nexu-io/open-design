@@ -274,15 +274,29 @@ export function runAskedUserQuestion(
 //
 // Only a SUCCESSFUL run counts — a failed/cancelled run that happened to touch
 // a file is not a milestone (mirrors the `artifact_count` funnel's "generation
-// success → artifact produced" framing). A design system counts only when the
-// run actually wrote `DESIGN.md` (`designSystemCreated`), matching the
-// `run_finished.design_system_created` definition. Returns undefined when the
-// run crossed no milestone so the caller omits the `$set_once` key entirely
-// rather than shipping an empty object.
+// success → artifact produced" framing).
+//
+// The design-system milestone must mirror the EXACT condition under which
+// `run_finished` emits `design_system_created`, which is gated on
+// `isDesignSystemRun` (server.ts only includes the field for DS runs). A plain
+// chat run can also write a `DESIGN.md` — `finalize-design.ts` lands one under
+// the project dir, and a user can edit an existing `DESIGN.md` from the chat
+// composer — so `designSystemCreated` alone (the raw "a DESIGN.md was written"
+// signal) would stamp `first_design_system_at` on runs whose `run_finished`
+// reports no `design_system_created`, drifting the person property away from
+// the metric and overstating DS activation. Gating on `isDesignSystemRun`
+// keeps the milestone and the event field in lockstep (nettee review on
+// PR #4362).
+//
+// Returns undefined when the run crossed no milestone so the caller omits the
+// `$set_once` key entirely rather than shipping an empty object.
 export function deriveActivationMilestones(args: {
   result: TrackingRunResult;
   artifactCount: number;
   designSystemCreated: boolean;
+  // Whether this run is a design-system generation run. The DS milestone is
+  // gated on it so it tracks `run_finished.design_system_created` exactly.
+  isDesignSystemRun: boolean;
   capturedAtIso: string;
 }): { first_artifact_at?: string; first_design_system_at?: string } | undefined {
   if (args.result !== 'success') return undefined;
@@ -291,7 +305,7 @@ export function deriveActivationMilestones(args: {
     first_design_system_at?: string;
   } = {};
   if (args.artifactCount > 0) milestones.first_artifact_at = args.capturedAtIso;
-  if (args.designSystemCreated) {
+  if (args.isDesignSystemRun && args.designSystemCreated) {
     milestones.first_design_system_at = args.capturedAtIso;
   }
   return Object.keys(milestones).length > 0 ? milestones : undefined;

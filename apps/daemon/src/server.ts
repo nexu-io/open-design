@@ -13455,6 +13455,10 @@ export async function startServer({
           result,
           artifactCount,
           designSystemCreated,
+          // Gate the DS milestone on the same `isDesignSystemRun` condition the
+          // `run_finished.design_system_created` field uses below, so a plain
+          // chat run that writes a `DESIGN.md` doesn't overstate DS activation.
+          isDesignSystemRun,
           capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
         });
         const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({

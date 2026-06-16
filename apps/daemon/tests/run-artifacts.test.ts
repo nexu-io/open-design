@@ -396,28 +396,49 @@ describe('deriveActivationMilestones', () => {
         result: 'success',
         artifactCount: 2,
         designSystemCreated: false,
+        isDesignSystemRun: false,
         capturedAtIso: ISO,
       }),
     ).toEqual({ first_artifact_at: ISO });
   });
 
-  it('stamps first_design_system_at when a successful run wrote DESIGN.md', () => {
+  it('stamps first_design_system_at when a successful DS run wrote DESIGN.md', () => {
     expect(
       deriveActivationMilestones({
         result: 'success',
         artifactCount: 0,
         designSystemCreated: true,
+        isDesignSystemRun: true,
         capturedAtIso: ISO,
       }),
     ).toEqual({ first_design_system_at: ISO });
   });
 
-  it('stamps both when one run crossed both milestones', () => {
+  it('does NOT stamp first_design_system_at for a non-DS run that wrote DESIGN.md', () => {
+    // A plain chat run can write a `DESIGN.md` (finalize-design.ts, or a user
+    // editing an existing DESIGN.md from the composer). `run_finished` only
+    // emits `design_system_created` for DS runs, so the milestone must gate on
+    // `isDesignSystemRun` too or the person property overstates DS activation
+    // (nettee review on #4362). Here the run produced no artifact either, so
+    // the result is undefined — no milestone stamped.
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: true,
+        isDesignSystemRun: false,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('stamps both when one DS run crossed both milestones', () => {
     expect(
       deriveActivationMilestones({
         result: 'success',
         artifactCount: 3,
         designSystemCreated: true,
+        isDesignSystemRun: true,
         capturedAtIso: ISO,
       }),
     ).toEqual({ first_artifact_at: ISO, first_design_system_at: ISO });
@@ -429,6 +450,7 @@ describe('deriveActivationMilestones', () => {
         result: 'success',
         artifactCount: 0,
         designSystemCreated: false,
+        isDesignSystemRun: false,
         capturedAtIso: ISO,
       }),
     ).toBeUndefined();
@@ -442,6 +464,7 @@ describe('deriveActivationMilestones', () => {
         result: 'failed',
         artifactCount: 5,
         designSystemCreated: true,
+        isDesignSystemRun: true,
         capturedAtIso: ISO,
       }),
     ).toBeUndefined();
@@ -450,6 +473,7 @@ describe('deriveActivationMilestones', () => {
         result: 'cancelled',
         artifactCount: 5,
         designSystemCreated: true,
+        isDesignSystemRun: true,
         capturedAtIso: ISO,
       }),
     ).toBeUndefined();
