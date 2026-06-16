@@ -1422,6 +1422,8 @@ export const zhCN: Dict = {
   'socialShare.openDesignText': 'Open Design 是开源的设计智能工作区，可以生成、编辑、部署并交付设计产物。',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': '社媒分享',
+  'socialShare.publishPageTitle': '发布分享页',
+  'socialShare.publishPageSubtitle': '发布当前预览，以便分享到社媒平台。',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': '我用 Open Design 做了 {title}。查看已部署产物，也推荐收藏仓库：{repo}',
   'socialShare.projectCopyText': '我用 Open Design 做了 {title}\n{url}\nOpen Design 仓库：{repo}',

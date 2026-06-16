@@ -1422,6 +1422,8 @@ export const uk: Dict = {
   'socialShare.openDesignText': 'Open Design — це робочий простір з відкритим кодом для створення, редагування, розгортання та передавання дизайн-артефактів.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'ПОДІЛИТИСЯ В СОЦМЕРЕЖАХ',
+  'socialShare.publishPageTitle': 'Опублікувати сторінку для поширення',
+  'socialShare.publishPageSubtitle': 'Опублікуйте цей перегляд, щоб ним можна було поділитися в соцмережах.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Створено за допомогою Open Design: {title}. Перегляньте розгорнутий артефакт і поставте зірку репозиторію: {repo}',
   'socialShare.projectCopyText': 'Створено за допомогою Open Design: {title}\n{url}\nРепозиторій Open Design: {repo}',

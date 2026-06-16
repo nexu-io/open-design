@@ -1422,6 +1422,8 @@ export const th: Dict = {
   'socialShare.openDesignText': 'Open Design คือพื้นที่ทำงานแบบโอเพนซอร์สสำหรับการสร้าง แก้ไข เผยแพร่ และส่งต่อชิ้นงานออกแบบ',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'แชร์ลงโซเชียล',
+  'socialShare.publishPageTitle': 'เผยแพร่หน้าแชร์',
+  'socialShare.publishPageSubtitle': 'เผยแพร่ตัวอย่างนี้เพื่อแชร์บนแพลตฟอร์มโซเชียลได้',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'สร้างด้วย Open Design: {title} ดูชิ้นงานที่เผยแพร่และกดดาวให้ repo: {repo}',
   'socialShare.projectCopyText': 'สร้างด้วย Open Design: {title}\n{url}\nrepo ของ Open Design: {repo}',

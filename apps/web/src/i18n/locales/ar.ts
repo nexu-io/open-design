@@ -1422,6 +1422,8 @@ export const ar: Dict = {
   'socialShare.openDesignText': 'Open Design هي مساحة عمل مفتوحة المصدر لإنشاء عناصر التصميم وتحريرها ونشرها وتسليمها.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'المشاركة الاجتماعية',
+  'socialShare.publishPageTitle': 'نشر صفحة المشاركة',
+  'socialShare.publishPageSubtitle': 'انشر هذه المعاينة حتى يمكن مشاركتها على منصات التواصل الاجتماعي.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'تم الإنشاء باستخدام Open Design: {title}. اعرض العنصر المنشور وامنح نجمة للمستودع: {repo}',
   'socialShare.projectCopyText': 'تم الإنشاء باستخدام Open Design: {title}\n{url}\nمستودع Open Design: {repo}',

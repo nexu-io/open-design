@@ -1422,6 +1422,8 @@ export const ja: Dict = {
   'socialShare.openDesignText': 'Open Design は、デザイン成果物の作成・編集・デプロイ・引き継ぎを行うためのオープンソースのワークスペースです。',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'ソーシャル共有',
+  'socialShare.publishPageTitle': '共有ページを公開',
+  'socialShare.publishPageSubtitle': 'このプレビューを公開して、ソーシャルプラットフォームで共有できるようにします。',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Open Design で作成: {title}。デプロイされた成果物を見て、リポジトリにスターを付けてください: {repo}',
   'socialShare.projectCopyText': 'Open Design で作成: {title}\n{url}\nOpen Design リポジトリ: {repo}',

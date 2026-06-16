@@ -1422,6 +1422,8 @@ export const ko: Dict = {
   'socialShare.openDesignText': 'Open Design은 디자인 아티팩트를 생성, 편집, 배포 및 인수인계하기 위한 오픈소스 워크스페이스입니다.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': '소셜 공유',
+  'socialShare.publishPageTitle': '공유 페이지 게시',
+  'socialShare.publishPageSubtitle': '소셜 플랫폼에 공유할 수 있도록 이 미리보기를 게시합니다.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Open Design으로 제작: {title}. 배포된 아티팩트를 확인하고 저장소에 스타를 남겨주세요: {repo}',
   'socialShare.projectCopyText': 'Open Design으로 제작: {title}\n{url}\nOpen Design 저장소: {repo}',

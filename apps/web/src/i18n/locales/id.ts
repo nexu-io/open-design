@@ -1422,6 +1422,8 @@ export const id: Dict = {
   'socialShare.openDesignText': 'Open Design adalah ruang kerja sumber terbuka untuk membuat, mengedit, men-deploy, dan menyerahkan artefak desain.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'BAGIKAN KE MEDIA SOSIAL',
+  'socialShare.publishPageTitle': 'Publikasikan halaman berbagi',
+  'socialShare.publishPageSubtitle': 'Publikasikan pratinjau ini agar dapat dibagikan di platform sosial.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Dibuat dengan Open Design: {title}. Lihat artefak yang telah di-deploy dan beri bintang pada repo: {repo}',
   'socialShare.projectCopyText': 'Dibuat dengan Open Design: {title}\n{url}\nRepo Open Design: {repo}',

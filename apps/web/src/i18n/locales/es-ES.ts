@@ -1422,6 +1422,8 @@ export const esES: Dict = {
   'socialShare.openDesignText': 'Open Design es un espacio de trabajo de código abierto para crear, editar, desplegar y entregar artefactos de diseño.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'COMPARTIR EN REDES SOCIALES',
+  'socialShare.publishPageTitle': 'Publicar página para compartir',
+  'socialShare.publishPageSubtitle': 'Publica esta vista previa para poder compartirla en redes sociales.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Creado con Open Design: {title}. Consulta el artefacto desplegado y dale una estrella al repositorio: {repo}',
   'socialShare.projectCopyText': 'Creado con Open Design: {title}\n{url}\nRepositorio de Open Design: {repo}',

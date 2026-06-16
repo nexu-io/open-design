@@ -1422,6 +1422,8 @@ export const tr: Dict = {
   'socialShare.openDesignText': 'Open Design; tasarım yapıtları oluşturmak, düzenlemek, dağıtmak ve devretmek için açık kaynaklı bir çalışma alanıdır.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'SOSYAL PAYLAŞIM',
+  'socialShare.publishPageTitle': 'Paylaşım sayfasını yayınla',
+  'socialShare.publishPageSubtitle': 'Bu önizlemeyi sosyal platformlarda paylaşılabilir hale getirmek için yayınlayın.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Open Design ile oluşturuldu: {title}. Dağıtılan yapıtı görüntüleyin ve depoya yıldız verin: {repo}',
   'socialShare.projectCopyText': 'Open Design ile oluşturuldu: {title}\n{url}\nOpen Design deposu: {repo}',

@@ -1422,6 +1422,8 @@ export const pl: Dict = {
   'socialShare.openDesignText': 'Open Design to otwartoźródłowe środowisko pracy do tworzenia, edytowania, wdrażania i przekazywania artefaktów projektowych.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'UDOSTĘPNIANIE W MEDIACH SPOŁECZNOŚCIOWYCH',
+  'socialShare.publishPageTitle': 'Opublikuj stronę udostępniania',
+  'socialShare.publishPageSubtitle': 'Opublikuj ten podgląd, aby można było udostępniać go w mediach społecznościowych.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Stworzone w Open Design: {title}. Zobacz wdrożony artefakt i daj gwiazdkę repozytorium: {repo}',
   'socialShare.projectCopyText': 'Stworzone w Open Design: {title}\n{url}\nRepozytorium Open Design: {repo}',

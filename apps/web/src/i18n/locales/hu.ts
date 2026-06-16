@@ -1422,6 +1422,8 @@ export const hu: Dict = {
   'socialShare.openDesignText': 'Az Open Design egy nyílt forráskódú munkaterület tervezési elemek létrehozásához, szerkesztéséhez, telepítéséhez és átadásához.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'MEGOSZTÁS KÖZÖSSÉGI MÉDIÁN',
+  'socialShare.publishPageTitle': 'Megosztási oldal közzététele',
+  'socialShare.publishPageSubtitle': 'Tedd közzé ezt az előnézetet, hogy megosztható legyen közösségi platformokon.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'Open Design segítségével készült: {title}. Tekintsd meg a telepített elemet, és csillagozd a repót: {repo}',
   'socialShare.projectCopyText': 'Open Design segítségével készült: {title}\n{url}\nOpen Design repó: {repo}',

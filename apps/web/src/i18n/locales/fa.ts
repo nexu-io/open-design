@@ -1422,6 +1422,8 @@ export const fa: Dict = {
   'socialShare.openDesignText': 'Open Design یک فضای کاری متن‌باز برای ساخت، ویرایش، استقرار و تحویل آرتیفکت‌های طراحی است.',
   'socialShare.openDesignCopyText': '{text}\n{url}',
   'socialShare.projectSection': 'اشتراک‌گذاری در شبکه‌های اجتماعی',
+  'socialShare.publishPageTitle': 'انتشار صفحه اشتراک‌گذاری',
+  'socialShare.publishPageSubtitle': 'این پیش‌نمایش را منتشر کنید تا بتوان آن را در شبکه‌های اجتماعی به اشتراک گذاشت.',
   'socialShare.projectTitle': '{title} · Open Design',
   'socialShare.projectText': 'ساخته‌شده با Open Design: {title}. آرتیفکت مستقرشده را ببینید و به مخزن ستاره بدهید: {repo}',
   'socialShare.projectCopyText': 'ساخته‌شده با Open Design: {title}\n{url}\nمخزن Open Design: {repo}',
