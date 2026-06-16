@@ -289,6 +289,17 @@ function loginAndExit() {
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL}\n`);
     exit(1);
   }
+  // Models a host whose direct amr-api device-authorization path is broken
+  // (#3726): fail unless the daemon routed login through its IPv4 API proxy
+  // (which sets VELA_API_URL). Lets tests assert the direct-first / proxy-
+  // fallback contract of the login route.
+  if (
+    env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL &&
+    !(env.VELA_API_URL ?? '').trim()
+  ) {
+    stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+    exit(1);
+  }
   if (env.FAKE_VELA_ENV_DUMP_PATH) {
     writeFileSync(env.FAKE_VELA_ENV_DUMP_PATH, JSON.stringify(env, null, 2), 'utf8');
   }

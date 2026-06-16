@@ -177,6 +177,7 @@ afterEach(() => {
   delete process.env.VELA_PROFILE;
   delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
   delete process.env.FAKE_VELA_LOGIN_FAIL;
+  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
   delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
   delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
   delete process.env.FAKE_VELA_ENV_DUMP_PATH;
@@ -346,9 +347,29 @@ describe('GET /api/integrations/vela/status', () => {
 });
 
 describe('POST /api/integrations/vela/login', () => {
-  it('routes default vela login API traffic through the daemon AMR API proxy', async () => {
+  it('starts vela login over a direct connection (no AMR API proxy) when the direct attempt succeeds', async () => {
     const dumpPath = path.join(tmpHome, 'vela-env.json');
     process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+
+    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(status).toBe(202);
+
+    await waitForFile(dumpPath);
+    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+    // Direct-first: a healthy device-authorization path must NOT be re-routed
+    // through the daemon IPv4 proxy. The proxy hop loses the client IP behind a
+    // corporate transparent proxy (e.g. 飞连/CorpLink) → device authorization
+    // fails with "502: Invalid IP address: undefined" (#4210 regression).
+    expect(env.VELA_API_URL ?? '').toBe('');
+  });
+
+  it('falls back to the daemon AMR API proxy when the direct device-authorization attempt fails', async () => {
+    const dumpPath = path.join(tmpHome, 'vela-env-fallback.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    // Direct attempt fails (models a broken amr-api edge path, #3726); the proxy
+    // attempt (which sets VELA_API_URL) succeeds.
+    process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL =
+      'start device authorization: API request failed with status 502: broken edge';
 
     const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
     expect(status).toBe(202);
@@ -456,10 +477,12 @@ describe('POST /api/integrations/vela/login', () => {
     }
   });
 
-  it('derives the default login API proxy from OD_PUBLIC_BASE_URL when configured', async () => {
+  it('derives the fallback login API proxy from OD_PUBLIC_BASE_URL when the direct attempt fails', async () => {
     const dumpPath = path.join(tmpHome, 'vela-env-public-base-url.json');
     process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
     process.env.OD_PUBLIC_BASE_URL = 'https://open-design.example.com/';
+    process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL =
+      'start device authorization: API request failed with status 502: broken edge';
 
     const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
     expect(status).toBe(202);
