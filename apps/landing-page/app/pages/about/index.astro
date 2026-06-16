@@ -1,0 +1,178 @@
+---
+/*
+ * /about/ — short, vision-led company page.
+ *
+ * Deliberately light: who builds Open Design (Powerformer, Inc.) and a
+ * line of open-source products before it (Refly, Nexu), then the vision.
+ * No named individuals. en / zh / zh-tw authored; other locales fall
+ * back to en. Localized routes are produced by `[locale]/about/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+
+type AboutCopy = {
+  metaTitle: string;
+  metaDescription: string;
+  eyebrow: string;
+  h1: string;
+  lead: string;
+  visionHead: string;
+  vision: string[];
+  closing: string;
+};
+
+const COPY = {
+  en: {
+    metaTitle: 'About — Open Design',
+    metaDescription:
+      'Open Design is built by Powerformer, Inc. — a team behind a line of open-source products including Refly and Nexu, and, in 2026, Open Design.',
+    eyebrow: 'About',
+    h1: 'About Open Design',
+    lead: 'Open Design is built by Powerformer, Inc. We have shipped open-source tools for years — a line of products including Refly and Nexu — and in 2026 we released Open Design: a one-stop, agent-native design platform.',
+    visionHead: 'Our vision',
+    vision: [
+      'For decades, design barely changed: you open an app and drag shapes around a canvas by hand. Figma, Sketch, Photoshop — all variations of the same manual loop. We think that is about to shift. Design is becoming a capability every agent can call — woven into how products get built, the way coding already is.',
+      '2026 is the inflection point: models finally have real aesthetic judgment. World-class design no longer has to be a scarce resource locked behind specialists and expensive seats — paired with the right design system, it can be a default anyone can reach.',
+      'Open Design takes the coding agent already on your laptop and lets it step out of the code window to actually design, produce, and ship — local-first, open-source, BYOK at every layer, and neutral to any agent runtime. Skills, design systems, and templates are shared freely and get better with every use.',
+      'Our goal is to rekindle the curiosity for beauty — so people who are not designers can still make things that look great. An open, agent-native design ecosystem: design that evolves with you, not design you rent.',
+    ],
+    closing: 'Open Design is Apache-2.0 and built in the open.',
+  },
+  zh: {
+    metaTitle: '关于 — Open Design',
+    metaDescription:
+      'Open Design 由 Powerformer, Inc. 打造——我们做过一系列开源产品,包括 Refly、Nexu,并于 2026 年发布 Open Design。',
+    eyebrow: '关于',
+    h1: '关于 Open Design',
+    lead: 'Open Design 由 Powerformer, Inc. 打造。我们做开源产品已有多年——包括 Refly、Nexu,并在 2026 年发布了 Open Design:一站式的 agent-native 设计平台。',
+    visionHead: '我们的愿景',
+    vision: [
+      '过去几十年,设计这件事几乎没变过:打开一个软件,在画布上用鼠标一个个拖图形。Figma、Sketch、Photoshop,本质都是同一套"人在画布上手动操作"。我们判断,这正在改变——设计会从"一个要打开的软件",变成"每个 agent 都能随时调用的能力",像今天的 coding 一样融进生产流程。',
+      '2026 是拐点:模型第一次真正有了审美。世界级的"好看"不再是锁在少数专业设计师和昂贵席位里的稀缺资源——配上一套设计系统,它可以成为人人都能调用的默认能力。',
+      'Open Design 让你电脑里已有的 coding agent 走出代码窗口,真正去做设计、做产品、做交付——本地优先、开源、每一层都支持 BYOK,且对任何 agent runtime 保持中立。Skill、设计系统、模板自由共享,越用越好。',
+      '我们想做的,是把对美的好奇心重新点亮——让不只是设计师的人,也能做出好看的东西。一个开放、agent-native 的设计生态:设计与你一起进化,而不是租来的设计。',
+    ],
+    closing: 'Open Design 采用 Apache-2.0,完全开源构建。',
+  },
+  'zh-tw': {
+    metaTitle: '關於 — Open Design',
+    metaDescription:
+      'Open Design 由 Powerformer, Inc. 打造——我們做過一系列開源產品,包括 Refly、Nexu,並於 2026 年發布 Open Design。',
+    eyebrow: '關於',
+    h1: '關於 Open Design',
+    lead: 'Open Design 由 Powerformer, Inc. 打造。我們做開源產品已有多年——包括 Refly、Nexu,並在 2026 年發布了 Open Design:一站式的 agent-native 設計平台。',
+    visionHead: '我們的願景',
+    vision: [
+      '過去幾十年,設計這件事幾乎沒變過:打開一個軟體,在畫布上用滑鼠一個個拖圖形。Figma、Sketch、Photoshop,本質都是同一套「人在畫布上手動操作」。我們判斷,這正在改變——設計會從「一個要打開的軟體」,變成「每個 agent 都能隨時呼叫的能力」,像今天的 coding 一樣融進生產流程。',
+      '2026 是拐點:模型第一次真正有了審美。世界級的「好看」不再是鎖在少數專業設計師和昂貴席位裡的稀缺資源——配上一套設計系統,它可以成為人人都能呼叫的預設能力。',
+      'Open Design 讓你電腦裡已有的 coding agent 走出程式碼視窗,真正去做設計、做產品、做交付——本地優先、開源、每一層都支援 BYOK,且對任何 agent runtime 保持中立。Skill、設計系統、範本自由共享,越用越好。',
+      '我們想做的,是把對美的好奇心重新點亮——讓不只是設計師的人,也能做出好看的東西。一個開放、agent-native 的設計生態:設計與你一起進化,而不是租來的設計。',
+    ],
+    closing: 'Open Design 採用 Apache-2.0,完全開源建構。',
+  },
+} satisfies Record<string, AboutCopy>;
+
+const c = COPY[locale as keyof typeof COPY] ?? COPY.en;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  name: c.metaTitle,
+  description: c.metaDescription,
+  url: new URL('/about/', Astro.site).toString(),
+  mainEntity: {
+    '@type': 'Organization',
+    name: 'Powerformer, Inc.',
+    brand: 'Open Design',
+    url: Astro.site?.toString(),
+    sameAs: [
+      'https://github.com/nexu-io/open-design',
+      'https://nexu.io',
+      'https://refly.ai',
+    ],
+  },
+};
+---
+
+<Layout title={c.metaTitle} description={c.metaDescription} jsonLd={jsonLd}>
+  <article class="about-page">
+    <span class="about-eyebrow">{c.eyebrow}</span>
+    <h1 class="about-h1">{c.h1}<span class="about-dot">.</span></h1>
+    <p class="about-lead">{c.lead}</p>
+
+    <section class="about-block">
+      <h2 class="about-h2">{c.visionHead}</h2>
+      {c.vision.map((p) => <p class="about-p">{p}</p>)}
+      <p class="about-closing">{c.closing}</p>
+    </section>
+
+    <div class="about-actions">
+      <a class="btn btn-primary" href="https://github.com/nexu-io/open-design" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn btn-ghost" href={href('/plugins/')}>Open Design plugins →</a>
+    </div>
+  </article>
+
+  <style>
+    .about-page {
+      max-width: 680px;
+    }
+    .about-eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-mute, #595959);
+      margin-bottom: 18px;
+    }
+    .about-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--ink, #262626);
+    }
+    .about-dot {
+      color: var(--ui-brand, #63fe13);
+    }
+    .about-lead {
+      margin: 18px 0 0;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .about-block {
+      margin-top: 44px;
+      padding-top: 36px;
+      border-top: 1px solid var(--line);
+    }
+    .about-h2 {
+      margin: 0 0 18px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink, #262626);
+    }
+    .about-p {
+      margin: 0 0 16px;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink-soft, #434343);
+    }
+    .about-closing {
+      margin: 24px 0 0;
+      font-size: 14px;
+      color: var(--ink-mute, #595959);
+    }
+    .about-actions {
+      display: flex;
+      gap: 14px;
+      margin-top: 40px;
+      flex-wrap: wrap;
+    }
+  </style>
+</Layout>

@@ -4757,8 +4757,8 @@ footer .container {
 }
 .sub-footer-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 40px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 28px;
   margin-bottom: 36px;
 }
 .sub-footer-col h5 {
@@ -4770,6 +4770,17 @@ footer .container {
   margin-bottom: 14px;
   font-weight: 500;
 }
+/* Column headers that double as links (Solution / Agent / Plugins /
+   Compare) keep the eyebrow styling but become clickable. */
+.sub-footer-col h5 a {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.16s ease;
+}
+.sub-footer-col h5 a:hover { color: var(--coral); }
 .sub-footer-col ul {
   list-style: none;
   padding: 0;
@@ -4785,6 +4796,52 @@ footer .container {
   transition: color 0.16s ease;
 }
 .sub-footer-col a:hover { color: var(--coral); }
+
+/* ---------- footer bottom bar ----------
+ *
+ * Legal sign-off + social row under the link columns. One class contract
+ * shared by `site-footer.astro` (sub-pages, scoped style) and the homepage
+ * footer in `page.tsx` (these global rules).
+ */
+.foot-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line, #d9d9d9);
+}
+.foot-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--ink-mute, #8c8c8c);
+}
+.foot-bar-left a {
+  color: var(--ink-soft, #595959);
+  text-decoration: none;
+}
+.foot-bar-left a:hover { text-decoration: underline; }
+.foot-dot { opacity: 0.5; }
+.foot-social {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.foot-social a {
+  color: var(--ink-mute, #8c8c8c);
+  display: inline-flex;
+}
+.foot-social a:hover { color: var(--ink, #262626); }
+
+/* Tablet: 7 columns get cramped — drop to a 4-wide grid. */
+@media (max-width: 1080px) {
+  .sub-footer-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 
 /* ---------- footer masthead ----------
  *
