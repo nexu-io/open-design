@@ -309,9 +309,9 @@ describe("packaged smoke workflow", () => {
   it("[P2] validates stable dry-run nightly metadata from a non-release ref", async () => {
     const objects: Record<string, unknown> = {};
     const fixture = await startStableNightlyMetadataServer(objects);
-    objects["nightly/versions/0.10.1.nightly.12/metadata.json"] = stableNightlyMetadataFixture(
-      "0.10.1",
-      "0.10.1.nightly.12",
+    objects["nightly/versions/0.10.2.nightly.12/metadata.json"] = stableNightlyMetadataFixture(
+      "0.10.2",
+      "0.10.2.nightly.12",
       fixture.origin,
     );
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-stable-dry-run-"));
@@ -331,16 +331,16 @@ describe("packaged smoke workflow", () => {
           OPEN_DESIGN_RELEASE_CHANNEL: "stable",
           OPEN_DESIGN_RELEASE_DRY_RUN: "true",
           OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: fixture.origin,
-          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.10.1.nightly.12",
-          OPEN_DESIGN_STABLE_VERSION: "0.10.1",
+          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.10.2.nightly.12",
+          OPEN_DESIGN_STABLE_VERSION: "0.10.2",
           PATH: `${join(runnerTemp, "bin")}:${process.env.PATH ?? ""}`,
         },
       });
 
-      expect(result.stdout).toContain("[release-stable] validated nightly: 0.10.1.nightly.12");
+      expect(result.stdout).toContain("[release-stable] validated nightly: 0.10.2.nightly.12");
       expect(result.stdout).toContain("[release-stable] channel: stable");
       expect(result.stdout).toContain("[release-stable] dry run: true");
-      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.10.1");
+      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.10.2");
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });
