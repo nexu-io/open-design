@@ -1,11 +1,18 @@
 name: notify-daily-feishu
 
-# Every morning (09:00 Asia/Shanghai) build a beta package off the currently
-# active release branch (highest-semver release/vX.Y.Z) by reusing release-beta,
-# then post a Feishu card with download links and the changelog since the
-# previously published beta — to the SAME Feishu bot as the per-push release
-# stream (FEISHU_RELEASE_WEBHOOK). The two streams share one group; their cards
-# stay distinguishable via CHANNEL_LABEL (Beta vs Nightly) and STREAM_LABEL.
+# Every morning (09:00 Asia/Shanghai) build a beta package off main (the
+# development tip) by reusing release-beta, then post a Feishu card with download
+# links and the changelog since the previously published beta — to the SAME
+# Feishu bot as the per-push release stream (FEISHU_RELEASE_WEBHOOK). The two
+# streams share one group; their cards stay distinguishable via CHANNEL_LABEL
+# (Beta vs Nightly) and STREAM_LABEL.
+#
+# Beta is the daily R&D channel, so it tracks main rather than a release branch:
+# a per-patch release/vX.Y.Z branch freezes once it ships stable, at which point
+# its base version equals the latest stable and release-beta's
+# strictly-greater-than-stable guard rejects every build. main always leads
+# stable, so it never hits that trap. Pass `ref` to build a one-off beta from a
+# specific branch (e.g. a release branch) instead.
 #
 # NOTE: schedule triggers only fire from the default branch (main), so this file
 # must live on main to run on its cron.
@@ -17,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Override the release branch to build (e.g. release/v0.9.0). Empty auto-selects the highest-semver release branch."
+        description: "Override the ref to build (e.g. release/v0.10.1). Empty builds main."
         required: false
         type: string
         default: ""
@@ -32,16 +39,13 @@ concurrency:
 
 jobs:
   resolve:
-    name: Resolve active release branch
+    name: Resolve build ref
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     outputs:
       ref: ${{ steps.pick.outputs.ref }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Pick highest-semver release branch
+      - name: Pick build ref (main, or override)
         id: pick
         env:
           OVERRIDE_REF: ${{ inputs.ref }}
@@ -52,20 +56,11 @@ jobs:
             echo "ref=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          latest="$(git ls-remote --heads origin 'refs/heads/release/v*' \
-            | sed 's#.*refs/heads/##' \
-            | grep -E '^release/v[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V \
-            | tail -1)"
-          if [ -z "$latest" ]; then
-            echo "no release/vX.Y.Z branch found" >&2
-            exit 1
-          fi
-          echo "active release branch: $latest"
-          echo "ref=$latest" >> "$GITHUB_OUTPUT"
+          echo "using default ref: main"
+          echo "ref=main" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build beta from active release branch
+    name: Build beta from main
     needs: resolve
     uses: ./.github/workflows/release-beta.yml
     secrets: inherit

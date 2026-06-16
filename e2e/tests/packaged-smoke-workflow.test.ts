@@ -19,6 +19,7 @@ const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "scripts", "release-beta.ts");
+const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   ".github",
@@ -282,6 +283,28 @@ describe("packaged smoke workflow", () => {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });
     }
+  });
+
+  it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {
+    // Beta is the daily R&D channel and must track the development tip (main).
+    // Selecting the highest-semver release/vX.Y.Z branch stalls the build: once
+    // that branch ships stable, its base version equals the latest stable and
+    // release-beta's strictly-greater-than-stable guard rejects every run until
+    // someone hand-bumps the retired branch. main always leads stable, so it
+    // never hits that trap.
+    //
+    // Scope every assertion to the resolve job so a refactor elsewhere in the
+    // workflow cannot keep this green while changing the build-ref control flow,
+    // and prove both branches of that control flow: the empty-input default
+    // builds main, and the workflow_dispatch override is still propagated.
+    const workflow = await readFile(notifyDailyFeishuWorkflowPath, "utf8");
+    const resolveJob = sectionBetween(workflow, "  resolve:", "\n  build:");
+    // Override path: workflow_dispatch ref is wired in and forwarded verbatim.
+    expect(resolveJob).toContain("OVERRIDE_REF: ${{ inputs.ref }}");
+    expect(resolveJob).toContain('echo "ref=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"');
+    // Default path: an empty input builds main, never a release branch.
+    expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
+    expect(resolveJob).not.toContain("refs/heads/release/v*");
   });
 
   it("[P2] supports release dry-run preflight without build or publish side effects", async () => {
