@@ -2032,10 +2032,11 @@ export function ChatPane({
                                 );
                                 // Forward the canonical telemetry device id to
                                 // AMR only on metrics opt-in (see
-                                // amrHandoffDeviceId). Sourced from the resolved
-                                // device id / installationId, not the mount-time
-                                // bootstrap UUID, so the join key matches the
-                                // telemetry identity.
+                                // amrHandoffDeviceId). Sourced from the current
+                                // config.installationId / resolved device id,
+                                // not the mount-time bootstrap UUID, so the join
+                                // key matches the telemetry identity even across
+                                // a Delete-my-data rotation.
                                 const deviceId = amrHandoffDeviceId({
                                   metricsConsent:
                                     config?.telemetry?.metrics === true,

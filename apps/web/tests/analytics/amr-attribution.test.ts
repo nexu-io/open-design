@@ -218,15 +218,24 @@ describe('AMR attribution helper', () => {
         installationId: 'od-install-abc',
       }),
     ).toBeNull();
-    // Consent on: prefer the resolved (canonical telemetry) device id.
+    // Consent on, steady state (the two ids agree): forward that id.
     expect(
       amrHandoffDeviceId({
         metricsConsent: true,
         resolvedDeviceId: 'od-install-abc',
-        installationId: 'config-install-xyz',
+        installationId: 'od-install-abc',
       }),
     ).toBe('od-install-abc');
-    // Consent on, resolved id not hydrated yet: fall back to installationId.
+    // Consent on, config.installationId not hydrated yet: fall back to the
+    // resolved telemetry device id.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: true,
+        resolvedDeviceId: 'od-install-abc',
+        installationId: null,
+      }),
+    ).toBe('od-install-abc');
+    // Consent on, resolved id not hydrated yet: use installationId.
     expect(
       amrHandoffDeviceId({
         metricsConsent: true,
@@ -242,5 +251,21 @@ describe('AMR attribution helper', () => {
         installationId: null,
       }),
     ).toBeNull();
+  });
+
+  it('prefers the freshly rotated installationId over a stale resolved device id', () => {
+    // Delete-my-data rotation window: config.installationId is the new
+    // source-of-truth in the current render, but the analytics client's
+    // resolvedDeviceId module global still holds the pre-rotation value until
+    // the App-level setIdentity effect runs applyIdentity(). The handoff must
+    // forward the fresh installation id so the AMR cross-product join never
+    // points at the deleted identity.
+    expect(
+      amrHandoffDeviceId({
+        metricsConsent: true,
+        resolvedDeviceId: 'od-install-OLD',
+        installationId: 'od-install-NEW',
+      }),
+    ).toBe('od-install-NEW');
   });
 });
