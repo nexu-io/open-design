@@ -37,6 +37,7 @@ export type AnalyticsEventName =
   | 'file_upload_result'
   // Artifact
   | 'artifact_export_result'
+  | 'artifact_deploy_result'
   // Feedback
   | 'feedback_submit_result'
   | 'assistant_feedback_click'
@@ -221,6 +222,10 @@ export type TrackingArtifactKind =
   | 'doc'
   | 'unknown';
 
+// NOTE: vercel / cloudflare_pages are intentionally NOT here. Deploy attempts
+// used to ride artifact_export_result with those formats, but that only ever
+// meant "deploy popover opened", never a real publish. Real deploys are now
+// tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
 export type TrackingExportFormat =
   | 'pdf'
   | 'pptx'
@@ -230,9 +235,7 @@ export type TrackingExportFormat =
   | 'markdown'
   | 'template'
   | 'share_link'
-  | 'share_page'
-  | 'vercel'
-  | 'cloudflare_pages';
+  | 'share_page';
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';
@@ -2061,7 +2064,10 @@ export interface PresentPopoverClickProps {
 export interface ShareOptionPopoverClickProps {
   page_name: 'artifact';
   area: 'share_option_popover';
-  element: TrackingExportFormat;
+  // Export/share formats, plus 'publish_required_guide' for the share-intent
+  // signal: the user opened Share wanting a link but the artifact isn't
+  // deployed yet, so only the "publish online first" guide row is shown.
+  element: TrackingExportFormat | 'publish_required_guide';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   project_id: string;
@@ -2835,6 +2841,32 @@ export interface ArtifactExportResultProps {
   project_kind: TrackingProjectKind | null;
 }
 
+export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
+
+// Fired from the deploy modal when a real publish attempt resolves — NOT when
+// the modal merely opens (that path is `artifact_export_result` with
+// export_format vercel/cloudflare_pages and only means "popover opened").
+// `result` is 'success' once the provider accepts the deploy (the link may
+// still be delayed/protected), 'failed' on a hard error or missing config.
+export interface ArtifactDeployResultProps {
+  page_name: 'artifact';
+  area: 'deploy_modal';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  provider: TrackingDeployProvider;
+  result: TrackingExportResult;
+  // True when this attempt saved a new/changed token (the user actually
+  // entered a key this run), so "configured a key AND deployed" is queryable.
+  saved_new_token: boolean;
+  // True when the provider had no saved, configured credentials before this
+  // attempt — i.e. this is a first-time setup-and-deploy.
+  first_configure: boolean;
+  error_code?: string;
+  deploy_duration_ms: number;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+}
+
 export interface FeedbackSubmitResultProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -2997,6 +3029,7 @@ export type AnalyticsEventPayload =
   | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
   | { event: 'file_upload_result'; props: FileUploadResultProps }
   | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
+  | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
   | { event: 'feedback_submit_result'; props: FeedbackSubmitResultProps }
   | { event: 'assistant_feedback_click'; props: AssistantFeedbackClickProps }
   | {
