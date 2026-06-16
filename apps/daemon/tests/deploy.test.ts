@@ -6,34 +6,28 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Monkeypatch vi.stubGlobal to gracefully handle unmocked git/trees GET requests in existing tests.
-const originalStubGlobal = vi.stubGlobal;
-vi.stubGlobal = function (key: string, value: any) {
-  if (key === 'fetch') {
-    const originalFetchMock = value;
-    const wrappedFetchMock = vi.fn(async (input: any, init: any) => {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof Request
-            ? input.url
-            : String(input);
-      if (url.includes('/git/trees/')) {
-        try {
-          return await originalFetchMock(input, init);
-        } catch (err: any) {
-          if (err.message && (err.message.includes('Unexpected fetch') || err.message.includes('unexpected fetch'))) {
-            return new Response(JSON.stringify({ tree: [] }), { status: 200 });
-          }
-          throw err;
+function stubGlobalFetch(fetchMock: any) {
+  const wrappedFetchMock = vi.fn(async (input: any, init: any) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+    if (url.includes('/git/trees/')) {
+      try {
+        return await fetchMock(input, init);
+      } catch (err: any) {
+        if (err.message && (err.message.includes('Unexpected fetch') || err.message.includes('unexpected fetch'))) {
+          return new Response(JSON.stringify({ tree: [] }), { status: 200 });
         }
+        throw err;
       }
-      return originalFetchMock(input, init);
-    });
-    return originalStubGlobal.call(vi, key, wrappedFetchMock);
-  }
-  return originalStubGlobal.call(vi, key, value);
-};
+    }
+    return fetchMock(input, init);
+  });
+  vi.stubGlobal('fetch', wrappedFetchMock);
+}
 
 
 import {
@@ -373,7 +367,7 @@ describe('vercel deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToVercel({
       config: { token: 'vercel-token-secret', teamSlug: 'my-team-slug' },
@@ -447,7 +441,7 @@ describe('render deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToRender({
       config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
@@ -517,7 +511,7 @@ describe('render deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await deployToRender({
       config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
@@ -577,7 +571,7 @@ describe('render deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(
       deployToRender({
@@ -625,7 +619,7 @@ describe('render deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const deployPromise = deployToRender({
       config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
@@ -743,7 +737,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
@@ -825,7 +819,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(
       deployToNetlify({
@@ -915,7 +909,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(
       deployToNetlify({
@@ -1021,7 +1015,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
@@ -1113,7 +1107,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(
       deployToNetlify({
@@ -1188,7 +1182,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     // First deploy with priorMetadata containing deployKeyId
     const result = await deployToNetlify({
@@ -1261,7 +1255,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'github-token-secret' },
@@ -1344,7 +1338,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'github-token-secret' },
@@ -1480,7 +1474,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
@@ -1561,7 +1555,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const files = [
       {
@@ -1702,7 +1696,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const files = [
       {
@@ -1780,7 +1774,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
@@ -1916,7 +1910,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const files = [
       {
@@ -2080,7 +2074,7 @@ describe('netlify and railway deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const files = [
       {
@@ -2128,7 +2122,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const deployPromise = deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
@@ -2202,7 +2196,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await deployToNetlify({
       config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
@@ -2271,7 +2265,7 @@ describe('netlify and railway deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(
       deployToRailway({
@@ -3246,7 +3240,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(deployToCloudflarePages({
       config: {
@@ -3397,7 +3391,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToCloudflarePages({
       config: {
@@ -3515,7 +3509,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToCloudflarePages({
       config: {
@@ -3544,7 +3538,7 @@ describe('cloudflare pages deploys', () => {
 
   it('rejects invalid custom-domain prefix before creating a Pages deployment', async () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(deployToCloudflarePages({
       config: {
@@ -3585,7 +3579,7 @@ describe('cloudflare pages deploys', () => {
       }
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(deployToCloudflarePages({
       config: {
@@ -3627,7 +3621,7 @@ describe('cloudflare pages deploys', () => {
         headers: { 'content-type': 'application/json' },
       });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     await expect(listCloudflarePagesZones({
       token: 'cloudflare-token-secret',
@@ -3829,7 +3823,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToCloudflarePages({
       config: {
@@ -3893,7 +3887,7 @@ describe('cloudflare pages deploys', () => {
         content: 'demo-pages.pages.dev',
       }],
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain();
 
@@ -3926,7 +3920,7 @@ describe('cloudflare pages deploys', () => {
         content: 'demo-pages.pages.dev',
       }],
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain();
 
@@ -3950,7 +3944,7 @@ describe('cloudflare pages deploys', () => {
     const { calls, fetchMock } = createCustomDomainDeployMock({
       pagesDomains: [{ name: 'demo.example.com', status: 'active' }],
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain();
 
@@ -3978,7 +3972,7 @@ describe('cloudflare pages deploys', () => {
     const { calls, fetchMock } = createCustomDomainDeployMock({
       dnsCreateRejectsComment: true,
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain();
 
@@ -4010,7 +4004,7 @@ describe('cloudflare pages deploys', () => {
         content: 'other.pages.dev',
       }],
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain();
 
@@ -4038,7 +4032,7 @@ describe('cloudflare pages deploys', () => {
 
   it('patches only a previously owned CNAME with matching marker metadata', async () => {
     const initial = createCustomDomainDeployMock();
-    vi.stubGlobal('fetch', initial.fetchMock);
+    stubGlobalFetch(initial.fetchMock);
     const first = await deployWithCustomDomain();
     const priorMetadata = first.providerMetadata as Record<string, unknown>;
     const priorCustom = priorMetadata.cloudflarePagesCustomDomain as Record<string, unknown>;
@@ -4053,7 +4047,7 @@ describe('cloudflare pages deploys', () => {
         comment: priorCustom.marker,
       }],
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployWithCustomDomain({ priorMetadata });
 
@@ -4158,7 +4152,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToCloudflarePages({
       config: {
@@ -4303,7 +4297,7 @@ describe('cloudflare pages deploys', () => {
 
       throw new Error(`Unexpected fetch: ${method} ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobalFetch(fetchMock);
 
     const result = await deployToCloudflarePages({
       config: {

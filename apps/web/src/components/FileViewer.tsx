@@ -14007,8 +14007,12 @@ function HtmlViewer({
     }
   }
 
-  async function retryDeploymentLink() {
-    const current = (deployResult?.providerId === deployProviderId ? deployResult : null) || (deployment?.providerId === deployProviderId ? deployment : null);
+  async function retryDeploymentLink(targetProviderId?: WebDeployProviderId) {
+    const providerId = targetProviderId || deployProviderId;
+    const current =
+      (deployResult?.providerId === providerId ? deployResult : null) ||
+      (deployment?.providerId === providerId ? deployment : null) ||
+      deploymentsByProvider[providerId];
     if (!current?.id) return;
     setDeployError(null);
     setDeployPhase('preparing-link');
@@ -18038,6 +18042,200 @@ function HtmlViewer({
                 }}
               >
                 {deployButtonLabel}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+      {workspaceActive && socialShareModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div
+          className="modal-backdrop viewer-modal-backdrop social-share-flow-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeSocialShareModal();
+          }}
+        >
+          <div
+            className="modal deploy-modal social-share-flow-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+            style={{ maxWidth: '480px' }}
+          >
+            <div className="deploy-flow-modal__scroll">
+              <div className="modal-head">
+                <div className="kicker">{t('socialShare.projectSection')}</div>
+                <h2>{t('fileViewer.shareLabel')}</h2>
+                <p className="subtitle">{t('fileViewer.shareLinkPublishGuide')}</p>
+              </div>
+              <div className="deploy-form" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {deployCopyLinks.length > 1 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      background: 'var(--bg-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)' }}>
+                      {t('fileViewer.deployProviderLabel')}
+                    </span>
+                    <select
+                      aria-label="Select deployment provider for social share"
+                      value={activeSocialShareProviderId || latestShareDeploymentDefault?.providerId || deployCopyLinks[0]?.providerId}
+                      onChange={(e) => setActiveSocialShareProviderId(e.target.value as WebDeployProviderId)}
+                      style={{
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text)',
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        minWidth: '140px',
+                      }}
+                    >
+                      {deployCopyLinks.map((item) => (
+                        <option key={item.providerId} value={item.providerId}>
+                          {item.providerLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                <div className={`deploy-social-share${activeProjectSocialShare ? '' : ' is-locked'}${socialShareBlockedState ? ` is-${socialShareBlockedState}` : ''}`} style={{ marginTop: 0 }}>
+                  <div className="deploy-social-share__head">
+                    <div className="deploy-social-share__label">
+                      {t('socialShare.projectSection')}
+                    </div>
+                    {socialShareDisplayUrl ? (
+                      <a
+                        className="deploy-social-share__url"
+                        href={socialShareDisplayUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {socialShareDisplayUrl}
+                      </a>
+                    ) : null}
+                  </div>
+                  {!activeProjectSocialShare || socialShareBlockedState ? (
+                    <p className="hint">{socialShareUnavailableMessage}</p>
+                  ) : null}
+                  {activeProjectSocialShare ? (
+                    <SocialShareGrid
+                      share={activeProjectSocialShare}
+                      onAfterShare={closeSocialShareModal}
+                    />
+                  ) : null}
+                  {socialShareBlockedDeployment?.url && latestSocialShareDeployment?.id === socialShareBlockedDeployment.id ? (
+                    <div className="deploy-social-share__actions">
+                      <button
+                        type="button"
+                        className="viewer-action"
+                        disabled={deployPhase === 'preparing-link'}
+                        onClick={() => {
+                          void retryDeploymentLink(latestSocialShareDeployment?.providerId);
+                        }}
+                      >
+                        {deployPhase === 'preparing-link'
+                          ? t('fileViewer.preparingPublicLink')
+                          : t('fileViewer.retryLink')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {socialShareResultCards.length > 0 ? (
+                  <div className={`deploy-result-block ${deployResultState(latestSocialShareDeployment?.status)}`}>
+                    <div className="deploy-result-summary" style={{ padding: 0, border: 'none', background: 'transparent' }}>
+                      <div className="deploy-result-links" style={{ marginTop: 0 }}>
+                        {socialShareResultCards.map((card) => {
+                          const state = deployResultState(card.status);
+                          const canRetry = state === 'delayed' || state === 'protected';
+                          const isDisabled = state === 'protected' || state === 'failed';
+                          return (
+                            <div key={card.id} className={`deploy-result-link ${state}`} style={{ margin: 0 }}>
+                              <div className="deploy-result-link-main">
+                                <div className="deploy-result-link-head">
+                                  <span className="deploy-result-link-label">{card.label}</span>
+                                  <span className={`deploy-result-link-state ${state}`}>{statusLabelFor(state)}</span>
+                                </div>
+                                {card.message ? (
+                                  <p className="deploy-result-link-message">{card.message}</p>
+                                ) : null}
+                                <a
+                                  className="deploy-result-url"
+                                  href={card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                >
+                                  {card.url}
+                                </a>
+                              </div>
+                              <div className="deploy-result-actions">
+                                {canRetry ? (
+                                  <button
+                                    type="button"
+                                    className="viewer-action"
+                                    disabled={deployPhase === 'preparing-link'}
+                                    onClick={() => {
+                                      void retryDeploymentLink(latestSocialShareDeployment?.providerId);
+                                    }}
+                                  >
+                                    {deployPhase === 'preparing-link'
+                                      ? t('fileViewer.preparingPublicLink')
+                                      : t('fileViewer.retryLink')}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="viewer-action"
+                                  onClick={() => {
+                                    void copyDeployLink(card.url);
+                                  }}
+                                >
+                                  <Icon name="copy" size={14} />
+                                  <span>{copyDeployLabel(card.url)}</span>
+                                </button>
+                                <a
+                                  className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
+                                  href={isDisabled ? undefined : card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  aria-disabled={isDisabled}
+                                >
+                                  <Icon name="upload" size={14} />
+                                  {t('fileViewer.open')}
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="viewer-action secondary"
+                onClick={closeSocialShareModal}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                {t('common.close') || 'Close'}
               </button>
             </div>
           </div>
