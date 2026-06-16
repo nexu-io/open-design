@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
@@ -40,6 +41,13 @@ describe('POST /api/import/folder', () => {
     const d = mkdtempSync(path.join(tmpdir(), 'od-import-'));
     tempDirs.push(d);
     return d;
+  }
+
+  function inlineScript(html: string, marker: string): string {
+    const pattern = new RegExp(`<script\\b[^>]*${marker}[^>]*>([\\s\\S]*?)<\\/script>`, 'iu');
+    const match = pattern.exec(html);
+    expect(match).toBeTruthy();
+    return match?.[1] ?? '';
   }
 
   async function importFolder(body: unknown) {
@@ -847,6 +855,16 @@ const server = http.createServer((req, res) => {
     res.end("@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')}body{font-family:Inter}");
     return;
   }
+  if (req.url === '/api/hello') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true, url: req.url }));
+    return;
+  }
+  if (req.url === '/api/projects/imported-check') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true, url: req.url }));
+    return;
+  }
   if (req.method === 'POST' && req.url === '/submit') {
     let body = '';
     req.setEncoding('utf8');
@@ -864,7 +882,7 @@ const server = http.createServer((req, res) => {
   }
   res.setHeader('content-type', 'text/html');
   res.write('<!doctype html>');
-  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><form method="post" action="/submit"><input name="query" value="Search"></form><a href="/search">Search</a><h1>Preview ' + req.url + '</h1></body></html>');
+  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><form method="post" action="/submit"><input name="query" value="Search"></form><a href="/search">Search</a><h1>Preview ' + req.url + '</h1><script data-test-preview-api-fetch>window.__previewApiPromise = fetch("/api/hello").then(function(resp){ return resp.json(); });</script></body></html>');
 });
 server.listen(port, '127.0.0.1');
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
@@ -934,9 +952,64 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     expect(renderedHtml).toContain(`import "${previewBody.baseUrl}/@vite/client"`);
     expect(renderedHtml).toContain(`action="${previewBody.baseUrl}/submit"`);
     expect(renderedHtml).toContain(`<a href="${previewBody.baseUrl}/search">Search</a>`);
+    expect(renderedHtml).toContain('data-od-preview-proxy-network-bridge');
     expect(renderedHtml).toContain('data-od-url-snapshot-bridge');
     expect(renderedHtml).toContain("data.type === 'od:editable-snapshot'");
     expect(renderedHtml).toContain("type: 'od:editable-snapshot:result'");
+
+    const networkBridgeScript = inlineScript(renderedHtml, 'data-od-preview-proxy-network-bridge');
+    const apiFetchScript = inlineScript(renderedHtml, 'data-test-preview-api-fetch');
+    class FakeXMLHttpRequest {
+      url: string | null = null;
+
+      open(_method: string, url: string): void {
+        this.url = url;
+      }
+    }
+    type PreviewWindowHarness = {
+      location: URL;
+      fetch: (input: unknown, init?: RequestInit) => Promise<Response>;
+      XMLHttpRequest: typeof FakeXMLHttpRequest;
+      __lastFetchUrl?: string;
+      __previewApiPromise?: Promise<{ ok: boolean; url: string }>;
+    };
+    const previewWindow: PreviewWindowHarness = {
+      location: new URL(`${baseUrl}${previewBody.url!}`),
+      XMLHttpRequest: FakeXMLHttpRequest,
+      fetch: async (input: unknown, init?: RequestInit) => {
+        const value = input instanceof URL
+          ? input.href
+          : input instanceof Request
+            ? input.url
+            : String(input);
+        const absoluteUrl = new URL(value, baseUrl).href;
+        previewWindow.__lastFetchUrl = absoluteUrl;
+        return fetch(absoluteUrl, init);
+      },
+    };
+    const scriptContext = vm.createContext({
+      console,
+      fetch: previewWindow.fetch,
+      Request,
+      URL,
+      window: previewWindow,
+      XMLHttpRequest: FakeXMLHttpRequest,
+    });
+    vm.runInContext(networkBridgeScript, scriptContext);
+    (scriptContext as Record<string, unknown>).fetch = previewWindow.fetch;
+    vm.runInContext(apiFetchScript, scriptContext);
+    await expect(previewWindow.__previewApiPromise).resolves.toEqual({ ok: true, url: '/api/hello' });
+    expect(previewWindow.__lastFetchUrl).toBe(`${baseUrl}${previewBody.baseUrl!}/api/hello`);
+    await expect(previewWindow.fetch('/api/projects/imported-check').then((resp) => resp.json())).resolves.toEqual({
+      ok: true,
+      url: '/api/projects/imported-check',
+    });
+    expect(previewWindow.__lastFetchUrl).toBe(`${baseUrl}${previewBody.baseUrl!}/api/projects/imported-check`);
+    await expect(previewWindow.fetch(`${previewBody.baseUrl}/already-proxied`)).resolves.toHaveProperty('status', 200);
+    expect(previewWindow.__lastFetchUrl).toBe(`${baseUrl}${previewBody.baseUrl!}/already-proxied`);
+    const xhr = new previewWindow.XMLHttpRequest();
+    xhr.open('POST', '/auth/login');
+    expect(xhr.url).toBe(`${previewBody.baseUrl}/auth/login`);
 
     const postResp = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
       method: 'POST',

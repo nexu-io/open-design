@@ -976,7 +976,10 @@ function transformPreviewProxyText(text: string, contentType: string, proxyBaseP
     return rewritePreviewProxyScriptPaths(
       rewritePreviewProxyCssPaths(
         rewritePreviewProxyHtmlPaths(
-          injectUrlPreviewBridge(injectPreviewProxyBase(text, proxyBasePath), 'snapshot'),
+          injectPreviewProxyNetworkBridge(
+            injectUrlPreviewBridge(injectPreviewProxyBase(text, proxyBasePath), 'snapshot'),
+            proxyBasePath,
+          ),
           proxyBasePath,
         ),
         proxyBasePath,
@@ -987,6 +990,76 @@ function transformPreviewProxyText(text: string, contentType: string, proxyBaseP
   if (/text\/css/i.test(contentType)) return rewritePreviewProxyCssPaths(text, proxyBasePath);
   if (/(?:javascript|json)/i.test(contentType)) return rewritePreviewProxyScriptPaths(text, proxyBasePath);
   return text;
+}
+
+function injectPreviewProxyNetworkBridge(html: string, proxyBasePath: string): string {
+  const marker = 'data-od-preview-proxy-network-bridge';
+  if (html.includes(marker)) return html;
+  const tag = previewProxyNetworkBridgeScript(proxyBasePath);
+  const headOpen = html.search(/<head(?:\s[^>]*)?>/i);
+  if (headOpen >= 0) {
+    const close = html.indexOf('>', headOpen);
+    if (close >= 0) return `${html.slice(0, close + 1)}${tag}${html.slice(close + 1)}`;
+  }
+  return `${tag}${html}`;
+}
+
+function previewProxyNetworkBridgeScript(proxyBasePath: string): string {
+  return `<script data-od-preview-proxy-network-bridge>
+(function(){
+  if (window.__odPreviewProxyNetworkBridge) return;
+  window.__odPreviewProxyNetworkBridge = true;
+  var proxyBasePath = ${JSON.stringify(proxyBasePath)};
+  function shouldProxyPath(pathname){
+    return typeof pathname === 'string' &&
+      pathname.charAt(0) === '/' &&
+      pathname.charAt(1) !== '/' &&
+      pathname !== proxyBasePath &&
+      pathname.indexOf(proxyBasePath + '/') !== 0;
+  }
+  function rewriteUrl(value){
+    if (typeof value !== 'string') return value;
+    if (shouldProxyPath(value)) return proxyBasePath + value;
+    try {
+      var url = new URL(value, window.location.href);
+      if (url.origin === window.location.origin && shouldProxyPath(url.pathname)) {
+        return proxyBasePath + url.pathname + url.search + url.hash;
+      }
+    } catch (_err) {}
+    return value;
+  }
+  function rewriteFetchInput(input){
+    if (typeof Request !== 'undefined' && input instanceof Request) {
+      var rewrittenRequestUrl = rewriteUrl(input.url);
+      return rewrittenRequestUrl === input.url ? input : new Request(rewrittenRequestUrl, input);
+    }
+    if (typeof URL !== 'undefined' && input instanceof URL) {
+      var rewrittenUrl = rewriteUrl(input.href);
+      return rewrittenUrl === input.href ? input : new URL(rewrittenUrl, window.location.href);
+    }
+    return rewriteUrl(input);
+  }
+  if (typeof window.fetch === 'function' && !window.fetch.__odPreviewProxyPatched) {
+    var nativeFetch = window.fetch;
+    var patchedFetch = function(input, init){
+      return nativeFetch.call(this, rewriteFetchInput(input), init);
+    };
+    patchedFetch.__odPreviewProxyPatched = true;
+    window.fetch = patchedFetch;
+  }
+  if (window.XMLHttpRequest && window.XMLHttpRequest.prototype) {
+    var nativeOpen = window.XMLHttpRequest.prototype.open;
+    if (typeof nativeOpen === 'function' && !nativeOpen.__odPreviewProxyPatched) {
+      var patchedOpen = function(method, url){
+        arguments[1] = rewriteUrl(url);
+        return nativeOpen.apply(this, arguments);
+      };
+      patchedOpen.__odPreviewProxyPatched = true;
+      window.XMLHttpRequest.prototype.open = patchedOpen;
+    }
+  }
+})();
+</script>`;
 }
 
 function injectPreviewProxyBase(html: string, proxyBasePath: string): string {
