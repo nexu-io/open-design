@@ -80,7 +80,7 @@ export function computeDesignSignature(report: DesignExtractReport): DesignSigna
   const fontFamilies = uniqueFontFamilies(report.typography.map((t) => t.value));
   const spacing = uniqueLengths(report.spacing.map((s) => s.value));
   const radius = uniqueLengths(report.radius.map((r) => r.value));
-  const shadow = uniqueLengths(report.shadow.map((s) => s.value));
+  const shadow = uniqueShadows(report.shadow.map((s) => s.value));
   const shadowCount = shadow.length;
 
   const palette = scorePalette(colors);
@@ -269,6 +269,33 @@ function uniqueLengths(values: string[]): string[] {
   for (const value of values) {
     const v = String(value ?? '').trim().toLowerCase();
     if (v) set.add(v);
+  }
+  return [...set].sort();
+}
+
+// Shadow tokens embed a color, so they need the same color-equivalence handling
+// as the palette: `0 1px 2px #FFF` and `0 1px 2px #ffffff` must normalize equal,
+// otherwise they hash differently and produce a false-positive diff. Lowercase
+// and collapse whitespace, then expand any embedded shorthand hex to 6/8 digits.
+export function normalizeShadow(value: string): string {
+  const collapsed = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  // Expand #rgb / #rgba shorthand hex in place so equivalent spellings match.
+  return collapsed.replace(/#([0-9a-f]{3,8})\b/g, (_m, h: string) => {
+    if (h.length === 3 || h.length === 4) {
+      return '#' + h.split('').map((c) => c + c).join('');
+    }
+    return '#' + h;
+  });
+}
+
+function uniqueShadows(values: string[]): string[] {
+  const set = new Set<string>();
+  for (const value of values) {
+    const norm = normalizeShadow(value);
+    if (norm) set.add(norm);
   }
   return [...set].sort();
 }
@@ -513,8 +540,15 @@ export function parseSignatureArgs(args: string[]): SignatureArgs {
     const a = args[i] ?? '';
     if (a === '--against') {
       hasAgainst = true;
-      against = args[i + 1];
-      i++; // consume the value
+      const next = args[i + 1];
+      // Only treat the next token as the value if it is a real value: a normal
+      // path, or the bare `-` stdin sentinel. A following flag (e.g. `--json`)
+      // means the value is missing, so leave `against` undefined and let the
+      // caller fail fast rather than opening a file named `--json`.
+      if (next !== undefined && (next === '-' || !next.startsWith('-'))) {
+        against = next;
+        i++; // consume the value
+      }
       continue;
     }
     if (a.startsWith('--against=')) {

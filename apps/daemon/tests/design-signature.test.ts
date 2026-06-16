@@ -282,6 +282,22 @@ describe('diffDesignSignatures', () => {
     const shadow = diffDesignSignatures(a, b).changes.find((c) => c.area === 'shadow');
     expect(shadow?.direction).toBe('increased');
   });
+
+  // Regression: shadows embed a color, so equivalent color spellings inside a
+  // shadow must share a fingerprint (same contract as the palette), otherwise
+  // #FFF vs #ffffff produces a false-positive diff.
+  it('treats equivalent shadow color spellings as the same fingerprint', () => {
+    const a = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #FFF}</style>');
+    const b = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #ffffff}</style>');
+    expect(a.fingerprint).toBe(b.fingerprint);
+    expect(diffDesignSignatures(a, b).unchanged).toBe(true);
+  });
+
+  it('collapses shadow whitespace so spacing-only spelling differences match', () => {
+    const a = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #000}</style>');
+    const b = computeDesignSignatureFromText('<style>x{box-shadow:0   1px   2px   #000}</style>');
+    expect(a.fingerprint).toBe(b.fingerprint);
+  });
 });
 
 describe('renderDiffForTerminal', () => {
@@ -347,6 +363,22 @@ describe('parseSignatureArgs', () => {
     const parsed = parseSignatureArgs(['next.html', '--against']);
     expect(parsed.hasAgainst).toBe(true);
     expect(parsed.against).toBeUndefined();
+  });
+
+  // Regression: a following flag is not a value. `--against --json` must leave
+  // `against` undefined so the caller fails fast, rather than capturing
+  // `--json` and trying to open a file named `--json`.
+  it('does not capture a following flag as the --against value', () => {
+    const parsed = parseSignatureArgs(['next.html', '--against', '--json']);
+    expect(parsed.hasAgainst).toBe(true);
+    expect(parsed.against).toBeUndefined();
+    expect(parsed.json).toBe(true);
+    expect(parsed.target).toBe('next.html');
+  });
+
+  it('accepts a bare - as the --against value (stdin previous version)', () => {
+    const parsed = parseSignatureArgs(['next.html', '--against', '-']);
+    expect(parsed.against).toBe('-');
   });
 
   it('reports no target when only flags are given', () => {
