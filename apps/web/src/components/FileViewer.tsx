@@ -12,11 +12,13 @@ import {
   anonymizeArtifactId,
   artifactKindToTracking,
   type TrackingProjectKind,
+  type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
+  trackArtifactDeployResult,
   trackArtifactHeaderClick,
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
@@ -4469,15 +4471,13 @@ function HtmlViewer({
       | 'markdown'
       | 'template'
       | 'share_link'
-      | 'share_page'
-      | 'vercel'
-      | 'cloudflare_pages',
+      | 'share_page',
     fn: () => Promise<unknown> | unknown,
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
     const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
-    const trackingFormat = format as Exclude<typeof format, 'image'>;
+    const trackingFormat = format;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -4975,6 +4975,15 @@ function HtmlViewer({
   const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   const imageExportPrepareIdRef = useRef(0);
+  // Threads the share-popover click → artifact_export_result(image) pair, the
+  // same correlation other export formats get via fireShareExport. The image
+  // export is a separate modal flow, so it owns its own request id / start.
+  const imageExportRequestIdRef = useRef<string | null>(null);
+  const imageExportStartedRef = useRef(0);
+  // Same click→result correlation for Save as template, which now reports the
+  // export result only after the template is actually saved (not on open).
+  const templateExportRequestIdRef = useRef<string | null>(null);
+  const templateExportStartedRef = useRef(0);
   const screenshotInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
@@ -6610,6 +6619,24 @@ function HtmlViewer({
   // from the same artifact output surface as files.
   function openSaveAsTemplateModal() {
     setDownloadMenuOpen(false);
+    // Start the template click→result correlation; the result fires later from
+    // handleSaveAsTemplate once the save actually resolves.
+    const requestId = analytics.newRequestId();
+    templateExportRequestIdRef.current = requestId;
+    templateExportStartedRef.current = performance.now();
+    trackShareOptionPopoverClick(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        element: 'template',
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
     setTemplateName(defaultName);
@@ -6625,6 +6652,11 @@ function HtmlViewer({
     setTemplateNote(null);
     setTemplateSaveError(null);
     let savedName: string | null = null;
+    // Default to failed; flips to success only when the save resolves. The
+    // finally block reports exactly one artifact_export_result(template),
+    // covering the !tpl branch and any thrown error too.
+    let templateOutcome: 'success' | 'failed' = 'failed';
+    let templateErrorCode: string | undefined = 'UNKNOWN';
     try {
       const tpl = await saveTemplate({
         name,
@@ -6633,6 +6665,7 @@ function HtmlViewer({
       });
       if (!tpl) {
         setTemplateSaveError(t('fileViewer.savedTemplateFail'));
+        templateErrorCode = 'SAVE_FAILED';
         return;
       }
       savedName = tpl.name;
@@ -6642,8 +6675,28 @@ function HtmlViewer({
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
       // Show success toast
       setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
+      templateOutcome = 'success';
+      templateErrorCode = undefined;
     } finally {
       setSavingTemplate(false);
+      const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
+      const started = templateExportStartedRef.current || performance.now();
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'template',
+          result: templateOutcome,
+          ...(templateErrorCode ? { error_code: templateErrorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
       if (savedName) {
         // Auto-clear the note so the menu doesn't keep stale state next open.
         setTimeout(() => setTemplateNote(null), 4000);
@@ -6731,10 +6784,38 @@ function HtmlViewer({
     setDeployError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
+    // Real-deploy analytics: report success only after the provider actually
+    // accepts the publish, failed on any hard error / missing config. This is
+    // distinct from the share-popover "opened" signal (artifact_export_result).
+    const deployStarted = performance.now();
+    const providerForTracking: TrackingDeployProvider =
+      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+    const firstConfigure = !deployConfig?.configured;
+    let savedNewToken = false;
+    const fireDeployResult = (
+      result: 'success' | 'failed' | 'cancelled',
+      errorCode?: string,
+    ) => {
+      trackArtifactDeployResult(analytics.track, {
+        page_name: 'artifact',
+        area: 'deploy_modal',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        provider: providerForTracking,
+        result,
+        saved_new_token: savedNewToken,
+        first_configure: firstConfigure,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        deploy_duration_ms: Math.round(performance.now() - deployStarted),
+        project_id: projectId,
+        project_kind: projectKind,
+      });
+    };
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
+      savedNewToken = Boolean(hasNewToken);
       const cloudflareHints = cloudflareConfigHintsFromForm();
       const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
         cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
@@ -6750,7 +6831,12 @@ function HtmlViewer({
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
-        if (!nextConfig) return;
+        if (!nextConfig) {
+          // saveDeployConfig bailed (missing/invalid token, e.g. user clicked
+          // Deploy without entering a key) — count as a failed deploy attempt.
+          fireDeployResult('failed', 'CONFIG_REQUIRED');
+          return;
+        }
         if (!nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
           throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
@@ -6765,6 +6851,7 @@ function HtmlViewer({
       setDeployment(next);
       setDeployResult(next);
       if (deployResultState(next.status) !== 'failed') {
+        fireDeployResult('success');
         setDeploySavedToast({
           message: t('fileViewer.deploySuccessToast'),
           details: t('fileViewer.deploySuccessToastDetails', {
@@ -6772,18 +6859,26 @@ function HtmlViewer({
             url: next.url,
           }),
         });
+      } else {
+        fireDeployResult('failed', `STATUS_${next.status ?? 'UNKNOWN'}`);
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
       const message = err instanceof Error
         ? err.message
         : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
-      if (message === t(option.tokenRequiredKey, { provider: t(option.labelKey) })) {
+      const tokenRequired =
+        message === t(option.tokenRequiredKey, { provider: t(option.labelKey) });
+      if (tokenRequired) {
         setDeployActionToast(message);
         deployTokenInputRef.current?.focus();
       } else {
         setDeployError(message);
       }
+      fireDeployResult(
+        'failed',
+        tokenRequired ? 'CONFIG_REQUIRED' : err instanceof Error ? err.name : 'UNKNOWN',
+      );
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -7401,6 +7496,24 @@ function HtmlViewer({
     flushSync(() => {
       setDownloadMenuOpen(false);
     });
+    // Start the image export's own click→result correlation (separate modal
+    // flow, so it can't ride fireShareExport).
+    const requestId = analytics.newRequestId();
+    imageExportRequestIdRef.current = requestId;
+    imageExportStartedRef.current = performance.now();
+    trackShareOptionPopoverClick(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        element: 'image',
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
     setImageExportError(null);
     setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
@@ -7416,16 +7529,44 @@ function HtmlViewer({
   };
 
   async function handleImageExportSave() {
+    const fireImageExportResult = (
+      result: 'success' | 'failed' | 'cancelled',
+      errorCode?: string,
+    ) => {
+      const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
+      const started = imageExportStartedRef.current || performance.now();
+      trackArtifactExportResult(
+        analytics.track,
+        {
+          page_name: 'artifact',
+          area: 'share_option_popover',
+          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+          export_format: 'image',
+          result,
+          ...(errorCode ? { error_code: errorCode } : {}),
+          export_duration_ms: Math.round(performance.now() - started),
+          project_id: projectId,
+          project_kind: projectKind,
+        },
+        { requestId },
+      );
+    };
     const prepared = imageExportPreparedBlob;
     if (!prepared || prepared.format !== imageExportFormat) {
       setImageExportError(t('fileViewer.exportImageFailed'));
+      fireImageExportResult('failed', 'BLOB_NOT_READY');
       return;
     }
     setImageExportBusy(true);
     setImageExportError(null);
     try {
       const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
-      if (!target) return;
+      if (!target) {
+        // Native picker dismissed by the user.
+        fireImageExportResult('cancelled');
+        return;
+      }
       const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
       if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
         downloadImageDataUrl(preparedDataUrl, target.filename);
@@ -7433,6 +7574,7 @@ function HtmlViewer({
         await target.save(prepared.blob);
       }
       setImageExportModalOpen(false);
+      fireImageExportResult('success');
       setImageExportSavedToast({
         message: target.method === 'picker'
           ? t('fileViewer.exportImageSaved')
@@ -7444,6 +7586,7 @@ function HtmlViewer({
     } catch (err) {
       console.warn('[exportAsImage] failed to save snapshot:', err);
       setImageExportError(t('fileViewer.exportImageFailed'));
+      fireImageExportResult('failed', err instanceof Error ? err.name : 'UNKNOWN');
     } finally {
       setImageExportBusy(false);
     }
@@ -8295,6 +8438,21 @@ function HtmlViewer({
                           role="menuitem"
                           title={shareUnavailableHint}
                           onClick={() => {
+                            // Share-intent-but-blocked signal: user wants a
+                            // share link but nothing is deployed yet.
+                            trackShareOptionPopoverClick(
+                              analytics.track,
+                              {
+                                page_name: 'artifact',
+                                area: 'share_option_popover',
+                                artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+                                artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+                                element: 'publish_required_guide',
+                                project_id: projectId,
+                                project_kind: projectKind,
+                              },
+                              { requestId: analytics.newRequestId() },
+                            );
                             setShareGuideToast(shareUnavailableHint);
                           }}
                         >
@@ -8319,13 +8477,11 @@ function HtmlViewer({
                           className="share-menu-item"
                           role="menuitem"
                           onClick={() => {
-                            const format =
-                              option.id === 'cloudflare-pages'
-                                ? 'cloudflare_pages'
-                                : option.id === 'vercel-self'
-                                  ? 'vercel'
-                                  : 'vercel';
-                            fireShareExport(format, () => openDeployModal(option.id));
+                            // Just open the deploy modal. The real publish is
+                            // tracked by artifact_deploy_result from
+                            // deployToSelectedProvider — no "popover opened"
+                            // export event here.
+                            void openDeployModal(option.id);
                           }}
                         >
                           <span className="share-menu-icon">
@@ -8344,7 +8500,10 @@ function HtmlViewer({
                         role="menuitem"
                         onClick={() => {
                           setDeployMenuOpen(false);
-                          fireShareExport('vercel', () => openSocialShareFlow());
+                          // Deploy-then-share also routes through the deploy
+                          // modal; the real publish is tracked by
+                          // artifact_deploy_result, not an export event.
+                          void openSocialShareFlow();
                         }}
                       >
                         <span className="share-menu-icon">
@@ -8486,9 +8645,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      fireShareExport('template', () => {
-                        openSaveAsTemplateModal();
-                      });
+                      openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
