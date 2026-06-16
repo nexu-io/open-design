@@ -11,6 +11,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import PluginRow from '../../../_components/plugin-row.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import { getBundledPlugins } from '../../../_lib/bundled-plugins';
 import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
@@ -38,19 +39,17 @@ const jsonLd = {
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pcopy.tileSkills}</span>
-  </nav>
-
   <header class="catalog-head plugin-skills-head">
-    <span class="label">{pcopy.skillsLabel}</span>
+    <nav class="label detail-crumb" aria-label="Breadcrumb">
+      <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+      <span class="crumb-sep" aria-hidden="true">·</span>
+      <span aria-current="page">{pcopy.tileSkills}</span>
+    </nav>
     <h1 class="display">{pcopy.skillsHeading(skills.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.skillsLead}</p>
   </header>
+
+  <PluginContribute />
 
   <section class="catalog-grid catalog-grid-skills" aria-label="All instruction skills">
     <ol>
@@ -65,8 +64,17 @@ const jsonLd = {
       border-top: 0;
       padding-top: 0;
     }
-    .plugin-skills-head .label {
-      display: none;
+    .detail-crumb a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .detail-crumb a:hover {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+    }
+    .detail-crumb .crumb-sep {
+      margin: 0 0.45em;
+      opacity: 0.55;
     }
   </style>
 </Layout>

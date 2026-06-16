@@ -1,0 +1,32 @@
+name: release-prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Optional git ref to build. Empty builds the dispatched ref."
+        required: false
+        type: string
+        default: ""
+      release_version:
+        description: "Base version (x.y.z). Required when ref is not release/vX.Y.Z."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  placeholder:
+    name: Registered workflow placeholder
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain placeholder
+        run: |
+          cat <<'EOF'
+          This placeholder exists on the default branch so GitHub registers
+          release-prerelease for workflow_dispatch. Dispatch a branch that
+          contains the full release-prerelease.yml implementation to run the
+          actual prerelease validation and publish workflow.
+          EOF

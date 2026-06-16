@@ -8,6 +8,7 @@
 // per-event prop types below.
 
 import type {
+  AnalyticsConfigureGlobals,
   TrackingConfigureAvailability,
   TrackingConfigureType,
 } from './public-params.js';
@@ -1652,7 +1653,12 @@ export interface DesignToolboxClickProps {
 //     or jumping to the add-resource surface (`resource_kind`).
 //   - `design_system_switch`: picked a design system from the composer
 //     (`design_system_id`).
-//   - `working_dir_switch`: changed the project's local-storage working dir.
+//   - `working_dir` / `working_dir_recent` / `working_dir_clear`: the
+//     working-dir picker under the composer — picking a new folder, re-selecting
+//     one from the "Recent folders" submenu, or clearing the bound dir. Fires on
+//     the click itself (intent), identical timing/semantics to the home
+//     composer's `working_dir*` elements, so one dashboard counts the action
+//     across both surfaces.
 //   - `agent_selector_open` / `agent_select` / `agent_model_select`: the CLI/
 //     agent/model dropdown (`agent_id` / `model_id`).
 //   - `context_remove`: removed a staged context chip (`resource_kind` +
@@ -1665,7 +1671,9 @@ export interface ComposerBarClickProps {
     | 'plus_pick'
     | 'plus_add'
     | 'design_system_switch'
-    | 'working_dir_switch'
+    | 'working_dir'
+    | 'working_dir_recent'
+    | 'working_dir_clear'
     | 'agent_selector_open'
     | 'agent_select'
     | 'agent_model_select'
@@ -3298,11 +3306,7 @@ export interface DeriveConfigureGlobalsInput {
 
 export function deriveConfigureGlobals(
   input: DeriveConfigureGlobalsInput,
-): {
-  has_available_configure_cli: boolean;
-  configure_type: TrackingConfigureType;
-  configure_availability: TrackingConfigureAvailability;
-} {
+): AnalyticsConfigureGlobals {
   const agents = input.agents ?? [];
   // The AMR runtime is bundled with the app, so its agent row must not
   // count as a user-configured local CLI: with it included every install
@@ -3353,6 +3357,14 @@ export function deriveConfigureGlobals(
     has_available_configure_cli: hasAvailableCli,
     configure_type: configureType,
     configure_availability: configureAvailability,
+    // Independent per-path runnable flags (no cascade masking — see
+    // AnalyticsConfigureGlobals). `cli_runnable` mirrors
+    // `has_available_configure_cli`; `byok_runnable` uses the actually-saved
+    // key signal (not the `mode === 'api'` fallback, which can be true with no
+    // key yet); `amr_runnable` is sign-in.
+    cli_runnable: hasAvailableCli,
+    byok_runnable: byokConfigured,
+    amr_runnable: amrAuthorized,
   };
 }
 
