@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countDesignSystemPreviewModules,
   countNewArtifacts,
+  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from '../src/run-artifacts.js';
@@ -397,5 +398,103 @@ describe('runAskedUserQuestion', () => {
         ...questionFormText(),
       ]),
     ).toBe(true);
+  });
+});
+
+// `deriveActivationMilestones` powers the `$set_once` person-property stamp on
+// `run_finished` — the first-touch "produced an artifact / generated a design
+// system (first observed since rollout)" segmentation. Pins: only successful runs count, a design
+// system requires `designSystemCreated`, both can fire from one run, and a
+// no-milestone run returns undefined so the caller omits `$set_once`.
+describe('deriveActivationMilestones', () => {
+  const ISO = '2026-06-15T12:00:00.000Z';
+
+  it('stamps first_artifact_at when a successful run produced artifacts', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 2,
+        designSystemCreated: false,
+        isDesignSystemRun: false,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_artifact_at: ISO });
+  });
+
+  it('stamps first_design_system_at when a successful DS run wrote DESIGN.md', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: true,
+        isDesignSystemRun: true,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_design_system_at: ISO });
+  });
+
+  it('does NOT stamp first_design_system_at for a non-DS run that wrote DESIGN.md', () => {
+    // A plain chat run can write a `DESIGN.md` (finalize-design.ts, or a user
+    // editing an existing DESIGN.md from the composer). `run_finished` only
+    // emits `design_system_created` for DS runs, so the milestone must gate on
+    // `isDesignSystemRun` too or the person property overstates DS activation
+    // (nettee review on #4362). Here the run produced no artifact either, so
+    // the result is undefined — no milestone stamped.
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: true,
+        isDesignSystemRun: false,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('stamps both when one DS run crossed both milestones', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 3,
+        designSystemCreated: true,
+        isDesignSystemRun: true,
+        capturedAtIso: ISO,
+      }),
+    ).toEqual({ first_artifact_at: ISO, first_design_system_at: ISO });
+  });
+
+  it('returns undefined for a successful run that crossed no milestone', () => {
+    expect(
+      deriveActivationMilestones({
+        result: 'success',
+        artifactCount: 0,
+        designSystemCreated: false,
+        isDesignSystemRun: false,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for a failed run even when it touched files', () => {
+    // A failed/cancelled run that happened to write a file is not a
+    // milestone — the funnel only credits successful generation.
+    expect(
+      deriveActivationMilestones({
+        result: 'failed',
+        artifactCount: 5,
+        designSystemCreated: true,
+        isDesignSystemRun: true,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
+    expect(
+      deriveActivationMilestones({
+        result: 'cancelled',
+        artifactCount: 5,
+        designSystemCreated: true,
+        isDesignSystemRun: true,
+        capturedAtIso: ISO,
+      }),
+    ).toBeUndefined();
   });
 });

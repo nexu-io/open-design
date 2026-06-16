@@ -32,6 +32,7 @@
 // uniform zero on PostHog and made the same funnel useless from the
 // other direction.
 
+import type { TrackingRunResult } from '@open-design/contracts/analytics';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 
 // Tool names cover Claude-style, Codex-style, and the ACP/MCP shapes
@@ -243,4 +244,69 @@ export function runAskedUserQuestion(
     else if (typeof data.text === 'string') text += data.text;
   }
   return emittedRenderableQuestionForm(text);
+}
+
+// First-touch activation milestones, written to the PostHog person record via
+// `$set_once` on `run_finished` (the authoritative daemon-side run-outcome
+// event that already carries `artifact_count` and `design_system_created`).
+// Two milestones the growth funnel needs to segment a user without replaying
+// their whole event history:
+//
+//   - `first_artifact_at`        — first run, observed since this stamp shipped,
+//                                  in which the user produced an artifact
+//   - `first_design_system_at`   — first run, observed since this stamp shipped,
+//                                  in which the user generated a design system
+//
+// IMPORTANT — "first observed since rollout", NOT "first ever". `$set_once`
+// only writes a key that does not already exist on the person, and this is the
+// only writer, so the timestamp is pinned to the user's first qualifying run
+// AFTER this code ships. For users who onboard after rollout that equals their
+// true first-ever milestone (and a faithful time-to-first-value signal). For
+// the pre-existing installed base it does NOT: a user who already produced an
+// artifact before rollout gets the timestamp of their next qualifying run
+// instead. There is no historical backfill in this path, so cohorts and
+// time-to-first-value built on these keys are only sound for post-rollout
+// users — segment older accounts by first-seen date before relying on them
+// (nettee review on PR #4362).
+//
+// The two are independent: a single design-system run that also emits HTML
+// artifacts legitimately crosses both at once.
+//
+// Only a SUCCESSFUL run counts — a failed/cancelled run that happened to touch
+// a file is not a milestone (mirrors the `artifact_count` funnel's "generation
+// success → artifact produced" framing).
+//
+// The design-system milestone must mirror the EXACT condition under which
+// `run_finished` emits `design_system_created`, which is gated on
+// `isDesignSystemRun` (server.ts only includes the field for DS runs). A plain
+// chat run can also write a `DESIGN.md` — `finalize-design.ts` lands one under
+// the project dir, and a user can edit an existing `DESIGN.md` from the chat
+// composer — so `designSystemCreated` alone (the raw "a DESIGN.md was written"
+// signal) would stamp `first_design_system_at` on runs whose `run_finished`
+// reports no `design_system_created`, drifting the person property away from
+// the metric and overstating DS activation. Gating on `isDesignSystemRun`
+// keeps the milestone and the event field in lockstep (nettee review on
+// PR #4362).
+//
+// Returns undefined when the run crossed no milestone so the caller omits the
+// `$set_once` key entirely rather than shipping an empty object.
+export function deriveActivationMilestones(args: {
+  result: TrackingRunResult;
+  artifactCount: number;
+  designSystemCreated: boolean;
+  // Whether this run is a design-system generation run. The DS milestone is
+  // gated on it so it tracks `run_finished.design_system_created` exactly.
+  isDesignSystemRun: boolean;
+  capturedAtIso: string;
+}): { first_artifact_at?: string; first_design_system_at?: string } | undefined {
+  if (args.result !== 'success') return undefined;
+  const milestones: {
+    first_artifact_at?: string;
+    first_design_system_at?: string;
+  } = {};
+  if (args.artifactCount > 0) milestones.first_artifact_at = args.capturedAtIso;
+  if (args.isDesignSystemRun && args.designSystemCreated) {
+    milestones.first_design_system_at = args.capturedAtIso;
+  }
+  return Object.keys(milestones).length > 0 ? milestones : undefined;
 }
