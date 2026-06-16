@@ -1104,14 +1104,18 @@ function OnboardingView({
       (agent) => agent.available && agent.id !== 'amr',
     );
     if (currentAvailableAgents.length > 0) {
+      const selectedCliAgentId = selectedCliAgentIdForScanResult(currentAvailableAgents);
       selectDefaultCliAgent(currentAvailableAgents);
       showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      if (agentsLoading) return;
       setCliScanStatus('done');
       emitPendingCliScanResult(scanToken, {
         result: 'success',
         detected: agents.length,
         available: currentAvailableAgents.length,
-        selectedCliId: agentIdToTracking(currentAvailableAgents[0]!.id),
+        ...(selectedCliAgentId
+          ? { selectedCliId: agentIdToTracking(selectedCliAgentId) }
+          : {}),
       });
       return;
     }
@@ -1459,6 +1463,11 @@ function OnboardingView({
     onAgentChange(availableAgents[0]!.id);
   }
 
+  function selectedCliAgentIdForScanResult(availableAgents: AgentInfo[]): string | null {
+    if (availableAgents.some((agent) => agent.id === config.agentId)) return config.agentId;
+    return availableAgents[0]?.id ?? null;
+  }
+
   function emitPendingCliScanResult(
     token: number,
     args: {
@@ -1766,14 +1775,18 @@ function OnboardingView({
       (agent) => agent.available && agent.id !== 'amr',
     );
     if (options.preferExisting && currentAvailableAgents.length > 0) {
+      const selectedCliAgentId = selectedCliAgentIdForScanResult(currentAvailableAgents);
       selectDefaultCliAgent(currentAvailableAgents);
       showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      if (agentsLoading) return currentAvailableAgents;
       setCliScanStatus('done');
       emitPendingCliScanResult(scanToken, {
         result: 'success',
         detected: agents.length,
         available: currentAvailableAgents.length,
-        selectedCliId: agentIdToTracking(currentAvailableAgents[0]!.id),
+        ...(selectedCliAgentId
+          ? { selectedCliId: agentIdToTracking(selectedCliAgentId) }
+          : {}),
       });
       return currentAvailableAgents;
     }
@@ -1803,12 +1816,13 @@ function OnboardingView({
         });
         return;
       }
+      const selectedCliAgentId = selectedCliAgentIdForScanResult(availableAgents);
       emitPendingCliScanResult(scanToken, {
         result: 'success',
         detected: nextAgents.length,
         available: availableAgents.length,
-        ...(availableAgents[0]
-          ? { selectedCliId: agentIdToTracking(availableAgents[0].id) }
+        ...(selectedCliAgentId
+          ? { selectedCliId: agentIdToTracking(selectedCliAgentId) }
           : {}),
       });
       showCliAgents(scanToken, availableAgents, { stagger: true });
