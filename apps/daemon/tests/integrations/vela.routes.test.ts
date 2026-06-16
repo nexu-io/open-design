@@ -904,7 +904,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
-  it('mirrors Open Design onboarding profile snapshots to AMR analytics', async () => {
+  it('mirrors Open Design onboarding profile snapshots with the header-derived device id', async () => {
     const requests: unknown[] = [];
     const captureServer = createServer((req, res) => {
       let raw = '';
@@ -937,7 +937,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
       sourceDetail: 'onboarding_amr_sign_in_continue',
       entryOccurredAt: '2026-06-03T12:00:00.000Z',
       profileOccurredAt: '2026-06-03T12:03:00.000Z',
-      odDeviceId: 'od-install-abc',
+      odDeviceId: 'body-device-should-not-win',
       odRole: 'pm',
       odOrgSize: 'startup',
       odUseCase: ['product', 'design-system'],
@@ -974,7 +974,7 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
               locale: 'zh-CN',
               traceId: 'od-amr-entry-profile',
             },
-            payload,
+            payload: { ...payload, odDeviceId: 'od-device-1' },
           },
         ],
       });

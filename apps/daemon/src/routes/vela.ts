@@ -283,7 +283,8 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       res.status(202).json({ mirrored: false });
       return;
     }
-    const result = await mirrorAmrOnboardingProfileAnalytics(payload, {
+    const canonicalPayload = { ...payload, odDeviceId: analyticsContext.deviceId };
+    const result = await mirrorAmrOnboardingProfileAnalytics(canonicalPayload, {
       analyticsContext,
       env,
     });
