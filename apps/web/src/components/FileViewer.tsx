@@ -4988,6 +4988,10 @@ function HtmlViewer({
   // export result only after the template is actually saved (not on open).
   const templateExportRequestIdRef = useRef<string | null>(null);
   const templateExportStartedRef = useRef(0);
+  // Same one-terminal-result guard as image export: a template session
+  // (reset in openSaveAsTemplateModal) emits exactly one success/failed/
+  // cancelled, whether it ends in a save or a modal dismiss.
+  const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
@@ -6628,6 +6632,7 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     templateExportRequestIdRef.current = requestId;
     templateExportStartedRef.current = performance.now();
+    templateExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -6648,6 +6653,34 @@ function HtmlViewer({
     setTemplateSaveError(null);
     setTemplateModalOpen(true);
   }
+
+  // Component-scoped so both the save flow and the modal Cancel button emit
+  // the one terminal result for a template export session.
+  const fireTemplateExportResult = (
+    result: 'success' | 'failed' | 'cancelled',
+    errorCode?: string,
+  ) => {
+    if (templateExportResolvedRef.current) return;
+    templateExportResolvedRef.current = true;
+    const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
+    const started = templateExportStartedRef.current || performance.now();
+    trackArtifactExportResult(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        export_format: 'template',
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        export_duration_ms: Math.round(performance.now() - started),
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
+  };
 
   async function handleSaveAsTemplate() {
     const name = templateName.trim();
@@ -6683,24 +6716,7 @@ function HtmlViewer({
       templateErrorCode = undefined;
     } finally {
       setSavingTemplate(false);
-      const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
-      const started = templateExportStartedRef.current || performance.now();
-      trackArtifactExportResult(
-        analytics.track,
-        {
-          page_name: 'artifact',
-          area: 'share_option_popover',
-          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-          export_format: 'template',
-          result: templateOutcome,
-          ...(templateErrorCode ? { error_code: templateErrorCode } : {}),
-          export_duration_ms: Math.round(performance.now() - started),
-          project_id: projectId,
-          project_kind: projectKind,
-        },
-        { requestId },
-      );
+      fireTemplateExportResult(templateOutcome, templateErrorCode);
       if (savedName) {
         // Auto-clear the note so the menu doesn't keep stale state next open.
         setTimeout(() => setTemplateNote(null), 4000);
@@ -9150,6 +9166,9 @@ function HtmlViewer({
                 className="ghost-link button-like"
                 disabled={savingTemplate}
                 onClick={() => {
+                  // Dismissed without saving — close the ui_click(template)→
+                  // result funnel as cancelled.
+                  fireTemplateExportResult('cancelled', 'MODAL_DISMISSED');
                   setTemplateModalOpen(false);
                   setTemplateSaveError(null);
                 }}
