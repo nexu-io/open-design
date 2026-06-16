@@ -1948,6 +1948,8 @@ export interface Dict {
   'socialShare.openDesignText': string;
   'socialShare.openDesignCopyText': string;
   'socialShare.projectSection': string;
+  'socialShare.publishPageTitle': string;
+  'socialShare.publishPageSubtitle': string;
   'socialShare.projectTitle': string;
   'socialShare.projectText': string;
   'socialShare.projectCopyText': string;
