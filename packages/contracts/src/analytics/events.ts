@@ -498,11 +498,14 @@ export type TrackingOnboardingSourceType =
   | 'none';
 
 // `completed`: user clicked through every step (with or without a DS).
-// `skipped`: user clicked Skip from any step. `cancelled`: user closed
-// the onboarding tab / navigated away without finishing.
-// `failed`: terminal error before completion.
+// `cancelled`: user closed the onboarding tab / navigated away without
+// finishing. `failed`: terminal error before completion.
+// `skipped`: DEPRECATED — the onboarding "Skip for now" affordance was
+// removed (Connect is now a required gate), so this is no longer emitted.
+// Kept in the union for historical data / dashboard compatibility.
 export type TrackingOnboardingCompletionResult =
   | 'completed'
+  /** @deprecated no longer emitted — Skip was removed from onboarding. */
   | 'skipped'
   | 'cancelled'
   | 'failed';
@@ -510,6 +513,7 @@ export type TrackingOnboardingCompletionResult =
 export type TrackingOnboardingCompletionType =
   | 'completed_with_design_system'
   | 'completed_without_design_system'
+  /** @deprecated no longer emitted — Skip was removed from onboarding. */
   | 'skipped';
 
 // CLI scan terminal state. `success`: at least one CLI was detected;
@@ -561,6 +565,7 @@ export type TrackingOnboardingClickElement =
   // Action buttons
   | 'continue'
   | 'back'
+  /** @deprecated no longer emitted — Skip was removed from onboarding. */
   | 'skip'
   | 'generate'
   // About you fields
@@ -586,6 +591,7 @@ export type TrackingOnboardingClickAction =
   | 'select_runtime'
   | 'continue'
   | 'back'
+  /** @deprecated no longer emitted — Skip was removed from onboarding. */
   | 'skip'
   | 'generate'
   | 'select_option'

@@ -1705,76 +1705,72 @@
   justify-self: center;
 }
 
+/* Segmented progress indicator: a horizontal bar per step with the label
+   below it. Bars read as progress, not as clickable cards — upcoming steps
+   are clearly muted and non-interactive. */
 .onboarding-view__steps li {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   min-width: 0;
-  min-height: 64px;
-  padding: 14px 18px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle) 4%);
-  box-shadow: var(--shadow-xs);
 }
 
-.onboarding-view__steps li span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+/* The "line" for each step. Grey while upcoming, accent once the step has
+   been reached (current or earlier). */
+.onboarding-view__steps li::before {
+  content: '';
+  display: block;
+  height: 3px;
   border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-muted);
-  background: var(--bg-subtle);
+  background: var(--border);
+  transition: background 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-view__steps li.is-reached::before {
+  background: var(--accent);
+}
+
+/* The legacy number badge is dropped in the bar+label design. */
+.onboarding-view__steps li span {
+  display: none;
 }
 
 .onboarding-view__steps li button {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   padding: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 16px;
-  font-weight: 650;
-  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
   cursor: pointer;
 }
 
-.onboarding-view__steps li button:hover:not(:disabled),
-.onboarding-view__steps li button:active {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
+/* Reached-but-not-current steps stay navigable (jump back). */
+.onboarding-view__steps li.is-reached button {
+  color: var(--text);
 }
 
-.onboarding-view__steps li:hover {
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%);
+/* Upcoming steps are not navigable yet — muted and not-allowed. */
+.onboarding-view__steps li.is-upcoming button,
+.onboarding-view__steps li button:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+  opacity: 0.55;
 }
 
 .onboarding-view__steps li.is-active {
   color: var(--text-strong);
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 94%, var(--accent) 6%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.onboarding-view__steps li.is-active:hover {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 93%, var(--accent) 7%);
-}
-
-.onboarding-view__steps li.is-active span,
-.onboarding-view__steps li.is-done span {
-  color: var(--accent-contrast, #fff);
-  background: var(--accent);
+.onboarding-view__steps li.is-active button {
+  color: var(--text-strong);
+  font-weight: 700;
 }
 
 .onboarding-view__body {
