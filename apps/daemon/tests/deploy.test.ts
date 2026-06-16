@@ -438,6 +438,71 @@ describe('render deploys', () => {
     expect(requestedUrls).toContain('GET https://api.render.com/v1/services/render-service-1/deploys/render-deploy-1');
   });
 
+  it('handles non-main default branch (e.g. master) on Render deploys', async () => {
+    let serviceCreateBody: any = null;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-render-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, default_branch: 'master' }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 200 });
+      }
+      if (url.includes('/owners') && method === 'GET') {
+        return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      }
+      if (url.includes('/services?limit=100') && method === 'GET') {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      if (url.includes('/services') && method === 'POST') {
+        serviceCreateBody = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({
+          id: 'render-service-1',
+          url: 'https://od-render-p1.onrender.com',
+        }), { status: 200 });
+      }
+      if (url.includes('/deploys?limit=1') && method === 'GET') {
+        return new Response(JSON.stringify([{ deploy: { id: 'render-deploy-1' } }]), { status: 200 });
+      }
+      if (url.includes('/deploys/render-deploy-1') && method === 'GET') {
+        return new Response(JSON.stringify({ status: 'live' }), { status: 200 });
+      }
+      if (url === 'https://od-render-p1.onrender.com' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToRender({
+      config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+      projectId: 'p1',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+    });
+
+    expect(serviceCreateBody?.branch).toBe('master');
+  });
+
   it('throws DeployError when Render build fails', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
@@ -1058,6 +1123,76 @@ describe('netlify and railway deploys', () => {
     expect(result.providerMetadata?.deployKeyId).toBe('existing-key-id');
     expect(deployKeysCreated).toBe(0);
     expect(githubKeysAdded).toBe(0);
+  });
+
+  it('handles non-main default branch (e.g. master) on Netlify deploys', async () => {
+    let updateSiteBody: any = null;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1', default_branch: 'master' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+      }
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response(JSON.stringify([{ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }]), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'PUT') {
+        updateSiteBody = JSON.parse(String(init?.body ?? '{}'));
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+        return new Response(JSON.stringify({ deploy_id: 'deploy-1' }), { status: 200 });
+      }
+      if (url.endsWith('/deploys/deploy-1') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'deploy-1',
+          state: 'ready',
+          deploy_ssl_url: 'https://deploy--example.netlify.app',
+          ssl_url: 'https://example.netlify.app',
+        }), { status: 200 });
+      }
+      if (url === 'https://example.netlify.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await deployToNetlify({
+      config: { token: 'netlify-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+      priorMetadata: { siteId: 'site-1', deployKeyId: 'existing-key-id' },
+    });
+
+    expect(updateSiteBody?.repo?.branch).toBe('master');
   });
 
   it('creates a Railway project, service, deployment, and service domain from the UI-backed file set', async () => {

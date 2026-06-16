@@ -615,7 +615,7 @@ async function ensureGitHubRepository({
   repoName: string;
   githubToken: string;
   isPrivate?: boolean;
-}): Promise<{ repoId: number; private: boolean }> {
+}): Promise<{ repoId: number; private: boolean; defaultBranch: string }> {
   const repoUrl = `https://api.github.com/repos/${username}/${repoName}`;
   const repoCheck = await fetch(repoUrl, {
     headers: {
@@ -655,6 +655,7 @@ async function ensureGitHubRepository({
         return {
           repoId: repoJson.id,
           private: typeof repoJson.private === 'boolean' ? repoJson.private : isPrivate,
+          defaultBranch: repoJson.default_branch || 'main',
         };
       }
       const errText = await createResp.text();
@@ -665,6 +666,7 @@ async function ensureGitHubRepository({
     return {
       repoId: createJson.id,
       private: typeof createJson.private === 'boolean' ? createJson.private : isPrivate,
+      defaultBranch: createJson.default_branch || 'main',
     };
   } else if (!repoCheck.ok) {
     const errText = await repoCheck.text();
@@ -674,6 +676,7 @@ async function ensureGitHubRepository({
     return {
       repoId: repoJson.id,
       private: typeof repoJson.private === 'boolean' ? repoJson.private : false,
+      defaultBranch: repoJson.default_branch || 'main',
     };
   }
 }
@@ -766,6 +769,7 @@ export async function deployToNetlify({
   });
   const repoId = repoInfo.repoId;
   const isPrivate = repoInfo.private;
+  const defaultBranch = repoInfo.defaultBranch;
 
   // Resolve Netlify site details early so we can check for existing deploy keys
   let siteId = priorMetadata?.siteId;
@@ -863,7 +867,7 @@ export async function deployToNetlify({
           repo: `${username}/${repoName}`,
           repo_id: repoId,
           private: isPrivate,
-          branch: 'main',
+          branch: defaultBranch,
           cmd: '',
           dir: '.',
           deploy_key_id: deployKeyId,
@@ -888,7 +892,7 @@ export async function deployToNetlify({
           repo: `${username}/${repoName}`,
           repo_id: repoId,
           private: isPrivate,
-          branch: 'main',
+          branch: defaultBranch,
           cmd: '',
           dir: '.',
           deploy_key_id: deployKeyId,
@@ -926,7 +930,7 @@ export async function deployToNetlify({
             repo: `${username}/${repoName}`,
             repo_id: repoId,
             private: isPrivate,
-            branch: 'main',
+            branch: defaultBranch,
             cmd: '',
             dir: '.',
             deploy_key_id: deployKeyId,
@@ -1175,12 +1179,13 @@ export async function deployToRender({
 
   // 3. Ensure GitHub repository exists
   const repoName = `od-render-${projectId}`;
-  await ensureGitHubRepository({
+  const repoInfo = await ensureGitHubRepository({
     username,
     repoName,
     githubToken: config.githubToken,
     isPrivate: false,
   });
+  const defaultBranch = repoInfo.defaultBranch;
 
 
   // 4. Sync files to the GitHub repository using the GitHub API
@@ -1245,7 +1250,7 @@ export async function deployToRender({
         name: repoName,
         ownerId,
         repo: `https://github.com/${username}/${repoName}`,
-        branch: 'main',
+        branch: defaultBranch,
         autoDeploy: 'yes',
         serviceDetails: {
           buildCommand: '',
