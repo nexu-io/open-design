@@ -166,7 +166,9 @@ export function AvatarMenu({
   const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
   const amrConsoleUrl = amrConsoleUrlForProfile(amrProfile);
   const handleAmrConsoleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    const attribution = recordAmrEntry(analytics.track, 'avatar_amr_console');
+    const attribution = recordAmrEntry(analytics.track, 'avatar_amr_console', new Date(), {
+      metricsConsent: config.telemetry?.metrics === true,
+    });
     const deviceId = amrHandoffDeviceId({
       metricsConsent: config.telemetry?.metrics === true,
       resolvedDeviceId: getResolvedDeviceId(),

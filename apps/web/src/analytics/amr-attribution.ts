@@ -16,10 +16,12 @@ type Track = (
 ) => void;
 
 interface RecordAmrEntryOptions {
+  metricsConsent?: boolean;
   reuseExistingFrom?: readonly TrackingAmrEntrySource[];
 }
 
 interface SyncAmrProfileOptions {
+  metricsConsent?: boolean;
   odDeviceId?: string | null;
   now?: Date;
 }
@@ -93,7 +95,9 @@ export function recordAmrEntry(
     source_detail: attribution.sourceDetail,
     entry_occurred_at: attribution.occurredAt,
   });
-  void mirrorAmrEntryToAmrAnalytics(attribution);
+  if (options.metricsConsent === true) {
+    void mirrorAmrEntryToAmrAnalytics(attribution);
+  }
   return attribution;
 }
 
@@ -136,7 +140,9 @@ export function syncAmrAttributionWithOnboardingProfile(
         : {}),
   };
   writeAmrAttribution(next);
-  void mirrorAmrOnboardingProfileToAmrAnalytics(next, now);
+  if (options.metricsConsent === true) {
+    void mirrorAmrOnboardingProfileToAmrAnalytics(next, now);
+  }
   return next;
 }
 

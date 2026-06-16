@@ -359,29 +359,101 @@ describe('POST /api/integrations/vela/login', () => {
   });
 
   it('passes Open Design attribution device id to vela login', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
     const dumpPath = path.join(tmpHome, 'vela-env-attribution.json');
     process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
-
-    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`, {
-      attribution: {
-        entryId: 'od-amr-entry-onboarding',
-        sourceProduct: 'open_design',
-        sourceDetail: 'onboarding_amr_sign_in_continue',
-        occurredAt: '2026-06-16T08:00:00.000Z',
-        odDeviceId: 'od-install-abc',
-      },
+    await writeAppConfig(dataDir, {
+      ...previous,
+      telemetry: { ...(previous.telemetry ?? {}), metrics: true },
     });
-    expect(status).toBe(202);
 
-    await waitForFile(dumpPath);
-    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
-    expect(env.OPEN_DESIGN_AMR_ORIGIN).toBe('open_design');
-    expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBe('od-amr-entry-onboarding');
-    expect(env.OPEN_DESIGN_AMR_ENTRY_SOURCE).toBe(
-      'onboarding_amr_sign_in_continue',
-    );
-    expect(env.OPEN_DESIGN_AMR_ENTRY_AT).toBe('2026-06-16T08:00:00.000Z');
-    expect(env.OPEN_DESIGN_AMR_DEVICE_ID).toBe('od-install-abc');
+    try {
+      const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`, {
+        attribution: {
+          entryId: 'od-amr-entry-onboarding',
+          sourceProduct: 'open_design',
+          sourceDetail: 'onboarding_amr_sign_in_continue',
+          occurredAt: '2026-06-16T08:00:00.000Z',
+          odDeviceId: 'body-should-not-win',
+        },
+      }, { 'x-od-analytics-device-id': 'od-install-abc' });
+      expect(status).toBe(202);
+
+      await waitForFile(dumpPath);
+      const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+      expect(env.OPEN_DESIGN_AMR_ORIGIN).toBe('open_design');
+      expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBe('od-amr-entry-onboarding');
+      expect(env.OPEN_DESIGN_AMR_ENTRY_SOURCE).toBe(
+        'onboarding_amr_sign_in_continue',
+      );
+      expect(env.OPEN_DESIGN_AMR_ENTRY_AT).toBe('2026-06-16T08:00:00.000Z');
+      expect(env.OPEN_DESIGN_AMR_DEVICE_ID).toBe('od-install-abc');
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+
+  it('omits Open Design attribution device id without analytics consent headers', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    const dumpPath = path.join(tmpHome, 'vela-env-attribution-no-headers.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    await writeAppConfig(dataDir, {
+      ...previous,
+      telemetry: { ...(previous.telemetry ?? {}), metrics: true },
+    });
+
+    try {
+      const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`, {
+        attribution: {
+          entryId: 'od-amr-entry-onboarding',
+          sourceProduct: 'open_design',
+          sourceDetail: 'onboarding_amr_sign_in_continue',
+          occurredAt: '2026-06-16T08:00:00.000Z',
+          odDeviceId: 'body-should-be-dropped',
+        },
+      });
+      expect(status).toBe(202);
+
+      await waitForFile(dumpPath);
+      const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+      expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBe('od-amr-entry-onboarding');
+      expect(env.OPEN_DESIGN_AMR_DEVICE_ID).toBeUndefined();
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+
+  it('omits Open Design attribution device id when telemetry metrics are disabled', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    const dumpPath = path.join(tmpHome, 'vela-env-attribution-metrics-off.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    await writeAppConfig(dataDir, {
+      ...previous,
+      telemetry: { ...(previous.telemetry ?? {}), metrics: false },
+    });
+
+    try {
+      const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`, {
+        attribution: {
+          entryId: 'od-amr-entry-onboarding',
+          sourceProduct: 'open_design',
+          sourceDetail: 'onboarding_amr_sign_in_continue',
+          occurredAt: '2026-06-16T08:00:00.000Z',
+          odDeviceId: 'body-should-be-dropped',
+        },
+      }, { 'x-od-analytics-device-id': 'od-install-abc' });
+      expect(status).toBe(202);
+
+      await waitForFile(dumpPath);
+      const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+      expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBe('od-amr-entry-onboarding');
+      expect(env.OPEN_DESIGN_AMR_DEVICE_ID).toBeUndefined();
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
   });
 
   it('derives the default login API proxy from OD_PUBLIC_BASE_URL when configured', async () => {

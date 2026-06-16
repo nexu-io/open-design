@@ -211,10 +211,21 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const analyticsContext = readAnalyticsContext(req);
       const attribution = parseVelaLoginAttribution(req.body);
+      let loginAttribution = attribution;
+      if (attribution) {
+        if (analyticsContext && appConfig.telemetry?.metrics === true) {
+          loginAttribution = { ...attribution, odDeviceId: analyticsContext.deviceId };
+        } else {
+          const withoutDeviceId = { ...attribution };
+          delete withoutDeviceId.odDeviceId;
+          loginAttribution = withoutDeviceId;
+        }
+      }
       const spawned = await spawnVelaLogin({
         configuredEnv,
-        attribution,
+        attribution: loginAttribution,
         defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
       });
       res.status(202).json(spawned);

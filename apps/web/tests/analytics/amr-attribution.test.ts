@@ -49,6 +49,7 @@ describe('AMR attribution helper', () => {
         track,
         source,
         new Date(`2026-06-03T12:00:${index.toString().padStart(2, '0')}.000Z`),
+        { metricsConsent: true },
       );
     }
 
@@ -60,7 +61,9 @@ describe('AMR attribution helper', () => {
     const track = vi.fn();
     const now = new Date('2026-06-03T12:00:00.000Z');
 
-    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now, {
+      metricsConsent: true,
+    });
 
     expect(attribution).toMatchObject({
       sourceProduct: 'open_design',
@@ -116,7 +119,9 @@ describe('AMR attribution helper', () => {
     const track = vi.fn();
     const now = new Date('2026-06-03T12:00:00.000Z');
 
-    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now, {
+      metricsConsent: true,
+    });
 
     expect(attribution).toMatchObject({
       odRole: 'pm',
@@ -139,6 +144,7 @@ describe('AMR attribution helper', () => {
       track,
       'chat_error_recharge',
       new Date('2026-06-03T12:00:00.000Z'),
+      { metricsConsent: true },
     );
 
     expect(attribution.odRole).toBeUndefined();
@@ -153,6 +159,7 @@ describe('AMR attribution helper', () => {
       track,
       'onboarding_amr_card',
       new Date('2026-06-03T12:00:00.000Z'),
+      { metricsConsent: true },
     );
 
     const second = recordAmrEntry(
@@ -184,7 +191,11 @@ describe('AMR attribution helper', () => {
         useCase: ['product', 'design-system'],
         source: 'github',
       },
-      { odDeviceId: 'od-install-abc', now: profileTime },
+      {
+        metricsConsent: true,
+        odDeviceId: 'od-install-abc',
+        now: profileTime,
+      },
     );
 
     expect(updated).toMatchObject({
@@ -226,6 +237,50 @@ describe('AMR attribution helper', () => {
     });
   });
 
+  it('does not mirror AMR entry analytics without metrics consent', () => {
+    const track = vi.fn();
+    const now = new Date('2026-06-03T12:00:00.000Z');
+
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+
+    expect(attribution).toMatchObject({
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      occurredAt: '2026-06-03T12:00:00.000Z',
+    });
+    expect(readAmrAttribution(now)).toEqual(attribution);
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not mirror AMR onboarding profile analytics without metrics consent', () => {
+    const track = vi.fn();
+    const entryTime = new Date('2026-06-03T12:00:00.000Z');
+    const profileTime = new Date('2026-06-03T12:03:00.000Z');
+    const attribution = recordAmrEntry(track, 'onboarding_amr_card', entryTime);
+    fetchMock.mockClear();
+
+    const updated = syncAmrAttributionWithOnboardingProfile(
+      {
+        role: 'pm',
+        orgSize: 'startup',
+        useCase: ['product', 'design-system'],
+        source: 'github',
+      },
+      { odDeviceId: null, now: profileTime },
+    );
+
+    expect(updated).toMatchObject({
+      entryId: attribution.entryId,
+      sourceDetail: 'onboarding_amr_card',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     'settings_amr_console',
     'avatar_amr_console',
@@ -236,7 +291,9 @@ describe('AMR attribution helper', () => {
       const track = vi.fn();
       const entryTime = new Date('2026-06-03T12:00:00.000Z');
       const profileTime = new Date('2026-06-03T12:03:00.000Z');
-      const attribution = recordAmrEntry(track, sourceDetail, entryTime);
+      const attribution = recordAmrEntry(track, sourceDetail, entryTime, {
+        metricsConsent: true,
+      });
       fetchMock.mockClear();
 
       const updated = syncAmrAttributionWithOnboardingProfile(
@@ -246,7 +303,11 @@ describe('AMR attribution helper', () => {
           useCase: ['product', 'design-system'],
           source: 'github',
         },
-        { odDeviceId: 'od-install-abc', now: profileTime },
+        {
+          metricsConsent: true,
+          odDeviceId: 'od-install-abc',
+          now: profileTime,
+        },
       );
 
       expect(updated).toBeNull();

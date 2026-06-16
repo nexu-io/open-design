@@ -412,6 +412,7 @@ export function AmrLoginPill({
       setPending('login');
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
+            metricsConsent,
             reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
           })
         : null;
@@ -499,7 +500,9 @@ export function AmrLoginPill({
   const handleConsoleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
       event.stopPropagation();
-      const attribution = recordAmrEntry(analytics.track, 'settings_amr_console');
+      const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
+        metricsConsent,
+      });
       const deviceId = amrHandoffDeviceId({
         metricsConsent,
         resolvedDeviceId: getResolvedDeviceId(),

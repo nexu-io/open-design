@@ -1580,7 +1580,9 @@ export function SettingsDialog({
     url: string,
     sourceDetail: TrackingAmrEntrySource,
   ) => {
-    const attribution = recordAmrEntry(analytics.track, sourceDetail);
+    const attribution = recordAmrEntry(analytics.track, sourceDetail, new Date(), {
+      metricsConsent: cfg.telemetry?.metrics === true,
+    });
     const deviceId = amrHandoffDeviceId({
       metricsConsent: cfg.telemetry?.metrics === true,
       resolvedDeviceId: getResolvedDeviceId(),
@@ -3585,7 +3587,15 @@ export function SettingsDialog({
                                       install_status: 'installed',
                                     });
                                     if (isAmrAgent) {
-                                      recordAmrEntry(analytics.track, 'settings_amr_agent_card');
+                                      recordAmrEntry(
+                                        analytics.track,
+                                        'settings_amr_agent_card',
+                                        new Date(),
+                                        {
+                                          metricsConsent:
+                                            cfg.telemetry?.metrics === true,
+                                        },
+                                      );
                                     }
                                     setCfg((c) => ({ ...c, agentId: a.id }));
                                   }}

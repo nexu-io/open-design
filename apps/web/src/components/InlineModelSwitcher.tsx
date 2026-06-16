@@ -288,6 +288,8 @@ export function InlineModelSwitcher({
       const attribution = recordAmrEntry(
         analytics.track,
         'inline_model_switcher_amr_row',
+        new Date(),
+        { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
       if (latest?.loggedIn) return;

@@ -1452,7 +1452,10 @@ function OnboardingView({
         analytics.track,
         'onboarding_amr_sign_in_continue',
         new Date(),
-        { reuseExistingFrom: ['onboarding_amr_card'] },
+        {
+          metricsConsent: config.telemetry?.metrics === true,
+          reuseExistingFrom: ['onboarding_amr_card'],
+        },
       );
       void handleAmrSignInToContinue(attribution);
       return;
@@ -1627,6 +1630,7 @@ function OnboardingView({
         source: snapshot.source,
       },
       {
+        metricsConsent: config.telemetry?.metrics === true,
         odDeviceId: amrHandoffDeviceId({
           metricsConsent: config.telemetry?.metrics === true,
           resolvedDeviceId: getResolvedDeviceId(),
@@ -1922,7 +1926,12 @@ function OnboardingView({
                       featured
                       selected={runtime === 'amr'}
                       onClick={() => {
-                        recordAmrEntry(analytics.track, 'onboarding_amr_card');
+                        recordAmrEntry(
+                          analytics.track,
+                          'onboarding_amr_card',
+                          new Date(),
+                          { metricsConsent: config.telemetry?.metrics === true },
+                        );
                         setRuntime('amr');
                         onModeChange('daemon');
                         onAgentChange('amr');

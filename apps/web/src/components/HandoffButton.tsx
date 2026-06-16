@@ -333,7 +333,9 @@ export function HandoffButton({
 
   const handleAmrWebsiteClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     fireHandoff({ element: 'amr_website', handoff_tab: 'cli' });
-    const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website');
+    const attribution = recordAmrEntry(analytics.track, 'handoff_amr_website', new Date(), {
+      metricsConsent,
+    });
     const deviceId = amrHandoffDeviceId({
       metricsConsent,
       resolvedDeviceId: getResolvedDeviceId(),
