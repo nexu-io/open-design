@@ -24,7 +24,7 @@
     "en": "Guizang Ppt"
   },
   "version": "0.1.0",
-  "description": "生成\"电子杂志 × 电子墨水\"风格的横向翻页网页 PPT（单 HTML 文件），含 WebGL 流体背景、衬线标题 + 非衬线正文、章节幕封、数据大字报、图片网格等模板。当用户需要制作分享 / 演讲 / 发布会风格的网页 PPT，或提到\"杂志风 PPT\"、\"horizontal swipe deck\"、\"editorial magazine\"、\"e-ink presentation\"时使用。",
+  "description": "Generates an \"editorial magazine × electronic ink\" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions \"magazine-style PPT\", \"horizontal swipe deck\", \"editorial magazine\", or \"e-ink presentation\".",
   "description_i18n": {
     "zh-CN": "生成「电子杂志 × 电子墨水」风格的横向翻页网页 PPT（单 HTML 文件），含 WebGL 流体背景、衬线标题 + 非衬线正文、章节幕封、数据大字报、图片网格等模板。适用于制作分享、演讲、发布会风格的网页 PPT，或杂志风演示文稿。",
     "zh-TW": "生成「電子雜誌 × 電子墨水」風格的橫向翻頁網頁 PPT（單一 HTML 檔案），含 WebGL 流體背景、襯線標題 + 非襯線正文、章節幕封、數據大字報、圖片網格等模板。適用於製作分享、演講、發表會風格的網頁 PPT，或雜誌風簡報。",
@@ -43,7 +43,7 @@
     "ar": "ينشئ عروض تقديمية ويب أفقية التمرير بأسلوب المجلة والحبر الإلكتروني (ملف HTML واحد) مع خلفية سائلة WebGL وعناوين serif ونصوص sans-serif وفواصل فصول وتصورات بيانات وشبكات صور للعروض والإطلاقات.",
     "tr": "Dergi ve e-mürekkep stilinde yatay kaydırmalı web sunumları (tek HTML dosyası) oluşturur. WebGL akışkan arka plan, serifli başlıklar, serifsiz metin, bölüm ayırıcıları, veri görselleştirmeleri ve resim ızgaraları ile konuşmalar ve lansmanlar için uygundur.",
     "uk": "Створює горизонтальні веб-презентації в стилі журналу та електронного чорнила (один HTML-файл) з WebGL-фоном, заголовками з зарубками, текстом без зарубок, розділювачами розділів, візуалізаціями даних та сітками зображень для виступів і презентацій.",
-    "en": "生成\"电子杂志 × 电子墨水\"风格的横向翻页网页 PPT（单 HTML 文件），含 WebGL 流体背景、衬线标题 + 非衬线正文、章节幕封、数据大字报、图片网格等模板。当用户需要制作分享 / 演讲 / 发布会风格的网页 PPT，或提到\"杂志风 PPT\"、\"horizontal swipe deck\"、\"editorial magazine\"、\"e-ink presentation\"时使用。"
+    "en": "Generates an \"editorial magazine × electronic ink\" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions \"magazine-style PPT\", \"horizontal swipe deck\", \"editorial magazine\", or \"e-ink presentation\"."
   },
   "license": "MIT",
   "author": {

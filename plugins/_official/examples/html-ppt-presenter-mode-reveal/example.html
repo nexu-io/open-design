@@ -1,18 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-themes="tokyo-night,dracula,catppuccin-mocha,nord,corporate-clean">
+<html lang="en" data-themes="tokyo-night,dracula,catppuccin-mocha,nord,corporate-clean">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>演讲者模式示例 · Presenter Mode Deck</title>
-<style>/* html-ppt :: shared webfonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+<title>Open Design · Presenter Mode Deck</title>
+<style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
 
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
@@ -28,25 +22,25 @@
   --text-2: #55596a;
   --text-3: #8a8f9e;
   --accent: #3b6cff;
-  --accent-2: #7a5cff;
-  --accent-3: #ff5c8a;
+  --accent-2: #2f9e8f;
+  --accent-3: #1d4ed8;
   --good: #1aaf6c;
   --warn: #f5a524;
   --bad:  #e0445a;
-  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
-  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
+  --grad: linear-gradient(135deg,var(--accent),var(--accent-3));
+  --grad-soft: linear-gradient(135deg,#eef2ff,#e8f0fe);
   --radius: 18px;
   --radius-sm: 12px;
   --radius-lg: 26px;
   --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
   --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
-  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --font-sans: 'IBM Plex Sans',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,serif;
+  --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
   --letter-normal: -.01em;
-  --ease: cubic-bezier(.4,0,.2,1);
+  --ease: cubic-bezier(.16,1,.3,1);
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -84,7 +78,7 @@ h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;fon
 h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
 h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
 h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
-.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:400;max-width:62ch}
 .dim{color:var(--text-2)}
 .dim2{color:var(--text-3)}
 .mono{font-family:var(--font-mono)}
@@ -125,7 +119,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 /* ================= CHROME (header/footer/progress) ================= */
 .deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
   font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
-.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+.deck-footer{position:absolute;bottom:44px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
   font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
 .slide-number::before{content:attr(data-current)}
 .slide-number::after{content:" / " attr(data-total)}
@@ -171,15 +165,15 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 :root{
   --bg:#1a1b26;--bg-soft:#16161e;--surface:#24283b;--surface-2:#2f334d;
   --border:rgba(192,202,245,.12);--border-strong:rgba(192,202,245,.24);
-  --text-1:#c0caf5;--text-2:#a9b1d6;--text-3:#565f89;
+  --text-1:#c0caf5;--text-2:#a9b1d6;--text-3:#8089b8;
   --accent:#7aa2f7;--accent-2:#bb9af7;--accent-3:#7dcfff;
   --good:#9ece6a;--warn:#e0af68;--bad:#f7768e;
-  --grad:linear-gradient(135deg,#7aa2f7,#bb9af7 55%,#f7768e);
+  --grad:linear-gradient(135deg,#7aa2f7,#7dcfff);
   --grad-soft:linear-gradient(135deg,#24283b,#2f334d);
   --radius:12px;--radius-sm:8px;--radius-lg:20px;
-  --shadow:0 10px 30px rgba(0,0,0,.45);
-  --shadow-lg:0 24px 62px rgba(0,0,0,.6);
-  --font-sans:'Inter','Noto Sans SC',sans-serif;
+  --shadow:0 1px 0 rgba(192,202,245,.06) inset;
+  --shadow-lg:0 18px 44px rgba(0,0,0,.5);
+  --font-sans:'IBM Plex Sans',sans-serif;
 }
 
 </style>
@@ -187,7 +181,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
  * Apply by adding class="anim-<name>" or data-anim="<name>".
  * Durations are deliberately snappy; tweak --anim-dur per element.
  */
-:root{--anim-dur:.7s;--anim-ease:cubic-bezier(.4,0,.2,1)}
+:root{--anim-dur:.7s;--anim-ease:cubic-bezier(.16,1,.3,1)}
 
 /* ---------- FADE DIRECTIONALS ---------- */
 @keyframes kf-fade-up{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
@@ -334,24 +328,27 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
 .tpl-presenter-mode-reveal .kicker {
   font-family: var(--font-mono, monospace);
-  font-size: 13px;
-  color: var(--text-3);
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  color: var(--accent, #7aa2f7);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin: 0 0 18px 0;
+  margin: 0 0 20px 0;
+  font-weight: 500;
 }
 
 .tpl-presenter-mode-reveal .h1 {
-  font-size: clamp(44px, 5.6vw, 76px);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-size: clamp(40px, 5.1vw, 70px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 700;
   margin: 0 0 24px 0;
 }
 
 .tpl-presenter-mode-reveal .h2 {
   font-size: clamp(32px, 3.6vw, 48px);
-  line-height: 1.22;
-  letter-spacing: -0.01em;
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+  font-weight: 700;
   margin: 0 0 28px 0;
 }
 
@@ -365,14 +362,23 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   font-family: var(--font-mono, monospace);
   font-size: 0.9em;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.08);
-  color: var(--accent, #58a6ff);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent, #7aa2f7) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #7aa2f7) 24%, transparent);
+  color: var(--accent, #7aa2f7);
 }
 
 .tpl-presenter-mode-reveal .accent {
-  color: var(--accent, #f0883e);
+  color: var(--accent, #7aa2f7);
   font-weight: 700;
+}
+
+/* footer meta stays quiet: no chip treatment down there */
+.tpl-presenter-mode-reveal .deck-footer .mono {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-3);
 }
 
 .tpl-presenter-mode-reveal .speaker {
@@ -385,7 +391,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent, #58a6ff), #bc8cff);
+  background: var(--surface-2, rgba(255,255,255,0.06));
+  border: 1.5px solid var(--accent, #7aa2f7);
+  position: relative;
+}
+.tpl-presenter-mode-reveal .speaker .av::after {
+  content: "OD";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent, #7aa2f7);
 }
 .tpl-presenter-mode-reveal .speaker b {
   display: block;
@@ -396,26 +416,27 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   color: var(--text-3);
 }
 
-/* Agenda rows */
+/* Agenda rows: hairline list, no boxed cards */
 .tpl-presenter-mode-reveal .agenda-row {
   display: grid;
   grid-template-columns: 48px 1fr auto;
   gap: 16px;
-  align-items: center;
-  padding: 14px 18px;
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 10px;
-  margin-bottom: 10px;
-  background: var(--surface, rgba(255,255,255,0.03));
+  align-items: baseline;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.1));
+  max-width: 880px;
+}
+.tpl-presenter-mode-reveal .agenda-row:first-child {
+  border-top: 1px solid var(--border, rgba(255,255,255,0.1));
 }
 .tpl-presenter-mode-reveal .agenda-row .num {
   font-family: var(--font-mono, monospace);
   font-size: 14px;
-  color: var(--accent, #58a6ff);
+  color: var(--accent, #7aa2f7);
   font-weight: 700;
 }
 .tpl-presenter-mode-reveal .agenda-row .t {
-  font-size: 17px;
+  font-size: 19px;
   font-weight: 500;
   color: var(--text-1);
 }
@@ -425,15 +446,16 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   color: var(--text-3);
 }
 
-/* Cards */
+/* Cards (kept only where hierarchy needs them: the 3-way contrast on Problem) */
 .tpl-presenter-mode-reveal .card {
   background: var(--surface, rgba(255,255,255,0.03));
   border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 12px;
-  padding: 22px 24px;
+  border-radius: 8px;
+  padding: 24px 26px;
+  box-shadow: none;
 }
 .tpl-presenter-mode-reveal .card-accent {
-  border-top: 3px solid var(--accent, #58a6ff);
+  border-top: 2px solid var(--accent, #7aa2f7);
 }
 .tpl-presenter-mode-reveal .card h4 {
   margin: 0 0 10px 0;
@@ -473,29 +495,32 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   line-height: 1.55;
   margin: 0;
 }
-.tpl-presenter-mode-reveal .blue { color: #58a6ff; }
-.tpl-presenter-mode-reveal .green { color: #3fb950; }
-.tpl-presenter-mode-reveal .orange { color: #f0883e; }
-.tpl-presenter-mode-reveal .purple { color: #bc8cff; }
-.tpl-presenter-mode-reveal .red { color: #f85149; }
+/* Step / rule numbers keep one voice: theme accent + mono. The old
+ * rainbow per-row palette (blue/green/orange/purple/red) was an AI tell. */
+.tpl-presenter-mode-reveal .blue,
+.tpl-presenter-mode-reveal .green,
+.tpl-presenter-mode-reveal .orange,
+.tpl-presenter-mode-reveal .purple { color: var(--accent, #7aa2f7); font-family: var(--font-mono, monospace); }
+.tpl-presenter-mode-reveal .red { color: var(--accent, #7aa2f7); }
 
-/* Rule rows (3 铁律) */
+/* Rule rows (3 core principles): hairline list with accent left rule */
 .tpl-presenter-mode-reveal .rule-row {
   display: grid;
   grid-template-columns: 56px 1fr;
   gap: 20px;
   align-items: start;
-  padding: 18px 22px;
-  border: 1px solid var(--border, rgba(255,255,255,0.1));
-  border-radius: 12px;
-  margin-bottom: 14px;
-  background: var(--surface, rgba(255,255,255,0.03));
+  padding: 20px 0 20px 22px;
+  border-left: 2px solid var(--accent, #7aa2f7);
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.08));
+  margin-bottom: 0;
+  max-width: 920px;
 }
+.tpl-presenter-mode-reveal .rule-row:last-child { border-bottom: none; }
 .tpl-presenter-mode-reveal .rule-row .num {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 26px;
+  font-weight: 700;
   font-family: var(--font-mono, monospace);
-  line-height: 1;
+  line-height: 1.2;
 }
 .tpl-presenter-mode-reveal .rule-row b {
   display: block;
@@ -512,20 +537,21 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 
 /* Code block */
 .tpl-presenter-mode-reveal .code-block {
-  background: #0d1117;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
+  background: var(--bg-soft, #16161e);
+  border: 1px solid var(--border, rgba(192,202,245,0.12));
+  border-radius: 8px;
+  max-width: 920px;
   padding: 20px 26px;
   font-family: var(--font-mono, "SF Mono", monospace);
   font-size: 15px;
   line-height: 1.8;
-  color: #e6edf3;
+  color: var(--text-1, #c0caf5);
   white-space: pre-wrap;
   text-align: left;
 }
-.tpl-presenter-mode-reveal .code-block .comment { color: #8b949e; }
-.tpl-presenter-mode-reveal .code-block .cmd { color: #3fb950; font-weight: 600; }
-.tpl-presenter-mode-reveal .code-block .flag { color: #f0883e; }
+.tpl-presenter-mode-reveal .code-block .comment { color: var(--text-3, #6c75a6); }
+.tpl-presenter-mode-reveal .code-block .cmd { color: var(--good, #9ece6a); font-weight: 600; }
+.tpl-presenter-mode-reveal .code-block .flag { color: var(--accent, #7aa2f7); }
 
 /* Stack helper */
 .tpl-presenter-mode-reveal .stack > * + * { margin-top: 0; }
@@ -539,6 +565,14 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 .tpl-presenter-mode-reveal .mt-l { margin-top: 32px; }
 .tpl-presenter-mode-reveal .mt-s { margin-top: 10px; }
 .tpl-presenter-mode-reveal .tc { text-align: center; }
+
+/* Closing line sits under a left-aligned code block; keep one alignment
+ * voice instead of a lone centered strip (alignment drift is an AI tell). */
+.tpl-presenter-mode-reveal .code-block + .lede.tc {
+  text-align: left;
+  max-width: 920px;
+  font-size: 18px;
+}
 
 </style>
 <style>
@@ -554,170 +588,167 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- ============ 1. COVER ============ -->
   <section class="slide" data-title="Cover">
     <p class="kicker">presenter-mode / demo</p>
-    <h1 class="h1 anim-fade-up" data-anim="fade-up">如何做一场<br><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">有逐字稿</span>的技术分享</h1>
-    <p class="lede mt-m">按 <span class="mono">S</span> 进入演讲者视图 · <span class="mono">T</span> 切换主题 · <span class="mono">← →</span> 翻页</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up"><span style="color:var(--accent)">Open Design</span><br>The open-source, local, agent-driven design platform</h1>
+    <p class="lede mt-m">Press <span class="mono">S</span> for presenter view · <span class="mono">T</span> to switch themes · <span class="mono">← →</span> to navigate</p>
     <div class="speaker">
       <div class="av"></div>
-      <div><b>@lewis</b><span>sharing talk · 30 min</span></div>
+      <div><b>Open Design</b><span>github.com/nexu-io/open-design · 30 min</span></div>
     </div>
     <div class="deck-footer">
-      <span class="mono">#presenter #逐字稿 #tech-talk</span>
+      <span class="mono">Apache-2.0 · Runs locally · BYOK · No sign-up</span>
       <span class="slide-number" data-current="1" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>大家好，欢迎来到今天的技术分享。我是 lewis，今天想跟大家聊一个很多人忽略但其实非常影响演讲效果的话题——<strong>如何让一场技术分享既有深度，又讲得不卡壳</strong>。</p>
-      <p>在正式开始之前，先跟大家介绍一下这份 deck 本身：这是一个支持<em>演讲者模式</em>的 HTML 幻灯片模板。现在你们看到的是观众视图，但我自己的屏幕上看到的是完全不一样的东西——当前页、下一页、完整逐字稿、计时器，全在一块屏幕上。</p>
-      <p>为什么我要专门做这个？因为我发现自己做技术分享时最大的痛点不是 PPT 不够好看，而是<strong>讲到某一页突然不知道该说什么，或者忘了过渡怎么接</strong>。今天这份分享既是内容本身，也是个演示——我会一直开着演讲者模式讲，你们可以观察我讲得有多流畅。</p>
-      <p>今天分享大概 30 分钟，分 5 个部分。有问题随时打断。Let's go.</p>
+      <p>Hi everyone, welcome to today's session. I want to introduce <strong>Open Design — an open-source, local, agent-driven design platform</strong>: from idea to prototype, web page, slides, and HTML video, the entire product-design workflow runs on your own machine.</p>
+      <p>Before we dive in, a word about this deck itself: it supports <em>presenter mode</em>. You're seeing the audience view, while my screen shows the current slide, the next slide, the full script, and a timer — which is itself an example of Open Design producing slides with a Plugin.</p>
+      <p>Four keywords to remember: <strong>Apache-2.0 open source, runs locally, BYOK, no sign-up</strong>. This is not another cloud subscription tool — it's a design workflow that runs on your own machine.</p>
+      <p>We've got about 30 minutes, split into 5 parts. Interrupt me anytime with questions. Let's go.</p>
     </aside>
   </section>
 
   <!-- ============ 2. AGENDA ============ -->
   <section class="slide" data-title="Agenda">
     <p class="kicker">agenda</p>
-    <h2 class="h2">今天要讲的 5 件事</h2>
+    <h2 class="h2">Five things on the agenda</h2>
     <div class="stack mt-l">
-      <div class="agenda-row"><span class="num">01</span><span class="t">为什么 PPT 本身做得好还不够</span><span class="d">~5min</span></div>
-      <div class="agenda-row"><span class="num">02</span><span class="t">演讲者模式到底该有哪些信息</span><span class="d">~6min</span></div>
-      <div class="agenda-row"><span class="num">03</span><span class="t">逐字稿怎么写才不像念稿</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · html-ppt skill 怎么用</span><span class="d">~8min</span></div>
-      <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~3min</span></div>
+      <div class="agenda-row"><span class="num">01</span><span class="t">Why · What Claude Design proved — and what it locked away</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Workflow · From idea to deliverable in a few steps</span><span class="d">~6min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Three principles · What makes Open Design different</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Live demo · Presenting this very deck in presenter mode</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">CTA + Q&amp;A</span><span class="d">~3min</span></div>
     </div>
     <aside class="notes">
-      <p>先过一下今天的议程。</p>
-      <p>第一部分我想先说服你们<strong>"PPT 做得漂亮≠讲得好"</strong>。我见过太多很精致的 deck，但讲的人一上去就开始 "嗯…这个…就是…"。</p>
-      <p>第二部分聊演讲者视图。业界的产品其实差别蛮大的，Keynote、PowerPoint、reveal.js 都有各自的方案，但真正好用的设计逻辑是什么，我会给出我的答案。</p>
-      <p>第三部分是今天的<em>核心</em>——逐字稿。很多人以为逐字稿就是把要说的话一字不差写下来，错。逐字稿的目的是让你<strong>"看一眼就接得上"</strong>，写法完全不一样。</p>
-      <p>第四部分会现场 demo 我自己用的 html-ppt skill，展示如何 30 分钟出一份带逐字稿的 deck。</p>
-      <p>最后收尾 + 答疑。</p>
-      <p>OK，进入第一部分。</p>
+      <p>Let's walk through today's agenda.</p>
+      <p>Part one is the <strong>Why</strong> — in April 2026, Claude Design proved that LLMs can genuinely do design, but it's closed-source, paid, and cloud-only. That's the reason Open Design exists.</p>
+      <p>Part two covers the <strong>workflow</strong>: how the whole pipeline runs locally, from a one-line idea to a deliverable artifact.</p>
+      <p>Part three is the <em>core</em> of today — Open Design's three principles: desktop-native, plug into agents instead of building one, and getting smarter the more you use it.</p>
+      <p>Part four is the live demo — though really, the demo started on slide one: this deck was produced by Open Design, and I've had presenter mode on the whole time.</p>
+      <p>Then we wrap up with the CTA and Q&amp;A.</p>
+      <p>OK, on to part one.</p>
     </aside>
   </section>
 
   <!-- ============ 3. PROBLEM ============ -->
   <section class="slide" data-title="Problem">
-    <p class="kicker">// part 01 · problem</p>
-    <h2 class="h2">做 PPT 和讲 PPT，<br>是<span class="accent">两件事</span>。</h2>
+    <p class="kicker">// part 01 · why</p>
+    <h2 class="h2">AI can do design now —<br>but the capability is <span class="accent">locked in the cloud</span>.</h2>
     <div class="grid g3 mt-l">
       <div class="card card-accent">
-        <h4>✅ PPT 做得好</h4>
-        <p class="dim">主题统一、排版干净、图表清晰、动效克制。这些是"静态作品"的质量。</p>
+        <h4>✅ What it proved</h4>
+        <p class="dim">In April 2026, Claude Design proved for the first time that LLMs can genuinely do design — not write about it, but produce real design work.</p>
       </div>
       <div class="card card-accent">
-        <h4>❌ 讲得好</h4>
-        <p class="dim">逻辑连贯、语速稳定、不 "嗯啊"、能接住问题、能当场调整节奏。</p>
+        <h4>❌ What it locked away</h4>
+        <p class="dim">Closed-source, paid, cloud-only: the model is locked to Anthropic — no swapping agents, no self-hosting, no BYOK.</p>
       </div>
       <div class="card card-accent">
-        <h4>💡 差别在哪</h4>
-        <p class="dim">前者是<strong>纸上功夫</strong>，后者需要你<strong>"看一眼幻灯片就知道下句话说什么"</strong>。</p>
+        <h4>💡 Open Design</h4>
+        <p class="dim">Opens that capability up — <strong>bringing frontier AI design power back to every creator's desk</strong>.</p>
       </div>
     </div>
     <aside class="notes">
-      <p>我先抛一个可能有争议的观点——<strong>做 PPT 和讲 PPT 是两件完全不同的事</strong>。</p>
-      <p>大家看左边这张卡片，"PPT 做得好" 意味着什么？主题统一、排版干净、图表清晰、动效克制——这些都是<em>静态作品</em>的质量标准，可以离线评判。</p>
-      <p>但中间这张卡片就不一样了："讲得好" 意味着逻辑连贯、语速稳定、不卡壳、能接住提问、能根据现场反应调整节奏——这些是<strong>临场能力</strong>，跟 PPT 好不好看基本没关系。</p>
-      <p>最关键的是右边这句话——讲得好的人，本质上是"<strong>看一眼幻灯片就知道下句话说什么</strong>"。这个能力靠什么？不是背稿，也不是即兴发挥，而是靠<em>合理设计的提词器系统</em>。</p>
-      <p>今天接下来 25 分钟，我就是围绕这个核心问题展开的。</p>
+      <p>Let's start with a moment in time — <strong>April 2026, Claude Design launches</strong>.</p>
+      <p>Look at the card on the left. What did it prove? That LLMs can <em>genuinely do design</em> — not write an essay about design, but directly produce usable design work. That's a qualitative leap.</p>
+      <p>But the middle card is the problem: it's <strong>closed-source, paid, and cloud-only</strong>. The model is locked to Anthropic. Want to swap in a different agent? No. Self-host? No. Use your own API key — BYOK? Still no. The capability is powerful, but you can't get your hands on it.</p>
+      <p>Which brings us to the card on the right — <strong>Open Design's mission is to open that capability up</strong>: open source, runs locally, swap agents freely. In one sentence: bring frontier AI design power back to every creator's desk.</p>
+      <p>So how does it actually work? On to the next part.</p>
     </aside>
   </section>
 
   <!-- ============ 4. SOLUTION ============ -->
   <section class="slide" data-title="Presenter View">
-    <p class="kicker">// part 02 · presenter view</p>
-    <h2 class="h2">演讲者视图应该有<span class="accent">四块信息</span></h2>
+    <p class="kicker">// part 02 · workflow</p>
+    <h2 class="h2">From idea to deliverable in <span class="accent">four steps</span></h2>
     <div class="grid g2 mt-l">
       <div>
-        <div class="feature-row"><span class="num blue">①</span><div><b>当前页大图</b><p class="dim">占视图一半以上，保证你能扫一眼就知道观众现在看到什么。</p></div></div>
-        <div class="feature-row"><span class="num green">②</span><div><b>下一页预览</b><p class="dim">帮你提前准备过渡句，避免"下一页我忘了讲什么了"。</p></div></div>
+        <div class="feature-row"><span class="num blue">①</span><div><b>Pick a starting point</b><p class="dim">Describe your goal in one sentence, or start from a template or Plugin.</p></div></div>
+        <div class="feature-row"><span class="num green">②</span><div><b>Set the visual direction</b><p class="dim">Once chosen, the palette, typography, and spacing flow into every generation step.</p></div></div>
       </div>
       <div>
-        <div class="feature-row"><span class="num orange">③</span><div><b>逐字稿区域</b><p class="dim">大字号、高对比度、支持滚动，这才是演讲者真正在看的东西。</p></div></div>
-        <div class="feature-row"><span class="num purple">④</span><div><b>计时器 + 页码</b><p class="dim">知道自己讲了多久、还剩几页，节奏全凭这个。</p></div></div>
+        <div class="feature-row"><span class="num orange">③</span><div><b>Generate the artifact</b><p class="dim">The agent reads the full context and produces real, runnable files — preview and edit instantly in the sandbox.</p></div></div>
+        <div class="feature-row"><span class="num purple">④</span><div><b>Deliver + build memory</b><p class="dim">Hand off to engineering, or turn it into video with HyperFrames; every choice becomes context for the next generation.</p></div></div>
       </div>
     </div>
     <aside class="notes">
-      <p>演讲者模式应该给你四块信息。我按重要性排序。</p>
-      <p>第一块，<strong>当前页大图</strong>。这个必须占据视图一半以上空间，因为它是你跟观众的"同步锚"——观众看到什么，你脑子里也得是什么。</p>
-      <p>第二块，<strong>下一页预览</strong>。这个很多人不理解为什么要放，我解释一下：演讲最卡的瞬间不是讲某一页，而是<em>翻到下一页的那 2 秒</em>。如果你提前看到下一页长什么样，过渡句自然就有了。</p>
-      <p>第三块，<strong>逐字稿区域</strong>——这是今天的重点，下一部分我会专门讲。这里先说一个硬性要求：字号必须大、对比度必须高、必须能滚动。因为你讲的时候<em>只有余光瞄一下</em>，字小了根本来不及读。</p>
-      <p>第四块，<strong>计时器和页码</strong>。知道自己讲了多久、还剩几页——节奏感全靠它。Keynote 做得最好，reveal.js 默认不够清楚。</p>
-      <p>这四块缺一不可。今天这个 deck 我把这四块都做出来了，按 S 大家可以试试。</p>
+      <p>Open Design's workflow is four steps. Let me walk through them in order.</p>
+      <p>Step one, <strong>pick a starting point</strong>. Describe what you want in one sentence, or pick a starting point straight from templates and Plugins — today's deck, for example, started from a presenter-mode Slides Plugin.</p>
+      <p>Step two, <strong>set the visual direction</strong>. Once the direction is locked in, the palette, fonts, and spacing automatically carry into the rest of the generation flow — no per-slide hand-tuning.</p>
+      <p>Step three, <strong>generate the artifact</strong> — the most important step. The agent reads the full context and produces <em>real, runnable files</em> — not screenshots, not preview images — that you can preview and edit instantly in the sandbox.</p>
+      <p>Step four, <strong>deliver and build memory</strong>. The files can go straight to engineering for further development, or become a marketing video via HyperFrames; meanwhile every choice you make is captured as memory, so the next generation lands closer to what you want.</p>
+      <p>So what's the philosophy behind this workflow? Next part.</p>
     </aside>
   </section>
 
   <!-- ============ 5. SCRIPT ============ -->
   <section class="slide" data-title="Script">
-    <p class="kicker">// part 03 · script</p>
-    <h2 class="h2">逐字稿的<span class="accent">3 条铁律</span></h2>
+    <p class="kicker">// part 03 · principles</p>
+    <h2 class="h2">Open Design's <span class="accent">three principles</span></h2>
     <div class="stack mt-l">
       <div class="rule-row">
         <span class="num red">01</span>
         <div>
-          <b>不是一字不差的讲稿，是<span class="accent">"提示信号"</span></b>
-          <p class="dim">把要讲的核心点加粗，把过渡句单独成段，把数据和名字列清楚——<em>让你看一眼就接得上</em>。</p>
+          <b>🖥️ <span class="accent">Desktop</span>-native</b>
+          <p class="dim">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable, and <em>the agent has full terminal execution power</em>.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">02</span>
         <div>
-          <b>每页 <span class="accent">150–300 字</span>，不多不少</b>
-          <p class="dim">少于 150 字提示不够，多于 300 字你没时间读。按 2–3 分钟/页的节奏控制。</p>
+          <b>🤖 Don't build agents — <span class="accent">plug into them</span></b>
+          <p class="dim">The Claude Code / Codex / Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
         </div>
       </div>
       <div class="rule-row">
         <span class="num red">03</span>
         <div>
-          <b>用<span class="accent">口语</span>写，不用书面语</b>
-          <p class="dim">"因此" → "所以"；"该方案" → "这个方案"。写的时候读一遍，听起来像说话才对。</p>
+          <b>🧠 Gets <span class="accent">smarter</span> with every use</b>
+          <p class="dim">Every choice settles into your Design System, preferences, and memory — so the next generation lands closer to what you want.</p>
         </div>
       </div>
     </div>
     <aside class="notes">
-      <p>进入最核心的一部分——逐字稿怎么写。我总结了 3 条铁律。</p>
-      <p><strong>第一条，逐字稿不是讲稿</strong>。很多人一听"逐字稿"就以为要把每句话一字不差写下来。错。如果你照着稿念，观众会立刻看出来，信任感瞬间崩塌。</p>
-      <p>逐字稿的真实作用是<em>"提示信号"</em>——把核心要点加粗，把过渡句单独成段，把数据和专有名词列清楚。这样你讲的时候<strong>瞄一眼就能接得上</strong>，但说出来的还是你自己的话。</p>
-      <p><strong>第二条，每页控制在 150 到 300 字</strong>。这个是我做了十几场分享摸出来的经验值。少于 150 字提示不够，讲到一半卡住；多于 300 字你根本来不及扫完。按一页讲 2 到 3 分钟算，这个字数刚好。</p>
-      <p><strong>第三条，用口语写</strong>。这条最多人栽跟头。你写"因此"，讲出来会变成"所以"；你写"该方案"，讲出来会变成"这个方案"。<em>写的时候读一遍</em>，不拗口才对。</p>
-      <p>这三条配合起来，你会发现讲 PPT 突然变成了一件很舒服的事。</p>
+      <p>Now for the heart of today's talk — Open Design's three principles.</p>
+      <p><strong>First, desktop-native</strong>. The desktop is where design actually happens: local files, Figma exports, code repositories — all directly readable. More importantly, the agent here has <em>full terminal execution power</em> — something no cloud tool can give you.</p>
+      <p><strong>Second, don't build agents — plug into them</strong>. We don't reinvent the wheel. The Claude Code, Codex, and Cursor on your machine are already strong; what Open Design does is wire them into a complete design workflow — <strong>21 coding agents</strong> supported so far, auto-detected from your PATH, zero configuration.</p>
+      <p><strong>Third, it gets smarter the more you use it</strong>. Every choice settles into your Design System, preferences, and memory, so the next generation lands closer to what you want. That's a self-evolving design system.</p>
+      <p>Put the three together: open, local, agent-native. Finally, let's see how to get started.</p>
     </aside>
   </section>
 
   <!-- ============ 6. DEMO + CLOSING ============ -->
   <section class="slide" data-title="Demo & Close">
     <p class="kicker">// part 04-05 · demo + close</p>
-    <h2 class="h2">现在<span class="accent">你也能做到</span></h2>
+    <h2 class="h2">Bring frontier AI design power <span class="accent">back to your desk</span></h2>
     <div class="code-block mt-m">
-<span class="comment"># 安装 html-ppt skill</span>
-<span class="cmd">npx</span> skills add <span class="flag">https://github.com/lewislulu/html-ppt-skill</span>
+<span class="comment"># Get Open Design (macOS / Windows · Apache-2.0)</span>
+<span class="cmd">open</span> <span class="flag">https://github.com/nexu-io/open-design</span>
 
-<span class="comment"># 复制演讲者模式模板</span>
-<span class="cmd">cp -r</span> templates/full-decks/presenter-mode-reveal examples/my-talk
-<span class="cmd">open</span> examples/my-talk/index.html
+<span class="comment"># 60K+ Stars · 300+ Contributors · 217+ Plugins · 129 Design Systems</span>
 
-<span class="comment"># 键盘操作</span>
-<span class="flag">S</span>  <span class="comment">→ 进入演讲者视图</span>
-<span class="flag">T</span>  <span class="comment">→ 切换主题（5 种预设）</span>
-<span class="flag">← →</span> <span class="comment">→ 翻页</span>
-<span class="flag">R</span>  <span class="comment">→ 重置计时器</span>
+<span class="comment"># Keyboard shortcuts for this deck (presenter-mode demo)</span>
+<span class="flag">S</span>  <span class="comment">→ open presenter view</span>
+<span class="flag">T</span>  <span class="comment">→ switch theme (5 presets)</span>
+<span class="flag">← →</span> <span class="comment">→ navigate slides</span>
+<span class="flag">R</span>  <span class="comment">→ reset timer</span>
     </div>
-    <p class="lede mt-m tc">关键是：<strong>每一页 &lt;aside class="notes"&gt; 里写 150–300 字逐字稿</strong>。</p>
+    <p class="lede mt-m tc"><strong>Open · Local · Agent-native</strong> — Download Open Design ｜ Star on GitHub · discord.gg/qhbcCH8Am4</p>
     <div class="deck-footer">
       <span class="mono">#thanks · Q&amp;A</span>
       <span class="slide-number" data-current="6" data-total="6"></span>
     </div>
     <aside class="notes">
-      <p>最后我演示一下这个 skill 怎么用，给大家省点时间自己摸索。</p>
-      <p>第一步，装 html-ppt skill，一行命令。第二步，把我这个 <code>presenter-mode-reveal</code> 模板复制到你自己的 examples 目录。第三步，打开 html，按 S。</p>
-      <p>键盘操作我列在这里了。<strong>S 进入演讲者视图、T 切换主题、左右键翻页、R 重置计时器</strong>。主题默认带 5 个——tokyo-night、dracula、catppuccin-mocha、nord、corporate-clean——基本覆盖了深色技术分享、浅色商务汇报两种常见场景。</p>
-      <p>最关键的一步——<em>每一页底部的 <code>&lt;aside class="notes"&gt;</code> 里，老老实实写 150 到 300 字的逐字稿</em>。这是整个方法论的交付物。AI 可以帮你写初稿，但你一定要自己过一遍，读出来听听是不是你会说的话。</p>
-      <p>好，我今天就讲到这里。如果你做下一场分享的时候想起了这个"演讲者视图 + 逐字稿"的组合，并且觉得讲得比以前顺——那就是我最大的收获。谢谢大家，有问题现在开始。</p>
+      <p>Finally, the call to action — to save you some time figuring it out yourselves.</p>
+      <p>Getting started is simple: open the GitHub repo <code>nexu-io/open-design</code> and download the macOS or Windows client. <strong>Apache-2.0 open source, no sign-up, BYOK with your own key</strong>. The community is at 60K+ stars, 300+ contributors, 217+ Plugins, and 129 Design Systems — the ecosystem is buzzing.</p>
+      <p>The keyboard shortcuts are listed here. <strong>S for presenter view, T to switch themes, arrow keys to navigate, R to reset the timer</strong>. Five themes ship by default — tokyo-night, dracula, catppuccin-mocha, nord, corporate-clean — covering dark tech talks and light business reviews alike.</p>
+      <p>And remember, this deck is itself an Open Design artifact — <em>presenter mode, the full script, theme switching: all generated HTML</em>. The demo you've been watching is the product.</p>
+      <p>That's all from me today. One line to take home: <strong>open, local, agent-native</strong>. Thank you — questions, go.</p>
     </aside>
   </section>
 
 </div>
 
-<div style="position:fixed;bottom:12px;left:12px;font-size:11px;color:#484f5866;z-index:100;pointer-events:none">
-  S 演讲者视图 · T 切换主题 · ← → 翻页 · F 全屏 · O 总览 · R 重置计时
+<div style="position:fixed;bottom:12px;left:12px;font-size:11px;font-family:var(--font-mono);color:var(--text-3);opacity:.7;z-index:100;pointer-events:none">
+  S presenter view · T theme · ← → navigate · F fullscreen · O overview · R reset timer
 </div>
 
 

@@ -9,18 +9,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --paper:      #E9E5DB;   /* warm parchment ground */
-    --paper-deep: #DCD6C4;   /* slightly darker for shadows */
-    --sun:        #F1EE2E;   /* signature solar yellow */
-    --sun-soft:   #F8F39B;
-    --ink:        #1B2566;   /* deep indigo navy */
-    --ember:      #E26B4A;   /* warm peach accent */
-    --haze:       #F0DA7C;
-    --line:       #1B2566;
+    --paper: #E9E5DB;   /* warm parchment ground */
+    --sun:   #F1EE2E;   /* signature solar yellow */
+    --ink:   #1B2566;   /* deep indigo navy */
+    --ember: #E26B4A;   /* warm peach edge note */
+    --ease:  cubic-bezier(.16, 1, .3, 1);
   }
 
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--ink); }
   body {
     font-family: 'Archivo', 'Helvetica Neue', sans-serif;
     color: var(--ink);
@@ -40,16 +37,23 @@
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 280ms var(--ease);
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
-  /* Type system — kept on a small set of utility classes */
-  .display      { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; line-height: 0.9; letter-spacing: -0.012em; }
-  .display-it   { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; line-height: 1.04; letter-spacing: -0.005em; }
-  .micro-label  { font-family: 'Archivo', sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; }
-  .body-text    { font-family: 'Archivo', sans-serif; font-weight: 400; line-height: 1.5; }
-  .mono-tab     { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 400; }
+  /* layered poster reveal: opacity-only stagger on each slide's direct
+     children, so positioned transforms (vrail rotate, qwrap translate)
+     are never touched */
+  @keyframes settle { from { opacity: 0; } to { opacity: 1; } }
+  .slide.active > * { animation: settle .55s var(--ease) both; }
+  .slide.active > *:nth-child(2) { animation-delay: .06s; }
+  .slide.active > *:nth-child(3) { animation-delay: .12s; }
+  .slide.active > *:nth-child(4) { animation-delay: .18s; }
+  .slide.active > *:nth-child(5) { animation-delay: .24s; }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > * { animation: none; }
+  }
 
   /* Page number — single, bottom-right, on every slide */
   .pagenum {
@@ -68,12 +72,12 @@
   .nav-hint {
     position: fixed;
     left: clamp(20px, 2vw, 36px);
-    bottom: clamp(16px, 2vh, 28px);
+    bottom: 8px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: clamp(10px, 0.75vw, 12px);
     color: var(--ink);
     letter-spacing: 0.08em;
-    opacity: 0.4;
+    opacity: 0.72; /* 0.55 blended below AA on the parchment ground */
     z-index: 10;
     pointer-events: none;
   }
@@ -90,18 +94,17 @@
     grid-template-columns: 1fr 1fr 1fr 1fr;
     grid-template-rows: repeat(8, 1fr);
   }
-  .s-cover .blocks div { background: transparent; }
   .s-cover .blocks .b1 { background: rgba(241,238,46,0.55); grid-column: 1; grid-row: 3 / 6; }
   .s-cover .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 1 / 4; }
   .s-cover .blocks .b3 { background: rgba(241,238,46,0.7);  grid-column: 1 / 3; grid-row: 6 / 9; }
   .s-cover .blocks .b4 { background: rgba(241,238,46,0.45); grid-column: 3 / 5; grid-row: 6 / 8; }
 
-  /* central sun-bloom + corner peach edge */
+  /* central sun disc + ember ring echo — crisp poster shapes, no haze */
   .s-cover .sunglow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 42% 38% at 52% 42%, rgba(241,238,46,0.95) 0%, rgba(241,238,46,0.65) 38%, rgba(240,218,124,0.22) 65%, rgba(233,229,219,0) 88%),
-      radial-gradient(ellipse 28% 30% at 88% 16%, rgba(226,107,74,0.22) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 58% 36%, var(--sun) 0 17.5vmin, rgba(241,238,46,0) calc(17.5vmin + 1.5px)),
+      radial-gradient(circle at 58% 36%, rgba(226,107,74,0) 0 19.5vmin, var(--ember) calc(19.5vmin + 1px) 20vmin, rgba(226,107,74,0) calc(20vmin + 1.5px));
   }
 
   .s-cover .date-rail {
@@ -125,6 +128,10 @@
     max-width: 88%;
   }
   .s-cover .title {
+    /* h1 defaults to bold, but Instrument Serif ships 400 only; without
+       this the browser synthesizes a smeared faux-bold */
+    margin: 0;
+    font-weight: 400;
     font-family: 'Instrument Serif', Georgia, serif;
     font-size: clamp(120px, min(14.6vw, 22vh), 240px);
     line-height: 0.86;
@@ -177,13 +184,16 @@
      SLIDE 2 — MANIFESTO (single italic statement, atmospheric)
      ────────────────────────────────────────────────────────────────── */
   .s-manifesto { background: var(--paper); display: flex; align-items: center; justify-content: center; }
+  /* sun sits low in the right corner, clear of the quote's measure, so the
+     ember ring never slices through a line of text */
   .s-manifesto .haze {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 70% 60% at 50% 50%, rgba(241,238,46,0.7) 0%, rgba(248,243,155,0.42) 32%, rgba(240,218,124,0.18) 56%, rgba(233,229,219,0) 80%),
-      radial-gradient(circle 600px at 12% 88%, rgba(226,107,74,0.15) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 82% 84%, var(--sun) 0 18vmin, rgba(241,238,46,0) calc(18vmin + 1.5px)),
+      radial-gradient(circle at 82% 84%, rgba(226,107,74,0) 0 20vmin, var(--ember) calc(20vmin + 1px) 20.5vmin, rgba(226,107,74,0) calc(20.5vmin + 1.5px));
   }
   .s-manifesto .quote {
+    margin: 0; /* UA <p> margin would nudge the flex-centered measure down */
     position: relative; z-index: 4;
     max-width: min(86%, 1480px);
     padding: 0 clamp(40px, 6vw, 120px);
@@ -191,7 +201,7 @@
     font-style: italic;
     font-weight: 400;
     font-size: clamp(56px, min(7vw, 11vh), 120px);
-    line-height: 1.04;
+    line-height: 1.08;
     color: var(--ink);
     letter-spacing: -0.005em;
     text-align: left;
@@ -260,7 +270,7 @@
     display: grid;
     grid-template-columns: 56px 1fr;
     gap: clamp(14px, 1.4vw, 24px);
-    border-bottom: 1px solid rgba(27,37,102,0.18);
+    border-bottom: 1px solid rgba(27,37,102,0.28);
     padding-bottom: clamp(12px, 1.6vh, 22px);
   }
   .s-programme .strand .num {
@@ -290,11 +300,13 @@
      SLIDE 4 — CHAPTER DIVIDER (huge serif numeral)
      ────────────────────────────────────────────────────────────────── */
   .s-chapter { background: var(--paper); }
+  /* hard-edged poster blocks instead of soft corner wash — same block
+     language as the cover grid */
   .s-chapter .glow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(circle 720px at -10% -10%, rgba(241,238,46,0.7) 0%, rgba(241,238,46,0) 65%),
-      radial-gradient(circle 540px at 110% 110%, rgba(226,107,74,0.18) 0%, rgba(226,107,74,0) 70%);
+      linear-gradient(var(--sun), var(--sun)) no-repeat 0 0 / 25% 37.5%,
+      linear-gradient(rgba(241,238,46,0.45), rgba(241,238,46,0.45)) no-repeat 100% 100% / 25% 25%;
   }
   .s-chapter .vrail {
     position: absolute;
@@ -337,7 +349,7 @@
     max-width: 78%;
   }
   .s-chapter .lede {
-    margin-top: clamp(18px, 2.2vh, 36px);
+    margin: clamp(18px, 2.2vh, 36px) 0 0;
     font-family: 'Archivo', sans-serif;
     font-size: clamp(15px, 1.05vw, 18px);
     line-height: 1.55;
@@ -346,12 +358,12 @@
   }
 
   /* ──────────────────────────────────────────────────────────────────
-     SLIDE 5 — DATA: ATTENDANCE BARS
+     SLIDE 5 — DATA: COMMUNITY BARS
      ────────────────────────────────────────────────────────────────── */
   .s-data { background: var(--paper); }
   .s-data .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(ellipse 50% 40% at 92% 8%, rgba(241,238,46,0.55) 0%, rgba(241,238,46,0) 70%);
+    background: linear-gradient(rgba(241,238,46,0.5), rgba(241,238,46,0.5)) no-repeat 100% 0 / 25% 25%;
   }
   .s-data .frame {
     position: absolute; inset: clamp(40px, 4vw, 76px) clamp(40px, 4vw, 76px) clamp(70px, 7vh, 120px);
@@ -372,11 +384,11 @@
   .s-data .stat .lab2 { font-family: 'Archivo', sans-serif; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; font-size: clamp(11px, 0.8vw, 13px); color: var(--ink); }
   .s-data .stat .desc { font-family: 'Archivo', sans-serif; font-size: clamp(14px, 0.95vw, 15px); line-height: 1.45; color: var(--ink); max-width: 32ch; margin-top: 4px; }
 
-  .s-data .chart { display: flex; flex-direction: column; gap: clamp(8px, 1vh, 14px); justify-content: center; }
+  .s-data .chart { display: flex; flex-direction: column; gap: clamp(10px, 1.5vh, 18px); justify-content: center; }
   .s-data .row { display: grid; grid-template-columns: 64px 1fr 80px; align-items: center; gap: clamp(12px, 1vw, 22px); }
   .s-data .row .yr { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); letter-spacing: 0.04em; }
   .s-data .row .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(12px, 0.85vw, 14px); color: var(--ink); text-align: right; letter-spacing: 0.02em; }
-  .s-data .bar { height: clamp(14px, 1.6vh, 22px); background: var(--ink); position: relative; }
+  .s-data .bar { height: clamp(18px, 2.4vh, 30px); background: var(--ink); position: relative; }
   .s-data .bar.lit { background: var(--sun); border: 1px solid var(--ink); }
 
   /* ──────────────────────────────────────────────────────────────────
@@ -391,7 +403,7 @@
   }
   .s-quote .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(circle 600px at 8% 92%, rgba(241,238,46,0.4) 0%, rgba(241,238,46,0) 70%);
+    background: linear-gradient(rgba(241,238,46,0.4), rgba(241,238,46,0.4)) no-repeat 0 100% / 17% 25%;
   }
   .s-quote .qwrap {
     position: absolute;
@@ -409,6 +421,7 @@
     margin-bottom: clamp(14px, 1.8vh, 26px);
   }
   .s-quote .qbody {
+    margin: 0; /* UA <p> margin throws off the translateY(-50%) centering */
     font-family: 'Instrument Serif', Georgia, serif;
     font-style: italic;
     font-size: clamp(40px, min(4.6vw, 7vh), 88px);
@@ -445,7 +458,7 @@
   .s-cal { background: var(--paper); }
   .s-cal .glow {
     position: absolute; inset: 0; pointer-events: none;
-    background: radial-gradient(circle 700px at 105% 0%, rgba(241,238,46,0.45) 0%, rgba(241,238,46,0) 65%);
+    background: linear-gradient(rgba(241,238,46,0.45), rgba(241,238,46,0.45)) no-repeat 100% 0 / 25% 12.5%;
   }
   .s-cal .frame {
     position: absolute;
@@ -473,8 +486,11 @@
     gap: clamp(14px, 1.4vw, 28px);
     align-items: center;
     padding: clamp(10px, 1.3vh, 18px) 0;
-    border-bottom: 1px solid rgba(27,37,102,0.2);
+    border-bottom: 1px solid rgba(27,37,102,0.28);
   }
+  /* data rows share the remaining stage height so the ledger fills the
+     frame instead of stacking against the top with a dead band below */
+  .s-cal .row:not(.headrow) { flex: 1; min-height: 0; }
   .s-cal .row .date { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(13px, 0.95vw, 16px); color: var(--ink); letter-spacing: 0.02em; }
   .s-cal .row .ttl  { font-family: 'Instrument Serif', Georgia, serif; font-size: clamp(20px, 1.6vw, 30px); line-height: 1.15; color: var(--ink); }
   .s-cal .row .ttl em { font-style: italic; }
@@ -487,11 +503,12 @@
      SLIDE 8 — COLOPHON (mirror of cover, inverted)
      ────────────────────────────────────────────────────────────────── */
   .s-colophon { background: var(--paper); }
+  /* rising sun disc on the horizon — mirrors the cover's sun, half set.
+     No ember ring here: it would slice through the colophon footer text. */
   .s-colophon .glow {
     position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(ellipse 55% 50% at 50% 110%, rgba(241,238,46,0.85) 0%, rgba(241,238,46,0.5) 35%, rgba(240,218,124,0.18) 60%, rgba(233,229,219,0) 84%),
-      radial-gradient(ellipse 30% 30% at 12% 18%, rgba(226,107,74,0.18) 0%, rgba(226,107,74,0) 70%);
+      radial-gradient(circle at 64% 132%, var(--sun) 0 38vmin, rgba(241,238,46,0) calc(38vmin + 1.5px));
   }
   .s-colophon .blocks {
     position: absolute; inset: 0;
@@ -499,7 +516,9 @@
     display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; grid-template-rows: repeat(8, 1fr);
   }
   .s-colophon .blocks .b1 { background: rgba(241,238,46,0.55); grid-column: 1 / 3; grid-row: 1 / 3; }
-  .s-colophon .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 5 / 8; }
+  /* b2 ends one row higher so its hard edge never slices through the
+     License column of the colophon footer */
+  .s-colophon .blocks .b2 { background: rgba(241,238,46,0.4);  grid-column: 4; grid-row: 4 / 7; }
   .s-colophon .titlewrap {
     position: absolute;
     left: clamp(40px, 4vw, 76px);
@@ -512,6 +531,9 @@
     letter-spacing: 0.22em; font-size: clamp(11px, 0.82vw, 13px); color: var(--ink); margin-bottom: clamp(12px, 1.4vh, 22px);
   }
   .s-colophon .ttl {
+    /* same faux-bold guard as the cover h1: only weight 400 is loaded */
+    margin: 0;
+    font-weight: 400;
     font-family: 'Instrument Serif', Georgia, serif;
     font-size: clamp(80px, min(10vw, 16vh), 200px);
     line-height: 0.86;
@@ -550,29 +572,29 @@
       </div>
       <div class="sunglow" aria-hidden="true"></div>
 
-      <div class="date-rail">02.05—<br/>11.10.2026</div>
+      <div class="date-rail">60K+<br/>Stars</div>
 
       <div class="titlewrap">
-        <h1 class="title">Aurora<br/><em>Programme</em></h1>
-        <div class="caption subline">Annual Survey · Issue No. 04</div>
+        <h1 class="title">Open<br/><em>Design</em></h1>
+        <div class="caption subline">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
       </div>
 
       <div class="footer-row">
         <div>
-          <div class="caption ftag">Hosted by</div>
-          <div class="caption ftxt">Aurora Institute<br/>for Public Form</div>
+          <div class="caption ftag">Project</div>
+          <div class="caption ftxt">github.com/nexu-io/<br/>open-design</div>
         </div>
         <div>
-          <div class="caption ftag">Edition</div>
-          <div class="caption ftxt">Fourth annual<br/>open programme</div>
+          <div class="caption ftag">License</div>
+          <div class="caption ftxt">Apache-2.0<br/>open source</div>
         </div>
         <div>
-          <div class="caption ftag">Reading</div>
-          <div class="caption ftxt">A field study of light,<br/>matter and atmosphere</div>
+          <div class="caption ftag">Platform</div>
+          <div class="caption ftxt">The open-source, local,<br/>agent-driven design platform</div>
         </div>
         <div>
           <div class="caption ftag">Notes</div>
-          <div class="caption fdesc">Six months of exhibitions, residencies and public lectures across three pavilions, mapped against a slow-changing palette of yellow.</div>
+          <div class="caption fdesc">From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, on your own machine.</div>
         </div>
       </div>
 
@@ -582,56 +604,56 @@
     <!-- 2. MANIFESTO ──────────────────────────────────────────────── -->
     <section class="slide s-manifesto">
       <div class="haze" aria-hidden="true"></div>
-      <p class="quote">A room is a slow argument with the sun. We have spent four years listening for what it answers.</p>
-      <div class="attr">From the Aurora Charter, 2023</div>
+      <p class="quote">Frontier AI design, back on every creator's desk. Open, local, and driven by the agents you already run.</p>
+      <div class="attr">From the Open Design README, 2026</div>
       <div class="pagenum">02 / 08</div>
     </section>
 
     <!-- 3. PROGRAMME ──────────────────────────────────────────────── -->
     <section class="slide s-programme">
       <div class="left">
-        <div class="kicker">Strands · 2026</div>
+        <div class="kicker">Workflow · 5 Steps</div>
         <div>
-          <div class="word">Programme</div>
+          <div class="word">Workflow</div>
         </div>
-        <div class="meta">Six interlocking strands run across the year. Each is independently curated, but every strand answers to the same question: what does light know that we don't?</div>
+        <div class="meta">From idea to delivery in five steps. Each step is independently useful, but every step answers to the same question: how close can the first draft land to what you meant?</div>
       </div>
       <div class="right">
-        <div class="head caption">Strand · Title · Anchor</div>
+        <div class="head caption">Step · Title · Detail</div>
         <div class="strands">
           <div class="strand">
             <div class="num">01</div>
             <div>
-              <h3>Slow Atmospheres</h3>
-              <p>A reading room of long-form essays, drawings and weather notebooks, organised around the changing yellow of late afternoon.</p>
+              <h3>Pick a starting point</h3>
+              <p>Describe your goal in one sentence, or start from a template or plugin and skip the blank page entirely.</p>
             </div>
           </div>
           <div class="strand">
             <div class="num">02</div>
             <div>
-              <h3>Public Form</h3>
-              <p>Three commissions in three pavilions, each examining how a public square wears its own light over the course of a season.</p>
+              <h3>Set the visual direction</h3>
+              <p>Choose a direction once; palette, type, and spacing flow into the generation pipeline automatically.</p>
             </div>
           </div>
           <div class="strand">
             <div class="num">03</div>
             <div>
-              <h3>Field Notes</h3>
-              <p>A residency programme drawing artists, architects and meteorologists together for a hundred days of recording, drawing and arguing.</p>
+              <h3>Generate the artifact</h3>
+              <p>The agent reads full context and produces real runnable files, previewed and edited live in a sandbox.</p>
             </div>
           </div>
           <div class="strand">
             <div class="num">04</div>
             <div>
-              <h3>Quiet Editions</h3>
-              <p>A typographic publishing strand committed to printing only what asks to be read in daylight, on warm paper, slowly.</p>
+              <h3>Ship it, or film it</h3>
+              <p>Hand off to engineering, or turn the artifact into a marketing video with the HyperFrames pipeline.</p>
             </div>
           </div>
           <div class="strand">
             <div class="num">05</div>
             <div>
-              <h3>Open Conversations</h3>
-              <p>Twelve evenings of public talks, paired with a meal and a question: what is the weather like in your work?</p>
+              <h3>Memory compounds</h3>
+              <p>Every choice becomes context for the next run — design systems, preferences, and memory that sharpen each generation.</p>
             </div>
           </div>
         </div>
@@ -642,11 +664,11 @@
     <!-- 4. CHAPTER DIVIDER ────────────────────────────────────────── -->
     <section class="slide s-chapter">
       <div class="glow" aria-hidden="true"></div>
-      <div class="caption vrail">First Chapter — Slow Atmospheres</div>
+      <div class="caption vrail">First Chapter — Why Open Design</div>
       <div class="stack">
         <div class="nm">01</div>
-        <div class="ttl">A reading of the season's quietest hours</div>
-        <p class="lede">In its first chapter the Aurora Programme convenes around the slowest light of the year: the long minutes after the sun has gone but before the room has admitted it. We open the year in March, in three rooms, in three cities, with three lamps left burning past closing.</p>
+        <div class="ttl">Setting frontier design capability free</div>
+        <p class="lede">In April 2026, Claude Design proved for the first time that an LLM can truly design — not write about design, but produce real design artifacts. Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK. Open Design sets that capability free.</p>
       </div>
       <div class="pagenum">04 / 08</div>
     </section>
@@ -656,27 +678,27 @@
       <div class="glow" aria-hidden="true"></div>
       <div class="frame">
         <div class="head">
-          <div class="h">Public attendance</div>
-          <div class="caption lab">Open programme · 2022—2026</div>
+          <div class="h">Community in numbers</div>
+          <div class="caption lab">GitHub Stars · 2026 · demo curve</div>
         </div>
         <div class="col-a">
           <div class="stat">
-            <div class="v">182<sup>k</sup></div>
-            <div class="caption lab2">Visitors · Year four</div>
-            <div class="desc">A 2.4× rise on the inaugural year, drawn from a programme that grew slower than the audience.</div>
+            <div class="v">60<sup>k+</sup></div>
+            <div class="caption lab2">GitHub Stars</div>
+            <div class="desc">Open source under Apache-2.0, built in public with 300+ contributors and 217+ plugins.</div>
           </div>
           <div class="stat">
-            <div class="v">7<sup>4%</sup></div>
-            <div class="caption lab2">Returning audience</div>
-            <div class="desc">Three quarters of last year's visitors came back; nearly half came back twice.</div>
+            <div class="v">-80<sup>%</sup></div>
+            <div class="caption lab2">Monthly cost vs. Claude Design</div>
+            <div class="desc">From $500 to ~$73 a month, with bring-your-own-key model and media providers.</div>
           </div>
         </div>
         <div class="chart">
-          <div class="row"><div class="caption yr">2022</div><div class="bar" style="width: 32%"></div><div class="caption val">76,400</div></div>
-          <div class="row"><div class="caption yr">2023</div><div class="bar" style="width: 48%"></div><div class="caption val">112,800</div></div>
-          <div class="row"><div class="caption yr">2024</div><div class="bar" style="width: 62%"></div><div class="caption val">141,200</div></div>
-          <div class="row"><div class="caption yr">2025</div><div class="bar" style="width: 72%"></div><div class="caption val">164,900</div></div>
-          <div class="row"><div class="caption yr">2026</div><div class="bar lit" style="width: 86%"></div><div class="caption val">182,300</div></div>
+          <div class="row"><div class="caption yr">02.26</div><div class="bar" style="width: 32%"></div><div class="caption val">9,800</div></div>
+          <div class="row"><div class="caption yr">03.26</div><div class="bar" style="width: 48%"></div><div class="caption val">18,500</div></div>
+          <div class="row"><div class="caption yr">04.26</div><div class="bar" style="width: 62%"></div><div class="caption val">31,200</div></div>
+          <div class="row"><div class="caption yr">05.26</div><div class="bar" style="width: 72%"></div><div class="caption val">47,600</div></div>
+          <div class="row"><div class="caption yr">06.26</div><div class="bar lit" style="width: 86%"></div><div class="caption val">60,000+</div></div>
         </div>
       </div>
       <div class="pagenum">05 / 08</div>
@@ -687,14 +709,14 @@
       <div class="yblock" aria-hidden="true"></div>
       <div class="glow" aria-hidden="true"></div>
       <div class="qwrap">
-        <div class="caption qkicker">A note from the curator</div>
-        <p class="qbody">The yellow we use is not the yellow we mean. It is the yellow that arrives ten minutes after we leave the building.</p>
+        <div class="caption qkicker">A note from the community</div>
+        <p class="qbody">File-system semantics plus git-diffable design artifacts — design is finally under version control.</p>
         <div class="qattr">
-          <div class="caption who">Idun Reijners</div>
-          <div class="caption role">Curator-at-large, Aurora Institute · letter to the editorial board, January 2026</div>
+          <div class="caption who">Indie developer</div>
+          <div class="caption role">Open Design community · from the public GitHub discussions, 2026</div>
         </div>
       </div>
-      <div class="y-mark" aria-hidden="true">¨</div>
+      <div class="y-mark" aria-hidden="true">&rdquo;</div>
       <div class="pagenum">06 / 08</div>
     </section>
 
@@ -703,58 +725,58 @@
       <div class="glow" aria-hidden="true"></div>
       <div class="frame">
         <div class="topbar">
-          <div class="h">Public calendar</div>
-          <div class="caption lab">Selected dates · May—October</div>
+          <div class="h">Core capabilities</div>
+          <div class="caption lab">Eight capabilities · Open Design</div>
         </div>
         <div class="ledger">
-          <div class="row headrow"><div class="caption">Date</div><div class="caption">Title</div><div class="caption">Venue</div><div class="caption">Length</div></div>
+          <div class="row headrow"><div class="caption">Nº</div><div class="caption">Capability</div><div class="caption">What it gives you</div><div class="caption">Tag</div></div>
           <div class="row">
-            <div class="caption date">02.05</div>
-            <div class="ttl"><em>The Long Yellow</em>, opening lecture</div>
-            <div class="ven">Pavilion of Quiet Form, Rotterdam</div>
-            <div class="caption dur">90 min</div>
+            <div class="caption date">01</div>
+            <div class="ttl"><em>Desktop-first</em>, where design happens</div>
+            <div class="ven">Local files, Figma, and repos readable in place</div>
+            <div class="caption dur">core</div>
           </div>
           <div class="row">
-            <div class="caption date">17.05</div>
-            <div class="ttl">A walk through the season's first room</div>
-            <div class="ven">Reading Garden, Pavilion North</div>
-            <div class="caption dur">2 hr</div>
+            <div class="caption date">02</div>
+            <div class="ttl">21 coding agents, zero config</div>
+            <div class="ven">Auto-detected from PATH</div>
+            <div class="caption dur">agents</div>
           </div>
           <div class="row">
-            <div class="caption date">06.06</div>
-            <div class="ttl"><em>Public Form 01</em> — opening</div>
-            <div class="ven">Square of the Slow Sun, Antwerp</div>
-            <div class="caption dur">All day</div>
+            <div class="caption date">03</div>
+            <div class="ttl"><em>HTML video</em> pipeline — HyperFrames</div>
+            <div class="ven">Programmatic HTML-to-MP4 video</div>
+            <div class="caption dur">video</div>
           </div>
           <div class="row">
-            <div class="caption date">28.06</div>
-            <div class="ttl">Field Notes residency, week one supper</div>
-            <div class="ven">House of the Half Window</div>
-            <div class="caption dur">3 hr</div>
+            <div class="caption date">04</div>
+            <div class="ttl">129 design systems, ready to import</div>
+            <div class="ven">From GitHub, Figma, or local</div>
+            <div class="caption dur">design</div>
           </div>
           <div class="row">
-            <div class="caption date">19.07</div>
-            <div class="ttl"><em>A Letter to the Sun</em>, evening reading</div>
-            <div class="ven">Aurora Library, room 3</div>
-            <div class="caption dur">75 min</div>
+            <div class="caption date">05</div>
+            <div class="ttl"><em>Plugin ecosystem</em>, 217+ and growing</div>
+            <div class="ven">Prototypes, slides, posters, dashboards</div>
+            <div class="caption dur">217+</div>
           </div>
           <div class="row">
-            <div class="caption date">14.08</div>
-            <div class="ttl">Quiet Editions — print fair &amp; book launch</div>
-            <div class="ven">Type Garden, Pavilion South</div>
-            <div class="caption dur">2 days</div>
+            <div class="caption date">06</div>
+            <div class="ttl">Full-stack BYOK across providers</div>
+            <div class="ven">Anthropic, OpenAI, Azure, Google + 14 media providers</div>
+            <div class="caption dur">byok</div>
           </div>
           <div class="row">
-            <div class="caption date">22.09</div>
-            <div class="ttl">Open Conversations · meteorology &amp; drawing</div>
-            <div class="ven">Reading Room, ground floor</div>
-            <div class="caption dur">2 hr</div>
+            <div class="caption date">07</div>
+            <div class="ttl"><em>Self-evolving</em> design memory</div>
+            <div class="ven">Remembers preferences and palettes</div>
+            <div class="caption dur">memory</div>
           </div>
           <div class="row">
-            <div class="caption date">11.10</div>
-            <div class="ttl"><em>The Last Window</em>, closing performance</div>
-            <div class="ven">Pavilion of Quiet Form, Rotterdam</div>
-            <div class="caption dur">60 min</div>
+            <div class="caption date">08</div>
+            <div class="ttl"><em>Apache-2.0</em>, open all the way down</div>
+            <div class="ven">Fork, self-host, commercial use all allowed</div>
+            <div class="caption dur">oss</div>
           </div>
         </div>
       </div>
@@ -769,26 +791,26 @@
       <div class="glow" aria-hidden="true"></div>
 
       <div class="titlewrap">
-        <div class="caption ktag">Colophon · Programme 04</div>
-        <h2 class="ttl">With thanks<br/>to the slow<br/><em>readers.</em></h2>
+        <div class="caption ktag">Open · Local · Agent-native</div>
+        <h2 class="ttl">Frontier AI,<br/>on every<br/><em>desk.</em></h2>
       </div>
 
       <div class="colofo">
         <div>
-          <div class="caption ftag">Curated by</div>
-          <div class="caption ftxt">Idun Reijners<br/>with the editorial board</div>
+          <a class="caption ftag" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Download</a>
+          <div class="caption ftxt">Open Design for<br/>macOS / Windows</div>
         </div>
         <div>
-          <div class="caption ftag">Designed</div>
-          <div class="caption ftxt">In daylight, on warm paper,<br/>over fourteen weeks</div>
+          <a class="caption ftag" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Star on GitHub</a>
+          <div class="caption ftxt">github.com/nexu-io/<br/>open-design</div>
         </div>
         <div>
-          <div class="caption ftag">Hosts</div>
-          <div class="caption ftxt">Aurora Institute<br/>Pavilion of Quiet Form<br/>Reading Garden</div>
+          <div class="caption ftag">Community</div>
+          <div class="caption ftxt">discord.gg/qhbcCH8Am4<br/>x.com/nexudotio</div>
         </div>
         <div>
-          <div class="caption ftag">Until next year</div>
-          <div class="caption ftxt">The fifth programme opens in May 2027. Look for the yellow on the door.</div>
+          <div class="caption ftag">License</div>
+          <div class="caption ftxt">Apache-2.0. Fork it, self-host it, ship it — frontier AI design, back on every creator's desk.</div>
         </div>
       </div>
 

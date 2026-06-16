@@ -3,112 +3,741 @@
 <head>
 <meta charset="UTF-8" />
 <title>Swiss International · Open Design 2026</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <style>
-  body { font-family: 'Inter Tight','Inter','Noto Sans SC',system-ui,sans-serif; background:#0a0a0a; color:#fafaf8; margin:0; }
-  .slide { width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto; position:relative; overflow:hidden; }
-  .ikb { background:#002FA7; color:#fafaf8; }
-  .paper { background:#fafaf8; color:#0a0a0a; }
-  .mono { font-family:'JetBrains Mono', ui-monospace, monospace; }
-  .hairline-b { border-bottom:1px solid currentColor; }
-  .hairline-t { border-top:1px solid currentColor; }
-  /* ASCII dot field */
-  .ascii { font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1; letter-spacing:6px; opacity:0.2; }
-  .bar { width:60px; background:#002FA7; }
-  .deck { display:grid; gap:24px; padding:24px; }
+  /* Swiss International tokens (locked family: IKB accent, paper, ink, hairlines, right angles) */
+  :root{
+    --ikb:#002FA7;
+    --paper:#fafaf8;
+    --ink:#0a0a0a;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+  }
+  *,*::before,*::after{ box-sizing:border-box; }
+  body{
+    font-family:'Inter Tight','Inter',system-ui,sans-serif;
+    background:var(--ink); color:var(--paper); margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .deck{ display:grid; gap:24px; padding:24px; }
+  .slide{
+    width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto;
+    position:relative; overflow:hidden; border-radius:0;
+  }
+  .ikb{ background:var(--ikb); color:var(--paper); }
+  .paper{ background:var(--paper); color:var(--ink); }
+  .mono{ font-family:'JetBrains Mono', ui-monospace, monospace; }
+  .hairline-b{ border-bottom:1px solid currentColor; }
+  .hairline-t{ border-top:1px solid currentColor; }
+
+  /* shared chrome */
+  .frame{ position:absolute; inset:0; padding:48px; display:flex; flex-direction:column; justify-content:space-between; }
+  .chrome{
+    display:flex; align-items:baseline; justify-content:space-between;
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em;
+  }
+  .chrome-foot{ padding-top:12px; }
+  .kicker{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:12px; text-transform:uppercase; letter-spacing:0.18em;
+  }
+
+  /* ASCII dot field (family signature: breathing dot matrix) */
+  .ascii{
+    font-family:'JetBrains Mono', monospace; font-size:11px; line-height:1;
+    letter-spacing:6px; opacity:0.22; margin:0;
+    animation:breathe 6s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ opacity:0.12; } 50%{ opacity:0.28; } }
+
+  /* S01 cover */
+  .cover-title{
+    margin:12px 0 0; font-weight:900; line-height:0.95; letter-spacing:-0.02em;
+    font-size:clamp(48px,7.5vw,124px);
+  }
+  .cover-lede{
+    margin:20px 0 0; max-width:640px; font-family:'Inter',sans-serif;
+    font-size:15px; line-height:1.5; opacity:0.92;
+  }
+  .cover .kicker{ opacity:0.8; }
+  .cover .chrome-foot{ opacity:0.75; }
+
+  /* shared paper headline (smaller than tower-h2, for content pages) */
+  .h2{
+    margin:8px 0 0; font-weight:900; line-height:1.06; letter-spacing:-0.02em;
+    font-size:clamp(28px,3.4vw,44px);
+  }
+  .body-copy{ font-family:'Inter',sans-serif; font-size:14px; line-height:1.55; }
+
+  /* S06 KPI tower */
+  .tower-h2{
+    margin:8px 0 0; font-weight:900; line-height:1; letter-spacing:-0.02em;
+    font-size:clamp(36px,4.8vw,80px);
+  }
+  .accent{ color:var(--ikb); }
+  .towers{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:40px;
+    align-items:end; margin-top:24px;
+  }
+  .tower{ text-align:center; }
+  .tower .glyph{ height:32px; margin:0 auto 12px; }
+  .tower .glyph svg{ width:28px; height:28px; display:block; margin:0 auto; }
+  .bar{ width:60px; margin:0 auto; background:var(--ikb); }
+  .tower .value{
+    margin-top:12px; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:32px; font-weight:700; color:var(--ikb); line-height:1.1;
+  }
+  .tower .label{
+    margin-top:4px; padding-top:4px; border-top:1px solid currentColor;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.16em; opacity:0.72;
+  }
+  .paper .chrome-foot{ opacity:0.72; margin-top:16px; }
+
+  /* S03 statement */
+  .statement-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .statement{
+    margin:0; font-weight:900; line-height:1.04; letter-spacing:-0.03em;
+    text-align:center; font-size:clamp(40px,5.6vw,76px);
+  }
+  .statement-note{
+    display:flex; gap:32px; align-items:baseline; justify-content:space-between;
+    border-top:1px solid var(--ink); padding-top:14px; margin-top:8px;
+  }
+  .statement-note .note-label{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--ikb);
+    white-space:nowrap;
+  }
+  .statement-note p{ margin:0; max-width:620px; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+
+  /* S19 four cards */
+  .cards4{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-top:28px; }
+  .card{
+    border:1px solid var(--ink); padding:20px; min-height:230px;
+    display:flex; flex-direction:column;
+  }
+  .card .meta{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .card h3{ margin:12px 0 10px; font-size:21px; font-weight:800; letter-spacing:-0.01em; line-height:1.1; }
+  .card p{ margin:0; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .card .card-foot{
+    margin-top:auto; padding-top:10px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.6;
+  }
+
+  /* S04 six cells */
+  .cells{ display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--ink); margin-top:24px; }
+  .cell{ padding:20px 22px 18px; border-right:1px solid var(--ink); border-bottom:1px solid var(--ink); }
+  .cell:nth-child(3n){ border-right:0; }
+  .cell:nth-child(n+4){ border-bottom:0; }
+  .cell-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cell-top svg{ width:22px; height:22px; display:block; }
+  .cell-top .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.14em; color:var(--ikb);
+  }
+  .cell h3{ margin:0 0 6px; font-size:17px; font-weight:800; letter-spacing:-0.01em; }
+  .cell p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+
+  /* S11 horizontal timeline */
+  .tl{ margin-top:64px; }
+  .tl-row{ display:grid; grid-template-columns:repeat(5,1fr); border-top:1px solid var(--ink); }
+  .tl-step{ position:relative; padding:26px 18px 0 0; }
+  .tl-step::before{
+    content:""; position:absolute; top:-6px; left:0;
+    width:11px; height:11px; background:var(--ikb);
+  }
+  .tl-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .tl-step h3{ margin:8px 0 6px; font-size:16px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
+  .tl-step p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+
+  /* S08 duo compare */
+  .duo{ flex:1; display:grid; grid-template-columns:repeat(16,1fr); margin-top:16px; }
+  .duo-col{
+    grid-column:span 8; padding:28px 44px 20px 0;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .duo-col + .duo-col{ border-left:1px solid var(--ink); padding:28px 0 20px 44px; }
+  .duo-body{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .duo .tag{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; opacity:0.65;
+  }
+  .duo .tag b{ font-weight:700; opacity:1; }
+  .duo .big{
+    margin:18px 0 0; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-weight:700; line-height:1; font-size:clamp(56px,6.4vw,88px); letter-spacing:-0.04em;
+  }
+  .duo .delta{
+    display:inline-block; margin-left:16px; padding:4px 10px; vertical-align:middle;
+    border:1px solid var(--ikb); color:var(--ikb);
+    font-size:16px; letter-spacing:0; font-weight:700;
+  }
+  .duo p{ margin:18px 0 0; max-width:380px; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .duo .duo-foot{
+    margin-top:auto; padding-top:12px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.6;
+  }
+
+  /* S14 loop diagram */
+  .loop{ flex:1; display:grid; grid-template-columns:repeat(16,1fr); align-items:center; margin-top:8px; }
+  .loop-steps{ grid-column:1/8; }
+  .loop-step{ display:flex; gap:18px; padding:14px 0; border-bottom:1px solid var(--ink); }
+  .loop-step:last-child{ border-bottom:0; }
+  .loop-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:12px; font-weight:700; color:var(--ikb); padding-top:2px;
+  }
+  .loop-step h3{ margin:0 0 3px; font-size:16px; font-weight:800; }
+  .loop-step p{ margin:0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.75; }
+  .loop-art{ grid-column:9/17; display:flex; justify-content:center; }
+  .loop-art svg{ display:block; }
+
+  /* S18 why now */
+  .why{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:26px; }
+  .why-col{ border-top:1px solid var(--ink); padding-top:16px; display:flex; flex-direction:column; min-height:300px; }
+  .why-col .cat{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--ikb);
+  }
+  .why-col h3{ margin:12px 0 10px; font-size:21px; font-weight:800; line-height:1.15; letter-spacing:-0.01em; }
+  .why-col p{ margin:0; font-family:'Inter',sans-serif; font-size:13px; line-height:1.5; opacity:0.78; }
+  .why-col .num{
+    margin-top:auto; padding-top:14px; border-top:1px solid var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:40px; font-weight:700; line-height:1;
+  }
+  .why-col .num-label{
+    margin-top:6px; font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.14em; opacity:0.65;
+  }
+  .why-col.why-accent{
+    background:var(--ikb); color:var(--paper);
+    border-top-color:var(--ikb); padding:16px 20px 20px; margin:-1px -2px 0;
+  }
+  .why-col.why-accent .cat{ color:var(--paper); opacity:0.85; }
+  .why-col.why-accent p{ opacity:0.88; }
+  .why-col.why-accent .num{ border-top-color:var(--paper); }
+  .why-col.why-accent .num-label{ opacity:0.8; }
+
+  /* S09 closing manifesto */
+  .closing{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(16,1fr); }
+  .closing-left{
+    grid-column:1/8; background:var(--ikb); color:var(--paper);
+    padding:48px; display:flex; flex-direction:column; justify-content:space-between;
+    position:relative;
+  }
+  .closing-left .manifesto{
+    margin:20px 0 0; font-weight:900; line-height:1.04; letter-spacing:-0.02em;
+    font-size:clamp(30px,3.8vw,50px);
+  }
+  .closing-left .meta{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:10px; text-transform:uppercase; letter-spacing:0.16em; opacity:0.78;
+    border-top:1px solid currentColor; padding-top:12px;
+  }
+  .closing-right{
+    grid-column:8/17; background:var(--paper); color:var(--ink);
+    padding:48px; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .next-steps{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:0; }
+  .next-step{ padding:22px 0; border-bottom:1px solid var(--ink); }
+  .next-step:first-child{ border-top:1px solid var(--ink); }
+  .next-step .num{
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:11px; letter-spacing:0.16em; color:var(--ikb);
+  }
+  .next-step h3{ margin:6px 0 4px; font-size:18px; font-weight:800; letter-spacing:-0.01em; }
+  .next-step a{
+    color:var(--ikb); font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:13px; font-weight:700; text-decoration:underline; text-underline-offset:3px;
+  }
+  .next-step p{ margin:6px 0 0; font-family:'Inter',sans-serif; font-size:12.5px; line-height:1.45; opacity:0.72; }
+
+  /* motion discipline: transform+opacity only, staggered ease-out */
+  .in{ animation:rise 0.7s var(--ease-out) both; }
+  .in-1{ animation-delay:0.05s; }
+  .in-2{ animation-delay:0.12s; }
+  .in-3{ animation-delay:0.19s; }
+  .in-4{ animation-delay:0.26s; }
+  .in-5{ animation-delay:0.33s; }
+  .in-6{ animation-delay:0.40s; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(20px); } to{ opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce){
+    .in,.in-1,.in-2,.in-3,.in-4,.in-5,.in-6{ animation:none; }
+    .ascii{ animation:none; opacity:0.2; }
+  }
+
+  @media print{
+    body{ background:var(--paper); }
+    .deck{ gap:0; padding:0; }
+    .slide{ page-break-after:always; }
+    .in,.in-1,.in-2,.in-3,.in-4,.in-5,.in-6,.ascii{ animation:none; }
+  }
 </style>
 </head>
 <body>
 <div class="deck">
 
-  <!-- S01 Cover · Full IKB -->
-  <section class="slide ikb">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
-        <span>OPEN DESIGN — 2026 ROADMAP</span>
-        <span>S01 / 22</span>
-        <span>2026.05.11</span>
+  <!-- №01 · S01 Cover · Full IKB -->
+  <section class="slide ikb cover">
+    <div class="frame">
+      <header class="chrome">
+        <span>OPEN DESIGN — PRODUCT BRIEF</span>
+        <span>S01 / 10</span>
+        <span>2026.06.11</span>
       </header>
       <!-- ascii dot matrix top-right -->
-      <pre class="absolute top-20 right-12 ascii">▒▓█▓▒░░▒▓█▓▒
+      <pre class="ascii" style="position:absolute; top:80px; right:48px;">▒▓█▓▒░░▒▓█▓▒
 ▒▒▓█▓▒░░▒▓█▓▒
 ░▒▓█▓▒░░▒▓█▓▒
 ░░▒▓█▓▒░░▒▓█▓
 ▒░░▒▓█▓▒░░▒▓
 ▒▒░░▒▓█▓▒░░▒</pre>
       <div>
-        <div class="mono text-[12px] uppercase tracking-[0.18em] opacity-80">№01 · A LANDMARK</div>
-        <h1 class="mt-3 font-black leading-[0.95] tracking-[-0.02em]" style="font-size:clamp(48px,7.5vw,124px)">
-          Designing<br/>intelligence<br/>on warm paper.
+        <div class="kicker in">№01 · OPEN DESIGN</div>
+        <h1 class="cover-title in in-1">
+          Open Design.<br/>Open · Local ·<br/>Agent-native.
         </h1>
-        <p class="mt-5 max-w-[640px] text-[15px] opacity-90 leading-snug">
-          75 个世界级 HTML 模板 · 17 个本地 AI agent 适配 · 0 API 成本 · 一键发布到任何平台。
+        <p class="cover-lede in in-2">
+          The open, local, agent-driven design platform — from idea to prototypes, web pages, slides and HTML video, end to end on your own machine. Apache-2.0 · Runs locally · BYOK · No sign-up.
         </p>
       </div>
-      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-70 hairline-t pt-3">
-        <span>OPEN-DESIGN.STUDIO</span>
-        <span>BERLIN · 52.5200° N · 13.4050° E</span>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+        <span>APACHE-2.0 · RUNS LOCALLY · BYOK</span>
         <span>VOL. 01</span>
       </footer>
     </div>
   </section>
 
-  <!-- S06 KPI Tower · paper bg, 4 IKB bars -->
+  <!-- №02 · S06 KPI Tower · paper bg, 4 IKB bars -->
   <section class="slide paper">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em]">
-        <span>KPI TOWER — Q1-Q4 OUTLOOK</span>
-        <span>S06 / 22</span>
-        <span>FY 2026</span>
+    <div class="frame">
+      <header class="chrome">
+        <span>STAT TOWER — OPEN ECOSYSTEM</span>
+        <span>S02 / 10</span>
+        <span>2026</span>
       </header>
       <div>
-        <div class="mono text-[12px] uppercase tracking-[0.18em]" style="color:#002FA7">№06 · GROWTH METRICS</div>
-        <h2 class="mt-2 font-black leading-[1] tracking-[-0.02em]" style="font-size:clamp(36px,4.8vw,80px)">
-          四根柱子, 一个目标 ——<br/>
-          做<span style="color:#002FA7">最被信任</span>的 HTML 生产线。
+        <div class="kicker accent">№02 · BY THE NUMBERS</div>
+        <h2 class="tower-h2">
+          Four pillars, one fact —<br/>
+          the open ecosystem behind <span class="accent">60K+ Stars</span>.
         </h2>
       </div>
-      <!-- bars -->
-      <div class="grid grid-cols-4 gap-10 items-end mt-6">
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="16" y="2" width="4" height="18"/></svg>
+      <!-- bars: heights proportional to real values (21 / 129 / 217 / 300, 280px = 300) -->
+      <div class="towers">
+        <div class="tower in in-1">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="4" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="16" y="2" width="4" height="18"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:60px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">75</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · 现在</div>
+          <div class="bar" style="height:20px"></div>
+          <div class="value">21</div>
+          <div class="label">Coding Agent</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><circle cx="12" cy="12" r="9" fill="none" stroke="#002FA7" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="tower in in-2">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><circle cx="12" cy="12" r="9" fill="none" stroke="#002FA7" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:140px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">200</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">模板 · Q4 目标</div>
+          <div class="bar" style="height:120px"></div>
+          <div class="value">129</div>
+          <div class="label">Design Systems</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
+        <div class="tower in in-3">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M12 2l3 7h7l-5.5 4.5 2 7L12 16l-6.5 4.5 2-7L2 9h7z"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:230px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">25K</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">GH Stars · 目标</div>
+          <div class="bar" style="height:203px"></div>
+          <div class="value">217+</div>
+          <div class="label">Plugins</div>
         </div>
-        <div class="text-center">
-          <div class="mb-3 mx-auto" style="height:32px">
-            <svg viewBox="0 0 24 24" class="w-7 h-7 mx-auto" fill="#002FA7"><path d="M5 3l10 9-10 9z"/></svg>
+        <div class="tower in in-4">
+          <div class="glyph">
+            <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M5 3l10 9-10 9z"/></svg>
           </div>
-          <div class="bar mx-auto" style="height:280px"></div>
-          <div class="mt-3 mono text-[32px] font-bold" style="color:#002FA7">80K</div>
-          <div class="hairline-t mt-1 pt-1 text-[11px] uppercase tracking-[0.16em] opacity-70">WAU · 目标</div>
+          <div class="bar" style="height:280px"></div>
+          <div class="value">300+</div>
+          <div class="label">Contributors</div>
         </div>
       </div>
-      <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-60 hairline-t pt-3 mt-4">
-        <span>SOURCE — INTERNAL ANALYTICS / 2026-04</span>
-        <span>OPEN-DESIGN.STUDIO</span>
-        <span>№06 / 22</span>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>SOURCE — GITHUB COMMUNITY / 2026</span>
+        <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+        <span>№02 / 10</span>
       </footer>
+    </div>
+  </section>
+
+  <!-- №03 · S03 Statement · giant centered thesis -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>STATEMENT — THE THESIS</span>
+        <span>S03 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="statement-wrap">
+        <h2 class="statement in">
+          Design lives where<br/>your <span class="accent">code</span> lives.
+        </h2>
+      </div>
+      <div>
+        <div class="statement-note in in-2">
+          <span class="note-label">Annotation</span>
+          <p>Open Design runs as a local daemon next to your repository. Your agent designs with the same files, the same git history and your own model keys — no canvas export, no cloud round-trip.</p>
+        </div>
+        <footer class="chrome chrome-foot hairline-t">
+          <span>OPEN DESIGN — MANIFESTO</span>
+          <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+          <span>№03 / 10</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <!-- №04 · S19 Four Cards · accent hairline + 4 equal cards -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome" style="border-top:1px solid #002FA7; padding-top:10px;">
+        <span>PRINCIPLES — NON-NEGOTIABLES</span>
+        <span>S04 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№04 · OPERATING PRINCIPLES</div>
+        <h2 class="h2">Four defaults that never change.</h2>
+        <div class="cards4">
+          <div class="card in in-1">
+            <div class="meta">01 / License</div>
+            <h3>Open source</h3>
+            <p>Apache-2.0, end to end. Read it, fork it, ship it — no open-core asterisks, no enterprise gate.</p>
+            <div class="card-foot">Apache-2.0</div>
+          </div>
+          <div class="card in in-2">
+            <div class="meta">02 / Runtime</div>
+            <h3>Local-first</h3>
+            <p>The daemon, your files and every generated artifact stay on your machine. Offline is a feature.</p>
+            <div class="card-foot">Runs locally</div>
+          </div>
+          <div class="card in in-3">
+            <div class="meta">03 / Models</div>
+            <h3>BYOK</h3>
+            <p>Bring your own keys. Point any of 21 supported coding agents at the model provider you already trust.</p>
+            <div class="card-foot">Your keys, your bill</div>
+          </div>
+          <div class="card in in-4">
+            <div class="meta">04 / Access</div>
+            <h3>No sign-up</h3>
+            <p>No account, no waitlist, no telemetry wall between you and the tool. Clone, install, design.</p>
+            <div class="card-foot">Zero onboarding</div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN — PRINCIPLES</span>
+        <span>APACHE-2.0 · RUNS LOCALLY · BYOK</span>
+        <span>№04 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №05 · S04 Six Cells · 2×3 capability grid -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>SURFACES — WHAT IT MAKES</span>
+        <span>S05 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№05 · OUTPUT SURFACES</div>
+        <h2 class="h2">One platform, six artifact classes.</h2>
+        <div class="cells">
+          <div class="cell in in-1">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="3" y="3" width="8" height="18"/><rect x="13" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8" fill="none" stroke="#002FA7" stroke-width="2"/></svg>
+              <span class="num">01</span>
+            </div>
+            <h3>Prototypes</h3>
+            <p>Clickable multi-screen flows in plain HTML — testable in any browser.</p>
+          </div>
+          <div class="cell in in-2">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#002FA7" stroke-width="2"><rect x="3" y="4" width="18" height="16"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+              <span class="num">02</span>
+            </div>
+            <h3>Web pages</h3>
+            <p>Landing pages and microsites as production-ready markup, not mockups.</p>
+          </div>
+          <div class="cell in in-3">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="2" y="5" width="20" height="12"/><rect x="9" y="19" width="6" height="2"/></svg>
+              <span class="num">03</span>
+            </div>
+            <h3>Slide decks</h3>
+            <p>16:9 decks like this one — 22 locked layouts, zero improvisation.</p>
+          </div>
+          <div class="cell in in-4">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#002FA7" stroke-width="2"><rect x="5" y="2" width="14" height="20"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+              <span class="num">04</span>
+            </div>
+            <h3>Posters &amp; social</h3>
+            <p>Print-ratio and feed-ratio statics generated from one prompt.</p>
+          </div>
+          <div class="cell in in-5">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><path d="M6 4l14 8-14 8z"/></svg>
+              <span class="num">05</span>
+            </div>
+            <h3>HTML video</h3>
+            <p>Motion graphics rendered straight from timeline markup.</p>
+          </div>
+          <div class="cell in in-6">
+            <div class="cell-top">
+              <svg viewBox="0 0 24 24" fill="#002FA7"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/></svg>
+              <span class="num">06</span>
+            </div>
+            <h3>Design systems</h3>
+            <p>129 ready-made systems — or grow your own out of the codebase.</p>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN — SURFACES</span>
+        <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+        <span>№05 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №06 · S11 Horizontal Timeline · 5-step workflow -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>WORKFLOW — PROMPT TO ARTIFACT</span>
+        <span>S06 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№06 · WORKFLOW</div>
+        <h2 class="h2">Prompt to shipped artifact in five moves.</h2>
+        <div class="tl">
+          <div class="tl-row">
+            <div class="tl-step in in-1">
+              <div class="num">01</div>
+              <h3>Describe</h3>
+              <p>State intent in plain language — brief, audience, constraints.</p>
+            </div>
+            <div class="tl-step in in-2">
+              <div class="num">02</div>
+              <h3>Generate</h3>
+              <p>Your agent drafts real files into the project, not a canvas.</p>
+            </div>
+            <div class="tl-step in in-3">
+              <div class="num">03</div>
+              <h3>Preview</h3>
+              <p>A live local preview reloads on every save.</p>
+            </div>
+            <div class="tl-step in in-4">
+              <div class="num">04</div>
+              <h3>Refine</h3>
+              <p>Annotate, compare and iterate with the agent in the loop.</p>
+            </div>
+            <div class="tl-step in in-5">
+              <div class="num">05</div>
+              <h3>Ship</h3>
+              <p>Commit it. The artifact is already code in your repo.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN — METHOD</span>
+        <span>NO SIGN-UP · NO EXPORT STEP</span>
+        <span>№06 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №07 · S08 Duo Compare · before / after split -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>COMPARE — TOOLING SPEND</span>
+        <span>S07 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="duo">
+        <div class="duo-col in in-1">
+          <div class="duo-body">
+            <div class="tag"><b>Before</b> — Proprietary stack</div>
+            <div class="big">$500</div>
+            <p>Subscription seats, per-tool fees and cloud rendering, stacked across a single design workflow.</p>
+          </div>
+          <div class="duo-foot">Closed · Hosted · Per-seat</div>
+        </div>
+        <div class="duo-col in in-2">
+          <div class="duo-body">
+            <div class="tag"><b>After</b> — Open Design</div>
+            <div class="big accent">~$73<span class="delta">−80%</span></div>
+            <p>A local runtime plus your own model keys. The only bill left is the inference you choose to buy.</p>
+          </div>
+          <div class="duo-foot">Open · Local · BYOK</div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>SOURCE — COMMUNITY COST BENCHMARK / 2026</span>
+        <span>$500 → ~$73</span>
+        <span>№07 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №08 · S14 Loop Diagram · numbered steps + SVG concentric rings -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>SYSTEM — THE AGENT LOOP</span>
+        <span>S08 / 10</span>
+        <span>2026</span>
+      </header>
+      <div class="loop">
+        <div class="loop-steps">
+          <div class="kicker accent">№08 · THE AGENT LOOP</div>
+          <h2 class="h2" style="margin-bottom:18px;">Design is a loop,<br/>not a handoff.</h2>
+          <div class="loop-step in in-1">
+            <span class="num">01</span>
+            <div><h3>Prompt</h3><p>Intent goes in as language, with full project context.</p></div>
+          </div>
+          <div class="loop-step in in-2">
+            <span class="num">02</span>
+            <div><h3>Generate</h3><p>The agent writes artifacts as code, directly in the repo.</p></div>
+          </div>
+          <div class="loop-step in in-3">
+            <span class="num">03</span>
+            <div><h3>Inspect</h3><p>You review the live render, not a static screenshot.</p></div>
+          </div>
+          <div class="loop-step in in-4">
+            <span class="num">04</span>
+            <div><h3>Iterate</h3><p>Feedback re-enters the same loop until it ships.</p></div>
+          </div>
+        </div>
+        <div class="loop-art in in-2">
+          <svg width="380" height="380" viewBox="0 0 380 380" role="img" aria-label="Concentric loop diagram">
+            <circle cx="190" cy="190" r="172" fill="none" stroke="#0a0a0a" stroke-width="1"/>
+            <circle cx="190" cy="190" r="128" fill="none" stroke="#002FA7" stroke-width="2"/>
+            <circle cx="190" cy="190" r="84" fill="none" stroke="#0a0a0a" stroke-width="1"/>
+            <rect x="184" y="12" width="12" height="12" fill="#002FA7"/>
+            <rect x="356" y="184" width="12" height="12" fill="#002FA7"/>
+            <rect x="184" y="356" width="12" height="12" fill="#002FA7"/>
+            <rect x="12" y="184" width="12" height="12" fill="#002FA7"/>
+            <text x="190" y="186" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="15" font-weight="700" letter-spacing="6" fill="#0a0a0a">LOOP</text>
+            <text x="190" y="206" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" letter-spacing="2" fill="#002FA7">4-STEP CYCLE</text>
+          </svg>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN — SYSTEM</span>
+        <span>21 CODING AGENTS SUPPORTED</span>
+        <span>№08 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №09 · S18 Why Now · 3 columns, last column accent -->
+  <section class="slide paper">
+    <div class="frame">
+      <header class="chrome">
+        <span>TIMING — WHY NOW</span>
+        <span>S09 / 10</span>
+        <span>2026</span>
+      </header>
+      <div>
+        <div class="kicker accent">№09 · WHY NOW</div>
+        <h2 class="h2">Three curves crossed in 2026.</h2>
+        <div class="why">
+          <div class="why-col in in-1">
+            <div class="cat">Agents</div>
+            <h3>Coding agents became daily drivers.</h3>
+            <p>Every major CLI agent can now hold a design brief end to end — and Open Design speaks to all of them.</p>
+            <div class="num">21</div>
+            <div class="num-label">Coding agents supported</div>
+          </div>
+          <div class="why-col in in-2">
+            <div class="cat">Community</div>
+            <h3>Open ecosystems out-ship closed suites.</h3>
+            <p>217+ plugins and 129 design systems compound in the open, contributed by the people who use them.</p>
+            <div class="num">60K+</div>
+            <div class="num-label">GitHub stars</div>
+          </div>
+          <div class="why-col why-accent in in-3">
+            <div class="cat">Economics</div>
+            <h3>The cost floor collapsed.</h3>
+            <p>From $500 of stacked subscriptions to roughly $73 of raw inference for the same workflow.</p>
+            <div class="num">−80%</div>
+            <div class="num-label">Tooling spend, $500 → ~$73</div>
+          </div>
+        </div>
+      </div>
+      <footer class="chrome chrome-foot hairline-t">
+        <span>OPEN DESIGN — TIMING</span>
+        <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
+        <span>№09 / 10</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- №10 · S09 Closing Manifesto · IKB block + next steps -->
+  <section class="slide">
+    <div class="closing">
+      <div class="closing-left">
+        <div>
+          <div class="kicker in" style="opacity:0.85;">№10 · CLOSING</div>
+          <h2 class="manifesto in in-1">Open.<br/>Local.<br/>Yours.</h2>
+        </div>
+        <pre class="ascii" style="position:absolute; bottom:120px; left:48px;">█▓▒░░▒▓█▓▒░
+▓█▓▒░░▒▓█▓▒
+▒▓█▓▒░░▒▓█▓
+░▒▓█▓▒░░▒▓█</pre>
+        <div class="meta">Apache-2.0 · Runs locally · BYOK · No sign-up</div>
+      </div>
+      <div class="closing-right">
+        <header class="chrome">
+          <span>NEXT STEPS</span>
+          <span>S10 / 10</span>
+          <span>2026</span>
+        </header>
+        <div class="next-steps">
+          <div class="next-step in in-1">
+            <div class="num">01 / Star &amp; contribute</div>
+            <h3><a href="https://github.com/nexu-io/open-design">github.com/nexu-io/open-design</a></h3>
+            <p>60K+ stars, 300+ contributors and counting. Issues and PRs welcome.</p>
+          </div>
+          <div class="next-step in in-2">
+            <div class="num">02 / Join the community</div>
+            <h3><a href="https://discord.gg/qhbcCH8Am4">discord.gg/qhbcCH8Am4</a></h3>
+            <p>Builders, designers and agent tinkerers, in one place.</p>
+          </div>
+          <div class="next-step in in-3">
+            <div class="num">03 / Follow the build</div>
+            <h3><a href="https://x.com/nexudotio">x.com/nexudotio</a></h3>
+            <p>Releases, demos and the roadmap — built in public.</p>
+          </div>
+        </div>
+        <footer class="chrome chrome-foot hairline-t">
+          <span>OPEN DESIGN — 2026</span>
+          <span>№10 / 10</span>
+        </footer>
+      </div>
     </div>
   </section>
 

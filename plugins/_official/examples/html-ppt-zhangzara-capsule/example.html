@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Capsule — Presentation Template</title>
+<title>Open Design — The Open-Source, Local, Agent-Driven Design Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,600..800;1,6..96,600..800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after {
     margin: 0;
@@ -24,9 +24,15 @@
     --violet: #A06CE8;
     --yellow: #F2D160;
     --peach: #F5B895;
-    --mint: #A8E6CF;
     --outline: #1E1E1E;
-    --shadow: rgba(26, 26, 26, 0.08);
+    --card: #FCFBF6;
+    /* darker ink-tones of the family hues, for text on light surfaces */
+    --coral-ink: #C73D2E;
+    --lime-ink: #6E7C1A;
+    --sky-ink: #2D5FBF;
+    --violet-ink: #7A3FD1;
+    --shadow: var(--outline);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
     --font-display: 'Bodoni Moda', serif;
     --font-body: 'Space Grotesk', sans-serif;
   }
@@ -69,13 +75,32 @@
     padding: 3rem 4rem;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.5s var(--ease);
     overflow: hidden;
   }
 
   .slide.active {
     opacity: 1;
     pointer-events: all;
+  }
+
+  /* Entrance: transform + opacity only, staggered, ease-out */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide.active > * {
+    animation: rise 0.6s var(--ease) both;
+  }
+
+  .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+  .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+  .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active > * { animation: none; }
   }
 
   /* Decorative pill elements */
@@ -102,8 +127,7 @@
   .pill-violet { background: var(--violet); }
   .pill-yellow { background: var(--yellow); }
   .pill-peach { background: var(--peach); }
-  .pill-mint { background: var(--mint); }
-  .pill-white { background: #fff; }
+  .pill-white { background: var(--card); }
 
   .pill-outline {
     background: transparent;
@@ -128,7 +152,7 @@
     border: 2px solid var(--outline);
     background: transparent;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
   }
 
   .nav-dot.active {
@@ -147,7 +171,7 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--fg);
-    opacity: 0.5;
+    opacity: 0.74;
     z-index: 100;
   }
 
@@ -162,7 +186,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg);
-    opacity: 0.3;
+    opacity: 0.7;
     z-index: 100;
   }
 
@@ -172,11 +196,7 @@
   .slide-1 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 20% 80%, rgba(200, 217, 78, 0.15) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 20%, rgba(139, 180, 247, 0.12) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 50%, rgba(245, 184, 149, 0.08) 0%, transparent 60%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-1 .deco-pills {
@@ -220,7 +240,7 @@
     text-transform: uppercase;
     margin-top: 1.5rem;
     color: var(--fg);
-    opacity: 0.6;
+    opacity: 0.82;
   }
 
   .slide-1 .title-pill {
@@ -243,9 +263,7 @@
      ============================================ */
   .slide-2 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 0% 50%, rgba(160, 108, 232, 0.08) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-2 .slide-inner {
@@ -276,8 +294,8 @@
     font-family: var(--font-body);
     font-size: clamp(0.95rem, 1.2vw, 1.15rem);
     line-height: 1.6;
-    opacity: 0.7;
-    max-width: 90%;
+    opacity: 0.8;
+    max-width: 60ch;
   }
 
   .slide-2 .left-content .accent-line {
@@ -329,10 +347,7 @@
      ============================================ */
   .slide-3 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 100% 0%, rgba(232, 93, 78, 0.06) 0%, transparent 40%),
-      radial-gradient(ellipse at 0% 100%, rgba(139, 180, 247, 0.08) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-3 .slide-inner {
@@ -376,15 +391,23 @@
   }
 
   .slide-3 .pillar-card {
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 2.5rem 2rem;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-    box-shadow: 8px 8px 0 var(--shadow);
-    transition: transform 0.3s ease;
+    box-shadow: 6px 6px 0 var(--shadow);
+    transition: transform 0.3s var(--ease);
+  }
+
+  .slide-3 .pillar-card:hover {
+    transform: translate(-3px, -3px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slide-3 .pillar-card:hover { transform: none; }
   }
 
   .slide-3 .pillar-card .card-icon {
@@ -411,7 +434,7 @@
   .slide-3 .pillar-card p {
     font-size: 0.9rem;
     line-height: 1.55;
-    opacity: 0.65;
+    opacity: 0.84;
   }
 
   /* ============================================
@@ -419,9 +442,7 @@
      ============================================ */
   .slide-4 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 100%, rgba(200, 217, 78, 0.1) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-4 .slide-inner {
@@ -445,11 +466,11 @@
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 3rem;
-    box-shadow: 8px 8px 0 var(--shadow);
+    box-shadow: 6px 6px 0 var(--shadow);
   }
 
   .slide-4 .chart-row {
@@ -480,20 +501,19 @@
   .slide-4 .chart-bar-fill {
     height: 100%;
     border-radius: 9999px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    padding-right: 1rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 1s var(--ease);
     border-right: 2px solid var(--outline);
+    /* value is read from the column on the right; the duplicate inside the bar is visually muted */
+    font-size: 0;
+    color: transparent;
   }
 
   .slide-4 .chart-value {
-    width: 60px;
-    font-size: 0.9rem;
-    font-weight: 600;
+    width: 72px;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     flex-shrink: 0;
   }
 
@@ -503,10 +523,7 @@
   .slide-5 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 30% 70%, rgba(245, 209, 96, 0.15) 0%, transparent 45%),
-      radial-gradient(ellipse at 70% 30%, rgba(160, 108, 232, 0.1) 0%, transparent 45%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-5 .statement-box {
@@ -559,7 +576,7 @@
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    opacity: 0.5;
+    opacity: 0.78;
   }
 
   .slide-5 .floating-pills {
@@ -587,9 +604,7 @@
      ============================================ */
   .slide-6 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 0%, rgba(232, 93, 78, 0.06) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-6 .slide-inner {
@@ -655,7 +670,7 @@
     font-family: var(--font-display);
     font-size: 1.3rem;
     font-weight: 700;
-    background: #fff;
+    background: var(--card);
     flex-shrink: 0;
     box-shadow: 4px 4px 0 var(--shadow);
   }
@@ -673,7 +688,7 @@
     text-align: center;
     font-size: 0.8rem;
     line-height: 1.4;
-    opacity: 0.55;
+    opacity: 0.8;
     margin-top: -0.5rem;
   }
 
@@ -682,10 +697,7 @@
      ============================================ */
   .slide-7 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 80% 80%, rgba(200, 217, 78, 0.1) 0%, transparent 40%),
-      radial-gradient(ellipse at 20% 20%, rgba(245, 184, 149, 0.1) 0%, transparent 40%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-7 .slide-inner {
@@ -715,7 +727,7 @@
   }
 
   .slide-7 .stat-pill {
-    background: #fff;
+    background: var(--card);
     border: 2px solid var(--outline);
     border-radius: 2rem;
     padding: 2rem 1.5rem;
@@ -724,7 +736,7 @@
     align-items: center;
     text-align: center;
     gap: 0.75rem;
-    box-shadow: 6px 6px 0 var(--shadow);
+    box-shadow: 5px 5px 0 var(--shadow);
   }
 
   .slide-7 .stat-pill .stat-number {
@@ -740,7 +752,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    opacity: 0.6;
+    opacity: 0.82;
     line-height: 1.3;
   }
 
@@ -756,9 +768,7 @@
      ============================================ */
   .slide-8 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 50% 50%, rgba(139, 180, 247, 0.08) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-8 .slide-inner {
@@ -800,9 +810,9 @@
     font-size: 0.85rem;
     line-height: 1.3;
     padding: 1rem 2rem;
-    box-shadow: 6px 6px 0 var(--shadow);
+    box-shadow: 5px 5px 0 var(--shadow);
     z-index: 2;
-    background: #fff;
+    background: var(--card);
     min-width: 140px;
     min-height: 60px;
   }
@@ -848,9 +858,7 @@
      ============================================ */
   .slide-9 {
     justify-content: center;
-    background: 
-      radial-gradient(ellipse at 100% 50%, rgba(245, 209, 96, 0.1) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-9 .slide-inner {
@@ -876,18 +884,17 @@
     height: 100%;
     border-radius: 2rem;
     border: 2px solid var(--outline);
-    background: 
-      linear-gradient(135deg, var(--lavender) 0%, var(--sky) 50%, var(--mint) 100%);
+    background: var(--sky);
     position: relative;
     overflow: hidden;
-    box-shadow: 12px 12px 0 var(--shadow);
+    box-shadow: 8px 8px 0 var(--shadow);
   }
 
   .slide-9 .visual-frame .frame-pattern {
     position: absolute;
     inset: 0;
-    opacity: 0.15;
-    background-image: 
+    opacity: 0.18;
+    background-image:
       radial-gradient(circle at 25% 25%, var(--outline) 2px, transparent 2px),
       radial-gradient(circle at 75% 75%, var(--outline) 2px, transparent 2px);
     background-size: 40px 40px;
@@ -906,10 +913,10 @@
   .slide-9 .visual-frame .frame-content span {
     font-family: var(--font-body);
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    opacity: 0.5;
+    opacity: 0.75;
   }
 
   .slide-9 .text-side {
@@ -929,7 +936,8 @@
   .slide-9 .text-side p {
     font-size: clamp(0.9rem, 1.1vw, 1.05rem);
     line-height: 1.6;
-    opacity: 0.65;
+    opacity: 0.84;
+    max-width: 60ch;
   }
 
   .slide-9 .text-side .text-pills {
@@ -955,11 +963,7 @@
   .slide-10 {
     justify-content: center;
     align-items: center;
-    background: 
-      radial-gradient(ellipse at 20% 20%, rgba(200, 217, 78, 0.12) 0%, transparent 40%),
-      radial-gradient(ellipse at 80% 80%, rgba(245, 184, 149, 0.12) 0%, transparent 40%),
-      radial-gradient(ellipse at 50% 50%, rgba(160, 108, 232, 0.06) 0%, transparent 50%),
-      var(--bg);
+    background: var(--bg);
   }
 
   .slide-10 .closing-content {
@@ -1002,10 +1006,10 @@
   .slide-10 .closing-sub {
     font-family: var(--font-body);
     font-size: 0.85rem;
-    font-weight: 400;
+    font-weight: 500;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    opacity: 0.5;
+    opacity: 0.7;
   }
 
   .slide-10 .deco-pills-closing {
@@ -1056,18 +1060,18 @@
   <!-- SLIDE 1: Title -->
   <div class="slide slide-1 active" data-slide="1">
     <div class="deco-pills">
-      <div class="deco-pill pill-coral" style="width:120px;height:55px;top:12%;left:8%;transform:rotate(-12deg);font-size:0.85rem;">Concept</div>
-      <div class="deco-pill pill-lavender" style="width:160px;height:60px;top:18%;right:12%;transform:rotate(8deg);font-size:0.9rem;">Strategy</div>
-      <div class="deco-pill pill-sky" style="width:110px;height:50px;top:72%;left:15%;transform:rotate(6deg);font-size:0.8rem;">Vision</div>
-      <div class="deco-pill pill-lime" style="width:135px;height:55px;top:78%;right:18%;transform:rotate(-8deg);font-size:0.85rem;">Future</div>
+      <div class="deco-pill pill-coral" style="width:120px;height:55px;top:12%;left:8%;transform:rotate(-12deg);font-size:0.85rem;">Open</div>
+      <div class="deco-pill pill-lavender" style="width:160px;height:60px;top:18%;right:12%;transform:rotate(8deg);font-size:0.9rem;">Agent-Driven</div>
+      <div class="deco-pill pill-sky" style="width:110px;height:50px;top:72%;left:15%;transform:rotate(6deg);font-size:0.8rem;">Local</div>
+      <div class="deco-pill pill-lime" style="width:135px;height:55px;top:78%;right:18%;transform:rotate(-8deg);font-size:0.85rem;">BYOK</div>
       <div class="deco-pill pill-peach" style="width:85px;height:85px;border-radius:50%;top:15%;left:45%;transform:rotate(0deg);font-size:0.75rem;">2026</div>
       <div class="deco-pill pill-white" style="width:105px;height:48px;top:65%;right:8%;transform:rotate(15deg);font-size:0.75rem;opacity:0.6;">Design</div>
-      <div class="deco-pill pill-violet" style="width:90px;height:90px;border-radius:50%;top:75%;left:5%;transform:rotate(0deg);font-size:0.7rem;">Next</div>
+      <div class="deco-pill pill-violet" style="width:90px;height:90px;border-radius:50%;top:75%;left:5%;transform:rotate(0deg);font-size:0.7rem;">Free</div>
     </div>
-    <div class="title-pill">Presentation Template</div>
+    <div class="title-pill">Apache-2.0 &middot; Runs Locally &middot; No Sign-up</div>
     <h1 class="main-title">
-      CAPSULE
-      <span class="subtitle">A Framework for Bold Ideas</span>
+      OPEN DESIGN
+      <span class="subtitle">The Open-Source, Local, Agent-Driven Design Platform</span>
     </h1>
   </div>
 
@@ -1076,18 +1080,18 @@
     <div class="slide-inner">
       <div class="left-content">
         <div class="accent-line"></div>
-        <h2>Every Great Endeavor Begins with a Single Thought</h2>
-        <p>We believe in the power of structured creativity. By combining rigorous methodology with unbounded imagination, teams can transform abstract concepts into tangible outcomes that resonate deeply with their audience.</p>
-        <p>This template exists to give shape to your boldest visions. It is a starting point, a scaffold, and a catalyst for the work that matters most.</p>
+        <h2>Frontier AI Design, Back on Every Creator's Desk</h2>
+        <p>In April 2026, Claude Design proved for the first time that an LLM can truly design — not write about design, but produce real design artifacts. Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK.</p>
+        <p>Open Design sets that capability free. From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, on your own machine.</p>
       </div>
       <div class="right-visual">
-        <div class="orbit-center">01</div>
-        <div class="orbit-pill pill-coral" style="width:90px;height:42px;top:10%;left:20%;transform:rotate(-20deg);">Research</div>
-        <div class="orbit-pill pill-lime" style="width:100px;height:45px;top:5%;right:15%;transform:rotate(15deg);">Ideation</div>
-        <div class="orbit-pill pill-sky" style="width:95px;height:42px;bottom:15%;left:10%;transform:rotate(10deg);">Prototype</div>
-        <div class="orbit-pill pill-lavender" style="width:110px;height:48px;bottom:10%;right:10%;transform:rotate(-12deg);">Iterate</div>
-        <div class="orbit-pill pill-yellow" style="width:80px;height:38px;top:40%;left:0%;transform:rotate(25deg);font-size:0.65rem;">Launch</div>
-        <div class="orbit-pill pill-violet" style="width:85px;height:40px;top:45%;right:0%;transform:rotate(-18deg);font-size:0.65rem;">Scale</div>
+        <div class="orbit-center">OD</div>
+        <div class="orbit-pill pill-coral" style="width:90px;height:42px;top:10%;left:20%;transform:rotate(-20deg);">Prototype</div>
+        <div class="orbit-pill pill-lime" style="width:100px;height:45px;top:5%;right:15%;transform:rotate(15deg);">Slides</div>
+        <div class="orbit-pill pill-sky" style="width:95px;height:42px;bottom:15%;left:10%;transform:rotate(10deg);">Image</div>
+        <div class="orbit-pill pill-lavender" style="width:110px;height:48px;bottom:10%;right:10%;transform:rotate(-12deg);">Video</div>
+        <div class="orbit-pill pill-yellow" style="width:80px;height:38px;top:40%;left:0%;transform:rotate(25deg);font-size:0.65rem;">Web</div>
+        <div class="orbit-pill pill-violet" style="width:85px;height:40px;top:45%;right:0%;transform:rotate(-18deg);font-size:0.65rem;">Memory</div>
       </div>
     </div>
   </div>
@@ -1096,24 +1100,24 @@
   <div class="slide slide-3" data-slide="3">
     <div class="slide-inner">
       <div class="slide-header">
-        <div class="header-pill">Core Principles</div>
-        <h2>The Foundation of Every Decision</h2>
+        <div class="header-pill">Why Open Design</div>
+        <h2>Three Things We Believe</h2>
       </div>
       <div class="cards-grid">
         <div class="pillar-card">
           <div class="card-icon pill-coral">I</div>
-          <h3>Clarity of Purpose</h3>
-          <p>Before any action is taken, define the north star that guides every subsequent choice. A well-articulated objective eliminates ambiguity and aligns stakeholders toward a unified destination.</p>
+          <h3>Desktop-Native</h3>
+          <p>Design happens on the desktop. Local files, Figma exports, and code repositories are directly readable, and agents get full terminal power — no uploads, no cloud detours, no copies of your work leaving the machine.</p>
         </div>
         <div class="pillar-card">
           <div class="card-icon pill-lime">II</div>
-          <h3>Structured Flexibility</h3>
-          <p>Rigorous frameworks need not constrain creativity. The most effective systems provide scaffolding while leaving ample room for improvisation, adaptation, and unexpected breakthroughs.</p>
+          <h3>Plug In Agents, Don't Rebuild Them</h3>
+          <p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow instead of asking you to adopt yet another proprietary agent.</p>
         </div>
         <div class="pillar-card">
           <div class="card-icon pill-sky">III</div>
-          <h3>Measured Impact</h3>
-          <p>Success is not a feeling but a quantity. Establish clear metrics early, track them honestly, and allow data to inform the evolution of your approach without dictating it entirely.</p>
+          <h3>It Learns Your Taste</h3>
+          <p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want. The platform compounds with use instead of starting from zero each time.</p>
         </div>
       </div>
     </div>
@@ -1123,43 +1127,43 @@
   <div class="slide slide-4" data-slide="4">
     <div class="slide-inner">
       <div class="slide-header">
-        <h2>Performance Indicators</h2>
+        <h2>An Open Ecosystem, by the Numbers</h2>
       </div>
       <div class="chart-container">
         <div class="chart-row">
-          <div class="chart-label">Market Reach</div>
+          <div class="chart-label">GitHub Stars</div>
           <div class="chart-bar-track">
-            <div class="chart-bar-fill pill-coral" style="width: 82%;">82%</div>
+            <div class="chart-bar-fill pill-coral" style="width: 95%;">60K+</div>
           </div>
-          <div class="chart-value">8.2M</div>
+          <div class="chart-value">60K+</div>
         </div>
         <div class="chart-row">
-          <div class="chart-label">Engagement</div>
+          <div class="chart-label">Contributors</div>
           <div class="chart-bar-track">
-            <div class="chart-bar-fill pill-lime" style="width: 67%;">67%</div>
+            <div class="chart-bar-fill pill-lime" style="width: 70%;">300+</div>
           </div>
-          <div class="chart-value">4.5M</div>
+          <div class="chart-value">300+</div>
         </div>
         <div class="chart-row">
-          <div class="chart-label">Conversion</div>
+          <div class="chart-label">Plugins</div>
           <div class="chart-bar-track">
-            <div class="chart-bar-fill pill-sky" style="width: 45%;">45%</div>
+            <div class="chart-bar-fill pill-sky" style="width: 56%;">217+</div>
           </div>
-          <div class="chart-value">2.1M</div>
+          <div class="chart-value">217+</div>
         </div>
         <div class="chart-row">
-          <div class="chart-label">Retention</div>
+          <div class="chart-label">Design Systems</div>
           <div class="chart-bar-track">
-            <div class="chart-bar-fill pill-violet" style="width: 91%;">91%</div>
+            <div class="chart-bar-fill pill-violet" style="width: 42%;">129</div>
           </div>
-          <div class="chart-value">7.8M</div>
+          <div class="chart-value">129</div>
         </div>
         <div class="chart-row">
-          <div class="chart-label">Satisfaction</div>
+          <div class="chart-label">Coding Agents</div>
           <div class="chart-bar-track">
-            <div class="chart-bar-fill pill-yellow" style="width: 74%;">74%</div>
+            <div class="chart-bar-fill pill-yellow" style="width: 24%;">21</div>
           </div>
-          <div class="chart-value">6.3M</div>
+          <div class="chart-value">21</div>
         </div>
       </div>
     </div>
@@ -1168,19 +1172,19 @@
   <!-- SLIDE 5: Statement / Quote -->
   <div class="slide slide-5" data-slide="5">
     <div class="floating-pills">
-      <div class="f-pill pill-coral" style="width:80px;height:35px;top:10%;left:8%;transform:rotate(-15deg);font-size:0.6rem;">Bold</div>
-      <div class="f-pill pill-lavender" style="width:100px;height:40px;top:15%;right:10%;transform:rotate(12deg);font-size:0.65rem;">Inspire</div>
-      <div class="f-pill pill-sky" style="width:90px;height:38px;bottom:12%;left:12%;transform:rotate(8deg);font-size:0.6rem;">Create</div>
-      <div class="f-pill pill-lime" style="width:110px;height:42px;bottom:18%;right:8%;transform:rotate(-10deg);font-size:0.7rem;">Elevate</div>
-      <div class="f-pill pill-violet" style="width:70px;height:70px;border-radius:50%;top:8%;left:40%;font-size:0.55rem;">Now</div>
-      <div class="f-pill pill-peach" style="width:75px;height:35px;bottom:8%;left:45%;transform:rotate(20deg);font-size:0.55rem;">Today</div>
+      <div class="f-pill pill-coral" style="width:80px;height:35px;top:10%;left:8%;transform:rotate(-15deg);font-size:0.6rem;">Open</div>
+      <div class="f-pill pill-lavender" style="width:100px;height:40px;top:15%;right:10%;transform:rotate(12deg);font-size:0.65rem;">Local</div>
+      <div class="f-pill pill-sky" style="width:90px;height:38px;bottom:12%;left:12%;transform:rotate(8deg);font-size:0.6rem;">BYOK</div>
+      <div class="f-pill pill-lime" style="width:110px;height:42px;bottom:18%;right:8%;transform:rotate(-10deg);font-size:0.7rem;">Agents</div>
+      <div class="f-pill pill-violet" style="width:70px;height:70px;border-radius:50%;top:8%;left:40%;font-size:0.55rem;">Git</div>
+      <div class="f-pill pill-peach" style="width:75px;height:35px;bottom:8%;left:45%;transform:rotate(20deg);font-size:0.55rem;">Diff</div>
     </div>
     <div class="statement-box">
       <div class="quote-mark">&ldquo;</div>
       <blockquote>
-        The best time to plant a tree was twenty years ago. The second best time is <span class="quote-highlight">right now</span>. Every moment of hesitation is a moment where <span class="quote-highlight alt">possibility</span> quietly dims.
+        File-system semantics plus <span class="quote-highlight">git-diffable</span> design artifacts &mdash; design is finally under <span class="quote-highlight alt">version control</span>.
       </blockquote>
-      <div class="attribution">A Philosophy of Action</div>
+      <div class="attribution">Indie Developer &middot; Open Design User</div>
     </div>
   </div>
 
@@ -1188,34 +1192,34 @@
   <div class="slide slide-6" data-slide="6">
     <div class="slide-inner">
       <div class="slide-header">
-        <h2>Phased Implementation</h2>
+        <h2>From Idea to Delivery in 5 Steps</h2>
       </div>
       <div class="timeline">
         <div class="timeline-track"></div>
         <div class="timeline-step">
           <div class="step-node pill-coral">1</div>
-          <div class="step-label">Discovery</div>
-          <div class="step-desc">Map the terrain before you traverse it</div>
+          <div class="step-label">Pick a Start</div>
+          <div class="step-desc">One sentence, a template, or a plugin</div>
         </div>
         <div class="timeline-step">
           <div class="step-node pill-lime">2</div>
-          <div class="step-label">Definition</div>
-          <div class="step-desc">Sharpen the question to find the answer</div>
+          <div class="step-label">Set Direction</div>
+          <div class="step-desc">Palette, type, and spacing flow into generation</div>
         </div>
         <div class="timeline-step">
           <div class="step-node pill-sky">3</div>
-          <div class="step-label">Development</div>
-          <div class="step-desc">Build with intent, iterate with care</div>
+          <div class="step-label">Generate</div>
+          <div class="step-desc">Real runnable files, previewed in a sandbox</div>
         </div>
         <div class="timeline-step">
           <div class="step-node pill-violet">4</div>
-          <div class="step-label">Delivery</div>
-          <div class="step-desc">Ship the work, then make it better</div>
+          <div class="step-label">Ship or Film</div>
+          <div class="step-desc">Hand off to engineering, or render an HTML video</div>
         </div>
         <div class="timeline-step">
           <div class="step-node pill-yellow">5</div>
-          <div class="step-label">Evolution</div>
-          <div class="step-desc">Growth is a process, not a destination</div>
+          <div class="step-label">Memory</div>
+          <div class="step-desc">Every choice becomes context for the next run</div>
         </div>
       </div>
     </div>
@@ -1225,27 +1229,27 @@
   <div class="slide slide-7" data-slide="7">
     <div class="slide-inner">
       <div class="slide-header">
-        <h2>Key Metrics at a Glance</h2>
+        <h2>Open, Local, and Yours</h2>
       </div>
       <div class="stats-grid">
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--coral);">340%</div>
-          <div class="stat-label">Growth in<br>Active Users</div>
+          <div class="stat-number" style="color: var(--coral-ink);">-80%</div>
+          <div class="stat-label">Monthly Cost vs.<br>Claude Design</div>
           <div class="stat-bar pill-coral"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--lime);">12.4M</div>
-          <div class="stat-label">Total Reach<br>Across Channels</div>
+          <div class="stat-number" style="color: var(--lime-ink);">BYOK</div>
+          <div class="stat-label">Your Keys,<br>Your Providers</div>
           <div class="stat-bar pill-lime"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--sky);">98.2%</div>
-          <div class="stat-label">System<br>Uptime Record</div>
+          <div class="stat-number" style="color: var(--sky-ink);">Local</div>
+          <div class="stat-label">Your Data Stays<br>on Your Machine</div>
           <div class="stat-bar pill-sky"></div>
         </div>
         <div class="stat-pill">
-          <div class="stat-number" style="color: var(--violet);">4.9</div>
-          <div class="stat-label">Average User<br>Satisfaction Score</div>
+          <div class="stat-number" style="color: var(--violet-ink);">0</div>
+          <div class="stat-label">Sign-ups<br>Required</div>
           <div class="stat-bar pill-violet"></div>
         </div>
       </div>
@@ -1256,29 +1260,29 @@
   <div class="slide slide-8" data-slide="8">
     <div class="slide-inner">
       <div class="slide-header">
-        <h2>System Architecture Overview</h2>
+        <h2>How Open Design Works</h2>
       </div>
       <div class="diagram-container">
-        <div class="diagram-node pill-white" style="min-width:120px;">Input Layer</div>
+        <div class="diagram-node pill-white" style="min-width:120px;">Your Idea</div>
         <div class="diagram-connector"></div>
-        <div class="diagram-node pill-lavender" style="min-width:140px;">Processing Core</div>
+        <div class="diagram-node pill-lavender" style="min-width:140px;">Design System</div>
         <div class="diagram-connector"></div>
-        <div class="diagram-node" style="background:var(--lime);min-width:120px;">Decision Engine</div>
+        <div class="diagram-node" style="background:var(--lime);min-width:120px;">Coding Agent</div>
         <div class="diagram-connector"></div>
-        <div class="diagram-node pill-coral" style="min-width:120px;">Output Stream</div>
+        <div class="diagram-node pill-coral" style="min-width:120px;">Real Artifact</div>
       </div>
       <div style="display:flex;justify-content:center;gap:2rem;margin-top:2.5rem;">
         <div style="text-align:center;max-width:180px;">
-          <div class="pill pill-filled pill-sky" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Data Ingestion</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">Raw signals are captured and normalized from multiple sources in real time</div>
+          <div class="pill pill-filled pill-sky" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Full Context</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">The agent reads local files, Figma exports, and code repositories in place</div>
         </div>
         <div style="text-align:center;max-width:180px;">
-          <div class="pill pill-filled pill-violet" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Transformation</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">Information is enriched, filtered, and structured for downstream consumption</div>
+          <div class="pill pill-filled pill-violet" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Sandbox Preview</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Real runnable files, previewed and edited instantly before anything ships</div>
         </div>
         <div style="text-align:center;max-width:180px;">
-          <div class="pill pill-filled pill-yellow" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Distribution</div>
-          <div style="font-size:0.75rem;opacity:0.55;line-height:1.4;">Results are routed to appropriate endpoints with guaranteed delivery</div>
+          <div class="pill pill-filled pill-yellow" style="padding:0.5rem 1.2rem;font-size:0.7rem;margin-bottom:0.5rem;">Design Memory</div>
+          <div style="font-size:0.75rem;opacity:0.84;line-height:1.4;">Every choice is remembered and sharpens the next generation</div>
         </div>
       </div>
     </div>
@@ -1291,20 +1295,20 @@
         <div class="visual-frame">
           <div class="frame-pattern"></div>
           <div class="frame-content">
-            <span>Visual Placeholder</span>
+            <span>Artifact Preview</span>
           </div>
         </div>
       </div>
       <div class="text-side">
-        <h2>Where Vision Meets Execution</h2>
-        <p>Great ideas deserve more than good intentions. They demand rigorous craft, thoughtful iteration, and an unwavering commitment to the user experience at every touchpoint.</p>
-        <p>Our methodology bridges the gap between aspiration and reality. By grounding creative instinct in empirical insight, we produce work that is simultaneously daring and dependable.</p>
+        <h2>One Workflow, Many Artifacts</h2>
+        <p>High-fidelity mobile and web prototypes. Interactive dashboards and live briefs. Creative decks and research reports. Posters, illustrations, and product mockups.</p>
+        <p>And when it is time to tell the story: HTML-to-MP4 marketing shorts and product demos with HyperFrames, plus cinematic generative footage — all from the same workflow, on the same machine.</p>
         <div class="text-pills">
-          <div class="mini-pill pill-coral">Research</div>
-          <div class="mini-pill pill-lime">Strategy</div>
-          <div class="mini-pill pill-sky">Design</div>
-          <div class="mini-pill pill-violet">Build</div>
-          <div class="mini-pill pill-yellow">Measure</div>
+          <div class="mini-pill pill-coral">Prototype</div>
+          <div class="mini-pill pill-lime">Slides</div>
+          <div class="mini-pill pill-sky">Image</div>
+          <div class="mini-pill pill-violet">Video</div>
+          <div class="mini-pill pill-yellow">HyperFrames</div>
         </div>
       </div>
     </div>
@@ -1313,19 +1317,19 @@
   <!-- SLIDE 10: Closing -->
   <div class="slide slide-10" data-slide="10">
     <div class="deco-pills-closing">
-      <div class="c-pill pill-lime" style="width:100px;height:42px;top:15%;left:10%;transform:rotate(-12deg);font-size:0.65rem;">Continue</div>
-      <div class="c-pill pill-sky" style="width:80px;height:38px;top:20%;right:12%;transform:rotate(15deg);font-size:0.6rem;">Explore</div>
-      <div class="c-pill pill-lavender" style="width:110px;height:45px;bottom:20%;left:12%;transform:rotate(10deg);font-size:0.7rem;">Discover</div>
+      <div class="c-pill pill-lime" style="width:100px;height:42px;top:15%;left:10%;transform:rotate(-12deg);font-size:0.65rem;">Download</div>
+      <div class="c-pill pill-sky" style="width:80px;height:38px;top:20%;right:12%;transform:rotate(15deg);font-size:0.6rem;">Star</div>
+      <div class="c-pill pill-lavender" style="width:110px;height:45px;bottom:20%;left:12%;transform:rotate(10deg);font-size:0.7rem;">Contribute</div>
       <div class="c-pill pill-coral" style="width:70px;height:70px;border-radius:50%;bottom:15%;right:15%;font-size:0.6rem;">Go</div>
-      <div class="c-pill pill-violet" style="width:90px;height:40px;top:50%;left:5%;transform:rotate(-20deg);font-size:0.6rem;">Begin</div>
-      <div class="c-pill pill-yellow" style="width:85px;height:38px;top:45%;right:8%;transform:rotate(18deg);font-size:0.55rem;">Launch</div>
-      <div class="c-pill pill-peach" style="width:75px;height:35px;top:8%;left:50%;transform:rotate(5deg);font-size:0.55rem;opacity:0.7;">More</div>
+      <div class="c-pill pill-violet" style="width:90px;height:40px;top:50%;left:5%;transform:rotate(-20deg);font-size:0.6rem;">Open</div>
+      <div class="c-pill pill-yellow" style="width:85px;height:38px;top:45%;right:8%;transform:rotate(18deg);font-size:0.55rem;">Local</div>
+      <div class="c-pill pill-peach" style="width:75px;height:35px;top:8%;left:50%;transform:rotate(5deg);font-size:0.55rem;opacity:0.7;">BYOK</div>
     </div>
     <div class="closing-content">
-      <div class="closing-pill">The Journey Continues</div>
-      <h2>Thank You for Your Attention</h2>
+      <div class="closing-pill">Open &middot; Local &middot; Agent-Native</div>
+      <h2>Frontier AI Design, On Your Desk</h2>
       <div class="closing-line"></div>
-      <div class="closing-sub">Questions and conversation welcome</div>
+      <div class="closing-sub">Download for macOS / Windows &middot; github.com/nexu-io/open-design</div>
     </div>
   </div>
 

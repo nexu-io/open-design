@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Signal Template</title>
+    <title>Open Design · Signal</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -42,17 +42,19 @@
         --c-fg: #e2dcd0;
         /* Secondary text on dark: muted blue-grey */
         --c-fg-2: #8a96a8;
-        /* Tertiary / hint text on dark */
-        --c-fg-3: #4e5a6e;
+        /* Tertiary / hint text on dark — kept readable on navy (AA-leaning) */
+        --c-fg-3: #8290ad;
         /* Primary text on light: very dark navy near-black */
         --c-fg-light: #1a2030;
         /* Secondary text on light */
         --c-fg-light-2: #5a6270;
-        /* Tertiary text on light */
-        --c-fg-light-3: #9aa0a8;
+        /* Tertiary text on light — dark enough to read on cream (AA on #f0ece3) */
+        --c-fg-light-3: #5b6270;
 
         /* Accent: warm antique gold — the single hot colour; used for italic serif em */
         --c-accent: #c8a870;
+        /* Same gold, darkened for text on the cream slides (AA: 5.2 on #f0ece3) */
+        --c-accent-deep: #7c5c1e;
         /* Dividers on dark: dark navy border */
         --c-border: #2e3d5c;
         /* Dividers on light: warm greige border */
@@ -76,8 +78,8 @@
         --sz-h3: 1.9vw; /* sub-headlines, compare panel titles */
         --sz-lead: 1.4vw; /* lead paragraph */
         --sz-body: 1.05vw; /* body text, bullets */
-        --sz-caption: 0.82vw; /* captions, footnotes */
-        --sz-label: 0.7vw; /* chrome, kickers, tags, mono metadata */
+        --sz-caption: 0.84vw; /* captions, footnotes */
+        --sz-label: 0.76vw; /* chrome, kickers, tags, mono metadata */
 
         /* ── Spacing ─────────────────────────────────────────────────────── */
         --pad-x: 7.5vw; /* horizontal slide padding */
@@ -264,7 +266,8 @@
         height: 5px;
         border-radius: 50%;
         border: none;
-        background: rgba(255, 255, 255, 0.22);
+        /* Mid blue-grey reads on both navy and cream slides */
+        background: rgba(138, 150, 168, 0.5);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -272,7 +275,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: rgba(255, 255, 255, 0.8);
+        background: var(--c-accent);
         transform: scale(1.4);
       }
 
@@ -283,9 +286,23 @@
         font-family: var(--f-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: rgba(255, 255, 255, 0.25);
+        /* Mid blue-grey reads on both navy and cream slides */
+        color: rgba(138, 150, 168, 0.7);
         z-index: 100;
         user-select: none;
+      }
+
+      /* Motion degrades gracefully when the user asks for less of it */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -357,6 +374,15 @@
         color: var(--c-accent);
         font-family: var(--f-heading);
       }
+      /* On cream slides the pale gold fails AA for text; deepen it.
+         Decorative rules keep the pale gold so the family hue stays consistent. */
+      .light .display em,
+      .light .h1 em,
+      .light .h2 em,
+      .light .h3 em,
+      .light .lead em {
+        color: var(--c-accent-deep);
+      }
 
       .dark .muted {
         color: var(--c-fg-2);
@@ -366,6 +392,9 @@
       }
       .accent {
         color: var(--c-accent);
+      }
+      .light .accent {
+        color: var(--c-accent-deep);
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -612,9 +641,13 @@
         line-height: 1.5;
       }
       .bullet-list li::before {
-        content: "—";
-        color: var(--c-accent);
-        font-family: var(--f-mono);
+        /* Gold hairline marker, aligned to the first text line */
+        content: "";
+        display: block;
+        width: 100%;
+        height: 1px;
+        background: var(--c-accent);
+        margin-top: 0.72em;
       }
       .dark .bullet-list li {
         color: var(--c-fg);
@@ -734,9 +767,12 @@
       }
 
       /* Date log in left column */
+      /* space-between spreads the entries down the full column height,
+         so the editorial spread reads as a set ledger, not a top-heavy list */
       .log-list {
         display: flex;
         flex-direction: column;
+        justify-content: space-between;
         gap: 1.4vh;
         flex: 1;
       }
@@ -765,10 +801,14 @@
       }
 
       /* 2x2 mixed-font stat grid in right column */
+      /* flex:1 + space-between lets the grid occupy the column height,
+         matching the spread rhythm of the date log on the left */
       .stat-4 {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0;
+        flex: 1;
+        align-content: space-between;
       }
       .stat-4-cell {
         border-top: 1px solid var(--c-border);
@@ -799,7 +839,7 @@
       }
       .stat-4-label {
         font-family: var(--f-mono);
-        font-size: 0.62vw;
+        font-size: var(--sz-label);
         letter-spacing: 0.07em;
         color: var(--c-fg-3);
         line-height: 1.4;
@@ -941,6 +981,9 @@
         text-transform: uppercase;
         color: var(--c-accent);
       }
+      .light .kicker {
+        color: var(--c-accent-deep);
+      }
 
       /* Outlined tag */
       .tag {
@@ -955,13 +998,16 @@
         line-height: 1;
       }
 
-      /* Image caption */
+      /* Image caption — tertiary token colour, no opacity stacking (keeps AA) */
       .img-caption {
         font-family: var(--f-mono);
         font-size: var(--sz-caption);
         letter-spacing: 0.04em;
-        opacity: 0.5;
+        color: var(--c-fg-3);
         margin-top: 0.8vh;
+      }
+      .light .img-caption {
+        color: var(--c-fg-light-3);
       }
       /* ── CHART ─────────────────────────────────────────────────────────── */
       .slide--chart .slide-body {
@@ -1089,6 +1135,10 @@
         color: var(--c-accent);
         letter-spacing: -0.02em;
         font-style: italic;
+      }
+      /* Pale gold numerals wash out on cream; deepen on light slides */
+      .light .flow-num {
+        color: var(--c-accent-deep);
       }
       .flow-title {
         font-family: var(--f-heading);
@@ -1223,10 +1273,20 @@
       .pyr-level:nth-child(1) {
         background: color-mix(in srgb, var(--c-accent) 70%, var(--c-bg));
         width: 38%;
+        /* Cream text fails contrast on the strong gold band; flip to dark */
+        color: var(--c-fg-light);
+      }
+      .pyr-level:nth-child(1) .pyr-desc {
+        color: color-mix(in srgb, var(--c-fg-light) 82%, transparent);
       }
       .pyr-level:nth-child(2) {
-        background: color-mix(in srgb, var(--c-accent) 45%, var(--c-bg));
+        background: color-mix(in srgb, var(--c-accent) 40%, var(--c-bg));
         width: 54%;
+      }
+      /* Muted blue-grey desc fails contrast on the mid gold bands; lift to cream */
+      .pyr-level:nth-child(2) .pyr-desc,
+      .pyr-level:nth-child(3) .pyr-desc {
+        color: var(--c-fg);
       }
       .pyr-level:nth-child(3) {
         background: color-mix(in srgb, var(--c-accent) 27%, var(--c-bg));
@@ -1411,7 +1471,7 @@
         <div class="cover-body">
           <!-- Session stamp: condensed mono label top-left -->
           <div class="label muted" data-anim="fade-in" data-delay="0">
-            [Period] · [Audience] · [Deck Type]
+            2026 · Product Overview · Open Design
           </div>
 
           <!-- Gold rule reveal -->
@@ -1419,7 +1479,7 @@
 
           <!-- Display title: roman + italic accent -->
           <h1 class="display" data-anim="fade-up" data-delay="2">
-            [Presentation]<br /><em>Title</em>
+            Open<br /><em>Design</em>
           </h1>
 
           <!-- Subtitle: italic serif -->
@@ -1434,14 +1494,15 @@
             data-anim="fade-up"
             data-delay="3"
           >
-            A short description of the deck, its purpose, and the decision it
-            supports.
+            The open-source, local, agent-driven design platform. From idea to
+            prototypes, web pages, slides, and HTML video — on your own
+            machine.
           </p>
 
           <!-- Meta bar: name left, version right -->
           <div class="cover-meta" data-anim="fade-in" data-delay="4">
-            <span class="label muted">[Author Name] · [Role]</span>
-            <span class="label muted">[Version] · [Status] · [Period]</span>
+            <span class="label muted">github.com/nexu-io/open-design</span>
+            <span class="label muted">Apache-2.0 · Runs Locally · BYOK · No Sign-up</span>
           </div>
         </div>
       </section>
@@ -1450,7 +1511,7 @@
       <section class="slide dark slide--chapter">
         <!-- Chapter number: mono label -->
         <div class="chapter-num" data-anim="fade-in" data-delay="0">
-          01 · [Section]
+          01 · Why
         </div>
         <!-- Gold rule -->
         <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
@@ -1461,7 +1522,7 @@
           data-anim="fade-up"
           data-delay="2"
         >
-          Section headline with one <em>emphasized</em> idea
+          What Claude Design proved — and what it kept <em>locked</em>
         </h1>
         <!-- Description -->
         <p
@@ -1470,8 +1531,9 @@
           data-anim="fade-up"
           data-delay="3"
         >
-          A brief setup sentence that explains what this section covers and why
-          it matters.
+          In April 2026, Claude Design showed an LLM can truly design —
+          producing real artifacts, not words about them. But it is
+          closed-source, paid, and cloud-only.
         </p>
       </section>
 
@@ -1480,7 +1542,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Slide Label]</span
+            >Why Open Design</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">03</span>
         </div>
@@ -1489,7 +1551,7 @@
           <div class="statement-body">
             <!-- Kicker -->
             <div class="kicker" data-anim="fade-in" data-delay="1">
-              [Kicker Label]
+              The Premise
             </div>
             <!-- Gold rule -->
             <div class="rule" data-anim="reveal-right" data-delay="2"></div>
@@ -1500,8 +1562,8 @@
               data-anim="fade-up"
               data-delay="3"
             >
-              A concise statement that frames the main argument in one
-              <em>memorable</em> sentence.
+              No agent choice, no self-hosting, no BYOK — Open Design sets that
+              capability <em>free</em>.
             </h1>
           </div>
         </div>
@@ -1521,7 +1583,7 @@
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >[Category] · [Topic]</span
+            >Why · The Problem</span
           >
           <span
             class="label"
@@ -1535,19 +1597,19 @@
         <div class="slide-body">
           <!-- Left: text content -->
           <div class="split-text" data-anim="fade-up" data-delay="1">
-            <div class="kicker">[Kicker Label]</div>
+            <div class="kicker">Cloud-Only By Design</div>
             <h2 class="h2">
-              Main headline for a split-layout slide
+              Closed, paid, and locked to one model
             </h2>
             <p class="lead" style="color: var(--c-fg-light-2)">
-              Use this paragraph for the core explanation. Keep it short,
-              specific, and easy to scan.
+              The frontier tool runs only in the cloud. Your files, your
+              repos, and your design context stay out of reach.
             </p>
             <!-- Bullet list -->
             <ul class="bullet-list" style="font-size: var(--sz-body)">
-              <li>First supporting point with concise context</li>
-              <li>Second supporting point with concise context</li>
-              <li>Third supporting point with concise context</li>
+              <li>Locked to a single model vendor</li>
+              <li>No self-hosting and no BYOK</li>
+              <li>No choice of coding agent</li>
             </ul>
           </div>
 
@@ -1581,7 +1643,7 @@
               >
             </div>
             <p class="img-caption" style="color: var(--c-fg-light-3)">
-              [Caption for image]
+              Open Design · local sandbox preview
             </p>
           </div>
         </div>
@@ -1597,7 +1659,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Category] · [Metrics]</span
+            >Traction · Metrics</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">05</span>
         </div>
@@ -1605,31 +1667,31 @@
         <div class="slide-body">
           <!-- Headline above stats -->
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            Three metrics that summarize the current state
+            Three numbers that show the momentum
           </h2>
 
           <!-- 3-column stat grid -->
           <div class="stats-grid" data-anim="fade-up" data-delay="2">
             <div class="stat-card">
-              <div class="stat-value">[X]%</div>
+              <div class="stat-value">60K+</div>
               <div class="stat-label">
-                Short description of the first metric and its meaning
+                GitHub Stars on the open-source core
               </div>
-              <div class="stat-note">[Source] · [Date]</div>
+              <div class="stat-note">GitHub · Apache-2.0</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value">[Y]×</div>
+              <div class="stat-value">300+</div>
               <div class="stat-label">
-                Short description of the second metric and its meaning
+                Contributors building the platform in the open
               </div>
-              <div class="stat-note">[Method or source]</div>
+              <div class="stat-note">github.com/nexu-io/open-design</div>
             </div>
             <div class="stat-card">
-              <div class="stat-value">[Z]</div>
+              <div class="stat-value">217+</div>
               <div class="stat-label">
-                Short description of the third metric and its meaning
+                Plugins across the community registry
               </div>
-              <div class="stat-note">[Benchmark]</div>
+              <div class="stat-note">Plugin registry</div>
             </div>
           </div>
         </div>
@@ -1643,17 +1705,18 @@
       <!-- ═══════ SLIDE 6 · QUOTE dark ═══════════════════════════════════════ -->
       <section class="slide dark slide--quote">
         <!-- Opening quote mark in accent gold -->
-        <div class="quote-mark" data-anim="fade-in" data-delay="0">"</div>
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">&#8220;</div>
 
         <!-- Quote body: large italic serif -->
         <p class="quote-text" data-anim="fade-up" data-delay="1">
-          A short pull quote or highlighted observation can sit here.
+          File-system semantics plus git-diffable design artifacts — design is
+          finally under version control.
         </p>
 
         <!-- Attribution -->
         <div class="quote-attr" data-anim="fade-up" data-delay="3">
-          <span class="label accent">[Source Name]</span>
-          <span class="label muted">[Source Role] · [Context]</span>
+          <span class="label accent">Indie Developer</span>
+          <span class="label muted">Open Design Community · 2026</span>
         </div>
       </section>
 
@@ -1666,7 +1729,7 @@
             style="color: var(--c-fg-light-2)"
             data-anim="fade-in"
             data-delay="0"
-            >[Framework]</span
+            >Core Capabilities</span
           >
           <span
             class="label"
@@ -1680,29 +1743,29 @@
         <div class="slide-body">
           <!-- Left column: intro -->
           <div class="list-head" data-anim="fade-up" data-delay="1">
-            <div class="kicker">[Kicker Label]</div>
+            <div class="kicker">What It Does</div>
             <h2 class="h2">
-              Five principles that shape the <em>recommended</em> approach
+              Five capabilities that keep design <em>local</em>
             </h2>
             <p class="body" style="color: var(--c-fg-light-2)">
-              Use this sentence to introduce the list and clarify how the
-              points should be read.
+              Everything runs on your machine — your files, your agents, your
+              keys, and the memory of every choice you make.
             </p>
           </div>
 
           <!-- Right column: bullets -->
           <ul class="bullet-list" data-anim="fade-up" data-delay="2">
             <li>
-              First principle written as a complete sentence
+              Desktop-first: local files, Figma exports, and repos readable in place
             </li>
             <li>
-              Second principle written as a complete sentence
+              21 coding agents auto-detected from PATH, zero config
             </li>
             <li>
-              Third principle written as a complete sentence
+              129 design systems imported from GitHub, Figma, or local files
             </li>
-            <li>Fourth principle written as a complete sentence</li>
-            <li>Fifth principle written as a complete sentence</li>
+            <li>HTML video pipeline — programmatic video via HyperFrames</li>
+            <li>Full-stack BYOK: Anthropic / OpenAI / Azure / Google + 14 media providers</li>
           </ul>
         </div>
 
@@ -1717,7 +1780,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Before] · [After]</span
+            >Closed Cloud · Open Local</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">08</span>
         </div>
@@ -1725,35 +1788,35 @@
         <div class="slide-body">
           <!-- Left panel: Before -->
           <div class="compare-panel left" data-anim="fade-up" data-delay="1">
-            <div class="compare-label">[Current State]</div>
+            <div class="compare-label">Closed &amp; Cloud-Only</div>
             <h3 class="h3">
-              Headline describing the current state
+              Frontier design, locked to one vendor
             </h3>
             <p class="lead" style="color: var(--c-fg-2)">
-              Describe the current approach, the friction it creates, and why it
-              needs to change.
+              The capability is real, but the terms are rigid: one model, one
+              cloud, one bill — and none of your local context.
             </p>
             <ul class="bullet-list" style="font-size: var(--sz-body)">
-              <li>Current limitation or source of friction</li>
-              <li>Current limitation or source of friction</li>
-              <li>Current limitation or source of friction</li>
+              <li>Locked to a single model vendor</li>
+              <li>No self-hosting and no BYOK</li>
+              <li>No choice of coding agent</li>
             </ul>
           </div>
 
           <!-- Right panel: After -->
           <div class="compare-panel right" data-anim="fade-up" data-delay="2">
-            <div class="compare-label after">[Proposed State]</div>
+            <div class="compare-label after">Open Design</div>
             <h3 class="h3">
-              Headline describing the proposed <em>approach</em>
+              The same capability, set <em>free</em>
             </h3>
             <p class="lead" style="color: var(--c-fg-2)">
-              Describe the improved approach, the behavior it enables, and the
-              outcome it supports.
+              Open-source under Apache-2.0, running on your own machine, wired
+              into the agents you already use.
             </p>
             <ul class="bullet-list" style="font-size: var(--sz-body)">
-              <li>Expected improvement or capability</li>
-              <li>Expected improvement or capability</li>
-              <li>Expected improvement or capability</li>
+              <li>21 coding agents, auto-detected from PATH</li>
+              <li>Full-stack BYOK across model and media providers</li>
+              <li>Fork, self-host, and commercial use all allowed</li>
             </ul>
           </div>
         </div>
@@ -1776,69 +1839,70 @@
         <!-- Chrome: section marker left, issue ID right -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >— § [Section]</span
+            >— § Field Notes</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Deck Name] · [Period] · <span class="accent">[Year]</span></span
+            >Open Design · Product Overview · <span class="accent">2026</span></span
           >
         </div>
 
         <!-- Week stamp: condensed mono with accent number -->
         <div class="editorial-stamp" data-anim="fade-in" data-delay="1">
-          [Issue] <span class="accent">[N]</span> · [Review Label]
+          Chapter <span class="accent">02</span> · How It Came Together
         </div>
 
         <!-- Headline: roman serif + single italic gold word -->
         <h2 class="editorial-hl" data-anim="fade-up" data-delay="2">
-          Editorial headline with one <em>accented</em> word for emphasis.
+          From a closed demo to an open platform, built in the <em>open</em>.
         </h2>
 
         <!-- Two-column body -->
         <div class="editorial-cols" data-anim="fade-up" data-delay="3">
           <!-- Left: date log -->
           <div class="editorial-col-left">
-            <div class="editorial-col-head">[Sequence]</div>
+            <div class="editorial-col-head">Sequence</div>
             <div class="log-list">
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">Apr 2026</span>
                 <span class="log-dd"
-                  >First event or observation appears.
-                  <em>Short implication.</em></span
+                  >Claude Design ships and proves an LLM can produce real
+                  design artifacts. <em>The capability is real.</em></span
                 >
               </div>
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">Apr 2026</span>
                 <span class="log-dd"
-                  >Second event or observation appears.
-                  <em>Short implication.</em></span
+                  >But it is closed-source, paid, and cloud-only.
+                  <em>The terms are not.</em></span
                 >
               </div>
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">2026</span>
                 <span class="log-dd"
-                  >Third event or observation appears.
-                  <em>Short implication.</em></span
+                  >Open Design rebuilds the workflow as an open, local
+                  platform. <em>Apache-2.0, no sign-up.</em></span
                 >
               </div>
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">2026</span>
                 <span class="log-dd"
-                  >Fourth event adds context. A key pattern <em>holds</em>
-                  across the data.</span
+                  >Instead of building its own agent, it plugs in the ones
+                  already on your machine. The pattern <em>holds</em>
+                  across 21 CLIs.</span
                 >
               </div>
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">2026</span>
                 <span class="log-dd"
-                  >Fifth event confirms part of the hypothesis and challenges
-                  another <em>assumption.</em></span
+                  >Design systems, plugins, and memory compound with use,
+                  challenging the cloud-only <em>assumption.</em></span
                 >
               </div>
               <div class="log-row">
-                <span class="log-dt">[Date]</span>
+                <span class="log-dt">Today</span>
                 <span class="log-dd"
-                  >Final event closes the sequence and <em>clarifies</em> the
-                  next question.</span
+                  >A community of 300+ contributors <em>clarifies</em> the
+                  next question: what else can run locally?</span
                 >
               </div>
             </div>
@@ -1846,29 +1910,29 @@
 
           <!-- Right: 2x2 mixed-font stat grid -->
           <div class="editorial-col-right">
-            <div class="editorial-col-head">[Key Readings]</div>
+            <div class="editorial-col-head">Key Readings</div>
             <!-- 2x2 grid: roman grotesque number + italic serif suffix in gold -->
             <div class="stat-4">
               <div class="stat-4-cell">
-                <div class="stat-4-val">[A]<em>%</em></div>
-                <div class="stat-4-label">Metric label · [Segment] · [Period]</div>
+                <div class="stat-4-val">60<em>K+</em></div>
+                <div class="stat-4-label">GitHub stars · open-source core</div>
               </div>
               <div class="stat-4-cell">
-                <div class="stat-4-val">[B]<em>x</em></div>
+                <div class="stat-4-val">217<em>+</em></div>
                 <div class="stat-4-label">
-                  Metric label vs. comparison period
+                  Plugins across the community registry
                 </div>
               </div>
               <div class="stat-4-cell">
-                <div class="stat-4-val">[C]<em>pt</em></div>
+                <div class="stat-4-val">129<em>sys</em></div>
                 <div class="stat-4-label">
-                  Metric label · [Segment]
+                  Design systems · GitHub / Figma / local
                 </div>
               </div>
               <div class="stat-4-cell">
-                <div class="stat-4-val">+<em>[D]</em></div>
+                <div class="stat-4-val">21<em>cli</em></div>
                 <div class="stat-4-label">
-                  Net change across selected group
+                  Coding agents auto-detected from PATH
                 </div>
               </div>
             </div>
@@ -1877,14 +1941,15 @@
 
         <!-- Analysis line below the columns -->
         <div class="editorial-analysis" data-anim="fade-in" data-delay="4">
-          Use this analysis line to synthesize the sequence above. Explain what
-          changed, why it matters, and what decision should follow.
+          The sequence reads one way: the frontier capability arrived closed,
+          and the open ecosystem caught up by composing what already exists —
+          local agents, local files, and a design memory that compounds.
         </div>
 
         <!-- Footer: sources left, page right -->
         <div class="slide-foot">
           <span class="label muted"
-            >Sources: [Source A] · [Source B] · [Source C] · [Source D]</span
+            >Sources: GitHub · Plugin Registry · Design System Catalog</span
           >
           <span class="label muted">09 / 18</span>
         </div>
@@ -1895,57 +1960,60 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Deep Dive]</span
+            >Deep Dive</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">10</span>
         </div>
 
         <!-- Headline with italic gold emphasis -->
         <h2 class="dense-hl" data-anim="fade-up" data-delay="1">
-          Long-form headline that frames the <em>central</em> tradeoff
+          Why design belongs on the <em>desktop</em>, not the cloud
         </h2>
 
         <!-- Two-column analysis text -->
         <div class="dense-cols slide-body" data-anim="fade-up" data-delay="2">
           <!-- Left column -->
           <div class="dense-col">
-            <h4>[Argument A]</h4>
+            <h4>Desktop-Native</h4>
             <p>
-              Use this paragraph to explain the first side of the argument.
-              Include one <em>emphasized phrase</em> when a key idea needs
-              extra weight.
+              Design happens where the work lives. Local files, Figma exports,
+              and code repositories are <em>directly readable</em> — no
+              uploads, no sync, no copies of your context drifting in someone
+              else's cloud.
             </p>
             <p>
-              Add a second paragraph with supporting evidence, operational
-              detail, or a short example that strengthens the case.
+              Agents get full terminal power: they run builds, diff artifacts,
+              and write real files into your project, the same way an engineer
+              on your team would.
             </p>
             <p>
-              Close the column with the implication. Make the logic clear
-              enough that the reader understands the recommended action.
+              The implication is simple: the design artifact is a file you own,
+              version, and ship — not a session you rent.
             </p>
           </div>
 
           <!-- Right column -->
           <div class="dense-col">
-            <h4>[Argument B]</h4>
+            <h4>Agents, Not Rebuilt</h4>
             <p>
-              Use this paragraph to explain the second side of the argument.
-              Highlight the contrasting principle with an
-              <em>emphasized phrase.</em>
+              Open Design does not build yet another agent. The
+              <em>coding agents already on your machine</em> — Claude Code,
+              Codex, Cursor — are wired into a complete design workflow.
             </p>
             <p>
-              Add a second paragraph with supporting detail. This column should
-              feel like a deliberate counterweight to the first column.
+              Every choice you make compounds: design systems, preferences, and
+              memory accumulate, so the next generation lands closer to what
+              you wanted.
             </p>
             <p>
-              Close with the practical takeaway, linking the argument back to
-              the decision the deck is meant to support.
+              The takeaway: the platform is the workflow and the memory, while
+              the intelligence stays swappable — yours to choose, via BYOK.
             </p>
           </div>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">[Analysis Label] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">10 / 18</span>
         </div>
       </section>
@@ -1954,14 +2022,14 @@
       <section class="slide dark slide--statement">
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Perspective]</span
+            >Perspective</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">11</span>
         </div>
         <div class="slide-body">
           <div class="statement-body">
             <div class="kicker" data-anim="fade-in" data-delay="1">
-              [Kicker Label]
+              The Thesis
             </div>
             <div class="rule" data-anim="reveal-right" data-delay="2"></div>
             <h1
@@ -1970,8 +2038,8 @@
               data-anim="fade-up"
               data-delay="3"
             >
-              A second statement slide can reinforce the argument with a
-              sharper <em>closing</em> line.
+              Frontier AI design, back on every creator's
+              <em>desk</em>.
             </h1>
           </div>
         </div>
@@ -1985,7 +2053,7 @@
       <section class="slide dark slide--end">
         <!-- Kicker: organization placeholder -->
         <div class="kicker" data-anim="fade-in" data-delay="0">
-          [Organization]
+          Open · Local · Agent-native
         </div>
 
         <!-- Gold rule -->
@@ -1998,7 +2066,7 @@
           data-anim="fade-up"
           data-delay="2"
         >
-          Closing headline with one <em>emphasized</em> phrase.
+          Download Open Design, or <em>star</em> it on GitHub.
         </h1>
 
         <!-- Contact line -->
@@ -2008,61 +2076,62 @@
           data-anim="fade-up"
           data-delay="3"
         >
-          [Author Name] · [email@example.com] · [website.example]
+          github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 ·
+          x.com/nexudotio
         </p>
       </section>
 
       <!-- SLIDE 11 · CHART  (dark — bar chart with gold accent bar) -->
       <section class="slide slide--chart dark">
         <header class="slide-chrome">
-          <span class="label muted">§ [Metrics]</span>
+          <span class="label muted">§ Metrics</span>
           <span class="label muted">13</span>
         </header>
         <div class="slide-body">
           <div class="chart-header">
             <h2 class="h2" data-anim="fade-up" data-delay="0">
-              Chart headline with <em>emphasis</em>
+              GitHub stars, <em>compounding</em>
             </h2>
             <span class="caption muted" data-anim="fade-in" data-delay="1"
-              >[Unit] · [Scope] · [Period]</span
+              >Stars · cumulative · demo data</span
             >
           </div>
           <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
             <div class="bar-track">
               <div class="bar-col">
-                <span class="bar-val">[A]</span>
+                <span class="bar-val">9K</span>
+                <div class="bar-fill" style="height: 4.5vh"></div>
+                <span class="bar-x-label">Launch</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">18K</span>
                 <div class="bar-fill" style="height: 9vh"></div>
-                <span class="bar-x-label">[T1]</span>
+                <span class="bar-x-label">+1 mo</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">[B]</span>
-                <div class="bar-fill" style="height: 14vh"></div>
-                <span class="bar-x-label">[T2]</span>
+                <span class="bar-val">31K</span>
+                <div class="bar-fill" style="height: 15.5vh"></div>
+                <span class="bar-x-label">+2 mo</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">[C]</span>
-                <div class="bar-fill" style="height: 20vh"></div>
-                <span class="bar-x-label">[T3]</span>
+                <span class="bar-val">47K</span>
+                <div class="bar-fill" style="height: 23.5vh"></div>
+                <span class="bar-x-label">+3 mo</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">[D]</span>
-                <div class="bar-fill" style="height: 26vh"></div>
-                <span class="bar-x-label">[T4]</span>
-              </div>
-              <div class="bar-col">
-                <span class="bar-val hi">[E]</span>
+                <span class="bar-val hi">60K+</span>
                 <div class="bar-fill accent" style="height: 30vh"></div>
-                <span class="bar-x-label">[T5]</span>
+                <span class="bar-x-label">Today</span>
               </div>
             </div>
             <div class="chart-baseline"></div>
           </div>
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: [Source] · [Period]
+            Source: GitHub · trajectory illustrative, current count 60K+
           </p>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">13 / 18</span>
         </footer>
       </section>
@@ -2075,44 +2144,47 @@
         </header>
         <div class="slide-body">
           <h2 class="h2" data-anim="fade-up" data-delay="0">
-            Four-step process with <em>emphasis</em>
+            From idea to delivery, in <em>four moves</em>
           </h2>
           <div class="flow" data-anim="fade-up" data-delay="1">
             <div class="flow-step">
               <div class="flow-num">01</div>
-              <div class="flow-title">Step One</div>
+              <div class="flow-title">Pick a starting point</div>
               <div class="flow-desc">
-                Briefly describe the first step in the workflow.
+                Describe your goal in one sentence, or start from a template
+                or plugin.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">02</div>
-              <div class="flow-title">Step Two</div>
+              <div class="flow-title">Set the direction</div>
               <div class="flow-desc">
-                Briefly describe the second step in the workflow.
+                Palette, type, and spacing flow into generation automatically.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">03</div>
-              <div class="flow-title">Step Three</div>
+              <div class="flow-title">Generate the artifact</div>
               <div class="flow-desc">
-                Briefly describe the third step in the workflow.
+                The agent reads full context and produces real runnable files,
+                previewed in a sandbox.
               </div>
             </div>
             <div class="flow-arrow">→</div>
             <div class="flow-step">
               <div class="flow-num">04</div>
-              <div class="flow-title">Step Four</div>
+              <div class="flow-title">Ship it, or film it</div>
               <div class="flow-desc">
-                Briefly describe the fourth step in the workflow.
+                Hand off to engineering, or turn it into a marketing video
+                with HyperFrames.
               </div>
             </div>
           </div>
         </div>
         <footer class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">14 / 18</span>
         </footer>
       </section>
@@ -2122,7 +2194,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Breakdown]</span
+            >Breakdown</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">15</span>
         </div>
@@ -2130,7 +2202,7 @@
         <div class="slide-body">
           <!-- Headline -->
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            Breakdown by <em>category</em>
+            Plugins by <em>artifact type</em>
           </h2>
 
           <!-- Donut + legend row -->
@@ -2155,35 +2227,35 @@
                   class="pie-swatch"
                   style="background: var(--c-accent)"
                 ></div>
-                <span class="pie-item-label">Category A</span>
+                <span class="pie-item-label">Prototypes &amp; web pages</span>
                 <span class="pie-item-val">35%</span>
               </div>
               <div class="pie-item">
                 <div class="pie-swatch" style="background: #3d5475"></div>
-                <span class="pie-item-label">Category B</span>
+                <span class="pie-item-label">Slides &amp; decks</span>
                 <span class="pie-item-val">30%</span>
               </div>
               <div class="pie-item">
                 <div class="pie-swatch" style="background: #526880"></div>
-                <span class="pie-item-label">Category C</span>
+                <span class="pie-item-label">Posters &amp; images</span>
                 <span class="pie-item-val">22%</span>
               </div>
               <div class="pie-item">
                 <div class="pie-swatch" style="background: #2d3f55"></div>
-                <span class="pie-item-label">Category D</span>
+                <span class="pie-item-label">Video &amp; HyperFrames</span>
                 <span class="pie-item-val">13%</span>
               </div>
-              <div class="pie-total">Total: [N] · As of [Period]</div>
+              <div class="pie-total">Total: 217+ plugins · demo split</div>
             </div>
           </div>
 
           <p class="chart-source" data-anim="fade-in" data-delay="3">
-            Source: [Source] · [Period]
+            Source: Plugin registry · distribution illustrative
           </p>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">15 / 18</span>
         </div>
       </section>
@@ -2193,7 +2265,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Hierarchy]</span
+            >Hierarchy</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">16</span>
         </div>
@@ -2201,42 +2273,42 @@
         <div class="slide-body">
           <!-- Headline -->
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            The priority <em>hierarchy</em>
+            The Open Design <em>stack</em>
           </h2>
 
           <!-- Pyramid levels, narrowest at top -->
           <div class="pyramid" data-anim="fade-up" data-delay="2">
             <div class="pyr-level">
-              <span class="pyr-name">Level One</span>
+              <span class="pyr-name">Design memory</span>
               <span class="pyr-desc"
-                >Highest-order principle or decision criterion</span
+                >Preferences and choices compound with every run</span
               >
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">Level Two</span>
+              <span class="pyr-name">Design systems</span>
               <span class="pyr-desc"
-                >Second-order principle or decision criterion</span
+                >129 systems imported from GitHub, Figma, or local</span
               >
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">Level Three</span>
-              <span class="pyr-desc">Third-order principle or decision criterion</span>
+              <span class="pyr-name">Plugins</span>
+              <span class="pyr-desc">217+ workflows: prototypes, slides, posters, video</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">Level Four</span>
-              <span class="pyr-desc">Supporting layer or operating standard</span>
+              <span class="pyr-name">Coding agents</span>
+              <span class="pyr-desc">21 CLIs auto-detected from PATH, zero config</span>
             </div>
             <div class="pyr-level">
-              <span class="pyr-name">Level Five</span>
+              <span class="pyr-name">Your machine</span>
               <span class="pyr-desc"
-                >Foundation layer or ongoing practice</span
+                >Local files, BYOK keys, Apache-2.0 open source</span
               >
             </div>
           </div>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">16 / 18</span>
         </div>
       </section>
@@ -2246,63 +2318,65 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Timeline]</span
+            >Timeline</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">17</span>
         </div>
 
         <!-- Section headline with italic em -->
         <h2 class="vt-hl" data-anim="fade-up" data-delay="1">
-          From starting point to <em>current state</em>
+          From a closed demo to an <em>open platform</em>
         </h2>
 
         <!-- Timeline: 3-column grid: date | spine | content -->
         <div class="vtimeline" data-anim="fade-up" data-delay="2">
           <!-- Event 1 -->
-          <div class="vt-date">[Year 1]</div>
+          <div class="vt-date">Apr 2026</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">Milestone One</div>
+            <div class="vt-title">The proof</div>
             <p class="vt-body">
-              Describe the first milestone and the outcome it produced.
+              Claude Design shows an LLM can produce real design artifacts —
+              but closed, paid, and cloud-only.
             </p>
           </div>
 
           <!-- Event 2 -->
-          <div class="vt-date">[Year 2]</div>
+          <div class="vt-date">2026</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">Milestone Two</div>
+            <div class="vt-title">The open answer</div>
             <p class="vt-body">
-              Describe the second milestone. Use <em>emphasis</em> for the key
-              implication.
+              Open Design launches under Apache-2.0: <em>local, BYOK, and
+              agent-driven</em> from day one.
             </p>
           </div>
 
           <!-- Event 3 -->
-          <div class="vt-date">[Year 3]</div>
+          <div class="vt-date">2026</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">Milestone Three</div>
+            <div class="vt-title">The ecosystem</div>
             <p class="vt-body">
-              Describe the third milestone and how the scope changed.
+              217+ plugins, 129 design systems, and 21 coding agents widen the
+              scope from prototypes to video.
             </p>
           </div>
 
           <!-- Event 4 -->
-          <div class="vt-date">[Year 4]</div>
+          <div class="vt-date">Today</div>
           <div class="vt-spine"></div>
           <div class="vt-content">
-            <div class="vt-title">Milestone Four</div>
+            <div class="vt-title">The community</div>
             <p class="vt-body">
-              Describe the current milestone and the <em>focus area</em> it
-              represents.
+              60K+ stars and 300+ contributors make <em>self-evolving design
+              memory</em> the current focus.
             </p>
           </div>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">17 / 18</span>
         </div>
       </section>
@@ -2312,7 +2386,7 @@
         <!-- Chrome bar -->
         <div class="slide-chrome">
           <span class="label muted" data-anim="fade-in" data-delay="0"
-            >[Process]</span
+            >Process</span
           >
           <span class="label muted" data-anim="fade-in" data-delay="0">18</span>
         </div>
@@ -2320,7 +2394,7 @@
         <div class="slide-body">
           <!-- Headline -->
           <h2 class="h2" data-anim="fade-up" data-delay="1">
-            The <em>operating</em> cycle
+            The <em>memory</em> cycle
           </h2>
 
           <!-- 2×2 cycle grid -->
@@ -2328,9 +2402,10 @@
             <!-- Step 01: top-left -->
             <div class="cycle-step">
               <div class="cycle-num">01</div>
-              <div class="cycle-title">Step One</div>
+              <div class="cycle-title">Describe</div>
               <div class="cycle-desc">
-                Describe how the cycle begins and what input starts the work.
+                State your goal in one sentence, or start from a template or
+                plugin.
               </div>
             </div>
 
@@ -2340,9 +2415,10 @@
             <!-- Step 02: top-right -->
             <div class="cycle-step">
               <div class="cycle-num">02</div>
-              <div class="cycle-title">Step Two</div>
+              <div class="cycle-title">Generate</div>
               <div class="cycle-desc">
-                Describe how the input is examined, refined, or validated.
+                The agent reads your full context and produces real runnable
+                files in a sandbox.
               </div>
             </div>
 
@@ -2358,9 +2434,10 @@
             <!-- Step 04: bottom-left -->
             <div class="cycle-step">
               <div class="cycle-num">04</div>
-              <div class="cycle-title">Step Four</div>
+              <div class="cycle-title">Remember</div>
               <div class="cycle-desc">
-                Describe how the result is implemented, supported, or improved.
+                Every choice becomes design systems, preferences, and memory
+                for the next run.
               </div>
             </div>
 
@@ -2370,17 +2447,17 @@
             <!-- Step 03: bottom-right -->
             <div class="cycle-step">
               <div class="cycle-num">03</div>
-              <div class="cycle-title">Step Three</div>
+              <div class="cycle-title">Refine</div>
               <div class="cycle-desc">
-                Describe the decision point and the criteria used to move
-                forward.
+                Preview, edit, and decide what ships — your taste is the
+                decision criterion.
               </div>
             </div>
           </div>
         </div>
 
         <div class="slide-foot">
-          <span class="label muted">[Organization] · [Period]</span>
+          <span class="label muted">Open Design · 2026</span>
           <span class="label muted">18 / 18</span>
         </div>
       </section>

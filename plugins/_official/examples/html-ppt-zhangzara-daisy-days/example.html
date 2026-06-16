@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daisy Days — Presentation Template</title>
+<title>Open Design — Product Story Deck</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 :root{
   --cream:#F5F0E6;--turquoise:#7ECDC0;--soft-pink:#F7C8D4;--butter:#FDE68A;
   --mint:#A8E6CF;--lavender:#D4A5E8;--peach:#FFCBA4;--sky:#A8D8F0;--coral:#F8635F;
-  --text-dark:#2D2D2D;--text-muted:#6B6B6B;
+  --text-dark:#2D2D2D;--text-muted:#595959; /* darkened from #6B6B6B: AA on mint/peach slide backgrounds */
   --border:#2D2D2D;--border-width:3px;--radius:20px;--radius-lg:28px;
   --shadow:6px 6px 0 var(--border);--shadow-sm:4px 4px 0 var(--border);
   --font-display:'Fredoka One',cursive;--font-body:'Quicksand',sans-serif;
@@ -24,16 +24,12 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:var(--font-body);co
 .slide{width:100vw;height:100vh;min-height:100vh;scroll-snap-align:start;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:40px 60px}
 
 /* ---- Typography ---- */
-h1,h2,h3,h4{font-family:var(--font-display);font-weight:400;letter-spacing:.02em}
+h1,h2,h3,h4{font-family:var(--font-display);font-weight:400;letter-spacing:0}
 h1{font-size:clamp(2.5rem,5vw,4.5rem);line-height:1.1}
 h2{font-size:clamp(1.8rem,3.5vw,3rem);line-height:1.15}
 h3{font-size:clamp(1.3rem,2vw,1.8rem);line-height:1.2}
 h4{font-size:clamp(1rem,1.5vw,1.3rem);line-height:1.3}
 p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
-
-/* ---- Utilities ---- */
-.card{background:#fff;border:var(--border-width) solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
-.badge{display:inline-block;padding:8px 20px;border-radius:50px;border:var(--border-width) solid var(--border);font-family:var(--font-display);font-size:.85rem;background:var(--butter)}
 
 /* ---- Decorations ---- */
 .deco{position:absolute;pointer-events:none;z-index:1}
@@ -41,7 +37,7 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
 
 /* ---- Nav ---- */
 .nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:100}
-.nav-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:#fff;cursor:pointer;transition:all .2s}
+.nav-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:#fff;cursor:pointer;transition:transform .2s cubic-bezier(.16,1,.3,1),background .2s cubic-bezier(.16,1,.3,1)}
 .nav-dot.active{background:var(--butter);transform:scale(1.2)}
 .slide-counter{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;border:var(--border-width) solid var(--border);border-radius:50px;padding:6px 20px;font-family:var(--font-display);font-size:.8rem;z-index:100;box-shadow:var(--shadow-sm)}
 
@@ -82,15 +78,15 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
    SLIDE 3 — Weekly
    ======================================== */
 .slide-weekly{background:var(--turquoise);padding:30px 40px}
-.slide-weekly h2{text-align:center;color:#fff;text-shadow:3px 3px 0 var(--border);margin-bottom:28px;font-size:clamp(1.8rem,3.5vw,3rem);position:relative;z-index:2}
+.slide-weekly h2{text-align:center;margin-bottom:28px;font-size:clamp(1.6rem,3vw,2.6rem);position:relative;z-index:2}
 .weekly-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;width:100%;max-width:1100px;z-index:2;position:relative}
 .day-card{background:#fff;border:var(--border-width) solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
 .day-header{padding:10px 8px;text-align:center;font-family:var(--font-display);font-size:clamp(.85rem,1.3vw,1.1rem);border-bottom:var(--border-width) solid var(--border)}
-.day-header.pink{background:var(--soft-pink)}.day-header.green{background:var(--mint)}.day-header.coral{background:var(--coral);color:#fff}.day-header.yellow{background:var(--butter)}.day-header.lavender{background:var(--lavender)}
+.day-header.pink{background:var(--soft-pink)}.day-header.green{background:var(--mint)}.day-header.coral{background:var(--coral)}.day-header.yellow{background:var(--butter)}.day-header.lavender{background:var(--lavender)}
 .day-body{padding:14px 16px}
 .day-body ul{list-style:none;display:flex;flex-direction:column;gap:8px}
 .day-body li{font-size:clamp(.8rem,1.1vw,.95rem);font-weight:600;padding-left:14px;position:relative;line-height:1.4}
-.day-body li::before{content:"-";position:absolute;left:0;color:var(--text-muted)}
+.day-body li::before{content:"";position:absolute;left:0;top:.45em;width:7px;height:7px;border-radius:50%;background:var(--coral);border:1.5px solid var(--border)}
 
 .slide-weekly .deco-daisy-tl{top:-20px;left:-25px;width:160px;height:160px}
 .slide-weekly .deco-daisy-br{bottom:-25px;right:-20px;width:170px;height:170px}
@@ -101,11 +97,11 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
    SLIDE 4 — Timeline
    ======================================== */
 .slide-timeline{background:var(--soft-pink)}
-.slide-timeline h2{text-align:center;color:#fff;text-shadow:3px 3px 0 rgba(0,0,0,.2);margin-bottom:32px;z-index:2;position:relative}
+.slide-timeline h2{text-align:center;margin-bottom:32px;z-index:2;position:relative}
 .timeline-wrap{display:flex;flex-direction:column;gap:18px;width:100%;max-width:700px;z-index:2;position:relative}
 .timeline-row{display:flex;align-items:center;gap:20px}
-.timeline-dot{width:48px;height:48px;border-radius:50%;border:var(--border-width) solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;color:#fff}
-.timeline-dot.d1{background:var(--coral)}.timeline-dot.d2{background:var(--mint)}.timeline-dot.d3{background:var(--sky)}.timeline-dot.d4{background:var(--lavender)}.timeline-dot.d5{background:var(--butter);color:var(--text-dark)}
+.timeline-dot{width:48px;height:48px;border-radius:50%;border:var(--border-width) solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;color:var(--text-dark)}
+.timeline-dot.d1{background:var(--coral)}.timeline-dot.d2{background:var(--mint)}.timeline-dot.d3{background:var(--sky)}.timeline-dot.d4{background:var(--lavender)}.timeline-dot.d5{background:var(--butter)}
 .timeline-card{flex:1;background:#fff;border:var(--border-width) solid var(--border);border-radius:var(--radius);padding:16px 24px;box-shadow:var(--shadow-sm)}
 .timeline-card h4{margin-bottom:4px;font-size:1.1rem}.timeline-card p{font-size:.9rem;color:var(--text-muted);font-weight:500}
 
@@ -151,7 +147,7 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
    ======================================== */
 .slide-quote{background:var(--lavender)}
 .quote-box{background:#fff;border:var(--border-width) solid var(--border);border-radius:var(--radius-lg);padding:48px 56px;box-shadow:var(--shadow);max-width:750px;width:100%;text-align:center;z-index:2;position:relative}
-.quote-mark{font-family:var(--font-display);font-size:4rem;line-height:1;color:var(--soft-pink);margin-bottom:8px}
+.quote-mark{font-family:var(--font-display);font-size:4rem;line-height:1;color:var(--coral);margin-bottom:8px}
 .quote-text{font-family:var(--font-display);font-size:clamp(1.3rem,2.5vw,2rem);line-height:1.35;color:var(--text-dark);margin-bottom:20px}
 .quote-author{font-weight:700;font-size:1rem;color:var(--text-muted)}
 
@@ -165,7 +161,7 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
    SLIDE 8 — Team
    ======================================== */
 .slide-team{background:var(--mint)}
-.slide-team h2{text-align:center;color:#fff;text-shadow:3px 3px 0 rgba(0,0,0,.15);margin-bottom:36px;z-index:2;position:relative}
+.slide-team h2{text-align:center;margin-bottom:36px;z-index:2;position:relative}
 .team-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;width:100%;max-width:900px;z-index:2;position:relative}
 .team-member{display:flex;flex-direction:column;align-items:center;gap:12px}
 .team-avatar{width:100px;height:100px;border-radius:50%;border:var(--border-width) solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);overflow:hidden}
@@ -186,7 +182,7 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
 .process-flow{display:flex;align-items:flex-start;justify-content:center;gap:16px;width:100%;max-width:950px;z-index:2;position:relative}
 .process-step{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
 .process-arrow{font-family:var(--font-display);font-size:2rem;color:var(--border);margin-top:30px;flex-shrink:0}
-.step-circle{width:90px;height:90px;border-radius:50%;border:var(--border-width) solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:2rem;color:#fff;box-shadow:var(--shadow-sm);flex-shrink:0}
+.step-circle{width:90px;height:90px;border-radius:50%;border:var(--border-width) solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:2rem;color:var(--text-dark);box-shadow:var(--shadow-sm);flex-shrink:0}
 .step-circle.s1{background:var(--coral)}.step-circle.s2{background:var(--turquoise)}.step-circle.s3{background:var(--lavender)}
 .step-title{font-family:var(--font-display);font-size:1.1rem}
 .step-desc{font-size:.85rem;font-weight:600;color:var(--text-muted);line-height:1.45;max-width:200px}
@@ -212,6 +208,38 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
 .slide-donut .deco-daisy-br{bottom:-10px;right:-10px;width:170px;height:170px}
 .slide-donut .deco-star-1{top:10%;right:7%;width:75px;height:75px}
 .slide-donut .deco-star-2{bottom:14%;left:5%;width:60px;height:60px}
+
+/* ========================================
+   Sticker titles + motion (family polish)
+   ======================================== */
+/* Section titles become white sticker pills: keeps the kawaii sticker language,
+   removes the low-contrast white-text-on-pastel + heavy text-shadow residue */
+.slide-weekly h2,.slide-timeline h2,.slide-chart-bar h2,.slide-cards h2,.slide-team h2,.slide-process h2{
+  align-self:center;display:inline-block;width:auto;color:var(--text-dark);text-shadow:none;
+  background:#fff;border:var(--border-width) solid var(--border);border-radius:50px;
+  padding:10px 38px;box-shadow:var(--shadow-sm);transform:rotate(-1.2deg)
+}
+/* Alternate the sticker tilt so repeated pills don't read machine-stamped */
+.slide-timeline h2,.slide-cards h2,.slide-process h2{transform:rotate(1deg)}
+.slide-title h1{letter-spacing:-.01em}
+.slide-title .subtitle{letter-spacing:.01em}
+
+/* Entrance: transform/opacity only, ease-out, gentle stagger */
+@keyframes pop-in{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
+.slide-title .title-box h1{animation:pop-in .6s cubic-bezier(.16,1,.3,1) both}
+.slide-title .title-box .subtitle{animation:pop-in .6s cubic-bezier(.16,1,.3,1) .08s both}
+.slide-title .deco{animation:pop-in .7s cubic-bezier(.16,1,.3,1) .15s both}
+.welcome-list li,.timeline-row,.day-card,.info-card,.team-member,.process-step,.quote-box,.d-legend-item{animation:pop-in .55s cubic-bezier(.16,1,.3,1) both}
+.welcome-list li:nth-child(2),.timeline-row:nth-child(2),.day-card:nth-child(2),.info-card:nth-child(2),.team-member:nth-child(2),.process-step:nth-of-type(2),.d-legend-item:nth-of-type(1){animation-delay:.06s}
+.welcome-list li:nth-child(3),.timeline-row:nth-child(3),.day-card:nth-child(3),.info-card:nth-child(3),.team-member:nth-child(3),.process-step:nth-of-type(3),.d-legend-item:nth-of-type(2){animation-delay:.12s}
+.welcome-list li:nth-child(4),.timeline-row:nth-child(4),.day-card:nth-child(4),.info-card:nth-child(4),.team-member:nth-child(4),.d-legend-item:nth-of-type(3){animation-delay:.18s}
+.welcome-list li:nth-child(5),.timeline-row:nth-child(5),.day-card:nth-child(5),.d-legend-item:nth-of-type(4){animation-delay:.24s}
+.d-legend-item:nth-of-type(5){animation-delay:.3s}
+@media (prefers-reduced-motion:reduce){
+  .slide-title .title-box h1,.slide-title .title-box .subtitle,.slide-title .deco,
+  .welcome-list li,.timeline-row,.day-card,.info-card,.team-member,.process-step,.quote-box,.d-legend-item{animation:none}
+  .slides-container{scroll-behavior:auto}
+}
 
 /* ========================================
    Responsive
@@ -249,8 +277,8 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-3"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#A8E6CF" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
 
   <div class="title-box">
-    <h1>Daisy Days</h1>
-    <p class="subtitle">A cheerful presentation template for bright moments</p>
+    <h1>Open Design</h1>
+    <p class="subtitle">The open-source, local, agent-driven design platform</p>
   </div>
 </section>
 
@@ -262,13 +290,13 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-2"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#D4A5E8" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
 
   <div class="welcome-frame">
-    <div class="welcome-header"><h2>Welcome to Today</h2></div>
+    <div class="welcome-header"><h2>Why Open Design?</h2></div>
     <div class="welcome-body">
       <ul class="welcome-list">
-        <li>Review the materials on your desk</li>
-        <li>Prepare your notes and supplies</li>
-        <li>Take a moment to settle in comfortably</li>
-        <li>Reach out if you need any assistance</li>
+        <li>In April 2026, Claude Design proved an LLM can truly design — real artifacts, not words about design</li>
+        <li>Yet it is closed-source, paid, and cloud-only, locked to a single model</li>
+        <li>No agent choice, no self-hosting, no BYOK</li>
+        <li>Open Design sets that capability free — open, local, and agent-driven</li>
       </ul>
     </div>
   </div>
@@ -281,13 +309,13 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-1"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#FDE366" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
   <div class="deco deco-star-2"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#FFFFFF" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
 
-  <h2>A Look at the Week</h2>
+  <h2>What Can You Make?</h2>
   <div class="weekly-grid">
-    <div class="day-card"><div class="day-header pink">Monday</div><div class="day-body"><ul><li>Reading</li><li>Writing</li><li>Numbers</li><li>Science</li><li>Art Studio</li></ul></div></div>
-    <div class="day-card"><div class="day-header green">Tuesday</div><div class="day-body"><ul><li>Reading</li><li>Numbers</li><li>History</li><li>Crafts</li><li>Games</li></ul></div></div>
-    <div class="day-card"><div class="day-header coral">Wednesday</div><div class="day-body"><ul><li>Reading</li><li>Numbers</li><li>Science</li><li>Music</li><li>Library</li></ul></div></div>
-    <div class="day-card"><div class="day-header yellow">Thursday</div><div class="day-body"><ul><li>Reading</li><li>Numbers</li><li>Projects</li><li>Skills</li><li>Art Studio</li></ul></div></div>
-    <div class="day-card"><div class="day-header lavender">Friday</div><div class="day-body"><ul><li>Reading</li><li>Numbers</li><li>Review</li><li>Nature</li><li>Garden</li></ul></div></div>
+    <div class="day-card"><div class="day-header pink">Prototype</div><div class="day-body"><ul><li>Mobile flows</li><li>Web apps</li><li>High fidelity</li><li>Real code</li><li>Sandbox preview</li></ul></div></div>
+    <div class="day-card"><div class="day-header green">Live Artifact</div><div class="day-body"><ul><li>Dashboards</li><li>Live briefs</li><li>Interactive</li><li>Data-driven</li><li>Shareable</li></ul></div></div>
+    <div class="day-card"><div class="day-header coral">Slides</div><div class="day-body"><ul><li>Creative decks</li><li>Reports</li><li>Pitch decks</li><li>Keyboard nav</li><li>Web-native</li></ul></div></div>
+    <div class="day-card"><div class="day-header yellow">Image</div><div class="day-body"><ul><li>Posters</li><li>Illustrations</li><li>Mockups</li><li>Brand assets</li><li>Social cards</li></ul></div></div>
+    <div class="day-card"><div class="day-header lavender">Video</div><div class="day-body"><ul><li>HyperFrames</li><li>HTML to MP4</li><li>Product demos</li><li>Marketing shorts</li><li>Cinematic clips</li></ul></div></div>
   </div>
 </section>
 
@@ -298,13 +326,13 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-1"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#FDE366" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
   <div class="deco deco-daisy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150"><!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) --><style type="text/css">.cls-0 {fill:#FFFFFF;}.cls-1 {fill:#FCDF6C;}.cls-2 {fill:none;stroke:#232323;stroke-width:2.0745;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}.cls-3 {fill:#FFFFFF;stroke:#232323;stroke-width:2.0745;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}</style><path class="cls-3" d="m66.6 53.8-5.9-13.8c-2.2-5.9-4.6-17.9-1.7-26.2 1.7-4.9 6.7-11.4 15.4-11.4 8.7-0.2 13.4 4.6 15.7 8.6 4.8 8.1 2.5 20.3-0.1 27.7l-6.8 15.1"/><path class="cls-3" d="m92.1 115.2c1.3 5.8 1.9 13.8-0.2 19.9-1.9 5.1-6.4 12.5-16.9 12.5-8.4 0-14.9-5.3-16.8-13.1-1.7-7-0.6-15.2 1.7-22l6.7-16.4"/><path class="cls-3" d="m96 66.4 14.7-5.8c5.9-2.4 16.2-8.3 19.8-17 2.8-6.4 2.1-14.2-4.3-19.7-2.8-2.5-6.2-4.2-10.2-5-9.3-0.6-15.8 5.5-20.3 10.9-2.7 3.4-5.1 7.4-6.8 11l-5.7 12.8"/><path class="cls-3" d="m54 84-14.7 5.5c-5.7 2.1-12.3 6.6-15.9 10.9-1.9 2.3-4 5.7-4.9 8.9-2.1 8.5 2.8 18 11.7 21.8 4.9 1.3 9.3 0.9 13.6-1.2 7.6-3.6 13.8-12.1 16.9-18.5l5.9-13.6"/><path class="cls-3" d="m96.2 83.8 14.5 5.5c5.9 2.1 15.7 8.3 19.5 16.2 2.6 5.1 3.2 12.1-1.9 18.7-2.7 3.3-7 6.9-13.2 6.9-8.5 0-14.1-5-18.3-9.7-2.6-3.2-5.4-7.6-7.3-11.5l-6.1-14.2"/><path class="cls-3" d="m54 66.1-14.3-5.5c-5.7-2.1-15.9-3.4-23.1-2.1-6.2 1.2-11.9 5.9-13.4 12.1-1.7 7.6 1.7 17.2 11.9 20.2 7 2.1 16.8 1.1 23.6-1.1l15.5-5.9"/><path class="cls-3" d="m116.4 58.9c4.2-0.9 9.2-1.5 14.1-0.9 5.1 0.5 9.7 2.6 12.9 6.4 6.2 7 5.1 17.3-1.5 22.8-2.3 2.1-5.5 3.8-9.5 4.4-6.8 1.1-14.1 0.3-21.3-1.9"/><path class="cls-3" d="m60.7 40c-3.3-6.4-10.5-17.1-18.8-20.5-7.2-3.1-15.5-1.5-20.4 4.9-2.1 2.8-3.7 6.2-3.7 10-0.2 8.5 5.8 15.4 13.7 20.7 3.2 2.1 7 4.2 10.6 5.5"/><path class="cls-1" d="m75.1 52.1c-10.9 0-22.6 8.9-22.6 23 0 9.3 7 22.1 22.6 22.1 11.7 0 22.5-8.7 22.5-21.9 0-11.1-9.3-23.2-22.5-23.2z"/><path class="cls-2" d="m75.1 52.1c-10.9 0-22.6 8.9-22.6 23 0 9.3 7 22.1 22.6 22.1 11.7 0 22.5-8.7 22.5-21.9 0-11.1-9.3-23.2-22.5-23.2z"/></svg></div>
 
-  <h2>Today's Schedule</h2>
+  <h2>From Idea to Delivery</h2>
   <div class="timeline-wrap">
-    <div class="timeline-row"><div class="timeline-dot d1">1</div><div class="timeline-card"><h4>Morning Gathering</h4><p>Welcome circle and daily intentions</p></div></div>
-    <div class="timeline-row"><div class="timeline-dot d2">2</div><div class="timeline-card"><h4>Learning Block</h4><p>Core concepts and guided practice</p></div></div>
-    <div class="timeline-row"><div class="timeline-dot d3">3</div><div class="timeline-card"><h4>Creative Time</h4><p>Hands-on projects and exploration</p></div></div>
-    <div class="timeline-row"><div class="timeline-dot d4">4</div><div class="timeline-card"><h4>Break</h4><p>Refreshments and outdoor play</p></div></div>
-    <div class="timeline-row"><div class="timeline-dot d5">5</div><div class="timeline-card"><h4>Reflection</h4><p>Share learnings and closing circle</p></div></div>
+    <div class="timeline-row"><div class="timeline-dot d1">1</div><div class="timeline-card"><h4>Pick a Starting Point</h4><p>One sentence, a template, or a plugin</p></div></div>
+    <div class="timeline-row"><div class="timeline-dot d2">2</div><div class="timeline-card"><h4>Set the Visual Direction</h4><p>Palette, type, and spacing flow into generation</p></div></div>
+    <div class="timeline-row"><div class="timeline-dot d3">3</div><div class="timeline-card"><h4>Generate the Artifact</h4><p>Real runnable files, previewed and edited in a sandbox</p></div></div>
+    <div class="timeline-row"><div class="timeline-dot d4">4</div><div class="timeline-card"><h4>Ship It, or Film It</h4><p>Hand off to engineering, or render a video with HyperFrames</p></div></div>
+    <div class="timeline-row"><div class="timeline-dot d5">5</div><div class="timeline-card"><h4>Memory Compounds</h4><p>Every choice becomes context for the next run</p></div></div>
   </div>
 </section>
 
@@ -315,23 +343,23 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-daisy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150"><!-- SVG created with Arrow, by QuiverAI (https://quiver.ai) --><style type="text/css">.cls-0 {fill:#FFFFFF;}.cls-1 {fill:#FCDF6C;}.cls-2 {fill:none;stroke:#232323;stroke-width:2.0745;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}.cls-3 {fill:#FFFFFF;stroke:#232323;stroke-width:2.0745;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}</style><path class="cls-3" d="m66.6 53.8-5.9-13.8c-2.2-5.9-4.6-17.9-1.7-26.2 1.7-4.9 6.7-11.4 15.4-11.4 8.7-0.2 13.4 4.6 15.7 8.6 4.8 8.1 2.5 20.3-0.1 27.7l-6.8 15.1"/><path class="cls-3" d="m92.1 115.2c1.3 5.8 1.9 13.8-0.2 19.9-1.9 5.1-6.4 12.5-16.9 12.5-8.4 0-14.9-5.3-16.8-13.1-1.7-7-0.6-15.2 1.7-22l6.7-16.4"/><path class="cls-3" d="m96 66.4 14.7-5.8c5.9-2.4 16.2-8.3 19.8-17 2.8-6.4 2.1-14.2-4.3-19.7-2.8-2.5-6.2-4.2-10.2-5-9.3-0.6-15.8 5.5-20.3 10.9-2.7 3.4-5.1 7.4-6.8 11l-5.7 12.8"/><path class="cls-3" d="m54 84-14.7 5.5c-5.7 2.1-12.3 6.6-15.9 10.9-1.9 2.3-4 5.7-4.9 8.9-2.1 8.5 2.8 18 11.7 21.8 4.9 1.3 9.3 0.9 13.6-1.2 7.6-3.6 13.8-12.1 16.9-18.5l5.9-13.6"/><path class="cls-3" d="m96.2 83.8 14.5 5.5c5.9 2.1 15.7 8.3 19.5 16.2 2.6 5.1 3.2 12.1-1.9 18.7-2.7 3.3-7 6.9-13.2 6.9-8.5 0-14.1-5-18.3-9.7-2.6-3.2-5.4-7.6-7.3-11.5l-6.1-14.2"/><path class="cls-3" d="m54 66.1-14.3-5.5c-5.7-2.1-15.9-3.4-23.1-2.1-6.2 1.2-11.9 5.9-13.4 12.1-1.7 7.6 1.7 17.2 11.9 20.2 7 2.1 16.8 1.1 23.6-1.1l15.5-5.9"/><path class="cls-3" d="m116.4 58.9c4.2-0.9 9.2-1.5 14.1-0.9 5.1 0.5 9.7 2.6 12.9 6.4 6.2 7 5.1 17.3-1.5 22.8-2.3 2.1-5.5 3.8-9.5 4.4-6.8 1.1-14.1 0.3-21.3-1.9"/><path class="cls-3" d="m60.7 40c-3.3-6.4-10.5-17.1-18.8-20.5-7.2-3.1-15.5-1.5-20.4 4.9-2.1 2.8-3.7 6.2-3.7 10-0.2 8.5 5.8 15.4 13.7 20.7 3.2 2.1 7 4.2 10.6 5.5"/><path class="cls-1" d="m75.1 52.1c-10.9 0-22.6 8.9-22.6 23 0 9.3 7 22.1 22.6 22.1 11.7 0 22.5-8.7 22.5-21.9 0-11.1-9.3-23.2-22.5-23.2z"/><path class="cls-2" d="m75.1 52.1c-10.9 0-22.6 8.9-22.6 23 0 9.3 7 22.1 22.6 22.1 11.7 0 22.5-8.7 22.5-21.9 0-11.1-9.3-23.2-22.5-23.2z"/></svg></div>
   <div class="deco deco-cloud"><svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg"><style>.cl0{fill:#C6E3F6;}.cl1{fill:none;stroke:#000;stroke-width:2.1405;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}.cl2{fill:#fff;stroke:#000;stroke-width:2.1405;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;}</style><path class="cl2" d="m106.8 57.3c-.3 0 0 0 0 0 1.7 0 2.8.1 3.8.3.2-1 .3-2 .3-3.1 0-7.2-6.3-16.3-15.5-16.3-2 0-3.9.4-6.2 1.1-2.2-6.2-9.3-16-23.8-16-10 0-18.8 5.8-23 15-1.9-.7-4.1-1.1-6.7-1.1-10.1 0-19.2 8.3-19.2 19.6 0 1.3.2 2.6.4 4.3-7.6 1.5-14.2 8.2-14.2 17.7 0 8.4 6.4 18.9 17.4 18.9 2.2 0 3.8-.1 5.5-.7l27.3 2.6 48.1-4.7c1.9.5 3.8.8 6.2.8 11.3 0 18.2-9 18.2-19.7 0-7.8-6.4-17.4-15-18.4l-3.6-.3z"/><path class="cl0" d="m123.7 70.6c-1.4 6.3-6.6 14.5-17.8 14.6-1 0-1.9-.1-2.8-.2l-1.6.9c-2.9 2.8-6.9 5.3-12.5 5.3-2.1 0-4.4-.3-6.4-1.1-.5-.2-1.2-.1-1.6.2-2.1 1.6-7.4 5.2-14.8 5.2-5.1 0-10.5-1.9-15.2-5.5-.8-1.1-2.3-1.1-2.4.6-2 4-14.5 7.7-23-3.8-.5-1.2-2.1-1.4-2.3.6-8.8 1-16.3-2.3-19.6-10.6-1.4 5.3 1.5 20.3 16 20.2 2.2 0 4.2-.1 5.9-.6l28.3 4.2c3-1.5 4.2 4.3 12.6 4 6.1-.2 11.1-2 14.2-5.6 2 .6 3.9 1.6 7.7 1.6 5 0 9.5-1.5 12.5-5.6l3.5.4c1 .2 2 .2 3 .2 11.2 0 19.2-10 17.2-21.6l-.9-3.4z"/><path class="cl0" d="m31.7 65.4c1.7-4.3 5.9-7.8 12.7-7.8 1.7 0 3.5.3 5.1.8l-2.6 5c-1.3-.8-2.8-2.4-7-2-3.2.2-6.3 2.2-8.2 4z"/><path class="cl0" d="m82.5 58.7 2.1 4.9c1.3-.7 3-1.5 6-1.5s5.9 1.5 7.5 3.5c-1-4-5.2-7.5-11-7.5l-4.6.6z"/><path class="cl0" d="m90.1 39.4.5 5.7c1.9-1.4 6-4.7 8.5-5.5-3-1.5-6.6-1-9-.2z"/><path class="cl1" d="m23.4 50.9c1.5-2.9 5-7.3 11.2-7.8"/><path class="cl1" d="m50.4 35.8c2.5-2.9 8-7.1 16.5-6.7"/><path class="cl1" d="m71 29.8 1.3.3"/><path class="cl1" d="m68.7 58.1c3.2.5 6.4 2.4 9 5.2"/><path class="cl1" d="m112.6 63.7c2.8 1.2 6.3 4.9 7 9.3"/></svg></div>
 
-  <h2>Activity Breakdown</h2>
+  <h2>Plugins by Type (demo data)</h2>
   <div class="chart-container">
     <svg class="chart-svg" viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
       <line x1="70" y1="250" x2="660" y2="250" stroke="#2D2D2D" stroke-width="2"/><line x1="70" y1="20" x2="70" y2="250" stroke="#2D2D2D" stroke-width="2"/>
       <line x1="70" y1="200" x2="660" y2="200" stroke="#E0E0E0" stroke-width="1"/><line x1="70" y1="150" x2="660" y2="150" stroke="#E0E0E0" stroke-width="1"/><line x1="70" y1="100" x2="660" y2="100" stroke="#E0E0E0" stroke-width="1"/><line x1="70" y1="50" x2="660" y2="50" stroke="#E0E0E0" stroke-width="1"/>
-      <text x="60" y="255" text-anchor="end" font-family="Quicksand" font-size="11" fill="#6B6B6B" font-weight="600">0</text><text x="60" y="205" text-anchor="end" font-family="Quicksand" font-size="11" fill="#6B6B6B" font-weight="600">25</text><text x="60" y="155" text-anchor="end" font-family="Quicksand" font-size="11" fill="#6B6B6B" font-weight="600">50</text><text x="60" y="105" text-anchor="end" font-family="Quicksand" font-size="11" fill="#6B6B6B" font-weight="600">75</text><text x="60" y="55" text-anchor="end" font-family="Quicksand" font-size="11" fill="#6B6B6B" font-weight="600">100</text>
+      <text x="60" y="255" text-anchor="end" font-family="Quicksand" font-size="11" fill="#595959" font-weight="600">0</text><text x="60" y="205" text-anchor="end" font-family="Quicksand" font-size="11" fill="#595959" font-weight="600">25</text><text x="60" y="155" text-anchor="end" font-family="Quicksand" font-size="11" fill="#595959" font-weight="600">50</text><text x="60" y="105" text-anchor="end" font-family="Quicksand" font-size="11" fill="#595959" font-weight="600">75</text><text x="60" y="55" text-anchor="end" font-family="Quicksand" font-size="11" fill="#595959" font-weight="600">100</text>
       <rect x="95" y="90" width="65" height="160" rx="8" fill="#F8635F" stroke="#2D2D2D" stroke-width="2"/><rect x="195" y="130" width="65" height="120" rx="8" fill="#8DE3B7" stroke="#2D2D2D" stroke-width="2"/><rect x="295" y="60" width="65" height="190" rx="8" fill="#85C5FE" stroke="#2D2D2D" stroke-width="2"/><rect x="395" y="110" width="65" height="140" rx="8" fill="#FDE366" stroke="#2D2D2D" stroke-width="2"/><rect x="495" y="150" width="65" height="100" rx="8" fill="#D4A5E8" stroke="#2D2D2D" stroke-width="2"/><rect x="595" y="80" width="65" height="170" rx="8" fill="#F7C8D4" stroke="#2D2D2D" stroke-width="2"/>
       <text x="127" y="82" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">80</text><text x="227" y="122" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">60</text><text x="327" y="52" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">95</text><text x="427" y="102" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">70</text><text x="527" y="142" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">50</text><text x="627" y="72" text-anchor="middle" font-family="Fredoka One" font-size="13" fill="#2D2D2D">85</text>
-      <text x="127" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Reading</text><text x="227" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Writing</text><text x="327" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Science</text><text x="427" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Art</text><text x="527" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Music</text><text x="627" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Games</text>
+      <text x="127" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Prototypes</text><text x="227" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Slides</text><text x="327" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Posters</text><text x="427" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Dashboards</text><text x="527" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Video</text><text x="627" y="270" text-anchor="middle" font-family="Quicksand" font-size="11" fill="#2D2D2D" font-weight="700">Reports</text>
     </svg>
     <div class="chart-legend">
-      <div class="legend-item"><span class="legend-swatch" style="background:#F8635F"></span>Reading</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#8DE3B7"></span>Writing</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#85C5FE"></span>Science</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#FDE366"></span>Art</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#D4A5E8"></span>Music</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#F7C8D4"></span>Games</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#F8635F"></span>Prototypes</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#8DE3B7"></span>Slides</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#85C5FE"></span>Posters</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#FDE366"></span>Dashboards</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#D4A5E8"></span>Video</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#F7C8D4"></span>Reports</div>
     </div>
   </div>
 </section>
@@ -342,12 +370,12 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-1"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#D4A5E8" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
   <div class="deco deco-sun"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="26" fill="#FFCD57" stroke="#2D2D2D" stroke-width="2.8"/><g stroke="#2D2D2D" stroke-width="2.8" stroke-linecap="round"><line x1="60" y1="10" x2="60" y2="24"/><line x1="60" y1="96" x2="60" y2="110"/><line x1="10" y1="60" x2="24" y2="60"/><line x1="96" y1="60" x2="110" y2="60"/><line x1="24.5" y1="24.5" x2="34" y2="34"/><line x1="86" y1="86" x2="95.5" y2="95.5"/><line x1="24.5" y1="95.5" x2="34" y2="86"/><line x1="86" y1="34" x2="95.5" y2="24.5"/></g><circle cx="51" cy="55" r="3" fill="#2D2D2D"/><circle cx="69" cy="55" r="3" fill="#2D2D2D"/><path d="M 50 68 Q 60 76 70 68" fill="none" stroke="#2D2D2D" stroke-width="2.8" stroke-linecap="round"/></svg></div>
 
-  <h2>Key Focus Areas</h2>
+  <h2>What Makes It Different</h2>
   <div class="cards-grid">
-    <div class="info-card"><div class="card-icon i1">A</div><h4>Creative Expression</h4><p>Explore imagination through hands-on activities and open-ended projects that inspire original thinking.</p></div>
-    <div class="info-card"><div class="card-icon i2">B</div><h4>Critical Thinking</h4><p>Develop problem-solving skills with guided challenges that encourage analysis and reasoning.</p></div>
-    <div class="info-card"><div class="card-icon i3">C</div><h4>Collaboration</h4><p>Build teamwork through group activities that foster communication and shared discovery.</p></div>
-    <div class="info-card"><div class="card-icon i4">D</div><h4>Curiosity &amp; Wonder</h4><p>Nurture a love of learning with explorations that spark questions and joyful discovery.</p></div>
+    <div class="info-card"><div class="card-icon i1">A</div><h4>Desktop-Native</h4><p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable; agents get full terminal power.</p></div>
+    <div class="info-card"><div class="card-icon i2">B</div><h4>Plug In Agents, Don't Rebuild Them</h4><p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p></div>
+    <div class="info-card"><div class="card-icon i3">C</div><h4>It Learns Your Taste</h4><p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p></div>
+    <div class="info-card"><div class="card-icon i4">D</div><h4>Open by Default</h4><p>Apache-2.0 licensed, with 129 design systems built in. Fork it, self-host it, use it commercially — all allowed.</p></div>
   </div>
 </section>
 
@@ -361,8 +389,8 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
 
   <div class="quote-box">
     <div class="quote-mark">&ldquo;</div>
-    <p class="quote-text">Every day is a fresh beginning. Every moment is a new chance to learn, grow, and discover something wonderful.</p>
-    <p class="quote-author">- A Wise Educator</p>
+    <p class="quote-text">File-system semantics plus git-diffable design artifacts &mdash; design is finally under version control.</p>
+    <p class="quote-author">- An indie developer</p>
   </div>
 </section>
 
@@ -373,12 +401,12 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
   <div class="deco deco-star-1"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
   <div class="deco deco-star-2"><svg viewBox="0 0 100 98.6" xmlns="http://www.w3.org/2000/svg"><path fill="#FDE366" stroke="#2D2D2D" stroke-width="2.4166" stroke-miterlimit="10" d="m57.7 7.8 8.3 19.1c.5 1.3 1.5 2.1 2.8 2.3l21.5 2.2c6.4.8 9.4 8.3 5.3 13.7l-16.2 15.2c-1 .9-1.5 2.5-1.2 4.2l4.3 21.1c.9 6.2-4.9 11.6-12 8.7l-18.1-10.2c-1.4-.8-3.3-.8-4.8 0l-17.8 10.2c-6 2.9-13.2-.6-12.7-8l4.5-21.3c.3-1.7-.1-3.5-1.3-4.5l-15.2-13.5c-4.5-4.3-3.6-13.6 4.2-15.6l21.5-2.2c1.3-.1 2.3-.9 2.9-2.3l8.7-19.1c2.7-6 11.5-7.7 15.3 0z"/></svg></div>
 
-  <h2>Our Team</h2>
+  <h2>21+ Agents, Zero Config</h2>
   <div class="team-grid">
-    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#F7C8D4" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#85C5FE" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Alex Rivera</div><div class="team-role">Lead Guide</div></div>
-    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#FFCD57" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#A8E6CF" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Sam Chen</div><div class="team-role">Co-Teacher</div></div>
-    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#D4A5E8" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#F7C8D4" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Jordan Park</div><div class="team-role">Specialist</div></div>
-    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#8DE3B7" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#FDE366" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Taylor Kim</div><div class="team-role">Assistant</div></div>
+    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#F7C8D4" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#85C5FE" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Claude Code</div><div class="team-role">Auto-detected on PATH</div></div>
+    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#FFCD57" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#A8E6CF" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Codex CLI</div><div class="team-role">Zero configuration</div></div>
+    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#D4A5E8" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#F7C8D4" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Cursor Agent</div><div class="team-role">Full terminal power</div></div>
+    <div class="team-member"><div class="team-avatar"><svg viewBox="0 0 100 100"><circle cx="50" cy="36" r="18" fill="#8DE3B7" stroke="#2D2D2D" stroke-width="2.5"/><ellipse cx="50" cy="82" rx="28" ry="22" fill="#FDE366" stroke="#2D2D2D" stroke-width="2.5"/><circle cx="44" cy="34" r="2" fill="#2D2D2D"/><circle cx="56" cy="34" r="2" fill="#2D2D2D"/><path d="M 45 42 Q 50 46 55 42" fill="none" stroke="#2D2D2D" stroke-width="2" stroke-linecap="round"/></svg></div><div class="team-name">Gemini CLI</div><div class="team-role">BYOK endpoints</div></div>
   </div>
 </section>
 
@@ -391,11 +419,11 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
 
   <h2>How It Works</h2>
   <div class="process-flow">
-    <div class="process-step"><div class="step-circle s1">1</div><div class="step-title">Discover</div><div class="step-desc">Explore new topics through guided introductions and engaging materials</div></div>
+    <div class="process-step"><div class="step-circle s1">1</div><div class="step-title">Describe</div><div class="step-desc">Tell the agent your goal in one sentence, or start from a template or plugin</div></div>
     <div class="process-arrow">&rarr;</div>
-    <div class="process-step"><div class="step-circle s2">2</div><div class="step-title">Practice</div><div class="step-desc">Apply concepts with hands-on activities and collaborative exercises</div></div>
+    <div class="process-step"><div class="step-circle s2">2</div><div class="step-title">Generate</div><div class="step-desc">The agent reads full context and produces real runnable files in a sandbox</div></div>
     <div class="process-arrow">&rarr;</div>
-    <div class="process-step"><div class="step-circle s3">3</div><div class="step-title">Reflect</div><div class="step-desc">Share insights and celebrate progress with the community</div></div>
+    <div class="process-step"><div class="step-circle s3">3</div><div class="step-title">Ship</div><div class="step-desc">Hand off to engineering, or turn it into a marketing video with HyperFrames</div></div>
   </div>
 </section>
 
@@ -416,18 +444,18 @@ p{font-size:clamp(.95rem,1.3vw,1.15rem);line-height:1.6}
         <circle cx="100" cy="100" r="80" fill="none" stroke="#FDE366" stroke-width="30" stroke-dasharray="50.2 377" stroke-dashoffset="-301" transform="rotate(-90 100 100)"/>
         <circle cx="100" cy="100" r="80" fill="none" stroke="#D4A5E8" stroke-width="30" stroke-dasharray="25.1 377" stroke-dashoffset="-351.2" transform="rotate(-90 100 100)"/>
         <circle cx="100" cy="100" r="55" fill="#fff" stroke="#2D2D2D" stroke-width="2.5"/>
-        <text x="100" y="95" text-anchor="middle" font-family="Fredoka One" font-size="14" fill="#2D2D2D">Total</text>
-        <text x="100" y="115" text-anchor="middle" font-family="Fredoka One" font-size="20" fill="#2D2D2D">100%</text>
+        <text x="100" y="95" text-anchor="middle" font-family="Fredoka One" font-size="14" fill="#2D2D2D">GitHub Stars</text>
+        <text x="100" y="115" text-anchor="middle" font-family="Fredoka One" font-size="20" fill="#2D2D2D">60K+</text>
         <circle cx="100" cy="100" r="80" fill="none" stroke="#2D2D2D" stroke-width="2"/>
       </svg>
     </div>
     <div class="donut-legend-side">
-      <h3>Topic Distribution</h3>
-      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#F8635F"></span>Literacy - 33%</div>
-      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#8DE3B7"></span>Numeracy - 27%</div>
-      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#85C5FE"></span>Science - 20%</div>
-      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#FDE366"></span>Arts - 13%</div>
-      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#D4A5E8"></span>Movement - 7%</div>
+      <h3>Frontier AI design, back on every creator's desk</h3>
+      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#F8635F"></span>Open &middot; Local &middot; Agent-native</div>
+      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#8DE3B7"></span>Download Open Design — macOS &amp; Windows</div>
+      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#85C5FE"></span>Star on GitHub — github.com/nexu-io/open-design</div>
+      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#FDE366"></span>Join the community — discord.gg/qhbcCH8Am4</div>
+      <div class="d-legend-item"><span class="d-legend-swatch" style="background:#D4A5E8"></span>Follow along — x.com/nexudotio</div>
     </div>
   </div>
 </section>

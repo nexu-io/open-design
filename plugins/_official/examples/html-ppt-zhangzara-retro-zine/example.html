@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Retro Zine Business Presentation</title>
+  <title>Open Design — Retro Zine Presentation</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@400&family=Space+Grotesk:wght@400;500;600&display=swap');
 
     :root {
       --bg: #C8B99A;
       --bg-dark: #B8A98A;
-      --green: #008F4D;
-      --green-light: #00A85D;
+      --green: #00713B;        /* zine ink green, >=3:1 on kraft for display sizes */
+      --green-light: #1FAE6A;  /* green for use on black surfaces */
+      --green-deep: #0B5132;   /* green for small labels on kraft, >=4.5:1 */
       --black: #1A1A1A;
       --white: #F4EFE6;
       --line: #1A1A1A;
@@ -115,13 +116,39 @@
       opacity: 0;
       pointer-events: none;
       transform: translateY(20px);
-      transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
       overflow: hidden;
     }
     .slide.active {
       opacity: 1;
       pointer-events: all;
       transform: translateY(0);
+    }
+    /* staggered ink-in for slide children: opacity only, so rotated
+       collage pieces / stamps keep their own transforms intact */
+    @keyframes inkIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .slide.active > * {
+      animation: inkIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .slide.active > *:nth-child(2) { animation-delay: 0.07s; }
+    .slide.active > *:nth-child(3) { animation-delay: 0.14s; }
+    .slide.active > *:nth-child(4) { animation-delay: 0.21s; }
+    .slide.active > *:nth-child(5) { animation-delay: 0.28s; }
+    .slide.active > *:nth-child(6) { animation-delay: 0.35s; }
+    @media (prefers-reduced-motion: reduce) {
+      .slide {
+        transition: none;
+        transform: none;
+      }
+      .slide.active > * {
+        animation: none;
+      }
+      .progress-bar {
+        transition: none;
+      }
     }
 
     /* ---------- UTILITIES ---------- */
@@ -182,7 +209,7 @@
       font-weight: 600;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: var(--green);
+      color: var(--green-deep);
       margin-bottom: 12px;
     }
     .slide-hero .hero-title {
@@ -241,7 +268,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: 14px;
       letter-spacing: 3px;
-      color: var(--green);
+      color: var(--green-deep);
       margin-bottom: 20px;
     }
     .slide-split .split-heading {
@@ -272,17 +299,20 @@
       margin-top: 8px;
     }
 
-    /* ---------- SLIDE 3: STATEMENT ---------- */
+    /* ---------- SLIDE 3: STATEMENT ----------
+       green ink flooded onto kraft, not an inverted page;
+       the closing slide keeps the deck's single inversion */
     .slide-statement {
       text-align: center;
-      background: var(--green);
-      color: var(--white);
+      background: var(--bg);
+      color: var(--black);
+      box-shadow: inset 0 0 0 16px var(--green), inset 0 0 0 20px var(--bg), inset 0 0 0 23px var(--green);
     }
     .slide-statement .statement-line-top,
     .slide-statement .statement-line-bottom {
       width: 60px;
       height: 4px;
-      background: var(--white);
+      background: var(--black);
       margin: 0 auto;
     }
     .slide-statement .statement-quote {
@@ -293,6 +323,7 @@
       letter-spacing: 2px;
       margin: 40px auto;
       max-width: 900px;
+      color: var(--green);
     }
     .slide-statement .statement-author {
       font-family: 'Caveat', cursive;
@@ -320,16 +351,21 @@
       width: 100%;
       max-width: 1000px;
       border: 3px solid var(--black);
+      background: var(--white);
     }
+    /* hairline grid: single shared rules instead of doubled box borders */
     .slide-grid .grid-box {
       padding: 32px;
-      border: 1.5px solid var(--black);
+      border-right: 1.5px solid var(--black);
+      border-bottom: 1.5px solid var(--black);
     }
+    .slide-grid .grid-box:nth-child(2n) { border-right: none; }
+    .slide-grid .grid-box:nth-last-child(-n+2) { border-bottom: none; }
     .slide-grid .grid-box-label {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 13px;
       letter-spacing: 3px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
       margin-bottom: 8px;
     }
@@ -470,7 +506,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(14px, 1.5vw, 18px);
       letter-spacing: 4px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
       margin-bottom: 24px;
       text-align: center;
@@ -481,12 +517,15 @@
       gap: 0;
       max-width: 1000px;
       width: 100%;
+      border: 3px solid var(--black);
+      background: var(--white);
     }
     .slide-numbers .num-item {
-      padding: 24px 20px;
-      border: 1.5px solid var(--black);
+      padding: 32px 24px;
+      border-right: 1.5px solid var(--black);
       text-align: center;
     }
+    .slide-numbers .num-item:last-child { border-right: none; }
     .slide-numbers .num-digit {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(44px, 6vw, 80px);
@@ -521,7 +560,7 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(14px, 1.5vw, 18px);
       letter-spacing: 4px;
-      color: var(--green);
+      color: var(--green-deep);
       text-transform: uppercase;
     }
     .slide-collage .collage-container {
@@ -587,7 +626,7 @@
       background: var(--black);
       color: var(--bg);
     }
-    .slide-collage .piece-4 h3 { color: var(--green); }
+    .slide-collage .piece-4 h3 { color: var(--green-light); }
     .slide-collage .piece-4 p { color: var(--bg); }
 
     /* Tape effects */
@@ -669,13 +708,13 @@
       bottom: -20px;
       right: 30px;
       background: var(--black);
-      color: var(--green);
+      color: var(--green-light);
       font-family: 'Bebas Neue', sans-serif;
       font-size: 18px;
       letter-spacing: 2px;
       padding: 10px 24px;
       transform: rotate(-8deg);
-      border: 2px solid var(--green);
+      border: 2px solid var(--green-light);
     }
 
     /* ---------- SLIDE 10: CLOSING ---------- */
@@ -689,7 +728,7 @@
       font-size: 12px;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: var(--green);
+      color: var(--green-light);
       margin-bottom: 24px;
     }
     .slide-closing .closing-title {
@@ -702,13 +741,13 @@
     .slide-closing .closing-divider {
       width: 80px;
       height: 4px;
-      background: var(--green);
+      background: var(--green-light);
       margin: 32px auto;
     }
     .slide-closing .closing-hand {
       font-family: 'Caveat', cursive;
       font-size: clamp(24px, 3vw, 36px);
-      color: var(--green);
+      color: var(--green-light);
       margin-top: 16px;
     }
     .slide-closing .closing-social {
@@ -724,12 +763,12 @@
     .slide-closing .closing-social a {
       color: var(--bg);
       text-decoration: none;
-      border-bottom: 2px solid var(--green);
+      border-bottom: 2px solid var(--green-light);
       padding-bottom: 4px;
       transition: color 0.3s;
     }
     .slide-closing .closing-social a:hover {
-      color: var(--green);
+      color: var(--green-light);
     }
 
     /* ---------- HANDWRITTEN SVG ILLUSTRATION ---------- */
@@ -745,7 +784,11 @@
       .slide-split { flex-direction: column; }
       .slide-split .split-left { border-right: none; border-bottom: 3px solid var(--black); }
       .slide-grid .grid-boxes { grid-template-columns: 1fr; }
+      .slide-grid .grid-box { border-right: none; border-bottom: 1.5px solid var(--black); }
+      .slide-grid .grid-box:last-child { border-bottom: none; }
       .slide-numbers .num-grid { grid-template-columns: 1fr; }
+      .slide-numbers .num-item { border-right: none; border-bottom: 1.5px solid var(--black); }
+      .slide-numbers .num-item:last-child { border-bottom: none; }
       .slide-editorial .ed-columns { grid-template-columns: 1fr; gap: 24px; }
       .slide-editorial .ed-col:first-child { border-right: none; padding-right: 0; border-bottom: 2px solid var(--black); padding-bottom: 24px; }
       .slide-collage .collage-piece { position: relative; top: auto; left: auto; right: auto; bottom: auto; width: 90%; height: auto; margin: 10px auto; transform: none; }
@@ -770,8 +813,8 @@
 
     <!-- SLIDE 1: HERO TITLE -->
     <div class="slide slide-hero active" data-index="0">
-      <div class="hero-label">Q3 Strategic Overview</div>
-      <div class="hero-title">NEXUS<br>VENTURES</div>
+      <div class="hero-label">Open-Source &middot; Local &middot; Agent-Driven</div>
+      <div class="hero-title">OPEN<br>DESIGN</div>
       <svg class="hero-illustration" viewBox="0 0 300 200" fill="none" xmlns="http://www.w3.org/2000/svg">
         <ellipse cx="110" cy="120" rx="60" ry="45" fill="#1A1A1A" stroke="#1A1A1A" stroke-width="3"/>
         <circle cx="110" cy="120" r="18" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
@@ -787,24 +830,25 @@
         <path d="M30 160 L50 155 L45 175 Z" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
         <path d="M240 145 L260 140 L255 160 Z" fill="#C8B99A" stroke="#1A1A1A" stroke-width="2"/>
       </svg>
-      <div class="hero-sub">Growth &mdash; Innovation &mdash; Partnership</div>
+      <div class="hero-sub">Apache-2.0 &mdash; Runs Locally &mdash; BYOK</div>
       <div class="hero-date">2026</div>
     </div>
 
     <!-- SLIDE 2: SPLIT EDITORIAL -->
     <div class="slide slide-split" data-index="1">
       <div class="split-left">
-        <div class="split-label">Our Mission</div>
-        <div class="split-heading">Building<br>Tomorrow</div>
+        <div class="split-label">Why Open Design</div>
+        <div class="split-heading">Design,<br>Set Free</div>
         <div class="split-body">
-          We partner with ambitious teams to turn complex challenges into scalable solutions. 
-          Through disciplined strategy and creative execution, we help organizations 
-          outpace change and deliver lasting value to their customers.
+          In April 2026, Claude Design proved an LLM can truly design &mdash; producing real
+          design artifacts, not prose about design. Yet it is closed-source, paid, and
+          cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK.
+          Open Design sets that capability free.
         </div>
       </div>
       <div class="split-right">
-        <div class="split-stat">340%</div>
-        <div class="split-stat-label">year-over-year growth</div>
+        <div class="split-stat">60K+</div>
+        <div class="split-stat-label">GitHub stars and counting</div>
       </div>
     </div>
 
@@ -812,10 +856,10 @@
     <div class="slide slide-statement" data-index="2">
       <div class="statement-line-top"></div>
       <div class="statement-quote">
-        "The companies that thrive<br>are not the ones that predict<br>the future. They are the ones<br>that build it."
+        "Frontier AI design,<br>back on every<br>creator's desk."
       </div>
       <div class="statement-line-bottom"></div>
-      <div class="statement-author">&mdash; Our founding principle since day one</div>
+      <div class="statement-author">&mdash; Open &middot; Local &middot; Agent-native</div>
     </div>
 
     <!-- SLIDE 4: INFO GRID -->
@@ -823,20 +867,20 @@
       <div class="grid-header">At a Glance</div>
       <div class="grid-boxes">
         <div class="grid-box">
-          <div class="grid-box-label">Founded</div>
-          <div class="grid-box-value"><strong>2019</strong> &mdash; San Francisco, CA</div>
+          <div class="grid-box-label">GitHub Stars</div>
+          <div class="grid-box-value"><strong>60K+</strong> &mdash; open source, Apache-2.0</div>
         </div>
         <div class="grid-box">
-          <div class="grid-box-label">Team</div>
-          <div class="grid-box-value"><strong>120</strong> people across 4 continents</div>
+          <div class="grid-box-label">Contributors</div>
+          <div class="grid-box-value"><strong>300+</strong> people building together</div>
         </div>
         <div class="grid-box">
-          <div class="grid-box-label">Clients</div>
-          <div class="grid-box-value"><strong>48</strong> active partnerships</div>
+          <div class="grid-box-label">Plugins</div>
+          <div class="grid-box-value"><strong>217+</strong> in the ecosystem</div>
         </div>
         <div class="grid-box">
-          <div class="grid-box-label">Revenue</div>
-          <div class="grid-box-value">$12.4M ARR &mdash; <strong>profitable</strong></div>
+          <div class="grid-box-label">Design Systems</div>
+          <div class="grid-box-value"><strong>129</strong> ready to import</div>
         </div>
       </div>
     </div>
@@ -853,72 +897,71 @@
           <line x1="40" y1="200" x2="360" y2="200" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
           <line x1="80" y1="80" x2="320" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
           <line x1="320" y1="80" x2="80" y2="320" stroke="#1A1A1A" stroke-width="2" opacity="0.1"/>
-          <path d="M200 40 Q240 120 320 200 Q240 280 200 360 Q160 280 80 200 Q160 120 200 40" stroke="#008F4D" stroke-width="3" fill="none" opacity="0.2"/>
+          <path d="M200 40 Q240 120 320 200 Q240 280 200 360 Q160 280 80 200 Q160 120 200 40" stroke="#00713B" stroke-width="3" fill="none" opacity="0.2"/>
         </svg>
       </div>
       <div class="visual-overlay stamp">
-        <h2>Q3<br>Target</h2>
-        <p>$18M ARR by December</p>
+        <h2>-80%<br>Cost</h2>
+        <p>$500 &rarr; ~$73 per month vs. Claude Design</p>
       </div>
-      <div class="visual-caption">Fiscal year ending March 2027</div>
+      <div class="visual-caption">Full-stack BYOK &mdash; your keys, your machine, your bill</div>
     </div>
 
     <!-- SLIDE 6: EDITORIAL -->
     <div class="slide slide-editorial" data-index="5">
       <div class="ed-header">
-        <h2>Product<br>Roadmap</h2>
-        <div class="ed-issue">FY 2026 / 2027</div>
+        <h2>From Idea<br>To Delivery</h2>
+        <div class="ed-issue">FIVE STEPS</div>
       </div>
       <div class="ed-columns">
         <div class="ed-col">
-          <span class="ed-drop">P</span>hase one is about foundation — refining our core platform, 
-          improving onboarding velocity, and expanding our API surface to serve 
-          <span class="ed-highlight">enterprise clients</span> with stricter compliance needs. 
-          We shipped 14 major releases this quarter alone.
+          <span class="ed-drop">P</span>ick a starting point — describe your goal in one sentence,
+          or begin from a template or plugin. Then set the visual direction: palette, type,
+          and spacing flow into generation automatically, drawn from your
+          <span class="ed-highlight">design systems</span>.
           <br><br>
-          The feedback loop with early adopters has sharpened our roadmap significantly. 
-          What started as a single feature request is now a dedicated vertical.
+          The agent reads full context — local files, Figma exports, code repos — and produces
+          real runnable files, previewed and edited in a sandbox.
         </div>
         <div class="ed-col">
-          <strong style="font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--green);">PHASE TWO: SCALE</strong>
+          <strong style="font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: var(--green-deep);">SHIP IT, OR FILM IT</strong>
           <br><br>
-          Next quarter we shift from build mode to distribution. The product is proven. 
-          Now we need partners, channels, and the operational muscle to support 
-          10x user growth without breaking the experience.
+          Hand the artifact off to engineering, or turn it into a marketing video with
+          HyperFrames — an HTML-to-MP4 pipeline that runs entirely on your own machine.
           <br><br>
-          International expansion is next. Two new regions. Localized support. 
-          Same product ethos, adapted for new markets.
+          Then memory compounds. Every choice becomes design systems, preferences,
+          and context for the next run.
           <br><br>
-          <em style="font-family: 'Caveat', cursive; font-size: 22px;">Speed without sacrifice is the goal.</em>
+          <em style="font-family: 'Caveat', cursive; font-size: 22px;">It learns your taste — every run lands closer.</em>
         </div>
       </div>
     </div>
 
     <!-- SLIDE 7: NUMBERED FEATURES -->
     <div class="slide slide-numbers" data-index="6">
-      <div class="num-header">Our Core Values</div>
+      <div class="num-header">Three Principles</div>
       <div class="num-grid">
         <div class="num-item">
           <div class="num-digit">01</div>
-          <div class="num-label">Clarity</div>
-          <div class="num-desc">Complex problems deserve simple explanations.</div>
+          <div class="num-label">Desktop-Native</div>
+          <div class="num-desc">Design happens where your files, repos, and terminal live.</div>
         </div>
         <div class="num-item">
           <div class="num-digit">02</div>
-          <div class="num-label">Velocity</div>
-          <div class="num-desc">Ship fast, learn faster, iterate always.</div>
+          <div class="num-label">Agent-Native</div>
+          <div class="num-desc">Claude Code, Codex, Cursor — plugged in, not rebuilt.</div>
         </div>
         <div class="num-item">
           <div class="num-digit">03</div>
-          <div class="num-label">Trust</div>
-          <div class="num-desc">Every partnership is built on radical transparency.</div>
+          <div class="num-label">Memory</div>
+          <div class="num-desc">Every choice brings the next generation closer to your taste.</div>
         </div>
       </div>
     </div>
 
     <!-- SLIDE 8: COLLAGE -->
     <div class="slide slide-collage" data-index="7">
-      <div class="collage-header">Capabilities</div>
+      <div class="collage-header">What You Can Make</div>
       <div class="collage-container">
         <div class="tape" style="top: 12%; left: 30%; transform: rotate(-25deg);"></div>
         <div class="tape" style="top: 10%; right: 22%; transform: rotate(35deg);"></div>
@@ -926,20 +969,20 @@
         <div class="tape" style="bottom: 18%; right: 28%; transform: rotate(-40deg);"></div>
 
         <div class="collage-piece piece-1">
-          <h3>Strategy</h3>
-          <p>Market analysis, competitive positioning, and roadmaps that bridge ambition with execution.</p>
+          <h3>Prototypes</h3>
+          <p>High-fidelity mobile and web prototypes — real, runnable code you can hand to engineering.</p>
         </div>
         <div class="collage-piece piece-2">
-          <h3>Design</h3>
-          <p>Product design, brand systems, and user experiences that make complexity feel effortless.</p>
+          <h3>Slides</h3>
+          <p>Creative decks and research reports — like the one you are reading right now.</p>
         </div>
         <div class="collage-piece piece-3">
-          <h3>Engineering</h3>
-          <p>Scalable architecture, robust APIs, and infrastructure that grows with your demand.</p>
+          <h3>HyperFrames</h3>
+          <p>HTML-to-MP4 marketing shorts and product demos, rendered programmatically.</p>
         </div>
         <div class="collage-piece piece-4">
-          <h3>Growth</h3>
-          <p>Go-to-market planning, partner programs, and revenue operations that accelerate traction.</p>
+          <h3>Live Artifacts</h3>
+          <p>Interactive dashboards and live briefs — versioned and git-diffable like code.</p>
         </div>
       </div>
     </div>
@@ -947,40 +990,40 @@
     <!-- SLIDE 9: RSVP -->
     <div class="slide slide-rsvp" data-index="8">
       <div class="rsvp-card">
-        <div class="rsvp-title">Let's Talk</div>
-        <div class="rsvp-subtitle">Ready to explore what we can build together?</div>
+        <div class="rsvp-title">Your First Run</div>
+        <div class="rsvp-subtitle">21+ coding agents auto-detected from PATH — zero config.</div>
         <div class="rsvp-fields">
           <div class="rsvp-field">
-            <label>Name</label>
-            <div class="hand-line">_________________________________</div>
+            <label>Agent</label>
+            <div class="hand-line">Claude Code — already on your machine</div>
           </div>
           <div class="rsvp-field">
-            <label>Company</label>
-            <div class="hand-line">_________________________________</div>
+            <label>Keys</label>
+            <div class="hand-line">BYOK — Anthropic / OpenAI / Azure / Google</div>
           </div>
           <div class="rsvp-field">
-            <label>Email</label>
-            <div class="hand-line">_________________________________</div>
+            <label>Design System</label>
+            <div class="hand-line">one of 129, or import your own</div>
           </div>
           <div class="rsvp-field">
-            <label>Project</label>
-            <div class="hand-line">_________________________________</div>
+            <label>Artifact</label>
+            <div class="hand-line">a prototype, a deck, a video…</div>
           </div>
         </div>
-        <div class="rsvp-stamp">CONTACT US</div>
+        <div class="rsvp-stamp">NO SIGN-UP</div>
       </div>
     </div>
 
     <!-- SLIDE 10: CLOSING -->
     <div class="slide slide-closing" data-index="9">
-      <div class="closing-label">Thank You</div>
-      <div class="closing-title">Let's Build<br>Together</div>
+      <div class="closing-label">Open &middot; Local &middot; Agent-Native</div>
+      <div class="closing-title">Back On<br>Your Desk</div>
       <div class="closing-divider"></div>
-      <div class="closing-hand">hello@nexusventures.co &mdash; San Francisco &mdash; Worldwide</div>
+      <div class="closing-hand">github.com/nexu-io/open-design &mdash; macOS &amp; Windows</div>
       <div class="closing-social">
-        <a href="#">LinkedIn</a>
-        <a href="#">Contact</a>
-        <a href="#">Careers</a>
+        <a href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener">GitHub</a>
+        <a href="https://discord.gg/qhbcCH8Am4" target="_blank" rel="noreferrer noopener">Discord</a>
+        <a href="https://x.com/nexudotio" target="_blank" rel="noreferrer noopener">X</a>
       </div>
     </div>
 

@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cartesian Presentation Template</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <title>Open Design — Cartesian Presentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -17,16 +16,32 @@
             --bg-primary: #ede8e0;
             --bg-secondary: #e2dbd1;
             --text-primary: #1a1a1a;
-            --text-secondary: #5a5a5a;
-            --accent: #8a8178;
+            --text-secondary: #4f4b45;
+            --accent: #8c4130; /* quiet rubric red, manuscript rubrication; 5.7:1 on --bg-primary */
             --line: #b8b0a4;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'Source Serif 4', Georgia, serif;
+            --ease-out: cubic-bezier(.16, 1, .3, 1);
         }
 
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             background: var(--bg-primary);
             color: var(--text-primary);
             overflow: hidden;
+        }
+
+        /* Faint paper grain, part of the Cartesian manuscript identity.
+           Inline SVG turbulence, no remote assets. */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            pointer-events: none;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 160px 160px;
         }
 
         .presentation {
@@ -43,10 +58,11 @@
             left: 0;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.6s ease, visibility 0.6s ease;
+            transition: opacity 0.6s var(--ease-out), visibility 0.6s var(--ease-out);
             display: flex;
             flex-direction: column;
-            padding: 4vh 4vw;
+            /* Generous book margins; the page should breathe like a set spread */
+            padding: 6vh 6vw;
             background: var(--bg-primary);
             overflow: hidden;
         }
@@ -56,29 +72,24 @@
             visibility: visible;
         }
 
-        /* Geometric decorations */
-        .geo-lines {
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 45vw;
-            height: 45vh;
-            pointer-events: none;
-            z-index: 0;
+        /* Quiet entrance: content rises gently on each slide change.
+           Transform + opacity only, ease-out. */
+        @keyframes slide-rise {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: none; }
         }
 
-        .geo-circle {
-            position: absolute;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            opacity: 0.5;
+        .slide.active .content > * {
+            animation: slide-rise 0.7s var(--ease-out) both;
         }
 
-        .geo-arc {
-            position: absolute;
-            border: 1px dashed var(--line);
-            border-radius: 50%;
-            opacity: 0.3;
+        .slide.active .content > *:nth-child(2) { animation-delay: 0.07s; }
+        .slide.active .content > *:nth-child(3) { animation-delay: 0.14s; }
+        .slide.active .content > *:nth-child(4) { animation-delay: 0.21s; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active .content > * { animation: none; }
+            .slide, .nav-dot, .nav-arrow { transition: none; }
         }
 
         /* Navigation */
@@ -94,26 +105,33 @@
         }
 
         .nav-dot {
-            width: 8px;
-            height: 8px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
-            background: var(--line);
+            background: transparent;
+            border: 1px solid var(--line);
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background 0.3s var(--ease-out), transform 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+        }
+
+        .nav-dot:hover {
+            border-color: var(--accent);
         }
 
         .nav-dot.active {
-            background: var(--text-primary);
-            transform: scale(1.3);
+            background: var(--accent);
+            border-color: var(--accent);
+            transform: scale(1.25);
         }
 
         .slide-counter {
             position: fixed;
             bottom: 3vh;
             right: 3vw;
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
+            font-variant-numeric: tabular-nums;
             font-size: 0.75rem;
-            color: var(--accent);
+            color: var(--text-secondary);
             letter-spacing: 2px;
             z-index: 100;
         }
@@ -130,27 +148,35 @@
         .nav-arrow {
             width: 40px;
             height: 40px;
-            border: 1px solid var(--line);
+            border: 1px solid var(--text-secondary);
+            border-radius: 50%;
             background: transparent;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             color: var(--text-primary);
-            transition: all 0.3s ease;
+            transition: background 0.3s var(--ease-out), color 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
         }
 
         .nav-arrow:hover {
             background: var(--text-primary);
+            border-color: var(--text-primary);
             color: var(--bg-primary);
         }
 
         /* Typography */
         h1, h2, h3 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-weight: 400;
-            line-height: 1.1;
+            line-height: 1.08;
+            letter-spacing: -0.015em;
+            text-wrap: balance;
+        }
+
+        h4 {
+            font-weight: 600;
         }
 
         h1 {
@@ -166,19 +192,27 @@
         }
 
         p, li {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             font-size: clamp(0.9rem, 1.2vw, 1.1rem);
-            line-height: 1.6;
+            line-height: 1.65;
             color: var(--text-secondary);
+            max-width: 62ch;
+            /* Oldstyle figures sit into the serif text like a set manuscript page */
+            font-variant-numeric: oldstyle-nums;
+        }
+
+        ::selection {
+            background: var(--accent);
+            color: var(--bg-primary);
         }
 
         .label {
-            font-family: 'Inter', sans-serif;
-            font-size: 0.75rem;
+            font-family: var(--font-body);
+            font-size: 0.72rem;
             text-transform: uppercase;
-            letter-spacing: 3px;
+            letter-spacing: 0.22em;
             color: var(--accent);
-            font-weight: 500;
+            font-weight: 600;
         }
 
         /* Slide 1: Title */
@@ -202,10 +236,11 @@
         }
 
         .slide-title .subtitle {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-body);
             font-size: clamp(1rem, 1.5vw, 1.3rem);
+            line-height: 1.6;
             color: var(--text-secondary);
-            max-width: 40vw;
+            max-width: 44ch;
         }
 
         /* All geo-decoration instances are decorative overlays, not flex
@@ -271,10 +306,11 @@
         }
 
         .slide-agenda .agenda-number {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.5rem;
             color: var(--accent);
             min-width: 3vw;
+            font-variant-numeric: lining-nums tabular-nums;
         }
 
         /* Slide 3: Statement */
@@ -295,12 +331,13 @@
             height: 100%;
         }
 
+        /* Rubricated opening quote, echoing the manuscript-red accent */
         .slide-statement .quote-mark {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 5rem;
-            line-height: 1;
-            color: var(--line);
-            opacity: 0.5;
+            line-height: 0.6;
+            color: var(--accent);
+            opacity: 0.45;
             display: block;
             margin-bottom: 2vh;
         }
@@ -336,6 +373,80 @@
             position: relative;
             height: 55vh;
             width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Hand-drawn cost comparison: flat single-hue bars, accent on ours */
+        .cost-bars {
+            flex: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 6vw;
+            border-bottom: 1px solid var(--line);
+            min-height: 0;
+        }
+
+        .cost-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            width: 9vw;
+            height: 100%;
+        }
+
+        .cost-value {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            margin-bottom: 1.2vh;
+            color: var(--text-primary);
+            font-variant-numeric: lining-nums tabular-nums;
+        }
+
+        .cost-fill {
+            width: 100%;
+            background: var(--text-primary);
+        }
+
+        .cost-fill.is-ours {
+            background: var(--accent);
+        }
+
+        .cost-bar-label {
+            margin-top: 1.5vh;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .cost-bars-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .cost-bar-labels {
+            display: flex;
+            justify-content: center;
+            gap: 6vw;
+        }
+
+        .cost-bar-labels .cost-bar-label {
+            width: 9vw;
+        }
+
+        .chart-caption {
+            margin-top: 2.5vh;
+            text-align: center;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent);
         }
 
         /* Slide 5: Two Column */
@@ -405,9 +516,10 @@
         }
 
         .slide-twocol .stat-item h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 2rem;
             margin-bottom: 0.5vh;
+            font-variant-numeric: lining-nums;
         }
 
         .slide-twocol .stat-item span {
@@ -447,21 +559,16 @@
         }
 
         .slide-cards .card {
-            border: 1px solid var(--line);
-            padding: 4vh 2vw;
-            background: rgba(255,255,255,0.3);
+            border-top: 1px solid var(--text-primary);
+            padding: 3.5vh 0.5vw 0 0;
+            background: transparent;
         }
 
         .slide-cards .card-icon {
-            width: 40px;
-            height: 40px;
-            border: 1px solid var(--line);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 3vh;
-            font-size: 1rem;
+            font-family: var(--font-display);
+            font-style: italic;
+            margin-bottom: 2.5vh;
+            font-size: 1.15rem;
             color: var(--accent);
         }
 
@@ -494,10 +601,38 @@
             flex: 1;
             position: relative;
             min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
 
-        .slide-linechart .chart-wrapper canvas {
-            max-height: 100%;
+        .slide-linechart .chart-wrapper svg {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+        }
+
+        .slide-linechart .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 3vw;
+            padding-top: 2vh;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+        }
+
+        .slide-linechart .chart-legend .key {
+            display: inline-block;
+            width: 22px;
+            height: 0;
+            border-top: 2px solid var(--text-primary);
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .slide-linechart .chart-legend .key.dashed {
+            border-top-style: dashed;
+            border-top-color: var(--line);
         }
 
         /* Slide 8: Timeline */
@@ -544,7 +679,7 @@
         }
 
         .slide-timeline .timeline-item h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.2rem;
             margin-bottom: 1vh;
             margin-top: 2vh;
@@ -602,7 +737,7 @@
         }
 
         .slide-team .team-member h4 {
-            font-family: 'Playfair Display', serif;
+            font-family: var(--font-display);
             font-size: 1.2rem;
             margin-bottom: 0.5vh;
         }
@@ -662,29 +797,6 @@
             border-radius: 50%;
         }
 
-        /* Vertical line decoration */
-        .vertical-line {
-            position: absolute;
-            left: 8vw;
-            top: 0;
-            width: 1px;
-            height: 100%;
-            background: var(--line);
-            opacity: 0.3;
-            z-index: 0;
-        }
-
-        /* Horizontal accent */
-        .horizontal-accent {
-            position: absolute;
-            bottom: 15vh;
-            left: 0;
-            width: 20vw;
-            height: 1px;
-            background: var(--text-primary);
-            z-index: 0;
-        }
-
         @media (max-aspect-ratio: 4/3) {
             .slide-agenda .content,
             .slide-barchart .content,
@@ -719,9 +831,9 @@
         <div class="slide slide-title active">
             <div class="geo-decoration"></div>
             <div class="content">
-                <div class="label">Presentation Template</div>
-                <h1>Cartesian</h1>
-                <p class="subtitle">A minimalist framework for strategic narratives. Clean geometry meets editorial refinement.</p>
+                <div class="label">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
+                <h1>Open Design</h1>
+                <p class="subtitle">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — on your own machine.</p>
             </div>
         </div>
 
@@ -730,15 +842,15 @@
             <div class="content">
                 <div class="left-col">
                     <div class="label">Overview</div>
-                    <h2>Session Agenda</h2>
-                    <p>An outline of key discussion points structured to guide our strategic conversation forward.</p>
+                    <h2>Agenda</h2>
+                    <p>Why Open Design exists, what the numbers say, and how the workflow and agent ecosystem fit together.</p>
                 </div>
                 <div class="right-col">
                     <ul class="agenda-list">
-                        <li><span class="agenda-number">01</span> Market Position Analysis</li>
-                        <li><span class="agenda-number">02</span> Core Value Proposition</li>
-                        <li><span class="agenda-number">03</span> Growth Trajectory</li>
-                        <li><span class="agenda-number">04</span> Implementation Roadmap</li>
+                        <li><span class="agenda-number">01</span> Why Open Design</li>
+                        <li><span class="agenda-number">02</span> By the Numbers</li>
+                        <li><span class="agenda-number">03</span> Pillars &amp; Workflow</li>
+                        <li><span class="agenda-number">04</span> Agent Ecosystem</li>
                     </ul>
                 </div>
             </div>
@@ -747,9 +859,9 @@
         <!-- Slide 3: Statement -->
         <div class="slide slide-statement">
             <div class="content">
-                <span class="quote-mark">"</span>
-                <h2>Precision in approach defines the boundary between noise and signal.</h2>
-                <div class="attribution">Guiding Principle</div>
+                <span class="quote-mark" aria-hidden="true">&ldquo;</span>
+                <h2>File-system semantics plus git-diffable design artifacts — design is finally under version control.</h2>
+                <div class="attribution">Indie Developer</div>
             </div>
             <div class="geo-decoration" style="left: -10vw; top: 10vh; width: 40vw; height: 40vw; opacity: 0.2;"></div>
         </div>
@@ -758,13 +870,29 @@
         <div class="slide slide-barchart">
             <div class="content">
                 <div class="left-col">
-                    <div class="label">Performance Data</div>
-                    <h2>Quarterly Metrics</h2>
-                    <p>Comparative analysis across key business indicators demonstrating sustained momentum and operational efficiency.</p>
+                    <div class="label">The Cost Story</div>
+                    <h2>&minus;80% Monthly Cost</h2>
+                    <p>Compared with Claude Design at $500 per month, Open Design with BYOK runs at roughly $73 — the same frontier design capability at a fraction of the cost.</p>
                 </div>
                 <div class="right-col">
                     <div class="chart-container">
-                        <canvas id="barChart"></canvas>
+                        <div class="cost-bars-wrap">
+                            <div class="cost-bars">
+                                <div class="cost-bar">
+                                    <div class="cost-value">$500</div>
+                                    <div class="cost-fill" style="height: 78%;"></div>
+                                </div>
+                                <div class="cost-bar">
+                                    <div class="cost-value">$73</div>
+                                    <div class="cost-fill is-ours" style="height: 11.4%;"></div>
+                                </div>
+                            </div>
+                            <div class="cost-bar-labels">
+                                <div class="cost-bar-label">Claude Design</div>
+                                <div class="cost-bar-label">Open Design (BYOK)</div>
+                            </div>
+                        </div>
+                        <div class="chart-caption">Monthly cost (USD)</div>
                     </div>
                 </div>
             </div>
@@ -775,26 +903,26 @@
             <div class="content">
                 <div class="left-col">
                     <div class="image-placeholder">
-                        <span class="image-label">Visual Reference</span>
+                        <span class="image-label">Product Preview</span>
                     </div>
                 </div>
                 <div class="right-col">
-                    <div class="label">Case Study</div>
-                    <h2>Structural Overview</h2>
-                    <p>A comprehensive examination of foundational elements that define our operational framework and strategic positioning within the market landscape.</p>
-                    <p>Through iterative refinement and measured adaptation, the methodology ensures alignment with evolving objectives and stakeholder expectations.</p>
+                    <div class="label">Ecosystem</div>
+                    <h2>An Open Ecosystem</h2>
+                    <p>Desktop-first by design: local files, Figma exports, and code repos are directly readable, and agents get full terminal power. Full-stack BYOK covers Anthropic, OpenAI, Azure, and Google, plus 14 media providers.</p>
+                    <p>Apache-2.0 licensed — fork, self-host, and commercial use are all allowed.</p>
                     <div class="stats">
                         <div class="stat-item">
-                            <h4>47%</h4>
-                            <span>Efficiency Gain</span>
+                            <h4>217+</h4>
+                            <span>Plugins</span>
                         </div>
                         <div class="stat-item">
-                            <h4>12x</h4>
-                            <span>Scale Factor</span>
+                            <h4>129</h4>
+                            <span>Design Systems</span>
                         </div>
                         <div class="stat-item">
-                            <h4>3.2M</h4>
-                            <span>Revenue Impact</span>
+                            <h4>21</h4>
+                            <span>Coding Agents</span>
                         </div>
                     </div>
                 </div>
@@ -805,24 +933,24 @@
         <div class="slide slide-cards">
             <div class="content">
                 <div class="header">
-                    <div class="label">Capabilities</div>
-                    <h2>Core Competencies</h2>
+                    <div class="label">Pillars</div>
+                    <h2>Three Core Pillars</h2>
                 </div>
                 <div class="cards-grid">
                     <div class="card">
                         <div class="card-icon">I</div>
-                        <h3>Analytical Depth</h3>
-                        <p>Rigorous data-driven methodologies that transform raw information into actionable strategic intelligence.</p>
+                        <h3>Desktop-Native</h3>
+                        <p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable; agents get full terminal power.</p>
                     </div>
                     <div class="card">
                         <div class="card-icon">II</div>
-                        <h3>Operational Scale</h3>
-                        <p>Streamlined processes designed to expand seamlessly while maintaining quality and consistency.</p>
+                        <h3>Plug In, Don't Rebuild</h3>
+                        <p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
                     </div>
                     <div class="card">
                         <div class="card-icon">III</div>
-                        <h3>Adaptive Design</h3>
-                        <p>Flexible frameworks that evolve with changing conditions and emerging opportunities.</p>
+                        <h3>It Learns Your Taste</h3>
+                        <p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p>
                     </div>
                 </div>
             </div>
@@ -833,13 +961,45 @@
             <div class="content">
                 <div class="header">
                     <div>
-                        <div class="label">Trend Analysis</div>
-                        <h2>Growth Projection</h2>
+                        <div class="label">Community Growth</div>
+                        <h2>The Road to 60K+ Stars</h2>
                     </div>
-                    <p style="max-width: 25vw; text-align: right;">Multi-year trajectory illustrating compound growth patterns and market penetration metrics.</p>
+                    <p style="max-width: 25vw; text-align: right;">Illustrative monthly trajectory to today's 60K+ GitHub Stars, backed by 300+ contributors. Demo data.</p>
                 </div>
                 <div class="chart-wrapper">
-                    <canvas id="lineChart"></canvas>
+                    <svg viewBox="0 0 1000 400" preserveAspectRatio="xMidYMid meet" role="img" aria-label="GitHub Stars growth, demo data">
+                        <!-- gridlines -->
+                        <line x1="70" y1="350" x2="960" y2="350" stroke="#b8b0a4" stroke-width="1"/>
+                        <line x1="70" y1="240" x2="960" y2="240" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="130" x2="960" y2="130" stroke="#d3ccc0" stroke-width="1"/>
+                        <line x1="70" y1="20" x2="960" y2="20" stroke="#d3ccc0" stroke-width="1"/>
+                        <!-- y labels -->
+                        <text x="58" y="354" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">0K</text>
+                        <text x="58" y="244" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">20K</text>
+                        <text x="58" y="134" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">40K</text>
+                        <text x="58" y="24" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">60K</text>
+                        <!-- milestone pace: 10, 20, 30, 40, 50, 60 -->
+                        <polyline points="80,295 256,240 432,185 608,130 784,75 960,20" fill="none" stroke="#b8b0a4" stroke-width="2" stroke-dasharray="6 6"/>
+                        <!-- actual stars: 8, 15, 24, 35, 48, 60 -->
+                        <polyline points="80,306 256,267.5 432,218 608,157.5 784,86 960,20" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+                        <circle cx="80" cy="306" r="4" fill="#1a1a1a"/>
+                        <circle cx="256" cy="267.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="432" cy="218" r="4" fill="#1a1a1a"/>
+                        <circle cx="608" cy="157.5" r="4" fill="#1a1a1a"/>
+                        <circle cx="784" cy="86" r="4" fill="#1a1a1a"/>
+                        <circle cx="960" cy="20" r="5" fill="#8c4130" stroke="#ede8e0" stroke-width="2"/>
+                        <!-- x labels -->
+                        <text x="80" y="382" text-anchor="start" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Jan 2026</text>
+                        <text x="256" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Feb 2026</text>
+                        <text x="432" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Mar 2026</text>
+                        <text x="608" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Apr 2026</text>
+                        <text x="784" y="382" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">May 2026</text>
+                        <text x="960" y="382" text-anchor="end" font-family="Source Serif 4, Georgia, serif" font-size="13" fill="#54504a">Jun 2026</text>
+                    </svg>
+                    <div class="chart-legend">
+                        <span><span class="key"></span>GitHub Stars (demo data)</span>
+                        <span><span class="key dashed"></span>Milestone pace (demo data)</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -848,29 +1008,29 @@
         <div class="slide slide-timeline">
             <div class="content">
                 <div class="header">
-                    <div class="label">Roadmap</div>
-                    <h2>Implementation Phases</h2>
+                    <div class="label">Workflow</div>
+                    <h2>From Idea to Delivery</h2>
                 </div>
                 <div class="timeline">
                     <div class="timeline-item">
-                        <div class="year">Phase One</div>
-                        <h4>Discovery</h4>
-                        <p>Initial assessment and comprehensive audit of existing systems and processes.</p>
+                        <div class="year">Step One</div>
+                        <h4>Pick a Starting Point</h4>
+                        <p>Describe your goal in one sentence, or start from a template or plugin.</p>
                     </div>
                     <div class="timeline-item">
-                        <div class="year">Phase Two</div>
-                        <h4>Strategy</h4>
-                        <p>Development of tailored frameworks aligned with organizational objectives.</p>
+                        <div class="year">Step Two</div>
+                        <h4>Set the Direction</h4>
+                        <p>Palette, type, and spacing flow into generation automatically.</p>
                     </div>
                     <div class="timeline-item">
-                        <div class="year">Phase Three</div>
-                        <h4>Execution</h4>
-                        <p>Phased rollout with continuous monitoring and iterative optimization.</p>
+                        <div class="year">Step Three</div>
+                        <h4>Generate the Artifact</h4>
+                        <p>The agent reads full context and produces real runnable files, previewed and edited in a sandbox.</p>
                     </div>
                     <div class="timeline-item">
-                        <div class="year">Phase Four</div>
-                        <h4>Scale</h4>
-                        <p>Expansion of proven methodologies across all operational units.</p>
+                        <div class="year">Step Four</div>
+                        <h4>Ship It, or Film It</h4>
+                        <p>Hand off to engineering, or turn it into video with HyperFrames. Every choice becomes context for the next run.</p>
                     </div>
                 </div>
             </div>
@@ -880,29 +1040,29 @@
         <div class="slide slide-team">
             <div class="content">
                 <div class="header">
-                    <div class="label">Leadership</div>
-                    <h2>Key Contributors</h2>
+                    <div class="label">Agent Ecosystem</div>
+                    <h2>21+ Coding Agents, Zero Config</h2>
                 </div>
                 <div class="team-grid">
                     <div class="team-member">
-                        <div class="member-photo">A</div>
-                        <h4>Alex Morgan</h4>
-                        <span>Strategy Director</span>
+                        <div class="member-photo">C</div>
+                        <h4>Claude Code</h4>
+                        <span>Coding Agent</span>
                     </div>
                     <div class="team-member">
-                        <div class="member-photo">J</div>
-                        <h4>Jordan Lee</h4>
-                        <span>Operations Lead</span>
+                        <div class="member-photo">X</div>
+                        <h4>Codex CLI</h4>
+                        <span>Coding Agent</span>
                     </div>
                     <div class="team-member">
-                        <div class="member-photo">S</div>
-                        <h4>Sam Taylor</h4>
-                        <span>Research Head</span>
+                        <div class="member-photo">U</div>
+                        <h4>Cursor Agent</h4>
+                        <span>Coding Agent</span>
                     </div>
                     <div class="team-member">
-                        <div class="member-photo">R</div>
-                        <h4>Reese Park</h4>
-                        <span>Design Principal</span>
+                        <div class="member-photo">G</div>
+                        <h4>Gemini CLI</h4>
+                        <span>Coding Agent</span>
                     </div>
                 </div>
             </div>
@@ -912,11 +1072,11 @@
         <div class="slide slide-closing">
             <div class="geo-ring"></div>
             <div class="content">
-                <div class="label">Conclusion</div>
-                <h1>Thank You</h1>
-                <p>Questions & Discussion</p>
+                <div class="label">Open · Local · Agent-native</div>
+                <h1>Frontier AI design, back on every creator's desk</h1>
+                <p>Download Open Design · Star on GitHub</p>
                 <div style="margin-top: 4vh; font-size: 0.85rem; color: var(--accent);">
-                    contact@example.com
+                    github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4
                 </div>
             </div>
         </div>
@@ -990,145 +1150,6 @@
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 prevSlide();
-            }
-        });
-
-        // Bar Chart
-        const barCtx = document.getElementById('barChart').getContext('2d');
-        new Chart(barCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Q1', 'Q2', 'Q3', 'Q4'],
-                datasets: [{
-                    label: 'Revenue',
-                    data: [2.4, 3.1, 3.8, 4.5],
-                    backgroundColor: '#1a1a1a',
-                    borderColor: '#1a1a1a',
-                    borderWidth: 1
-                }, {
-                    label: 'Target',
-                    data: [2.5, 3.0, 3.5, 4.2],
-                    backgroundColor: 'transparent',
-                    borderColor: '#b8b0a4',
-                    borderWidth: 2,
-                    borderDash: [5, 5]
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#5a5a5a',
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: '#e2dbd1',
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#8a8178',
-                            padding: 10
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 12 },
-                            color: '#1a1a1a',
-                            padding: 10
-                        }
-                    }
-                }
-            }
-        });
-
-        // Line Chart
-        const lineCtx = document.getElementById('lineChart').getContext('2d');
-        new Chart(lineCtx, {
-            type: 'line',
-            data: {
-                labels: ['2020', '2021', '2022', '2023', '2024', '2025'],
-                datasets: [{
-                    label: 'Market Share',
-                    data: [12, 18, 25, 34, 42, 51],
-                    borderColor: '#1a1a1a',
-                    backgroundColor: 'rgba(26, 26, 26, 0.05)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointBackgroundColor: '#1a1a1a',
-                    pointBorderColor: '#ede8e0',
-                    pointBorderWidth: 2,
-                    pointRadius: 5
-                }, {
-                    label: 'Industry Average',
-                    data: [10, 14, 19, 24, 30, 36],
-                    borderColor: '#b8b0a4',
-                    backgroundColor: 'transparent',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.4,
-                    pointBackgroundColor: '#b8b0a4',
-                    pointRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#5a5a5a',
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: '#e2dbd1',
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 11 },
-                            color: '#8a8178',
-                            padding: 10,
-                            callback: function(value) {
-                                return value + '%';
-                            }
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: { family: 'Inter', size: 12 },
-                            color: '#1a1a1a',
-                            padding: 10
-                        }
-                    }
-                }
             }
         });
     </script>

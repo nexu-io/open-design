@@ -6,24 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="assets/deck-stage.js"></script>
 <style>
   :root {
     --bone:    #E2DCC9;
-    --black:   #000000;
+    --black:   #15120D; /* warm near-black, not pure #000, keeps the charcoal-rubbing feel */
     --ink:     #0A0A0A;
     --paper:   #F4EFE0;
-    --sienna:  #A06A3C;
-    --magenta: #C73B7A;
+    --sienna:  #A9713F; /* lightened from #A06A3C so 18-22px ink body copy clears AA on sienna surfaces */
+    --magenta: #B13069; /* display accents on bone only */
+    --rose:    #9E2A5C; /* deep rose for surfaces that carry body text, bone copy clears AA */
     --orange:  #EE7A2E;
-    --teal:    #2D7E73;
-    --blue:    #3F73B7;
+    --teal:    #266B61;
+    --blue:    #345F9A;
     --mustard: #D8A93B;
-    --olive:   #6F7A2E;
   }
   html, body { margin:0; padding:0; background:#1a1a1a; }
-  body { font-family: "Inter", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  body { font-family: "Barlow", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
   deck-stage { background: #1a1a1a; }
 
   section.slide { background: var(--bone); color: var(--ink); overflow: hidden; position: relative; }
@@ -53,36 +53,6 @@
     opacity: .75;
   }
   section.slide.dark .footer { color: var(--bone); }
-
-  /* ---------- shared tablet card ---------- */
-  .tablet { border-radius: 26px; padding: 38px 32px 32px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
-  .tablet .num {
-    font-family: "Stardos Stencil", "Bowlby One", serif;
-    font-weight: 700;
-    line-height: .9;
-    color: var(--ink);
-    font-size: 220px;
-    letter-spacing: -.02em;
-  }
-  .tablet h3 {
-    font-family: "Stardos Stencil", serif;
-    font-weight: 700;
-    font-size: 30px;
-    line-height: 1;
-    text-transform: uppercase;
-    letter-spacing: .02em;
-    margin-top: auto;
-    margin-bottom: 14px;
-  }
-  .tablet p {
-    font-family: "Inter", sans-serif;
-    font-size: 22px;
-    line-height: 1.4;
-    color: var(--ink);
-  }
-  .tablet.dark { color: var(--bone); }
-  .tablet.dark h3 { color: var(--bone); }
-  .tablet.dark p  { color: var(--bone); opacity: .9; }
 
   /* =========== 01 COVER =========== */
   .s-cover { padding: 0; }
@@ -115,7 +85,13 @@
   }
   .s-cover .row .lockup { display: flex; align-items: center; gap: 18px; }
   .s-cover .row .mark {
-    width: 56px; height: 56px; border-radius: 14px; background: var(--orange);
+    width: 56px; height: 56px; border-radius: 12px; background: var(--orange);
+    position: relative; overflow: hidden;
+  }
+  /* stencil bridge cut through the mark, ties the lockup to the headline letterforms */
+  .s-cover .row .mark::after {
+    content: ""; position: absolute; left: 16%; right: 16%; top: 42%; height: 16%;
+    background: var(--bone);
   }
   .s-cover .row .who {
     font-family: "Barlow Condensed", sans-serif; font-weight: 700;
@@ -156,6 +132,9 @@
     font-size: 32px; line-height: 1.05; text-align: center;
     text-transform: uppercase; color: var(--ink);
   }
+  /* teal and blue tablets are too dark for ink labels, switch to bone */
+  .s-agenda .item:nth-child(2) .n, .s-agenda .item:nth-child(2) .lab,
+  .s-agenda .item:nth-child(3) .n, .s-agenda .item:nth-child(3) .lab { color: var(--bone); }
 
   /* =========== 03 PRINCIPLES (the source slide) =========== */
   .s-princ { padding: 0; }
@@ -168,7 +147,7 @@
   }
   .s-princ .card { border-radius: 26px; padding: 36px 30px 32px; display: flex; flex-direction: column; min-height: 0; }
   .s-princ .card.c1 { background: var(--sienna); }
-  .s-princ .card.c2 { background: var(--magenta); }
+  .s-princ .card.c2 { background: var(--rose); }
   .s-princ .card.c3 { background: var(--orange); }
   .s-princ .card.c4 { background: var(--teal); }
   .s-princ .card .n {
@@ -176,6 +155,7 @@
     font-size: 240px; line-height: .85; letter-spacing: -.02em;
     color: var(--ink);
   }
+  .s-princ .card.c2 .n, .s-princ .card.c4 .n { color: var(--bone); }
   .s-princ .card h3 {
     font-family: "Stardos Stencil", serif; font-weight: 700;
     font-size: 30px; line-height: 1.05;
@@ -185,6 +165,7 @@
   .s-princ .card p {
     font-size: 22px; line-height: 1.4; color: var(--ink);
   }
+  .s-princ .card.c2 h3, .s-princ .card.c2 p,
   .s-princ .card.c4 h3, .s-princ .card.c4 p { color: var(--bone); }
 
   /* =========== 04 SECTION DIVIDER =========== */
@@ -293,6 +274,7 @@
     background: var(--paper); border-radius: 22px;
     padding: 32px 32px 28px 80px;
     display: flex; flex-direction: column; overflow: hidden;
+    color: var(--ink);
   }
   .s-chart .right .yhead {
     font-family: "Barlow Condensed", sans-serif; font-weight: 700;
@@ -337,7 +319,7 @@
     display: flex; flex-direction: column; gap: 8px; position: relative;
   }
   .s-process .node.n1 { background: var(--sienna); color: var(--ink); }
-  .s-process .node.n2 { background: var(--magenta); color: var(--ink); }
+  .s-process .node.n2 { background: var(--rose); color: var(--bone); }
   .s-process .node.n3 { background: var(--orange); color: var(--ink); }
   .s-process .node.n4 { background: var(--teal); color: var(--bone); }
   .s-process .node.n5 { background: var(--blue); color: var(--bone); }
@@ -353,6 +335,7 @@
   .s-process .node .arr {
     position: absolute; right: -16px; top: 40%;
     width: 32px; height: 32px; z-index: 2;
+    color: var(--ink); /* arrows straddle the bone gap, currentColor from bone-text nodes made them vanish */
   }
   .s-process .node.n5 .arr { display: none; }
   .s-process .timeline {
@@ -410,7 +393,7 @@
   }
   .s-matrix .pill.yes  { background: var(--teal); color: var(--bone); }
   .s-matrix .pill.part { background: var(--mustard); color: var(--ink); }
-  .s-matrix .pill.no   { background: var(--magenta); color: var(--bone); }
+  .s-matrix .pill.no   { background: var(--rose); color: var(--bone); }
   .s-matrix .pill.note { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
 
   /* =========== 09 STATS / NUMBERS =========== */
@@ -460,7 +443,7 @@
   .s-quote { padding: 0; }
   .s-quote .panel {
     position: absolute; left: 64px; right: 64px; top: 130px; bottom: 110px;
-    background: var(--magenta);
+    background: var(--rose);
     border-radius: 26px;
     padding: 60px 80px;
     display: grid;
@@ -469,24 +452,24 @@
     align-items: center;
   }
   .s-quote .panel .qmark {
-    font-family: "Bowlby One", "Stardos Stencil", serif; font-weight: 700;
-    font-size: 320px; line-height: .8; color: var(--ink);
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 320px; line-height: .8; color: var(--ink); opacity: .55;
   }
   .s-quote .panel blockquote {
     margin: 0;
     font-family: "Stardos Stencil", serif; font-weight: 400;
     font-size: 60px; line-height: 1.05;
-    color: var(--ink);
+    color: var(--bone);
     letter-spacing: -.005em;
   }
   .s-quote .panel .who {
     margin-top: 32px;
     font-family: "Barlow Condensed", sans-serif; font-weight: 800;
     font-size: 26px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--ink);
+    color: var(--bone);
   }
   .s-quote .panel .who small {
-    display: block; font-weight: 600; font-size: 22px; opacity: .7; margin-top: 4px;
+    display: block; font-weight: 600; font-size: 22px; opacity: .8; margin-top: 4px;
   }
 
   /* =========== 11 CTA =========== */
@@ -523,53 +506,18 @@
   }
   .s-cta .pane.r .step p { font-size: 20px; line-height: 1.4; }
 
-  /* =========== 12 DESIGN SYSTEM =========== */
-  .s-system .wrap {
-    position: absolute; left: 64px; right: 64px; top: 130px; bottom: 80px;
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;
-  }
-  .s-system .card {
-    border-radius: 22px; padding: 28px;
-    display: flex; flex-direction: column; gap: 14px;
-    background: var(--paper);
-  }
-  .s-system .card h3 {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 28px; text-transform: uppercase; letter-spacing: .02em;
-    border-bottom: 2px solid var(--ink); padding-bottom: 10px;
-  }
-  .s-system .card .row { display: flex; align-items: center; gap: 14px; }
-  .s-system .swatch { width: 48px; height: 48px; border-radius: 10px; border: 1.5px solid var(--ink); }
-  .s-system .row .label {
-    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
-    font-size: 22px; letter-spacing: .04em; text-transform: uppercase;
-  }
-  .s-system .row .label small {
-    display: block; font-weight: 500; opacity: .65; letter-spacing: .04em;
-  }
-  .s-system .typespec {
-    display: flex; align-items: baseline; gap: 14px;
-    border-bottom: 1px dashed rgba(10,10,10,.3); padding-bottom: 12px;
-  }
-  .s-system .typespec .name {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 36px; text-transform: uppercase; flex-shrink: 0;
-  }
-  .s-system .typespec .name.barlow {
-    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
-  }
-  .s-system .typespec .name.inter {
-    font-family: "Inter", sans-serif; font-weight: 600; text-transform: none; font-size: 28px;
-  }
-  .s-system .typespec .desc {
-    font-size: 18px; opacity: .75;
-  }
-  .s-system ul { margin: 0; padding-left: 20px; font-size: 18px; line-height: 1.45; }
-  .s-system ul li { margin-bottom: 6px; }
-  .s-system .principle {
-    font-family: "Stardos Stencil", serif; font-weight: 700;
-    font-size: 30px; line-height: 1.05; text-transform: uppercase;
-    color: var(--magenta);
+  /* ---------- entrance motion (transform+opacity only, staggered, reduced-motion safe) ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes slide-rise {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: none; }
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer) {
+      animation: slide-rise .6s cubic-bezier(.16,1,.3,1) both;
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(3) { animation-delay: .07s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(4) { animation-delay: .14s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(5) { animation-delay: .21s; }
   }
 </style>
 </head>
@@ -581,18 +529,18 @@
   <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
     <div class="stage">
       <div>
-        <div class="super">Agency name × Partner name</div>
+        <div class="super">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
       </div>
       <div>
-        <h1>Bold by<br/><em>design.</em></h1>
+        <h1>Open by<br/><em>design.</em></h1>
         <div class="row">
           <div class="lockup">
             <div class="mark"></div>
-            <div class="who">North &amp; Partners
-              <small>Brand · Strategy · Q2 2026</small>
+            <div class="who">Open Design
+              <small>Open-source · Local · Agent-driven</small>
             </div>
           </div>
-          <div class="date">29 · IV · 2026</div>
+          <div class="date">VI · 2026</div>
         </div>
       </div>
     </div>
@@ -605,149 +553,149 @@
   <section class="slide s-agenda dark" data-label="02 Agenda" data-om-validate="false">
     <div class="top">
       <span>Agenda</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase I</span></span>
+      <span class="meta"><span>Open Design</span><span>Overview</span></span>
     </div>
     <div class="grid">
       <div class="item">
         <!-- figure-8 / peanut -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="#EE7A2E"/>
+          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="var(--orange)"/>
         </svg>
         <span class="n">01</span>
-        <span class="lab">Agenda<br/>item</span>
+        <span class="lab">Why<br/>open</span>
       </div>
       <div class="item">
         <!-- octagon -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="#2D7E73"/>
+          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="var(--teal)"/>
         </svg>
         <span class="n">02</span>
-        <span class="lab">Agenda<br/>item</span>
+        <span class="lab">The<br/>workflow</span>
       </div>
       <div class="item">
         <!-- hourglass / bowtie -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="#3F73B7"/>
+          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="var(--blue)"/>
         </svg>
         <span class="n">03</span>
-        <span class="lab">Agenda<br/>item</span>
+        <span class="lab">The<br/>numbers</span>
       </div>
       <div class="item">
         <!-- pinched X -->
         <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 0 Q 20 0 35 20 Q 50 40 65 20 Q 80 0 100 0 L100 90 Q 70 125 100 160 L100 250 Q 80 250 65 230 Q 50 210 35 230 Q 20 250 0 250 L0 160 Q 30 125 0 90 Z" fill="#A06A3C"/>
+          <path d="M0 0 L100 0 L100 90 Q 70 125 100 160 L100 250 L0 250 L0 160 Q 30 125 0 90 Z" fill="var(--sienna)"/>
         </svg>
         <span class="n">04</span>
-        <span class="lab">Agenda<br/>item</span>
+        <span class="lab">Get<br/>started</span>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>02 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>02 / 11</span></div>
   </section>
 
   <!-- ============ 03 PRINCIPLES ============ -->
   <section class="slide s-princ" data-label="03 Our Principles" data-om-validate="false">
     <div class="top">
       <span>Our Principles</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase II</span></span>
+      <span class="meta"><span>Open Design</span><span>Principles</span></span>
     </div>
     <div class="row">
       <div class="card c1">
         <div class="n">1</div>
-        <h3>Make it<br/>blunt</h3>
-        <p>Decisions read at a glance. If a stakeholder needs the legend, the slide is doing too much.</p>
+        <h3>Desktop<br/>native</h3>
+        <p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable in place.</p>
       </div>
       <div class="card c2">
         <div class="n">2</div>
-        <h3>Stay in<br/>the system</h3>
-        <p>Three serif numerals, two sans weights, six saturated colours. Anything else is a special case.</p>
+        <h3>Plug in<br/>agents</h3>
+        <p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into design work.</p>
       </div>
       <div class="card c3">
         <div class="n">3</div>
-        <h3>Show the<br/>shape</h3>
-        <p>Lead with form. Use weight, scale, and silhouette before reaching for icons or imagery.</p>
+        <h3>Learns<br/>your taste</h3>
+        <p>Every choice becomes design systems, preferences, and memory, so the next run lands closer to what you want.</p>
       </div>
       <div class="card c4">
         <div class="n">4</div>
-        <h3>Earn the<br/>black slide</h3>
-        <p>Reserve full-bleed black for moments that deserve a beat. Never as wallpaper.</p>
+        <h3>Open by<br/>license</h3>
+        <p>Apache-2.0 all the way down. Fork it, self-host it, use it commercially — all allowed.</p>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>03 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>03 / 11</span></div>
   </section>
 
   <!-- ============ 04 SECTION DIVIDER ============ -->
-  <section class="slide s-sec dark" data-label="04 Section · Direction" data-om-validate="false">
+  <section class="slide s-sec dark" data-label="04 Section · Why Open" data-om-validate="false">
     <div class="top">
-      <span>Direction</span>
+      <span>Why open</span>
       <span class="meta"><span>Section II</span></span>
     </div>
     <div class="num">02</div>
-    <div class="label">Direction<br/>&amp; doctrine</div>
-    <h2>Where we<br/>are going,<br/><em>and why.</em></h2>
-    <div class="footer"><span>North &amp; Partners</span><span>04 / 11</span></div>
+    <div class="label">Why open,<br/>why local</div>
+    <h2>Frontier AI<br/>design, set<br/><em>free.</em></h2>
+    <div class="footer"><span>Open Design</span><span>04 / 11</span></div>
   </section>
 
   <!-- ============ 05 CONSULT (text-dense) ============ -->
-  <section class="slide s-consult" data-label="05 Findings · Detail" data-om-validate="false">
+  <section class="slide s-consult" data-label="05 The Problem" data-om-validate="false">
     <div class="top">
-      <span>Findings · Detail</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase III</span></span>
+      <span>The Problem</span>
+      <span class="meta"><span>Open Design</span><span>Why open</span></span>
     </div>
     <div class="head">
       <div class="tag">Action title · 05</div>
-      <h2>The trust gap is built in the first 72 hours, not the first 7 days — and the cost compounds for the rest of the lifecycle.</h2>
+      <h2>In April 2026, Claude Design proved an LLM can truly design — but it is closed-source, paid, and cloud-only. Open Design sets that capability free.</h2>
     </div>
     <div class="grid">
       <div class="col a">
-        <h3>What we found</h3>
-        <p><strong>Three behavioural signals</strong> in the first 72 hours predict 18-month retention better than any feature-usage metric we tracked.</p>
+        <h3>What changed</h3>
+        <p><strong>Claude Design was the first proof</strong> that an LLM can produce real design artifacts — not write about design, but design.</p>
         <ul>
-          <li><strong>Email open #2</strong> — opening the second lifecycle email lifts D90 retention by 19 points.</li>
-          <li><strong>Personal salutation</strong> — accounts that received a written welcome retained 2.4× the cohort.</li>
-          <li><strong>Reply received</strong> — a single human reply within 24 hours is the single largest lever measured.</li>
+          <li><strong>Real artifacts</strong> — prototypes, pages, and decks generated end to end, not mockup descriptions.</li>
+          <li><strong>But closed</strong> — closed-source, paid, and locked to a single model vendor.</li>
+          <li><strong>And cloud-only</strong> — no self-hosting, no agent choice, no BYOK.</li>
         </ul>
-        <div class="src">N = 14,200 · Q1 2026</div>
+        <div class="src">April 2026 · The proof point</div>
       </div>
       <div class="col b">
         <h3>Why it matters</h3>
-        <div class="meta">$4.1M projected retained ARR — current cohort.</div>
-        <p>The first three days are the only window where customers are both paying attention and willing to write back. Every interaction here does the work of roughly four interactions in week three.</p>
-        <p>The cost of getting this wrong is not refunds — it is the long, quiet churn of an account that never returns to the inbox.</p>
-        <div class="src">Modelled on FY24 cohort behaviour</div>
+        <div class="meta">Frontier AI design, back on every creator's desk.</div>
+        <p>Design happens on the desktop — local files, Figma exports, and code repos live there, and that context never reaches a cloud-only tool.</p>
+        <p>The coding agents on your machine are already powerful. What is missing is an open workflow that wires them into design work.</p>
+        <div class="src">Open · Local · Agent-native</div>
       </div>
       <div class="col c">
-        <h3>What to do</h3>
+        <h3>What Open Design does</h3>
         <ul>
-          <li><strong>Rewrite emails 1–3</strong> in human voice; ship behind a 50/50 holdout. Owner: lifecycle. Due: May 17.</li>
-          <li><strong>Route every signup</strong> to a named human for one personal reply within 24h, capped at the top 200 accounts/day. Owner: success. Due: May 24.</li>
-          <li><strong>Instrument the 72-hour window</strong> as a first-class metric in the weekly review. Owner: analytics. Due: June 1.</li>
+          <li><strong>Runs locally</strong> — agents get full terminal power and direct access to your files, on your machine.</li>
+          <li><strong>Plugs in agents</strong> — Claude Code, Codex, Cursor and more, auto-detected from PATH, zero config.</li>
+          <li><strong>Stays open</strong> — Apache-2.0 license, full-stack BYOK, no sign-up required.</li>
         </ul>
-        <div class="src">Pilot scope: top-decile signups</div>
+        <div class="src">github.com/nexu-io/open-design</div>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>05 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>05 / 11</span></div>
   </section>
 
   <!-- ============ 06 CHART ============ -->
-  <section class="slide s-chart dark" data-label="06 Retention Curve" data-om-validate="false">
+  <section class="slide s-chart dark" data-label="06 Ecosystem Growth" data-om-validate="false">
     <div class="top">
-      <span>Retention, by cohort</span>
-      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+      <span>Ecosystem, by month</span>
+      <span class="meta"><span>Open source</span><span>Evidence</span></span>
     </div>
     <div class="left">
-      <h2>Curve<br/>bends at<br/><em>day three.</em></h2>
-      <p>Cohorts that received a written welcome and a human reply within 24 hours retain at roughly 2× the rate of the templated cohort, and the gap holds steady for ninety days.</p>
+      <h2>The curve<br/>only goes<br/><em>up.</em></h2>
+      <p>An open ecosystem compounds: 217+ plugins, 129 design systems, and 21 coding agents already plug into Open Design — and every contribution makes the next one easier. Demo data, current totals are real.</p>
       <div class="legend">
-        <div class="li"><i style="background:var(--bone); opacity:.5"></i> Templated welcome (control)</div>
-        <div class="li"><i style="background:var(--mustard)"></i> Written welcome</div>
-        <div class="li"><i style="background:var(--orange)"></i> Written + human reply</div>
+        <div class="li"><i style="background:var(--bone); opacity:.5"></i> Coding agents (21)</div>
+        <div class="li"><i style="background:var(--mustard)"></i> Design systems (129)</div>
+        <div class="li"><i style="background:var(--orange)"></i> Plugins (217+)</div>
       </div>
     </div>
     <div class="right">
-      <div class="yhead">% of cohort active, by day</div>
+      <div class="yhead">Ecosystem count, by month (demo curve)</div>
       <div class="plot">
         <div class="yticks">
-          <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+          <span>240</span><span>180</span><span>120</span><span>60</span><span>0</span>
         </div>
         <div class="gline" style="top:0%"></div>
         <div class="gline" style="top:25%"></div>
@@ -755,199 +703,198 @@
         <div class="gline" style="top:75%"></div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <polyline fill="none" stroke="#0a0a0a" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
-            points="0,4 16,30 32,50 48,64 64,76 80,84 100,90" />
+            points="0,98 16,96 32,95 48,94 64,93 80,92 100,91" />
           <polyline fill="none" stroke="#D8A93B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
-            points="0,4 16,18 32,28 48,38 64,46 80,52 100,56" />
+            points="0,98 16,88 32,77 48,66 64,57 80,50 100,46" />
           <polyline fill="none" stroke="#EE7A2E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
-            points="0,4 16,10 32,16 48,22 64,28 80,32 100,36" />
+            points="0,98 16,82 32,63 48,45 64,29 80,18 100,10" />
         </svg>
       </div>
       <div class="xticks">
-        <span>D0</span><span>D7</span><span>D14</span><span>D30</span><span>D45</span><span>D60</span><span>D90</span>
+        <span>Dec</span><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>06 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>06 / 11</span></div>
   </section>
 
   <!-- ============ 07 PROCESS ============ -->
   <section class="slide s-process" data-label="07 Process" data-om-validate="false">
     <div class="top">
-      <span>How we'll work</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase IV</span></span>
+      <span>How it works</span>
+      <span class="meta"><span>Open Design</span><span>Workflow</span></span>
     </div>
     <div class="head">
-      <h2>From <em>insight</em><br/>to default,<br/>in five moves.</h2>
-      <div class="sub">A repeatable path each pilot follows, end to end, before it is allowed to graduate to the default experience for every customer.</div>
+      <h2>From <em>idea</em><br/>to delivery,<br/>in five steps.</h2>
+      <div class="sub">The full product-design workflow runs on your own machine — every run feeds the memory that makes the next one better.</div>
     </div>
     <div class="flow">
       <div class="node n1">
         <div class="n">1</div>
-        <h3>Frame</h3>
-        <p>Translate the insight into a single behavioural hypothesis we can falsify in a sprint.</p>
+        <h3>Start</h3>
+        <p>Describe your goal in one sentence, or start from a template or plugin.</p>
         <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
       </div>
       <div class="node n2">
         <div class="n">2</div>
-        <h3>Design</h3>
-        <p>Smallest end-to-end change that lets the hypothesis be tested cleanly in one cycle.</p>
+        <h3>Direct</h3>
+        <p>Set the visual direction — palette, type, and spacing flow into generation automatically.</p>
         <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
       </div>
       <div class="node n3">
         <div class="n">3</div>
-        <h3>Pilot</h3>
-        <p>Ship to a 50/50 holdout in one segment. Hold the line for two cycles before reading.</p>
+        <h3>Generate</h3>
+        <p>The agent reads full context and produces real runnable files, previewed in a sandbox.</p>
         <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
       </div>
       <div class="node n4">
         <div class="n">4</div>
-        <h3>Read</h3>
-        <p>Pre-registered metrics only. Kill, scale, or extend — not three of three.</p>
+        <h3>Ship</h3>
+        <p>Hand off to engineering, or turn it into a marketing video with HyperFrames.</p>
         <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
       </div>
       <div class="node n5">
         <div class="n">5</div>
-        <h3>Default</h3>
-        <p>Promote to the default surface and retire the legacy path inside the same release.</p>
+        <h3>Remember</h3>
+        <p>Every choice becomes context for the next run — memory compounds.</p>
       </div>
     </div>
     <div class="timeline">
-      <span>Week 1 · Frame</span>
-      <span>Week 2–3 · Design</span>
-      <span>Week 3–6 · Pilot</span>
-      <span>Week 7 · Read</span>
-      <span>Week 8 · Default</span>
+      <span>1 · Start</span>
+      <span>2 · Direct</span>
+      <span>3 · Generate</span>
+      <span>4 · Ship</span>
+      <span>5 · Remember</span>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>07 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>07 / 11</span></div>
   </section>
 
   <!-- ============ 08 COMPARISON MATRIX ============ -->
   <section class="slide s-matrix" data-label="08 Comparison" data-om-validate="false">
     <div class="top">
-      <span>Three pilots, side by side</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase IV</span></span>
+      <span>Side by side</span>
+      <span class="meta"><span>Open Design</span><span>Comparison</span></span>
     </div>
     <div class="head">
-      <h2>Where each<br/><em>pilot</em> earns<br/>its keep.</h2>
-      <div class="sub">Scored against the four levers that matter most this cycle. We will only carry forward bets that win on at least two.</div>
+      <h2>Where <em>open</em><br/>earns its<br/>keep.</h2>
+      <div class="sub">Scored against the levers that matter for AI design tools: openness, locality, agent choice, and what you pay each month.</div>
     </div>
     <div class="table">
       <div class="cell head-row">Lever</div>
-      <div class="cell head-row">Rewrite welcome</div>
-      <div class="cell head-row">Quiet upgrades</div>
-      <div class="cell head-row">Inbox-as-search</div>
+      <div class="cell head-row">Open Design</div>
+      <div class="cell head-row">Claude Design</div>
+      <div class="cell head-row">Cloud design tools</div>
 
-      <div class="cell row-label">Time-to-impact</div>
-      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
-      <div class="cell"><span class="pill part">6–8 weeks</span></div>
-      <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+      <div class="cell row-label">Open source</div>
+      <div class="cell"><span class="pill yes">Apache-2.0</span></div>
+      <div class="cell"><span class="pill no">Closed</span></div>
+      <div class="cell"><span class="pill no">Closed</span></div>
 
-      <div class="cell row-label">Build cost</div>
-      <div class="cell"><span class="pill yes">Low</span></div>
-      <div class="cell"><span class="pill part">Medium</span></div>
-      <div class="cell"><span class="pill yes">Low</span></div>
+      <div class="cell row-label">Runs locally</div>
+      <div class="cell"><span class="pill yes">Yes</span></div>
+      <div class="cell"><span class="pill no">Cloud-only</span></div>
+      <div class="cell"><span class="pill no">Cloud-only</span></div>
 
-      <div class="cell row-label">Retention lift (model)</div>
-      <div class="cell"><span class="pill yes">+19 pts D90</span></div>
-      <div class="cell"><span class="pill part">+7 pts D90</span></div>
-      <div class="cell"><span class="pill part">+5 pts D90</span></div>
+      <div class="cell row-label">Agent choice + BYOK</div>
+      <div class="cell"><span class="pill yes">21 agents</span></div>
+      <div class="cell"><span class="pill no">One model</span></div>
+      <div class="cell"><span class="pill part">Varies</span></div>
 
-      <div class="cell row-label last">Risk to power users</div>
-      <div class="cell last"><span class="pill yes">None</span></div>
-      <div class="cell last"><span class="pill no">Material</span></div>
-      <div class="cell last"><span class="pill note">Soft, reversible</span></div>
+      <div class="cell row-label last">Monthly cost</div>
+      <div class="cell last"><span class="pill yes">~$73 BYOK</span></div>
+      <div class="cell last"><span class="pill no">$500</span></div>
+      <div class="cell last"><span class="pill note">Subscription</span></div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>08 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>08 / 11</span></div>
   </section>
 
   <!-- ============ 09 STATS ============ -->
   <section class="slide s-stats dark" data-label="09 In Numbers" data-om-validate="false">
     <div class="top">
       <span>In numbers</span>
-      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+      <span class="meta"><span>Open source</span><span>Evidence</span></span>
     </div>
     <div class="head">
       <h2>The case,<br/><em>by the numbers.</em></h2>
-      <div class="sub">Three figures we will report against every cycle. If one of these stops moving, the bet is over.</div>
+      <div class="sub">An open ecosystem you can count: stars, contributors, and the cost an open stack takes off the table.</div>
     </div>
     <div class="grid">
       <div class="stat s1">
-        <div class="big">2.4<small>×</small></div>
-        <h3>Retention<br/>multiple</h3>
-        <p>Cohort with written welcome + human reply, vs. templated control. Sustained through D90.</p>
+        <div class="big">60<small>K+</small></div>
+        <h3>GitHub<br/>stars</h3>
+        <p>Open source under Apache-2.0 — fork it, self-host it, use it commercially.</p>
       </div>
       <div class="stat s2">
-        <div class="big">$4.1<small>M</small></div>
-        <h3>Projected<br/>retained ARR</h3>
-        <p>Modelled on the current quarter's signup cohort, holding all other inputs constant.</p>
+        <div class="big">300<small>+</small></div>
+        <h3>Contributors<br/>worldwide</h3>
+        <p>217+ plugins and 129 design systems built and maintained by the community.</p>
       </div>
       <div class="stat s3">
-        <div class="big">72<small>HR</small></div>
-        <h3>The window<br/>that matters</h3>
-        <p>Behaviour after the first 72 hours predicts 18-month retention better than any feature metric.</p>
+        <div class="big">-80<small>%</small></div>
+        <h3>Monthly<br/>cost</h3>
+        <p>$500 down to ~$73 per month with BYOK, compared to Claude Design.</p>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>09 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>09 / 11</span></div>
   </section>
 
   <!-- ============ 10 QUOTE ============ -->
-  <section class="slide s-quote" data-label="10 Voice" data-om-validate="false">
+  <section class="slide s-quote" data-label="10 Community Voice" data-om-validate="false">
     <div class="top">
-      <span>Client voice</span>
-      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+      <span>Community voice</span>
+      <span class="meta"><span>Open Design</span><span>Evidence</span></span>
     </div>
     <div class="panel">
       <div class="qmark">"</div>
       <div>
-        <blockquote>Three days in, someone wrote me a real sentence. I'd been a customer of theirs for nine months before I noticed I'd never been a customer anywhere else again.</blockquote>
-        <div class="who">Margaux Lévêque
-          <small>CFO · mid-market retailer · 14 months in</small>
+        <blockquote>File-system semantics plus git-diffable design artifacts — design is finally under version control.</blockquote>
+        <div class="who">Indie developer
+          <small>Open Design community</small>
         </div>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>10 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>10 / 11</span></div>
   </section>
 
   <!-- ============ 11 CTA ============ -->
   <section class="slide s-cta" data-label="11 Next" data-om-validate="false">
     <div class="top">
       <span>What's next</span>
-      <span class="meta"><span>Agency × Partner</span><span>Phase V</span></span>
+      <span class="meta"><span>Open Design</span><span>Get started</span></span>
     </div>
     <div class="stage">
       <div class="pane l">
-        <div class="super" style="font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; opacity: .8;">From here</div>
-        <h2>Pick the<br/>three<br/><em>bets.</em></h2>
-        <p>Three pilots in eight weeks. We'll bring back evidence the quarter after, and the question won't be whether to ship — it'll be which two to default.</p>
+        <div class="super" style="font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; opacity: .8;">Open · Local · Agent-native</div>
+        <h2>Back on<br/>your<br/><em>desk.</em></h2>
+        <p>Frontier AI design, back on every creator's desk. No sign-up, no cloud lock-in — just your machine, your agents, and your keys.</p>
       </div>
       <div class="pane r">
-        <h3>How we move this week</h3>
+        <h3>How to start today</h3>
         <div class="step">
           <div class="n">1</div>
           <div>
-            <h4>Pick the pilots</h4>
-            <p>Confirm two of three by Friday. Owners named in the same conversation; calendars cleared.</p>
+            <h4>Download Open Design</h4>
+            <p>macOS and Windows builds at github.com/nexu-io/open-design. Apache-2.0, no sign-up.</p>
           </div>
         </div>
         <div class="step">
           <div class="n">2</div>
           <div>
-            <h4>Pre-register the read</h4>
-            <p>Lock the metric, the holdout, and the kill criteria before any code ships. Analytics writes it; both sides sign.</p>
+            <h4>Bring your own agent</h4>
+            <p>Claude Code, Codex, or Cursor already on your PATH is auto-detected — zero config, BYOK.</p>
           </div>
         </div>
         <div class="step">
           <div class="n">3</div>
           <div>
-            <h4>Stand a Friday review</h4>
-            <p>One slide each pilot, every Friday, until the bet defaults or dies. No exceptions, no makeup decks.</p>
+            <h4>Star and join in</h4>
+            <p>Star on GitHub, join discord.gg/qhbcCH8Am4, follow x.com/nexudotio — 300+ contributors and counting.</p>
           </div>
         </div>
       </div>
     </div>
-    <div class="footer"><span>North &amp; Partners</span><span>11 / 11</span></div>
+    <div class="footer"><span>Open Design</span><span>11 / 11</span></div>
   </section>
 
-  <!-- ============ 12 DESIGN SYSTEM ============ -->
 </deck-stage>
 
 </body>
