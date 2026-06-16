@@ -1,25 +1,19 @@
-# G2 design system UI Kit
+# G2 Design System UI Kit Reference
 
-This UI kit is the applied interface reference for the design system. Open `index.html` to review the composed app surface, then reuse the modular role components under `components/` when building new product-like artifacts.
+This plugin packages a browser-reviewable G2 AR glasses HUD UI kit.
 
-## Structure
+## Packaged Files
 
-- `index.html` - Browser-reviewable entry that loads `../../colors_and_type.css`, React, ReactDOM, Babel, and the component files.
-- `components/App.jsx` - App shell that composes the role components.
-- `components/Sidebar.jsx` - Navigation rail or sidebar pattern.
-- `components/AssistantsList.jsx` - Object, assistant, or thread list pattern.
-- `components/ChatArea.jsx` - Primary workspace with message/content stream.
-- `components/InputBar.jsx` - Composer or command-entry surface.
-- `components/MessageBubble.jsx` - Message, note, or review-comment unit.
+- `index.html` - Preview entry for the composed HUD surface.
+- `colors_and_type.css` - Local G2 token CSS.
+- `components/App.jsx` - App shell.
+- `components/Sidebar.jsx` - HUD navigation rail.
+- `components/AssistantsList.jsx` - AI and device status cards.
+- `components/ChatArea.jsx` - Message, call, and teleprompter workspace.
+- `components/InputBar.jsx` - Bottom command surface.
+- `components/MessageBubble.jsx` - Message unit.
+- `README.md` - Package guide and validation notes.
 
-## Usage
+## Use
 
-Copy component files into a React prototype or open `index.html` directly for visual review. Keep `colors_and_type.css` loaded before the components so color, type, spacing, radius, and state variables resolve through the extracted token contract.
-
-## Design Notes
-
-Prefer source-backed component roles over static duplicate HTML. When repository evidence is available, replace this scaffold with components modeled from captured app shell, navigation, composer, message, and content surfaces.
-
-## Source
-
-Use parent `DESIGN.md`, `README.md`, `preview/`, and `context/` as the evidence trail for any future refinement.
+Open `index.html` to review the kit, or copy the component files into a React prototype. Keep `colors_and_type.css` loaded first so the G2 token variables resolve.

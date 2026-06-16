@@ -4,15 +4,15 @@
   "runId": "bc1b4d1f-a76f-4fa1-b83a-60bf8905dc6f",
   "conversationId": "40d20cfe-9a0b-41e1-9810-4ec34c7b3bd3",
   "provenance": {
-    "summary": "Detected from ui_kits/app/README.md, SKILL.md, README.md after a successful run.",
+    "summary": "Formalized from the G2 design system import, then corrected so all paths named by the skill and manifest are packaged inside this plugin folder.",
     "detectedAt": 1781594313727
   },
   "sourceRefs": [
     {
       "kind": "file",
-      "value": "ui_kits/app/README.md",
-      "label": "ui_kits/app/README.md",
-      "size": 1458,
+      "value": "index.html",
+      "label": "index.html",
+      "size": 0,
       "copied": true
     },
     {
@@ -24,9 +24,9 @@
     },
     {
       "kind": "file",
-      "value": "README.md",
-      "label": "README.md",
-      "size": 8619,
+      "value": "colors_and_type.css",
+      "label": "colors_and_type.css",
+      "size": 0,
       "copied": true
     }
   ]
