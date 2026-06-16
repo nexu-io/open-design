@@ -1195,6 +1195,90 @@ describe('netlify and railway deploys', () => {
     expect(updateSiteBody?.repo?.branch).toBe('master');
   });
 
+  it('polls and resolves new Netlify deploy when trigger response lacks deploy_id and new deploy is delayed', async () => {
+    let getDeploysCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+      }
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response(JSON.stringify([{ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }]), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'PUT') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+        // Return success but omit deploy_id to trigger fallback
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1/deploys?per_page=1') && method === 'GET') {
+        getDeploysCount++;
+        if (getDeploysCount === 1) {
+          // Latest deploy before the trigger attempt
+          return new Response(JSON.stringify([{ id: 'deploy-old', state: 'ready' }]), { status: 200 });
+        }
+        if (getDeploysCount === 2) {
+          // First check after trigger, new deploy hasn't shown up yet (returns old deploy ID)
+          return new Response(JSON.stringify([{ id: 'deploy-old', state: 'ready' }]), { status: 200 });
+        }
+        // Second check after trigger, new deploy has shown up!
+        return new Response(JSON.stringify([{ id: 'deploy-new', state: 'processing' }]), { status: 200 });
+      }
+      if (url.endsWith('/deploys/deploy-new') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'deploy-new',
+          state: 'ready',
+          deploy_ssl_url: 'https://deploy--example.netlify.app',
+          ssl_url: 'https://example.netlify.app',
+        }), { status: 200 });
+      }
+      if (url === 'https://example.netlify.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await deployToNetlify({
+      config: { token: 'netlify-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      files: [
+        {
+          file: 'index.html',
+          data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+          contentType: 'text/html',
+        },
+      ],
+      priorMetadata: { siteId: 'site-1', deployKeyId: 'existing-key-id' },
+    });
+
+    expect(result.deploymentId).toBe('deploy-new');
+    expect(getDeploysCount).toBe(3); // 1 before trigger, 2 after trigger
+  });
+
   it('creates a Railway project, service, deployment, and service domain from the UI-backed file set', async () => {
     const graphQlCalls: Array<{ query: string; variables: Record<string, unknown> }> = [];
     const uploadedPaths: string[] = [];

@@ -948,6 +948,24 @@ export async function deployToNetlify({
   let triggerSucceeded = false;
   let triggerError: any = null;
 
+  // Fetch the latest deploy ID before triggering to detect the new deploy ID if needed
+  let latestDeployIdBefore: string | undefined;
+  try {
+    const preListResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (preListResp.ok) {
+      const deploys = await readNetlifyJson(preListResp);
+      if (Array.isArray(deploys) && deploys.length > 0) {
+        latestDeployIdBefore = deploys[0].id;
+      }
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('Failed to fetch Netlify deploys before trigger:', err);
+    }
+  }
+
   const buildsController = new AbortController();
   const buildsTimer = setTimeout(() => buildsController.abort(), 15_000);
   try {
@@ -982,14 +1000,28 @@ export async function deployToNetlify({
 
   // Fallback: If trigger succeeded but no deployment ID was returned, query the site's deploys list
   if (triggerSucceeded && !deploymentId) {
-    const listDeploysResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
-      headers: { Authorization: `Bearer ${config.token}` },
-    });
-    if (listDeploysResp.ok) {
-      const deploys = await readNetlifyJson(listDeploysResp);
-      if (Array.isArray(deploys) && deploys.length > 0) {
-        deploymentId = deploys[0].id;
+    // Poll up to 5 times (1s interval) for a new deploy to show up
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const listDeploysResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (listDeploysResp.ok) {
+        const deploys = await readNetlifyJson(listDeploysResp);
+        if (Array.isArray(deploys) && deploys.length > 0) {
+          const latestDeploy = deploys[0];
+          // Ensure it is a new deploy that appeared after the trigger
+          if (latestDeploy.id !== latestDeployIdBefore) {
+            deploymentId = latestDeploy.id;
+            break;
+          }
+        }
       }
+      // Wait 1 second before retrying
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (!deploymentId) {
+      throw new DeployError('Failed to resolve new Netlify deployment after trigger.', 502);
     }
   }
 
