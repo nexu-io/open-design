@@ -188,9 +188,9 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
       },
     },
     tutorials: {
-      title: t.guides,
-      seoTitle: `${t.guides} — Open Design`,
-      description: `${t.guides}: Open Design / YouTube / ${t.skills} / ${t.systems} / ${t.community}.`,
+      title: `Open Design ${t.guides}`,
+      seoTitle: `Open Design ${t.guides}`,
+      description: `Open Design ${t.guides}: ${t.skills} / ${t.systems} / ${t.community}.`,
       categoriesLabel: `${t.guides} · ${t.category}`,
       categories: {
         all: t.all,
@@ -539,10 +539,10 @@ const zhTw: UiText = {
 const make = (text: UiText): DeepPartial<LandingUiCopy> => buildUiCopy(text);
 
 const zhTutorialsCopy = {
-  title: '教程',
-  seoTitle: '教程 — Open Design',
+  title: 'Open Design 教程',
+  seoTitle: 'Open Design 教程 — 如何使用 Open Design',
   description:
-    '观看 Open Design 的上手 walkthrough、插件教程、演示、评测与社区视频。所有视频都在页面内播放，并保留原始 YouTube 来源。',
+    'Open Design 使用教程合集：手把手视频带你上手 Open Design，涵盖安装入门、插件、设计系统与实战工作流，全部可在页面内直接观看。',
   categoriesLabel: '教程分类',
   categories: {
     all: '全部',
@@ -572,10 +572,10 @@ const zhTutorialsCopy = {
 } satisfies NonNullable<DeepPartial<LandingUiCopy>['tutorials']>;
 
 const zhTwTutorialsCopy = {
-  title: '教學',
-  seoTitle: '教學 — Open Design',
+  title: 'Open Design 教學',
+  seoTitle: 'Open Design 教學 — 如何使用 Open Design',
   description:
-    '觀看 Open Design 的上手 walkthrough、外掛教學、演示、評測與社群影片。所有影片都在頁面內播放，並保留原始 YouTube 來源。',
+    'Open Design 使用教學合集：手把手影片帶你上手 Open Design，涵蓋安裝入門、外掛、設計系統與實戰工作流，全部可在頁面內直接觀看。',
   categoriesLabel: '教學分類',
   categories: {
     all: '全部',
