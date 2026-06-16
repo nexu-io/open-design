@@ -1,33 +1,57 @@
 import type { Express } from 'express';
 import fsp from 'node:fs/promises';
 import type { RouteDeps } from '../server-context.js';
+import type {
+  DesignSystemFileDetail,
+  DesignSystemFileSummary,
+  DesignSystemPackageInfo,
+  DesignSystemRevision,
+  DesignSystemSummary,
+  UserDesignSystemInput,
+} from '../design-systems.js';
+import type { DesignTokenContractRebuildPreparation } from '../design-token-contract-rebuild.js';
+import type {
+  DesignSystemGenerationJob,
+  DesignSystemRevisionInput,
+  DesignSystemTokenContractRebuildInput,
+} from '../design-system-generation-jobs.js';
+import type { openDatabase } from '../db.js';
+import type { Project, ProjectFile } from '@open-design/contracts';
+
+type DbHandle = ReturnType<typeof openDatabase>;
+
+type DesignSystemWorkspaceProject = {
+  project: Project;
+  files: ProjectFile[];
+};
+
+type AvailableDesignSystemSummary = DesignSystemSummary & {
+  source?: 'built-in' | 'installed' | 'user';
+};
 
 export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectFiles' | 'projectStore'> {
   designSystems: {
-    createUserDesignSystem: (root: string, input: unknown) => Promise<unknown>;
+    createUserDesignSystem: (root: string, input: UserDesignSystemInput) => Promise<DesignSystemSummary>;
     deleteUserDesignSystem: (root: string, id: string) => Promise<boolean>;
-    ensureUserDesignSystemWorkspaceProject: (db: unknown, id: string) => Promise<unknown>;
-    listAllDesignSystems: () => Promise<Array<Record<string, unknown>>>;
-    listUserDesignSystemFiles: (root: string, id: string) => Promise<unknown[] | null>;
-    listUserDesignSystemRevisions: (root: string, id: string) => Promise<unknown[] | null>;
-    prepareDesignTokenContractRebuild: (root: string, id: string, options?: { force?: boolean }) => Promise<{
-      decision: unknown;
-      revision?: Record<string, unknown> | null;
-    }>;
+    ensureUserDesignSystemWorkspaceProject: (db: DbHandle, id: string) => Promise<DesignSystemWorkspaceProject | null>;
+    listAllDesignSystems: () => Promise<AvailableDesignSystemSummary[]>;
+    listUserDesignSystemFiles: (root: string, id: string) => Promise<DesignSystemFileSummary[] | null>;
+    listUserDesignSystemRevisions: (root: string, id: string) => Promise<DesignSystemRevision[] | null>;
+    prepareDesignTokenContractRebuild: (root: string, id: string, options?: { force?: boolean }) => Promise<DesignTokenContractRebuildPreparation>;
     readAvailableDesignSystem: (id: string) => Promise<string | null>;
-    readAvailableDesignSystemPackageInfo: (id: string) => Promise<unknown | null>;
-    readDesignSystemWorkspaceTextFile: (db: unknown, summary: unknown, filePath: string) => Promise<string | null>;
-    readUserDesignSystemFile: (root: string, id: string, filePath: string) => Promise<unknown | null>;
+    readAvailableDesignSystemPackageInfo: (id: string) => Promise<DesignSystemPackageInfo | null>;
+    readDesignSystemWorkspaceTextFile: (db: DbHandle, summary: AvailableDesignSystemSummary | undefined, filePath: string) => Promise<string | null>;
+    readUserDesignSystemFile: (root: string, id: string, filePath: string) => Promise<DesignSystemFileDetail | null>;
     renderDesignSystemPreview: (id: string, body: string) => string;
     renderDesignSystemShowcase: (id: string, body: string) => string;
-    updateUserDesignSystem: (root: string, id: string, input: unknown) => Promise<unknown | null>;
-    updateUserDesignSystemRevisionStatus: (root: string, id: string, revisionId: string, status: 'accepted' | 'rejected') => Promise<unknown | null>;
+    updateUserDesignSystem: (root: string, id: string, input: UserDesignSystemInput) => Promise<DesignSystemSummary | null>;
+    updateUserDesignSystemRevisionStatus: (root: string, id: string, revisionId: string, status: 'accepted' | 'rejected') => Promise<DesignSystemRevision | null>;
   };
   generationJobs: {
-    get: (jobId: string) => unknown | null;
-    rebuildTokenContract: (input: Record<string, unknown>) => unknown;
-    revise: (input: Record<string, unknown>) => unknown;
-    start: (input: unknown) => unknown;
+    get: (jobId: string) => DesignSystemGenerationJob | null;
+    rebuildTokenContract: (input: DesignSystemTokenContractRebuildInput) => DesignSystemGenerationJob;
+    revise: (input: DesignSystemRevisionInput) => DesignSystemGenerationJob;
+    start: (input: UserDesignSystemInput) => DesignSystemGenerationJob;
   };
 };
 
@@ -106,7 +130,7 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
         req.params.id,
         { force: req.body?.force === true },
       );
-      if (!(preparation.decision as { available?: boolean }).available) {
+      if (!preparation.decision.available) {
         return res.status(200).json({ decision: preparation.decision });
       }
       if (!preparation.revision) {

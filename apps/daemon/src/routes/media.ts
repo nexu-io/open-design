@@ -1,17 +1,17 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
-import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
-import type { RouteDeps } from './server-context.js';
-import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media-policy.js';
+import type { RouteDeps } from '../server-context.js';
+import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import {
   aihubmixCatalogUrl,
   parseAIHubMixCatalog,
   AIHUBMIX_DEFAULT_BASE_URL,
   type AIHubMixCatalogType,
-} from './aihubmix.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
-import type { ToolTokenGrant } from './tool-tokens.js';
+} from '../aihubmix.js';
+import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import type { ToolTokenGrant } from '../tool-tokens.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
