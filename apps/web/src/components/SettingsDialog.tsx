@@ -3612,11 +3612,15 @@ export function SettingsDialog({
     ) => {
       setCfg((c) => {
         const prev = c.agentModels?.[selected.id] ?? {};
+        const merged = { ...prev, ...next };
+        if (next.serviceTier === undefined) {
+          delete merged.serviceTier;
+        }
         return {
           ...c,
           agentModels: {
             ...(c.agentModels ?? {}),
-            [selected.id]: { ...prev, ...next },
+            [selected.id]: merged,
           },
         };
       });
@@ -3802,7 +3806,10 @@ export function SettingsDialog({
               <select
                 value={serviceTierValue}
                 onChange={(e) =>
-                  setChoice({ serviceTier: e.target.value })
+                  setChoice({
+                    serviceTier:
+                      e.target.value === 'default' ? undefined : e.target.value,
+                  })
                 }
               >
                 <option value="default">{t('common.default')}</option>

@@ -352,6 +352,13 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       serviceTier: 'priority',
     });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
+    });
   });
 
   it('shows icon-only signed-in status instead of account information in the AMR button', async () => {

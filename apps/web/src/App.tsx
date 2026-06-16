@@ -1390,6 +1390,9 @@ function AppInner() {
       const current = latestPersistedConfigRef.current;
       const prev = current.agentModels?.[agentId] ?? {};
       const merged = { ...prev, ...choice };
+      if (choice.serviceTier === undefined) {
+        delete merged.serviceTier;
+      }
       const nextAgentModels = {
         ...(current.agentModels ?? {}),
         [agentId]: merged,

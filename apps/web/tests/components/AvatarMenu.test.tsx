@@ -306,6 +306,13 @@ describe('AvatarMenu', () => {
     expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
       serviceTier: 'priority',
     });
+
+    onAgentModelChange.mockClear();
+    fireEvent.change(tierSelect, { target: { value: 'default' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
+      serviceTier: undefined,
+    });
   });
 
   it('keeps a custom saved model visible when it is not in the declared agent model list', () => {

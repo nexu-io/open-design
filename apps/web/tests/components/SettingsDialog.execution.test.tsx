@@ -2645,6 +2645,18 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         serviceTier: 'priority',
       }));
     });
+
+    fireEvent.change(serviceTierPicker, { target: { value: 'default' } });
+
+    await waitFor(() => {
+      const clearedPersist = onPersist.mock.calls.find(([config]) => {
+        const choice = (config as AppConfig).agentModels?.codex;
+        return choice?.model === 'gpt-5.5'
+          && choice.reasoning === 'default'
+          && !Object.prototype.hasOwnProperty.call(choice, 'serviceTier');
+      });
+      expect(clearedPersist).toBeDefined();
+    });
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {

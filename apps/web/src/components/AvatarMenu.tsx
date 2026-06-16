@@ -624,7 +624,8 @@ export function AvatarMenu({
                         value={currentServiceTierId}
                         onChange={(e) =>
                           onAgentModelChange(currentAgent.id, {
-                            serviceTier: e.target.value,
+                            serviceTier:
+                              e.target.value === 'default' ? undefined : e.target.value,
                           })
                         }
                       >
