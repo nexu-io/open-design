@@ -252,27 +252,24 @@ const jsonLd = [
           {pcopy.detailFindOnGithub}
         </a>
         {/*
-         * The Homepage CTA was removed per product feedback: surfacing the
-         * upstream / author homepage on a marketing detail page led visitors
-         * away from Open Design before they explored the plugin in-app. The
-         * `plugin.homepage` field stays in the manifest reader so other
-         * surfaces (the in-app catalog, JSON-LD, future authored bios) can
-         * still consume it; the marketing CTA is the only call site that
-         * removed it. The unused `pcopy.detailHomepage` i18n key stays for
-         * the same reason — it's `Partial<>` everywhere and removing it
-         * would touch 18 locale blocks for no functional gain.
+         * Homepage CTA intentionally omitted (it led visitors off-site before
+         * exploring the plugin). Share is an icon-only utility button so the
+         * header keeps just two text actions — Use + Source.
          */}
         <button
           type="button"
-          class="btn btn-ghost detail-share-trigger"
+          class="btn btn-ghost btn-icon detail-share-trigger"
           data-share-open={`plugin:${plugin.manifestId}`}
+          aria-label={pcopy.shareOpen}
+          title={pcopy.shareOpen}
         >
-          {pcopy.shareOpen}
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
+          </svg>
         </button>
       </div>
     </header>
-
-    <PluginContribute />
 
     {hasPreview && systemRecord && (
       <section class="detail-block scenario-showcase" id="preview">
@@ -555,11 +552,20 @@ const jsonLd = [
         </div>
       </section>
     )}
+
+    <PluginContribute />
     </div>
   </article>
 </Layout>
 
 <style>
+  /* Compact icon-only utility button (Share) — keeps the header to two text
+     actions so the top doesn't read as a wall of buttons. */
+  .btn-icon {
+    padding: 0;
+    width: 40px;
+    justify-content: center;
+  }
   .detail-crumb a {
     color: inherit;
     text-decoration: none;
