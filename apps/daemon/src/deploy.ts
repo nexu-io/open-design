@@ -757,7 +757,7 @@ export async function deployToNetlify({
     });
   }
 
-  const repoName = `od-${projectId}`;
+  const repoName = `od-netlify-${projectId}`;
   const repoInfo = await ensureGitHubRepository({
     username,
     repoName,
@@ -767,50 +767,7 @@ export async function deployToNetlify({
   const repoId = repoInfo.repoId;
   const isPrivate = repoInfo.private;
 
-  // Generate a deploy key on Netlify
-  const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!deployKeyResp.ok) {
-    const errText = await deployKeyResp.text();
-    throw new DeployError(`Failed to create Netlify deploy key: ${errText}`, 502);
-  }
-  const deployKey = (await deployKeyResp.json()) as any;
-  const deployKeyId = deployKey.id;
-  const publicKey = deployKey.public_key;
-
-  // Add the public key to the GitHub repository as a deploy key
-  const addKeyResp = await fetch(`https://api.github.com/repos/${username}/${repoName}/keys`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.githubToken}`,
-      Accept: 'application/vnd.github.v3+json',
-      'Content-Type': 'application/json',
-      'User-Agent': 'Open-Design-Daemon',
-    },
-    body: JSON.stringify({
-      title: 'Netlify Deploy Key',
-      key: publicKey,
-      read_only: true,
-    }),
-  });
-  if (!addKeyResp.ok) {
-    const errText = await addKeyResp.text();
-    if (!errText.includes('already_exists') && !errText.includes('already exists')) {
-      throw new DeployError(`Failed to add deploy key to GitHub repository: ${errText}`, 502);
-    }
-  }
-
-  // 3. Sync files to the GitHub repository
-  for (const file of files) {
-    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
-  }
-
-  // 4. Find or create Netlify site linked to the GitHub repo
+  // Resolve Netlify site details early so we can check for existing deploy keys
   let siteId = priorMetadata?.siteId;
   let serviceUrl = priorMetadata?.serviceUrl;
   const siteName = safeVercelProjectName(`od-${projectId}`);
@@ -830,6 +787,68 @@ export async function deployToNetlify({
     }
   }
 
+  let deployKeyId = priorMetadata?.deployKeyId;
+  let publicKey = '';
+
+  // If we don't have a deployKeyId, check if we can get it from the site if the site already exists
+  if (!deployKeyId && siteId) {
+    const siteResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    if (siteResp.ok) {
+      const site = (await readNetlifyJson(siteResp)) as any;
+      deployKeyId = site?.deploy_key_id || site?.repo?.deploy_key_id || site?.build_settings?.deploy_key_id;
+    }
+  }
+
+  if (!deployKeyId) {
+    // Generate a deploy key on Netlify
+    const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!deployKeyResp.ok) {
+      const errText = await deployKeyResp.text();
+      throw new DeployError(`Failed to create Netlify deploy key: ${errText}`, 502);
+    }
+    const deployKey = (await deployKeyResp.json()) as any;
+    deployKeyId = deployKey.id;
+    publicKey = deployKey.public_key;
+  }
+
+  // Add the public key to the GitHub repository as a deploy key (only if we created a new key pair)
+  if (publicKey) {
+    const addKeyResp = await fetch(`https://api.github.com/repos/${username}/${repoName}/keys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Open-Design-Daemon',
+      },
+      body: JSON.stringify({
+        title: 'Netlify Deploy Key',
+        key: publicKey,
+        read_only: true,
+      }),
+    });
+    if (!addKeyResp.ok) {
+      const errText = await addKeyResp.text();
+      if (!errText.includes('already_exists') && !errText.includes('already exists')) {
+        throw new DeployError(`Failed to add deploy key to GitHub repository: ${errText}`, 502);
+      }
+    }
+  }
+
+  // 3. Sync files to the GitHub repository
+  for (const file of files) {
+    await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
+  }
+
+  // 4. Create or update Netlify site linked to the GitHub repo
   if (siteId) {
     // Ensure the site is linked to the GitHub repository
     const updateSiteResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
@@ -1000,7 +1019,7 @@ export async function deployToNetlify({
     status: link.status,
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
-    providerMetadata: { siteId, serviceUrl: link.url || initialUrl || `https://${siteName}.netlify.app` },
+    providerMetadata: { siteId, serviceUrl: link.url || initialUrl || `https://${siteName}.netlify.app`, deployKeyId },
   };
 }
 
@@ -1131,7 +1150,7 @@ export async function deployToRender({
   // 2. Resolve project directory and write render.yaml file
   const yamlContent = `services:
   - type: web
-    name: od-${projectId}
+    name: od-render-${projectId}
     runtime: static
     buildCommand: ""
     staticPublishPath: "."
@@ -1155,7 +1174,7 @@ export async function deployToRender({
   }
 
   // 3. Ensure GitHub repository exists
-  const repoName = `od-${projectId}`;
+  const repoName = `od-render-${projectId}`;
   await ensureGitHubRepository({
     username,
     repoName,
@@ -1335,7 +1354,7 @@ export async function deployToRailway({
   const username = githubUser.login;
 
   // 2. Ensure GitHub repository exists
-  const repoName = `od-${projectId}`;
+  const repoName = `od-railway-${projectId}`;
   await ensureGitHubRepository({
     username,
     repoName,
