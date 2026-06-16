@@ -544,6 +544,34 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
+  it('detects a child that was signal-killed before waitForStatus was entered (exitCode null, signalCode set)', async () => {
+    const child = fakeChild();
+    // A crash-at-startup by signal leaves exitCode === null and sets only
+    // signalCode. The pre-seed must read BOTH fields, or it misses the exited
+    // state and polls to the full timeout instead of failing fast.
+    child.exitCode = null;
+    child.signalCode = 'SIGSEGV';
+
+    const startedAt = Date.now();
+    let captured: unknown;
+    try {
+      await waitForStatus<{ url: string | null }>(
+        '/tmp/od-test-no-such-ipc-signal-' + Date.now(),
+        (status) => status.url != null,
+        30 * 60 * 1000,
+        { child, logPath: '/tmp/od-test-daemon.log' },
+      );
+    } catch (err) {
+      captured = err;
+    }
+    const elapsed = Date.now() - startedAt;
+
+    expect(captured).toBeInstanceOf(Error);
+    expect((captured as Error).message).toMatch(/daemon exited before reporting status/);
+    expect((captured as Error).message).toContain('signal=SIGSEGV');
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
   it('embeds the daemon log tail in the error so the crash surfaces in the terminal', async () => {
     // The packaged sidecars redirect the daemon's stdout/stderr into
     // latest.log, so a startup crash (e.g. the OD_RESOURCE_ROOT guard) only

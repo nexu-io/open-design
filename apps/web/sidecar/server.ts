@@ -31,6 +31,12 @@ const HOST = process.env.OD_HOST || "127.0.0.1";
 if (process.env.OD_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.OD_HOST)) {
   throw new Error(`OD_HOST contains invalid characters: ${process.env.OD_HOST}`);
 }
+// A bare IPv6 OD_HOST (e.g. `fd00::10`) must be bracketed wherever HOST is used
+// as a URL authority — `new URL('/api', 'http://fd00::10')` throws Invalid URL,
+// which would silently break relative /api,/artifacts,/frames proxying and the
+// allowed-origin check. Mirror the OD_DAEMON_HOST bracketing below.
+const HOST_AUTHORITY =
+  HOST.includes(":") && !HOST.startsWith("[") ? `[${HOST}]` : HOST;
 // The daemon normally listens on loopback, but a packaged WebUI launched with a
 // concrete `--host <ip>` binds the daemon ONLY to that address, so the sidecar
 // passes OD_DAEMON_HOST and the proxy must target it instead of 127.0.0.1. A
@@ -252,7 +258,7 @@ function resolveHttpProxyTarget(
 
   let parsedRequestUrl: URL;
   try {
-    parsedRequestUrl = new URL(requestUrl, `http://${HOST}`);
+    parsedRequestUrl = new URL(requestUrl, `http://${HOST_AUTHORITY}`);
   } catch {
     return null;
   }
@@ -269,7 +275,7 @@ export function normalizeDaemonProxyOriginHeader(options: {
   if (options.origin == null || options.origin.length === 0) return options.origin;
 
   const schemes = ["http", "https"];
-  const loopbackHosts = ["127.0.0.1", "localhost", "[::1]", HOST];
+  const loopbackHosts = ["127.0.0.1", "localhost", "[::1]", HOST_AUTHORITY];
   const allowedWebOrigins = new Set(
     schemes.flatMap((scheme) => loopbackHosts.map((host) => `${scheme}://${host}:${options.webPort}`)),
   );

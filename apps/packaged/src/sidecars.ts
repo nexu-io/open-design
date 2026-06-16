@@ -207,8 +207,11 @@ export async function waitForStatus<T>(
 
   // Cover the race between spawn-resolved and now: if the child has
   // already exited by the time we got here, the 'exit' event is gone,
-  // so seed childExited from the synchronous status fields.
-  if (watch != null && watch.child.exitCode !== null) {
+  // so seed childExited from the synchronous status fields. A signal-killed
+  // child leaves exitCode === null and sets only signalCode, so check BOTH —
+  // checking exitCode alone misses crash-at-startup-by-signal and falls back to
+  // polling to the full timeout instead of failing fast.
+  if (watch != null && (watch.child.exitCode !== null || watch.child.signalCode !== null)) {
     childExited = { code: watch.child.exitCode, signal: watch.child.signalCode };
   }
 

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createStandaloneBackendEnv,
@@ -33,6 +33,23 @@ describe('resolveDaemonProxyTarget', () => {
 
   it('rejects non-daemon paths', () => {
     expect(resolveDaemonProxyTarget('http://127.0.0.1:7456', '/settings')).toBeNull();
+  });
+
+  // A packaged WebUI started with `--host fd00::10` forwards that bare IPv6
+  // literal into OD_HOST. The proxy builds its base URL from HOST, and
+  // `new URL('/api/health', 'http://fd00::10')` throws Invalid URL unless HOST
+  // is bracketed — which would silently stop proxying relative /api requests.
+  it('proxies relative /api when OD_HOST is a bare IPv6 literal', async () => {
+    vi.resetModules();
+    vi.stubEnv('OD_HOST', 'fd00::10');
+    try {
+      const mod = await import('../sidecar/server');
+      const target = mod.resolveDaemonProxyTarget('http://[fd00::10]:7456', '/api/health');
+      expect(target?.href).toBe('http://[fd00::10]:7456/api/health');
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });
 
