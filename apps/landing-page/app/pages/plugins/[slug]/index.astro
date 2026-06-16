@@ -27,6 +27,7 @@ import {
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
 import { getSystemRecords, type SystemRecord } from '../../../_lib/catalog';
+import { getSystemTokens, type SystemTokens } from '../../../_lib/system-tokens';
 import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
@@ -105,6 +106,18 @@ const relatedSystems: ReadonlyArray<SystemRecord> = systemRecord
       )
       .slice(0, 4)
   : [];
+
+/*
+ * Structured design tokens. Each bundled design system ships a
+ * `design-tokens.json` conforming to the canonical TOKEN_SCHEMA contract
+ * (packages/contracts/src/design-systems/token-schema.ts) — the same shape
+ * the in-product brand kit (PR #4260's Brand) and the agent's theming layer
+ * read. The detail page previously ignored it and only showed regex-scraped
+ * hex values; here we render the real grouped token spec sheet.
+ */
+const systemTokens: SystemTokens | null = systemRecord
+  ? getSystemTokens(systemRecord.slug)
+  : null;
 
 /*
  * Render the full DESIGN.md body for design-system pages. The manifest
@@ -392,6 +405,37 @@ const jsonLd = [
       </section>
     )}
 
+    {systemTokens && (
+      <section class="detail-block design-tokens">
+        <h2>{pcopy.tokensHead}</h2>
+        <p class="block-lead">{pcopy.tokensLead(systemTokens.total)}</p>
+        <div class="token-groups">
+          {systemTokens.groups.map((group) => (
+            <div class="token-group">
+              <h3 class="token-group-head">{pcopy.tokenGroupLabels[group.id] ?? group.id}</h3>
+              <ul class="token-list">
+                {group.tokens.map((tok) => (
+                  <li class="token-row">
+                    {tok.type === 'color' ? (
+                      <span class="token-swatch" style={`background:${tok.value}`} aria-hidden="true" />
+                    ) : (
+                      <span class="token-swatch token-swatch-empty" aria-hidden="true" />
+                    )}
+                    <code class="token-name">{tok.name}</code>
+                    {tok.type === 'fontFamily' ? (
+                      <span class="token-value token-value-font" style={`font-family:${tok.value}`}>{tok.value}</span>
+                    ) : (
+                      <code class="token-value">{tok.value}</code>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
     {SystemContent && (
       <section class="detail-block designmd-body">
         <SystemContent />
@@ -532,5 +576,68 @@ const jsonLd = [
     display: block;
     border: 1px solid var(--line);
     background: #000;
+  }
+  /* Structured design-token spec sheet (design-tokens.json). Grouped by the
+     canonical TOKEN_SCHEMA visual stack; each row = swatch + name + value. */
+  .token-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px 32px;
+    margin-top: 16px;
+  }
+  .token-group-head {
+    margin: 0 0 8px;
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute, #595959);
+  }
+  .token-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .token-swatch {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+  .token-swatch-empty {
+    background: repeating-linear-gradient(
+      45deg,
+      var(--paper-warm, #f5f5f5),
+      var(--paper-warm, #f5f5f5) 3px,
+      var(--line) 3px,
+      var(--line) 4px
+    );
+  }
+  .token-name {
+    flex: none;
+    font-size: 0.78rem;
+    color: var(--ink, #262626);
+  }
+  .token-value {
+    margin-left: auto;
+    font-size: 0.74rem;
+    color: var(--ink-mute, #595959);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .token-value-font {
+    font-size: 0.85rem;
+    color: var(--ink-soft, #434343);
   }
 </style>
