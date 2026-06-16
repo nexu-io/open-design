@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
@@ -28,12 +29,43 @@ import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
 import type { RouteDeps } from '../server-context.js';
 
+export interface RegisterAtomRoutesDeps {
+  db: Database.Database;
+  resources: { FIRST_PARTY_ATOMS: Array<{ id: string; taskKinds: string[]; [key: string]: unknown }> };
+}
+
 export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'paths' | 'resources'> {
   tokenContractRebuild?: {
     maybeStartForImportedDesignSystem?: (
       designSystemId: string,
     ) => Promise<DesignSystemTokenContractRebuildJobResponse | undefined>;
   };
+}
+
+export function registerAtomRoutes(app: Express, ctx: RegisterAtomRoutesDeps) {
+  const { db } = ctx;
+  const atoms = ctx.resources.FIRST_PARTY_ATOMS ?? [];
+
+  app.get('/api/atoms', (_req, res) => {
+    res.json({ atoms: atoms.map((a) => ({ ...a, taskKinds: a.taskKinds.slice() })) });
+  });
+
+  app.get('/api/atoms/:id', async (req, res) => {
+    const id = req.params.id;
+    const atom = atoms.find((a) => a.id === id);
+    if (!atom) {
+      return res.status(404).json({ error: { code: 'atom-not-found', message: `Unknown atom "${id}"` } });
+    }
+    const body: Record<string, unknown> = { ...atom, taskKinds: atom.taskKinds.slice() };
+    try {
+      const { loadAtomBodies } = await import('../plugins/atom-bodies.js');
+      const bodies = await loadAtomBodies(db, [id]);
+      if (bodies[0] && typeof bodies[0].body === 'string') body.skillBody = bodies[0].body;
+    } catch (err) {
+      console.warn(`[atoms] failed to load SKILL.md body for ${id}:`, err);
+    }
+    res.json(body);
+  });
 }
 
 export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticResourceRoutesDeps) {
@@ -365,13 +397,6 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/design-systems/:id', (_req, _res, next) => {
-    // The design-system workflow owns the detail shape now because user-created
-    // systems may be backed by a review workspace project. Let the richer route
-    // registered in server.ts answer this request.
-    next();
-  });
-
   app.get('/api/prompt-templates', async (_req, res) => {
     try {
       const templates = await listPromptTemplates(PROMPT_TEMPLATES_DIR);
@@ -396,21 +421,6 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
     }
-  });
-
-  // Showcase HTML for a design system — palette swatches, typography
-  // samples, sample components, and the full DESIGN.md rendered as prose.
-  // Built at request time from the on-disk DESIGN.md so any update to the
-  // file shows up on the next view, no rebuild needed.
-  app.get('/api/design-systems/:id/preview', (_req, _res, next) => {
-    next();
-  });
-
-  // Marketing-style showcase derived from the same DESIGN.md — full landing
-  // page parameterised by the system's tokens. Same lazy-render strategy as
-  // /preview: built at request time, no caching.
-  app.get('/api/design-systems/:id/showcase', (_req, _res, next) => {
-    next();
   });
 
   // Pre-built example HTML for a skill — what a typical artifact from this
