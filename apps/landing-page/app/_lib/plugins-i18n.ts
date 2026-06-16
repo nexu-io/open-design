@@ -93,6 +93,12 @@ export interface PluginsCopy {
   tokensHead: string;
   tokensLead: (n: number) => string;
   tokenGroupLabels: Record<string, string>;
+  /** In-page anchor-nav labels on a design-system detail page. */
+  detailTocLabel: string;
+  detailTocPreview: string;
+  detailTocTokens: string;
+  detailTocGuide: string;
+  detailTocRelated: string;
   /** Lowercase category suffix appended to design-system detail titles/H1 (e.g. "design system"). */
   detailSystemLabel: string;
   /** Placeholder for the client-side catalog filter on templates / systems. */
@@ -317,6 +323,11 @@ carry the hierarchy and color is used sparingly for intent.
     layout: 'Layout',
     other: 'Other',
   },
+  detailTocLabel: 'On this page',
+  detailTocPreview: 'Preview',
+  detailTocTokens: 'Design tokens',
+  detailTocGuide: 'DESIGN.md guide',
+  detailTocRelated: 'Related',
   detailSystemLabel: 'design system',
   searchPlaceholder: 'Search by name or keyword…',
   searchNoResults: 'No matches. Try a different keyword.',
