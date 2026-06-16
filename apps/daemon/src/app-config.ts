@@ -18,7 +18,7 @@
 // this machine.
 
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { expandHomePrefix } from './home-expansion.js';
@@ -743,10 +743,20 @@ async function doWrite(
     : next as AppConfigPrefs;
   const normalizedNext = normalizeAgentCliEnvPrefs(nextWithInferredIntent);
   const file = configFile(dataDir);
-  await mkdir(path.dirname(file), { recursive: true });
+  // app-config.json holds `agentCliEnv` (per-agent CLI env, including BYOK API
+  // key overrides), so the data dir and file are locked to the owner (0700/0600)
+  // to match the other secret stores (connectors, mcp-tokens, xai-tokens). The
+  // post-rename chmod is best-effort so the hot-path write never fails on
+  // platforms that don't honor POSIX modes.
+  await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(normalizedNext, null, 2), 'utf8');
+  await writeFile(tmp, JSON.stringify(normalizedNext, null, 2), { encoding: 'utf8', mode: 0o600 });
   await rename(tmp, file);
+  try {
+    await chmod(file, 0o600);
+  } catch {
+    // best-effort: a non-POSIX filesystem (e.g. Windows) may reject chmod.
+  }
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
   // explicitly touched `installationId` (avoiding noisy writes on every

@@ -4,17 +4,33 @@ packages:
   - tools/*
   - e2e
 
+# Single source of truth for dependency overrides. pnpm 11 no longer reads the
+# `pnpm.overrides` block from package.json, so these security pins live here
+# only. The `dependency-audit` workflow gates against drift.
 overrides:
   brace-expansion: 5.0.6
   devalue: 5.8.1
   fast-uri: 3.1.2
-  hono: 4.12.19
+  hono: 4.12.25
   ip-address: 10.2.0
   postcss: 8.5.15
-  protobufjs: 8.4.0
+  protobufjs: 8.6.0
   qs: 6.15.2
   tmp: 0.2.7
   yaml: 2.9.0
+  # Transitive security bumps (see GHSA advisories surfaced by `pnpm audit`).
+  # Ranges are capped to the current major so the pins resolve to the minimal
+  # patched release instead of jumping a major (e.g. vite 7 -> 8) unintended.
+  esbuild: '>=0.28.1 <0.29.0'
+  form-data: '>=4.0.6 <5'
+  # No upper cap: vitest 4 / @vitest/mocker require vite 8 as a peer, and vite 8
+  # already satisfies the security floor (>=7.3.5).
+  vite: '>=7.3.5'
+  astro: '>=6.4.6 <7'
+  tar: '>=7.5.16 <8'
+  js-yaml: '>=4.2.0 <5'
+  dompurify: '>=3.4.9 <4'
+  '@opentelemetry/core': '>=2.8.0 <3'
 
 onlyBuiltDependencies:
   - better-sqlite3
