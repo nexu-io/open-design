@@ -107,6 +107,17 @@ describe("tools-dev local env loading", () => {
     assert.deepEqual(logs, []);
   });
 
+  it("does not treat option values named help as help output", async () => {
+    const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "od-local-env-"));
+    await writeFile(path.join(workspaceRoot, ".env.local"), "VALUE=yes\n");
+    const env: NodeJS.ProcessEnv = {};
+
+    const result = loadWorkspaceLocalEnv({ args: ["--namespace", "help", "start", "daemon"], workspaceRoot, env });
+
+    assert.equal(result.loaded, true);
+    assert.equal(env.VALUE, "yes");
+  });
+
   it("requires explicitly requested env files to exist", async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "od-local-env-"));
 

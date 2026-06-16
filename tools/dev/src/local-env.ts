@@ -1,5 +1,7 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+
+import { OPTIONS_WITH_VALUE } from "./cli-args.js";
 
 export const DEFAULT_LOCAL_ENV_FILE_NAMES = [".env.development.local", ".env.local", ".env.development", ".env"] as const;
 export const LOCAL_DEVELOPMENT_TELEMETRY_ENV = "local_development";
@@ -85,10 +87,6 @@ function parseLocalEnvFlags(args: readonly string[]): {
       json = true;
       continue;
     }
-    if (arg === "--help" || arg === "-h" || arg === "help") {
-      help = true;
-      continue;
-    }
     if (arg === "--no-env-file") {
       disabled = true;
       continue;
@@ -104,6 +102,18 @@ function parseLocalEnvFlags(args: readonly string[]): {
       const value = arg.slice("--env-file=".length);
       if (value.length === 0) throw new Error("--env-file requires a path");
       explicitFiles.push(value);
+      continue;
+    }
+    if (arg === "--help" || arg === "-h" || arg === "help") {
+      help = true;
+      continue;
+    }
+    if (OPTIONS_WITH_VALUE.has(arg)) {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--") && arg.includes("=")) {
+      continue;
     }
   }
 
