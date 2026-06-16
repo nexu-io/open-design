@@ -26,7 +26,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
-import { parseAmrEntryAnalyticsPayload } from '../../src/integrations/vela.js';
+import {
+  parseAmrEntryAnalyticsPayload,
+  parseAmrOnboardingProfileAnalyticsPayload,
+} from '../../src/integrations/vela.js';
 
 interface StartedServer {
   url: string;
@@ -353,6 +356,32 @@ describe('POST /api/integrations/vela/login', () => {
     await waitForFile(dumpPath);
     const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
     expect(env.VELA_API_URL).toBe(`${baseUrl}/api/integrations/vela/api-proxy`);
+  });
+
+  it('passes Open Design attribution device id to vela login', async () => {
+    const dumpPath = path.join(tmpHome, 'vela-env-attribution.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+
+    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`, {
+      attribution: {
+        entryId: 'od-amr-entry-onboarding',
+        sourceProduct: 'open_design',
+        sourceDetail: 'onboarding_amr_sign_in_continue',
+        occurredAt: '2026-06-16T08:00:00.000Z',
+        odDeviceId: 'od-install-abc',
+      },
+    });
+    expect(status).toBe(202);
+
+    await waitForFile(dumpPath);
+    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+    expect(env.OPEN_DESIGN_AMR_ORIGIN).toBe('open_design');
+    expect(env.OPEN_DESIGN_AMR_ENTRY_ID).toBe('od-amr-entry-onboarding');
+    expect(env.OPEN_DESIGN_AMR_ENTRY_SOURCE).toBe(
+      'onboarding_amr_sign_in_continue',
+    );
+    expect(env.OPEN_DESIGN_AMR_ENTRY_AT).toBe('2026-06-16T08:00:00.000Z');
+    expect(env.OPEN_DESIGN_AMR_DEVICE_ID).toBe('od-install-abc');
   });
 
   it('derives the default login API proxy from OD_PUBLIC_BASE_URL when configured', async () => {
@@ -803,6 +832,87 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     }
   });
 
+  it('mirrors Open Design onboarding profile snapshots to AMR analytics', async () => {
+    const requests: unknown[] = [];
+    const captureServer = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        requests.push(JSON.parse(raw));
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ accepted: 1 }));
+      });
+    });
+    await new Promise<void>((resolve) => {
+      captureServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = captureServer.address() as AddressInfo;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_URL =
+      `http://127.0.0.1:${address.port}/api/v1/analytics/events`;
+    process.env.OPEN_DESIGN_AMR_ANALYTICS_ENV = 'test';
+
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'onboarding',
+      area: 'onboarding',
+      element: 'about_you_submit',
+      action: 'submit_profile',
+      entryId: 'od-amr-entry-profile',
+      sourceProduct: 'open_design',
+      sourceDetail: 'onboarding_amr_sign_in_continue',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+      profileOccurredAt: '2026-06-03T12:03:00.000Z',
+      odDeviceId: 'od-install-abc',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    };
+
+    try {
+      const { status, body } = await postJson<{ mirrored: boolean; status: number }>(
+        `${baseUrl}/api/integrations/vela/analytics-profile`,
+        { payload },
+        {
+          'x-od-analytics-device-id': 'od-device-1',
+          'x-od-analytics-session-id': 'od-session-1',
+          'x-od-analytics-locale': 'zh-CN',
+        },
+      );
+
+      expect(status).toBe(202);
+      expect(body).toEqual({ mirrored: true, status: 202 });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({
+        events: [
+          {
+            common: {
+              eventId: 'od-onboarding-profile-od-amr-entry-profile',
+              eventTime: '2026-06-03T12:03:00.000Z',
+              registryKey: 'open_design_onboarding_profile',
+              eventName: 'onboarding_profile',
+              eventType: 'result',
+              platform: 'web',
+              env: 'test',
+              anonymousId: 'od-device-1',
+              sessionId: 'od-session-1',
+              locale: 'zh-CN',
+              traceId: 'od-amr-entry-profile',
+            },
+            payload,
+          },
+        ],
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        captureServer.close(() => resolve());
+      });
+    }
+  });
+
   it('drops an over-long profile value rather than mirroring it', () => {
     const base = {
       pageName: 'open_design',
@@ -839,6 +949,42 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
         payload: { ...base, odUseCase: 'not-an-array' },
       }),
     ).toBeNull();
+  });
+
+  it('rejects malformed AMR onboarding profile analytics payloads', async () => {
+    const base = {
+      pageName: 'open_design',
+      sourcePageName: 'onboarding',
+      area: 'onboarding',
+      element: 'about_you_submit',
+      action: 'submit_profile',
+      entryId: 'od-amr-entry-profile',
+      sourceProduct: 'open_design',
+      sourceDetail: 'onboarding_amr_sign_in_continue',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+      profileOccurredAt: '2026-06-03T12:03:00.000Z',
+    };
+
+    expect(
+      parseAmrOnboardingProfileAnalyticsPayload({
+        payload: { ...base, odRole: 'pm', odDeviceId: 'od-install-abc' },
+      }),
+    ).toMatchObject({ odRole: 'pm', odDeviceId: 'od-install-abc' });
+    expect(parseAmrOnboardingProfileAnalyticsPayload({ payload: base }))
+      .toBeNull();
+    expect(
+      parseAmrOnboardingProfileAnalyticsPayload({
+        payload: { ...base, odRole: 'x'.repeat(65) },
+      }),
+    ).toBeNull();
+
+    const { status, body } = await postJson<{ error: string }>(
+      `${baseUrl}/api/integrations/vela/analytics-profile`,
+      { payload: { pageName: 'open_design' } },
+    );
+
+    expect(status).toBe(400);
+    expect(body).toEqual({ error: 'invalid_amr_profile_analytics' });
   });
 
   it('rejects malformed AMR entry analytics payloads', async () => {

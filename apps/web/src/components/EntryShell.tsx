@@ -37,7 +37,13 @@ import {
   trackOnboardingRuntimeScanResult,
   trackPageView,
 } from '../analytics/events';
-import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import {
+  amrHandoffDeviceId,
+  recordAmrEntry,
+  syncAmrAttributionWithOnboardingProfile,
+  type AmrEntryAttribution,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
@@ -1502,7 +1508,12 @@ function OnboardingView({
       }
       if (amrLoginPollCancelledRef.current) return;
       beginAmrAuthTracking(attribution);
-      const loginResult = await startVelaLogin(attribution);
+      const odDeviceId = amrHandoffDeviceId({
+        metricsConsent: config.telemetry?.metrics === true,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId: config.installationId,
+      });
+      const loginResult = await startVelaLogin(attribution, odDeviceId);
       if (amrLoginPollCancelledRef.current) {
         resolveAmrAuthTracking(analytics.track, 'cancelled');
         if (loginResult.ok || loginResult.alreadyRunning) {
@@ -1608,6 +1619,21 @@ function OnboardingView({
       useCase: snapshot.useCase,
       source: snapshot.source,
     });
+    syncAmrAttributionWithOnboardingProfile(
+      {
+        role: snapshot.role,
+        orgSize: snapshot.orgSize,
+        useCase: snapshot.useCase,
+        source: snapshot.source,
+      },
+      {
+        odDeviceId: amrHandoffDeviceId({
+          metricsConsent: config.telemetry?.metrics === true,
+          resolvedDeviceId: getResolvedDeviceId(),
+          installationId: config.installationId,
+        }),
+      },
+    );
     trackOnboardingClick(analytics.track, {
       page_name: 'onboarding',
       area: 'about_you',

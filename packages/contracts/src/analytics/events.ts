@@ -130,6 +130,10 @@ export type TrackingAmrEntrySource =
   | 'inline_model_switcher_amr_row'
   | 'settings_amr_agent_card'
   | 'settings_amr_authorize'
+  | 'settings_amr_console'
+  | 'settings_amr_install'
+  | 'avatar_amr_console'
+  | 'handoff_amr_website'
   | 'chat_error_authorize_retry'
   | 'chat_error_recharge'
   | 'chat_error_switch_retry_card'
@@ -142,6 +146,8 @@ export interface AmrEntryAttribution {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   occurredAt: string;
+  // Open Design install/device id forwarded only on consent-gated AMR handoffs.
+  odDeviceId?: string;
   // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
   // AMR can segment paid conversion by who the visitor is. Open strings, not a
   // union: onboarding keeps these open so a new option never forces a contract

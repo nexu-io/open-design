@@ -7,6 +7,7 @@ import {
   attributedAmrUrl,
   readAmrAttribution,
   recordAmrEntry,
+  syncAmrAttributionWithOnboardingProfile,
 } from '../../src/analytics/amr-attribution';
 import { saveOnboardingProfile } from '../../src/state/onboarding-profile';
 
@@ -31,6 +32,10 @@ describe('AMR attribution helper', () => {
       'inline_model_switcher_amr_row',
       'settings_amr_agent_card',
       'settings_amr_authorize',
+      'settings_amr_console',
+      'settings_amr_install',
+      'avatar_amr_console',
+      'handoff_amr_website',
       'chat_error_authorize_retry',
       'chat_error_recharge',
       'chat_error_switch_retry_card',
@@ -163,6 +168,62 @@ describe('AMR attribution helper', () => {
     expect(readAmrAttribution(new Date('2026-06-03T12:00:05.000Z'))).toEqual(
       first,
     );
+  });
+
+  it('syncs an existing AMR entry with onboarding profile after About you is submitted', () => {
+    const track = vi.fn();
+    const entryTime = new Date('2026-06-03T12:00:00.000Z');
+    const profileTime = new Date('2026-06-03T12:03:00.000Z');
+    const attribution = recordAmrEntry(track, 'onboarding_amr_card', entryTime);
+    fetchMock.mockClear();
+
+    const updated = syncAmrAttributionWithOnboardingProfile(
+      {
+        role: 'pm',
+        orgSize: 'startup',
+        useCase: ['product', 'design-system'],
+        source: 'github',
+      },
+      { odDeviceId: 'od-install-abc', now: profileTime },
+    );
+
+    expect(updated).toMatchObject({
+      entryId: attribution.entryId,
+      sourceDetail: 'onboarding_amr_card',
+      odDeviceId: 'od-install-abc',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+    expect(readAmrAttribution(profileTime)).toEqual(updated);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/analytics-profile',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      payload: {
+        pageName: 'open_design',
+        sourcePageName: 'onboarding',
+        area: 'onboarding',
+        element: 'about_you_submit',
+        action: 'submit_profile',
+        entryId: attribution.entryId,
+        sourceProduct: 'open_design',
+        sourceDetail: 'onboarding_amr_card',
+        entryOccurredAt: '2026-06-03T12:00:00.000Z',
+        profileOccurredAt: '2026-06-03T12:03:00.000Z',
+        odDeviceId: 'od-install-abc',
+        odRole: 'pm',
+        odOrgSize: 'startup',
+        odUseCase: ['product', 'design-system'],
+        odSource: 'github',
+      },
+    });
   });
 
   it('expires stored attribution after seven days', () => {
