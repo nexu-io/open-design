@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryShell } from '../../src/components/EntryShell';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
 
@@ -883,8 +884,8 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
           kind: 'success',
           latencyMs: 10,
           models: [
-            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
             { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
           ],
         });
       }
@@ -936,6 +937,237 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       model: 'claude-opus-4-8',
       apiProviderBaseUrl: null,
     });
+  });
+
+  it('automatically fetches BYOK models and tests the selected model in onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+          ],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'claude-opus-4-8',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();
+    });
+    const providerModelCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/provider/models'),
+    );
+    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/test/connection'),
+    );
+    expect(providerModelCalls).toHaveLength(1);
+    expect(connectionTestCalls).toHaveLength(1);
+    expect(JSON.parse(String(connectionTestCalls[0]?.[1]?.body))).toMatchObject({
+      protocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'test-api-key',
+      model: 'claude-opus-4-8',
+    });
+  });
+
+  it('automatically selects a cached BYOK model before testing in onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'claude-opus-4-8',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      providerModelsCache: {
+        [providerModelsCacheKey('anthropic', 'https://api.anthropic.com', 'test-api-key')]: [
+          { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+          { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+        ],
+      },
+      onProviderModelsCacheChange: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();
+    });
+    const providerModelCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/provider/models'),
+    );
+    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/test/connection'),
+    );
+    expect(providerModelCalls).toHaveLength(0);
+    expect(connectionTestCalls).toHaveLength(1);
+    expect(props.onApiModelChange).toHaveBeenCalledWith('claude-opus-4-8');
+    expect(JSON.parse(String(connectionTestCalls[0]?.[1]?.body))).toMatchObject({
+      protocol: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'test-api-key',
+      model: 'claude-opus-4-8',
+    });
+  });
+
+  it('ignores stale BYOK model fetch responses after onboarding inputs change', async () => {
+    let resolveFirstModelFetch: ((response: Response) => void) | null = null;
+    let providerModelRequestCount = 0;
+    const fetchMock = vi.fn((input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return Promise.resolve(
+          jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+        );
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        providerModelRequestCount += 1;
+        if (providerModelRequestCount === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveFirstModelFetch = resolve;
+          });
+        }
+        return new Promise<Response>(() => {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding();
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'old-api-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
+
+    await waitFor(() => {
+      expect(providerModelRequestCount).toBe(1);
+    });
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'new-api-key' } });
+
+    await act(async () => {
+      resolveFirstModelFetch?.(
+        jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+          ],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(props.onApiModelChange).not.toHaveBeenCalled();
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls).not.toContainEqual([
+      expect.objectContaining({
+        apiKey: 'old-api-key',
+        model: 'claude-opus-4-8',
+      }),
+    ]);
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      apiKey: 'new-api-key',
+      model: '',
+    });
+  });
+
+  it('ignores stale BYOK model fetch responses after switching to Local CLI', async () => {
+    let resolveModelFetch: ((response: Response) => void) | null = null;
+    let providerModelRequestCount = 0;
+    const fetchMock = vi.fn((input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return Promise.resolve(
+          jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+        );
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        providerModelRequestCount += 1;
+        return new Promise<Response>((resolve) => {
+          resolveModelFetch = resolve;
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding();
+
+    fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'test-api-key' } });
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.anthropic.com' } });
+
+    await waitFor(() => {
+      expect(providerModelRequestCount).toBe(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+
+    await act(async () => {
+      resolveModelFetch?.(
+        jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
+            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+          ],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(props.onApiModelChange).not.toHaveBeenCalledWith('claude-opus-4-8');
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls).not.toContainEqual([
+      expect.objectContaining({
+        mode: 'api',
+        model: 'claude-opus-4-8',
+      }),
+    ]);
+    expect(props.onModeChange).toHaveBeenCalledWith('daemon');
   });
 
   it('shows the AMR cloud card as a skeleton while agent detection is still in flight', async () => {
