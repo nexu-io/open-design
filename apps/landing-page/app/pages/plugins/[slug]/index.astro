@@ -13,15 +13,21 @@
  * not the folder name. Manifest ids are globally unique within the
  * registry so there's no risk of collision across buckets.
  */
+import { getCollection, render } from 'astro:content';
 import Layout from '../../../_components/sub-page-layout.astro';
+import SystemPreview from '../../../_components/system-preview.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import {
+  detailHrefForSystemSlug,
   getDetailPlugins,
   resolveBundledDescription,
   resolveBundledTitle,
   type BundledPluginRecord,
 } from '../../../_lib/bundled-plugins';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
-import { localeFromPath, localizedHref } from '../../../i18n';
+import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
+import { getSystemRecords, type SystemRecord } from '../../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
 
 export async function getStaticPaths() {
   return getDetailPlugins().map((plugin) => ({
@@ -44,13 +50,6 @@ const pcopy = getPluginsCopy(locale);
 // the per-locale lookup happens here.
 const pluginTitle = resolveBundledTitle(plugin, locale);
 const pluginDescription = resolveBundledDescription(plugin, locale);
-// `community` plugins carry a non-localized label: the i18n bucket map only
-// covers the _official buckets, so narrow before indexing it.
-const bucketLabel =
-  plugin.bucket === 'community'
-    ? 'Community'
-    : pcopy.detailBucketLabel[plugin.bucket];
-
 /*
  * Author normalisation. First-party manifests authored by Open Design
  * point at the org URL (`https://github.com/nexu-io`) — fine for the
@@ -67,8 +66,83 @@ const authorUrl = plugin.authorUrl
   ? (ORG_TO_REPO[plugin.authorUrl.replace(/\/$/, '')] ?? plugin.authorUrl)
   : undefined;
 
-const title = `${pluginTitle} · Open Design plugin`;
+/*
+ * Design-system detail pages target the "[brand] design system" search
+ * cluster (e.g. "stripe design system", "vercel design system" — low KD,
+ * long-tail across the ~142 systems). Their manifest title is the bare
+ * brand name ("Stripe"), so weave the category keyword into the SEO title
+ * + H1; every other bucket keeps the generic plugin framing.
+ */
+const isDesignSystem = plugin.bucket === 'design-systems';
+const headingTitle = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel}`
+  : pluginTitle;
+const title = isDesignSystem
+  ? `${pluginTitle} ${pcopy.detailSystemLabel} — palette, typography & tokens for your agent · Open Design`
+  : `${pluginTitle} · Open Design plugin`;
 const description = pluginDescription;
+
+const ui = getLandingUiCopy(locale);
+/*
+ * For design-system plugins, pull the DESIGN.md-derived SystemRecord so
+ * the detail page carries real brand substance — palette swatches, the
+ * visual theme, and related systems. The manifest alone (a one-line
+ * tagline + poster) is too thin to be the "last click" for a
+ * "[brand] design system" search. Matched by shared folder slug; reuse
+ * the same copy keys the legacy /systems/<slug>/ page used so every
+ * locale is already covered.
+ */
+const allSystems: ReadonlyArray<SystemRecord> = isDesignSystem
+  ? await getSystemRecords(locale)
+  : [];
+const systemRecord: SystemRecord | null = isDesignSystem
+  ? (allSystems.find((s) => s.slug === plugin.slug) ?? null)
+  : null;
+const relatedSystems: ReadonlyArray<SystemRecord> = systemRecord
+  ? allSystems
+      .filter(
+        (s) => s.slug !== systemRecord.slug && s.category === systemRecord.category,
+      )
+      .slice(0, 4)
+  : [];
+
+/*
+ * Render the full DESIGN.md body for design-system pages. The manifest
+ * carries only a one-line tagline; the real substance (color roles,
+ * typography, components, layout, do's & don'ts, agent prompt guide)
+ * lives in the DESIGN.md content collection. Matched by the same folder
+ * slug the SystemRecord uses (`entry.id` is `<slug>/DESIGN`). The
+ * leading `# ...` heading is hidden via CSS so the page keeps a single
+ * H1 (the brand "<X> design system" title above).
+ */
+const systemEntry = isDesignSystem
+  ? (await getCollection('systems')).find(
+      (e) => (e.id.split('/')[0] ?? e.id) === plugin.slug,
+    )
+  : undefined;
+const SystemContent = systemEntry ? (await render(systemEntry)).Content : null;
+
+/*
+ * Hierarchical breadcrumb (Plugin library › <category> › <item>). The
+ * middle crumb is the real catalog the item lives in, so every level is
+ * clickable back up the tree — design systems → /plugins/systems/,
+ * templates (categorize !== null) → /plugins/templates/, instruction
+ * skills (categorize === null) → /plugins/skills/. This replaces both
+ * the old standalone back link and the redundant small-caps eyebrow.
+ */
+const category = isDesignSystem
+  ? null
+  : categorizePlugin(bundledRecordOf(plugin));
+const crumbHref = isDesignSystem
+  ? '/plugins/systems/'
+  : category
+    ? '/plugins/templates/'
+    : '/plugins/skills/';
+const crumbLabel = isDesignSystem
+  ? pcopy.tileSystems
+  : category
+    ? pcopy.tileTemplates
+    : pcopy.tileSkills;
 
 /*
  * Share-dialog copy. The English template stays as a fallback inside
@@ -111,20 +185,16 @@ const jsonLd = [
   jsonLd={jsonLd}
   localeCanonicalOnly
 >
-  <nav class="breadcrumb" aria-label={pcopy.breadcrumbLabel}>
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pluginTitle}</span>
-  </nav>
-
   <article class="detail">
     <header class="detail-head">
-      <span class="label">
-        {pcopy.hubLabel} · {bucketLabel}
-      </span>
-      <h1 class="display">{pluginTitle}<span class="dot">.</span></h1>
+      <nav class="label detail-crumb" aria-label={pcopy.breadcrumbLabel}>
+        <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <a href={href(crumbHref)}>{crumbLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <span aria-current="page">{pluginTitle}</span>
+      </nav>
+      <h1 class="display">{headingTitle}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
       <div class="detail-actions">
         <a class="btn btn-primary" href="https://github.com/nexu-io/open-design/releases" target="_blank" rel="noopener">
@@ -154,7 +224,11 @@ const jsonLd = [
       </div>
     </header>
 
-    {plugin.previewPoster && (
+    {systemRecord && systemRecord.palette.length > 0 && (
+      <SystemPreview system={systemRecord} caption={pcopy.systemPreviewCaption(pluginTitle)} />
+    )}
+
+    {plugin.previewPoster && !isDesignSystem && (
       <figure class="detail-preview">
         {plugin.previewType === 'video' && plugin.previewVideo ? (
           /*
@@ -234,6 +308,8 @@ const jsonLd = [
       </figure>
     )}
 
+    <PluginContribute />
+
     {/*
       Share modal — same DOM shape as the legacy /skills/<slug>/
       dialog so the global header-enhancer.astro click handlers
@@ -301,6 +377,27 @@ const jsonLd = [
       </form>
     </dialog>
 
+    {systemRecord && systemRecord.palette.length > 0 && (
+      <section class="detail-block">
+        <h2>{ui.catalog.systems.paletteSample}</h2>
+        <p class="block-lead">{ui.catalog.systems.paletteLead(systemRecord.palette.length)}</p>
+        <div class="palette-row">
+          {systemRecord.palette.map((hex) => (
+            <div class="palette-cell">
+              <span class="swatch" style={`background:${hex}`} />
+              <code>{hex}</code>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {SystemContent && (
+      <section class="detail-block designmd-body">
+        <SystemContent />
+      </section>
+    )}
+
     <dl class="detail-meta">
       {plugin.mode && (
         <Fragment>
@@ -350,10 +447,78 @@ const jsonLd = [
         </ul>
       </section>
     )}
+
+    {relatedSystems.length > 0 && (
+      <section class="detail-block">
+        <h2>{ui.catalog.systems.related(systemRecord?.categoryLabel ?? '')}</h2>
+        <ul class="related-grid">
+          {relatedSystems.map((r) => (
+            <li>
+              <a href={href(detailHrefForSystemSlug(r.slug) ?? '/plugins/systems/')}>
+                <span class="related-name">{r.name}</span>
+                <span class="related-desc">{r.tagline}</span>
+                <div class="system-swatches" aria-hidden="true">
+                  {r.palette.slice(0, 4).map((hex) => (
+                    <span class="swatch" style={`background:${hex}`} />
+                  ))}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
   </article>
 </Layout>
 
 <style>
+  .detail-crumb a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .detail-crumb a:hover {
+    color: var(--ink, #262626);
+    text-decoration: underline;
+  }
+  .detail-crumb .crumb-sep {
+    margin: 0 0.45em;
+    opacity: 0.55;
+  }
+  /* Full DESIGN.md render. Hide the file's own title H1 so the page
+     keeps one visible H1 (the "<Brand> design system" title in the
+     header). DESIGN.md files carry exactly one H1 (the title); all other
+     headings are H2/H3. */
+  .designmd-body :global(h1) {
+    display: none;
+  }
+  .designmd-body :global(h2) {
+    margin-top: 1.8em;
+  }
+  .designmd-body :global(h3) {
+    margin-top: 1.3em;
+  }
+  .designmd-body :global(ul),
+  .designmd-body :global(ol) {
+    padding-left: 1.4em;
+  }
+  .designmd-body :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .designmd-body :global(th),
+  .designmd-body :global(td) {
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .designmd-body :global(pre) {
+    overflow-x: auto;
+    padding: 12px;
+    background: var(--paper-warm, #f5f5f5);
+    border: 1px solid var(--line);
+  }
   .detail-preview-static {
     width: 100%;
     height: auto;

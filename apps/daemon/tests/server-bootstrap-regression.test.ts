@@ -60,6 +60,58 @@ describe('server route inventory', () => {
       'GET /api/runs/:runId/devloop-iterations',
       'POST /api/runs/:runId/replay',
     ];
+    const pluginEventRouteKeys = [
+      'GET /api/plugins/events/snapshot',
+      'GET /api/plugins/events/stats',
+      'POST /api/plugins/events/purge',
+      'GET /api/plugins/events',
+    ];
+    const pluginLifecycleRouteKeys = [
+      'GET /api/plugins',
+      'GET /api/plugins/:id',
+      'POST /api/plugins/upload-zip',
+      'POST /api/plugins/upload-folder',
+      'POST /api/plugins/install',
+      'POST /api/plugins/:id/uninstall',
+      'POST /api/plugins/:id/upgrade',
+      'POST /api/plugins/:id/apply',
+      'POST /api/plugins/:id/share-project',
+      'POST /api/plugins/:id/doctor',
+      'POST /api/plugins/:id/trust',
+      'GET /api/plugins/stats',
+      'GET /api/applied-plugins/:snapshotId',
+      'GET /api/applied-plugins/:snapshotId/canon',
+      'GET /api/applied-plugins',
+      'GET /api/projects/:projectId/applied-plugins',
+      'POST /api/applied-plugins/export',
+      'POST /api/applied-plugins/prune',
+    ];
+    const pluginAssetRouteKeys = [
+      'GET /api/plugins/:id/preview',
+      'GET /api/plugins/:id/example/:name',
+      'GET /api/plugins/:id/asset/*splat',
+      'GET /api/asset-cache',
+    ];
+    const marketplaceRouteKeys = [
+      'GET /api/marketplaces',
+      'POST /api/marketplaces',
+      'GET /api/marketplaces/:id',
+      'DELETE /api/marketplaces/:id',
+      'POST /api/marketplaces/:id/refresh',
+      'POST /api/marketplaces/:id/trust',
+      'GET /api/marketplaces/:id/plugins',
+    ];
+    const projectPluginRouteKeys = [
+      'POST /api/projects/:id/plugins/install-folder',
+      'POST /api/projects/:id/plugins/publish-github',
+      'GET /api/projects/:id/plugin-candidates',
+      'POST /api/projects/:id/plugin-candidates/:candidateId/dismiss',
+      'POST /api/projects/:id/plugin-candidates/:candidateId/draft',
+      'POST /api/projects/:id/plugin-candidates/:candidateId/share-tasks',
+      'POST /api/projects/:id/plugins/contribute-open-design',
+      'POST /api/projects/:id/plugins/share-tasks',
+      'POST /api/plugins/share-tasks/:id/wait',
+    ];
     const liveArtifactRouteKeys = [
       'GET /api/live-artifacts',
       'OPTIONS /api/live-artifacts/:artifactId/preview',
@@ -112,6 +164,11 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => automationRouteKeys.includes(key))).toEqual(automationRouteKeys);
     expect(routeKeys.filter((key) => velaRouteKeys.includes(key))).toEqual(velaRouteKeys);
     expect(routeKeys.filter((key) => genuiRouteKeys.includes(key))).toEqual(genuiRouteKeys);
+    expect(routeKeys.filter((key) => pluginEventRouteKeys.includes(key))).toEqual(pluginEventRouteKeys);
+    expect(routeKeys.filter((key) => pluginLifecycleRouteKeys.includes(key))).toEqual(pluginLifecycleRouteKeys);
+    expect(routeKeys.filter((key) => pluginAssetRouteKeys.includes(key))).toEqual(pluginAssetRouteKeys);
+    expect(routeKeys.filter((key) => marketplaceRouteKeys.includes(key))).toEqual(marketplaceRouteKeys);
+    expect(routeKeys.filter((key) => projectPluginRouteKeys.includes(key))).toEqual(projectPluginRouteKeys);
     expect(routeKeys.filter((key) => liveArtifactRouteKeys.includes(key))).toEqual(liveArtifactRouteKeys);
     expect(routeKeys.filter((key) => deployRouteKeys.includes(key))).toEqual(deployRouteKeys);
     expect(routeKeys.filter((key) => deploymentCheckRouteKeys.includes(key))).toEqual(deploymentCheckRouteKeys);
@@ -120,12 +177,18 @@ describe('server route inventory', () => {
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);
+    expect(routeKeys.indexOf('GET /api/plugins/events/snapshot')).toBeLessThan(routeKeys.indexOf('POST /api/daemon/db/verify'));
+    expect(routeKeys.indexOf('GET /api/plugins')).toBeLessThan(routeKeys.indexOf('GET /api/atoms'));
+    expect(routeKeys.indexOf('GET /api/plugins/:id/preview')).toBeLessThan(fallbackIndex);
     expect(routeKeys.indexOf('GET /api/automation-source-packets')).toBeLessThan(
       routeKeys.indexOf('GET /api/skills'),
     );
     expect(routeKeys.indexOf('USE /artifacts')).toBeLessThan(routeKeys.indexOf('USE /frames'));
     expect(routeKeys.filter((key) => key === 'USE /artifacts')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'USE /frames')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'GET /api/plugins')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'GET /api/marketplaces')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'POST /api/projects/:id/plugins/share-tasks')).toHaveLength(1);
     for (const [index, key] of routeKeys.entries()) {
       if (key.includes(' /api/')) {
         expect(index, `${key} should register before SPA fallback`).toBeLessThan(fallbackIndex);

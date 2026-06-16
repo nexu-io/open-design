@@ -12,7 +12,7 @@ const LEADING_CJK_FILLER = [
 ];
 
 const LEADING_LATIN_FILLER =
-  /^(please\s+)?(can\s+you\s+|could\s+you\s+|help\s+me\s+|i\s+want\s+to\s+|i\s+need\s+to\s+)?(create|build|make|design|implement|add|fix|update|improve|optimize|generate|write)\s+(a|an|the|this|that)?\s*/i;
+  /^(please\s+)?(can\s+you\s+|could\s+you\s+|help\s+me\s+|i\s+want\s+to\s+|i\s+need\s+to\s+)?(create|build|make|design|implement|add|fix|update|improve|optimize|generate|write|turn)\s+((this|that)\s+into\s+)?(an|a|the|this|that)?\s*/i;
 
 const LATIN_STOP_WORDS = new Set([
   'a',
@@ -83,7 +83,14 @@ export function summarizeProjectNameFromPrompt(prompt: string): string {
 }
 
 export function canAutoRenameProjectFromPrompt(
-  project: Pick<Project, 'metadata'>,
+  project: Pick<Project, 'metadata' | 'name'>,
+  prompt?: string,
 ): boolean {
-  return project.metadata?.nameSource === 'generated';
+  if (project.metadata?.nameSource === 'generated') return true;
+  if (project.metadata?.nameSource !== 'prompt' || !prompt) return false;
+
+  const promptHead = prompt.trim().split(/\s+/).slice(0, 8).join(' ');
+  const summarized = summarizeProjectNameFromPrompt(prompt);
+  const currentName = project.name.trim();
+  return Boolean(promptHead) && (currentName === promptHead || currentName === summarized);
 }
