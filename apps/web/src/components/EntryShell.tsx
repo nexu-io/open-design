@@ -189,6 +189,8 @@ const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 const NEWSLETTER_SUBSCRIBE_URL =
   process.env.NEXT_PUBLIC_NEWSLETTER_URL ?? 'https://open-design.ai/subscribe';
 const NEWSLETTER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS = 300;
+const ONBOARDING_BYOK_AUTO_TEST_DELAY_MS = 500;
 
 const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
@@ -1006,6 +1008,8 @@ function OnboardingView({
   const cliScanTokenRef = useRef(0);
   const amrLoginPollCancelledRef = useRef(false);
   const amrAgentRefreshAttemptedRef = useRef(false);
+  const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
+  const providerAutoTestKeyRef = useRef<string | null>(null);
   const apiProtocol = config.apiProtocol ?? 'anthropic';
   const providerTestInputKey = [
     apiProtocol,
@@ -1745,6 +1749,7 @@ function OnboardingView({
   async function testProviderInline() {
     if (!canTestProvider || providerTestState.status === 'running') return;
     const inputKey = providerTestInputKey;
+    providerAutoTestKeyRef.current = inputKey;
     setProviderTestState({ status: 'running', inputKey });
     try {
       const result = await testApiProvider({
@@ -1773,11 +1778,20 @@ function OnboardingView({
     }
   }
 
+  function selectFirstFetchedProviderModel(models: readonly ProviderModelOption[]) {
+    const firstModel = models[0];
+    if (!firstModel || config.model.trim()) return;
+    onApiModelChange(firstModel.id);
+    updateApiConfig({ model: firstModel.id });
+  }
+
   async function fetchProviderModelsInline() {
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
+    providerModelsAutoFetchKeyRef.current = inputKey;
     const cachedModels = activeProviderModelsCache[inputKey];
     if (cachedModels) {
+      selectFirstFetchedProviderModel(cachedModels);
       setProviderModelsState({
         status: 'done',
         inputKey,
@@ -1798,6 +1812,7 @@ function OnboardingView({
         apiKey: config.apiKey,
       });
       if (result.ok && result.models?.length) {
+        selectFirstFetchedProviderModel(result.models);
         activeSetProviderModelsCache((current) => ({
           ...current,
           [inputKey]: result.models ?? [],
@@ -1817,6 +1832,40 @@ function OnboardingView({
       });
     }
   }
+
+  useEffect(() => {
+    if (runtime !== 'byok' || step !== 0) return;
+    if (!canFetchProviderModels) return;
+    if (providerModelsState.status === 'running') return;
+    if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
+    const timer = window.setTimeout(() => {
+      void fetchProviderModelsInline();
+    }, ONBOARDING_BYOK_AUTO_FETCH_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    canFetchProviderModels,
+    providerModelsInputKey,
+    providerModelsState.status,
+    runtime,
+    step,
+  ]);
+
+  useEffect(() => {
+    if (runtime !== 'byok' || step !== 0) return;
+    if (!canTestProvider) return;
+    if (providerTestState.status === 'running') return;
+    if (providerAutoTestKeyRef.current === providerTestInputKey) return;
+    const timer = window.setTimeout(() => {
+      void testProviderInline();
+    }, ONBOARDING_BYOK_AUTO_TEST_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [
+    canTestProvider,
+    providerTestInputKey,
+    providerTestState.status,
+    runtime,
+    step,
+  ]);
 
   const onboardingNavigationLocked = newsletterSubmitting;
   const primaryActionLabel = isLastStep && newsletterSubmitting
