@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="bauhaus">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bauhaus Primary · Open Design 2026</title>
+<style>
+/* hps-bauhaus :: webfonts (Google Fonts @import only — no other external deps) */
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+</style>
+<style>
+/* ============================================================
+   TOKEN SHEET — locked to the upstream `bauhaus` theme of
+   lewislulu/html-ppt-skill (assets/themes/bauhaus.css).
+   Design-history geometric modernism: aged canvas, the three
+   primaries, zero radius, 2px ink strokes, hard offset shadows.
+   Do not introduce colors or fonts outside this sheet.
+   ============================================================ */
+:root{
+  --bg:#f4efe3; --bg-soft:#e8e2d1; --surface:#ffffff; --surface-2:#f4efe3;
+  --border:#111111; --border-strong:#111111;
+  --text-1:#111111; --text-2:#333333; --text-3:#666666;
+  --accent:#e03c27; --accent-2:#f4c430; --accent-3:#1d4eaf;
+  --good:#1b8c3c; --warn:#f4c430; --bad:#e03c27;
+  --grad:linear-gradient(135deg,#e03c27 0 33%,#f4c430 33% 66%,#1d4eaf 66% 100%);
+  --grad-soft:linear-gradient(135deg,#f4efe3,#e8e2d1);
+  --radius:0; --radius-sm:0; --radius-lg:0;
+  --shadow:4px 4px 0 #111; --shadow-lg:8px 8px 0 #111;
+  --font-sans:'Space Grotesk','Inter','Noto Sans SC',sans-serif;
+  --font-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --font-serif:'Space Grotesk','Noto Sans SC',sans-serif;
+  --font-display:'Archivo Black','Space Grotesk','Noto Sans SC',sans-serif;
+  --letter-tight:-.03em; --letter-normal:-.01em;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+/* theme block kept for parity with the html-ppt token contract */
+html[data-theme="bauhaus"]{ --bg:#f4efe3; }
+</style>
+<style>
+/* ============================================================
+   BASE + SLIDE SYSTEM — horizontal scroll-snap deck.
+   One <section class="slide"> = exactly one viewport screen.
+   Designed at 16:9 (1280×720 baseline), fluid to the viewport.
+   (mirrors upstream base.css; keep verbatim, replace content only)
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--text-1);font-family:var(--font-sans);
+  font-weight:400;line-height:1.6;letter-spacing:var(--letter-normal);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow:hidden}
+img,svg,video{max-width:100%;display:block}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+.deck{display:flex;width:100vw;height:100vh;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;scrollbar-width:none;-ms-overflow-style:none}
+.deck::-webkit-scrollbar{display:none}
+.slide{position:relative;flex:0 0 100vw;height:100vh;scroll-snap-align:start;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;overflow:hidden;background:var(--bg)}
+
+/* ============ TYPOGRAPHY ============ */
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--text-3);margin:0}
+.kicker{font-size:14px;font-weight:700;color:var(--accent);letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px}
+.h1{font-family:var(--font-display);font-size:clamp(44px,5.4vw,70px);line-height:1.04;font-weight:400;letter-spacing:var(--letter-tight);text-transform:uppercase;margin:0 0 18px;color:var(--text-1)}
+.h2{font-family:var(--font-display);font-size:clamp(32px,4vw,52px);line-height:1.08;font-weight:400;letter-spacing:var(--letter-tight);text-transform:uppercase;margin:0 0 14px;color:var(--text-1)}
+.h3{font-size:clamp(22px,2.5vw,32px);line-height:1.2;font-weight:700;margin:0 0 10px}
+.h4{font-size:clamp(17px,1.7vw,22px);line-height:1.3;font-weight:700;margin:0 0 8px}
+.lede{font-size:clamp(17px,1.7vw,22px);line-height:1.55;color:var(--text-2);font-weight:400;max-width:62ch;margin:0}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.gradient-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+  /* ink outline (token #111) keeps the yellow band legible on the canvas ground; classic outlined-poster device */
+  -webkit-text-stroke:.02em var(--text-1)}
+
+/* ============ LAYOUT PRIMITIVES ============ */
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+
+/* ============ CARDS / PILLS — zero radius, 2px ink, hard shadow ============ */
+.card{background:var(--surface);border:2px solid var(--border);border-radius:0;
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2)}
+.card-accent{border-top:8px solid var(--accent)}
+.card-accent-2{border-top:8px solid var(--accent-2)}
+.card-accent-3{border-top:8px solid var(--accent-3)}
+.pill{display:inline-block;padding:5px 14px;border-radius:0;font-size:12px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;background:var(--surface);color:var(--text-1);
+  border:2px solid var(--border);box-shadow:3px 3px 0 #111}
+.pill-accent{background:var(--accent);color:#fff}
+.pill-accent-2{background:var(--accent-2);color:#111}
+.pill-accent-3{background:var(--accent-3);color:#fff}
+.divider-accent{height:8px;width:180px;background:var(--grad);border-radius:0;border:2px solid var(--border)}
+.tri-band{height:12px;width:100%;background:var(--grad);border:2px solid var(--border)}
+
+/* ============ DECK CHROME ============ */
+.deck-header{position:fixed;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:var(--text-1);letter-spacing:.14em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:fixed;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:600;color:var(--text-3);z-index:10;pointer-events:none}
+.theme-chip{font-family:var(--font-mono);font-size:11px;letter-spacing:.04em;text-transform:none}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:6px;z-index:20;pointer-events:none;border-top:2px solid var(--border)}
+.progress-bar>span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ============ SLIDE-LOCAL COMPONENTS ============ */
+.section-num{position:absolute;right:72px;bottom:24px;font-family:var(--font-display);
+  font-size:clamp(140px,19vw,260px);font-weight:400;line-height:.85;
+  color:transparent;-webkit-text-stroke:3px var(--text-1);letter-spacing:-.04em;z-index:0;pointer-events:none}
+.slide>*{position:relative;z-index:1}
+.kpi .num{font-family:var(--font-display);font-size:clamp(34px,4vw,52px);font-weight:400;letter-spacing:var(--letter-tight);line-height:1.1}
+.kpi .lbl{font-size:14px;color:var(--text-2);margin-top:8px}
+.stat-big{font-family:var(--font-display);font-size:clamp(110px,15vw,200px);font-weight:400;line-height:1;letter-spacing:-.04em;margin:0}
+.bar-chart{display:flex;align-items:flex-end;gap:22px;height:250px;margin-top:46px;max-width:840px}
+.bar-chart .bar{flex:1;border:2px solid var(--border);box-shadow:var(--shadow);border-radius:0;position:relative;min-height:18px}
+.bar-chart .bar span{position:absolute;bottom:-32px;left:0;right:0;text-align:center;font-size:13px;font-weight:600;color:var(--text-2)}
+.bar-chart .bar em{position:absolute;top:-34px;left:0;right:0;text-align:center;font-size:15px;font-weight:700;font-style:normal;color:var(--text-1)}
+.steps{counter-reset:step}
+.steps .card{padding-top:38px}
+.steps .card::before{counter-increment:step;content:counter(step,decimal-leading-zero);
+  font-family:var(--font-mono);font-size:13px;font-weight:700;color:#fff;background:var(--accent-3);
+  position:absolute;top:0;left:0;padding:4px 10px;letter-spacing:.08em;border-right:2px solid var(--border);border-bottom:2px solid var(--border)}
+.quote{font-family:var(--font-display);font-size:clamp(28px,3.4vw,46px);line-height:1.3;font-weight:400;text-transform:uppercase;max-width:26ch;margin:0}
+.check{list-style:none;padding:0;margin:0;font-size:clamp(15px,1.5vw,19px)}
+.check li{padding:9px 0 9px 36px;position:relative;color:var(--text-2)}
+.check li::before{content:"";position:absolute;left:0;top:13px;width:18px;height:18px;border-radius:0;
+  background:var(--accent-2);border:2px solid var(--border)}
+.check li::after{content:"";position:absolute;left:5px;top:17px;width:9px;height:5px;
+  border-left:2.5px solid #111;border-bottom:2.5px solid #111;transform:rotate(-45deg)}
+
+/* Bauhaus geometric devices (inline, token-colored, no images) */
+.geo-strip{display:flex;gap:18px;align-items:center;margin-top:36px}
+.geo-circle{width:54px;height:54px;border-radius:50%;background:var(--accent-3);border:2px solid var(--border);box-shadow:var(--shadow)}
+.geo-square{width:54px;height:54px;background:var(--accent);border:2px solid var(--border);box-shadow:var(--shadow)}
+.geo-triangle{width:0;height:0;border-left:30px solid transparent;border-right:30px solid transparent;border-bottom:54px solid var(--accent-2);filter:drop-shadow(4px 4px 0 #111)}
+
+/* ============ SPEAKER NOTES (hidden from audience) ============ */
+.notes{display:none!important}
+
+/* ============ ANIMATIONS (entry effects, upstream subset) ============ */
+@keyframes kf-rise{from{opacity:0;transform:translateY(60px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes kf-fade-up{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:none}}
+.anim-rise-in{animation:kf-rise .9s var(--ease) both}
+.anim-fade-up{animation:kf-fade-up .7s var(--ease) both}
+.anim-stagger-list>*{opacity:0;animation:kf-rise .65s var(--ease) both}
+.anim-stagger-list>*:nth-child(1){animation-delay:.05s}
+.anim-stagger-list>*:nth-child(2){animation-delay:.15s}
+.anim-stagger-list>*:nth-child(3){animation-delay:.25s}
+.anim-stagger-list>*:nth-child(4){animation-delay:.35s}
+.anim-stagger-list>*:nth-child(5){animation-delay:.45s}
+.anim-stagger-list>*:nth-child(n+6){animation-delay:.55s}
+
+/* Reduced motion: entries land instantly, progress fill snaps. */
+@media (prefers-reduced-motion: reduce){
+  .anim-rise-in,.anim-fade-up,.anim-stagger-list>*{animation:none!important;opacity:1!important;transform:none!important}
+  .progress-bar>span{transition:none}
+}
+
+/* ============ PRINT ============ */
+@media print{
+  body{overflow:visible}
+  .deck{display:block;width:auto;height:auto;overflow:visible}
+  .slide{width:100vw;height:100vh;page-break-after:always}
+  .deck-header,.deck-footer,.progress-bar{display:none!important}
+}
+</style>
+<style id="od-no-pager">.deck-controls,#counter,.deck-counter{display:none!important}</style>
+</head>
+<body>
+
+<div class="deck-header"><span>Open Design · nexu-io</span><span class="theme-chip" id="theme-chip">bauhaus</span></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1 · layout: cover -->
+  <section class="slide" data-title="Cover">
+    <svg width="220" height="120" viewBox="0 0 220 120" aria-hidden="true" style="margin-bottom:28px">
+      <rect x="2" y="34" width="84" height="84" fill="#e03c27" stroke="#111" stroke-width="3"/>
+      <polygon points="130,34 172,118 88,118" fill="#f4c430" stroke="#111" stroke-width="3"/>
+      <circle cx="176" cy="76" r="42" fill="#1d4eaf" stroke="#111" stroke-width="3"/>
+    </svg>
+    <p class="kicker">github.com/nexu-io/open-design · 2026</p>
+    <h1 class="h1 anim-rise-in">Open<br><span class="gradient-text">Design</span></h1>
+    <p class="lede">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, on your own machine.</p>
+    <div class="row wrap mt-l" style="gap:10px">
+      <span class="pill pill-accent">Apache-2.0</span>
+      <span class="pill pill-accent-2">Runs Locally</span>
+      <span class="pill pill-accent-3">BYOK</span>
+      <span class="pill">No sign-up</span>
+    </div>
+    <div class="notes">Cover. The square-triangle-circle device is the deck's signature mark — every accent in the deck stays inside the red/yellow/blue primaries on an aged-canvas ground.</div>
+  </section>
+
+  <!-- 2 · layout: toc -->
+  <section class="slide" data-title="Agenda">
+    <p class="kicker">Agenda</p>
+    <h2 class="h2">Three chapters</h2>
+    <div class="tri-band mt-m" style="max-width:420px"></div>
+    <div class="grid g3 mt-l anim-stagger-list">
+      <div class="card card-accent"><h4 class="h4">01 · Why</h4><p class="dim">Claude Design proved an LLM can truly design — Open Design sets that capability free.</p></div>
+      <div class="card card-accent-2"><h4 class="h4">02 · Traction</h4><p class="dim">The project in numbers: stars, contributors, plugins, and design systems.</p></div>
+      <div class="card card-accent-3"><h4 class="h4">03 · Workflow</h4><p class="dim">From idea to delivery: how an agent turns a sentence into a shipped artifact.</p></div>
+    </div>
+    <div class="notes">Three chapters, each card carrying one primary as a thick top rule — the only decoration this style permits.</div>
+  </section>
+
+  <!-- 3 · layout: section-divider -->
+  <section class="slide" data-title="Section · Why">
+    <span class="section-num">01</span>
+    <p class="eyebrow">Chapter one</p>
+    <h2 class="h2">Why:<br>design, set free</h2>
+    <div class="divider-accent mt-m"></div>
+    <div class="notes">Section divider. The chapter number is rendered as an outlined display numeral — stroke only, no fill — a classic constructivist device.</div>
+  </section>
+
+  <!-- 4 · layout: two-column -->
+  <section class="slide" data-title="Principles">
+    <p class="kicker">Why open</p>
+    <h2 class="h2">Set the capability free</h2>
+    <div class="grid g2 mt-l">
+      <div>
+        <p class="lede">In April 2026, Claude Design proved an LLM can truly design — real artifacts, not essays about design. Yet it is closed-source, paid, and cloud-only. Open Design takes the opposite stance:</p>
+        <ul class="check mt-m">
+          <li>Open — Apache-2.0; fork, self-host, commercial use</li>
+          <li>Local — the full workflow runs on your own machine</li>
+          <li>Agent-driven — plug in Claude Code, Codex, Cursor</li>
+          <li>BYOK — your keys, any compatible model endpoint</li>
+        </ul>
+      </div>
+      <div class="card center" style="min-height:300px">
+        <svg width="260" height="220" viewBox="0 0 260 220" aria-hidden="true">
+          <rect x="14" y="14" width="100" height="100" fill="#e03c27" stroke="#111" stroke-width="3"/>
+          <rect x="14" y="14" width="100" height="100" fill="none" stroke="#111" stroke-width="3" transform="translate(12 12)"/>
+          <circle cx="190" cy="64" r="50" fill="#1d4eaf" stroke="#111" stroke-width="3"/>
+          <polygon points="130,210 190,110 250,210" fill="#f4c430" stroke="#111" stroke-width="3"/>
+          <line x1="14" y1="170" x2="120" y2="170" stroke="#111" stroke-width="6"/>
+          <line x1="14" y1="190" x2="90" y2="190" stroke="#111" stroke-width="6"/>
+        </svg>
+      </div>
+    </div>
+    <div class="notes">Two-column: claim left, geometric composition right. The diagram is inline SVG colored only with the three primaries and ink.</div>
+  </section>
+
+  <!-- 5 · layout: kpi-grid -->
+  <section class="slide" data-title="Traction KPIs">
+    <p class="kicker">Chapter two · Traction</p>
+    <h2 class="h2">The project in four numbers</h2>
+    <div class="grid g4 mt-l anim-stagger-list">
+      <div class="card kpi card-accent"><div class="num">60K+</div><div class="lbl">GitHub stars — open source under Apache-2.0</div></div>
+      <div class="card kpi card-accent-2"><div class="num">300+</div><div class="lbl">contributors building the platform in the open</div></div>
+      <div class="card kpi card-accent-3"><div class="num">217+</div><div class="lbl">plugins — prototypes, slides, posters, dashboards</div></div>
+      <div class="card kpi"><div class="num">129</div><div class="lbl">design systems, imported from GitHub, Figma, or local files</div></div>
+    </div>
+    <div class="notes">KPI grid. Numbers set in Archivo Black; each card takes one primary top rule, the fourth stays ink-only for rhythm.</div>
+  </section>
+
+  <!-- 6 · layout: stat-highlight -->
+  <section class="slide center" data-title="Stars">
+    <p class="kicker">Open · Local · Agent-native</p>
+    <p class="stat-big gradient-text anim-rise-in">60K+</p>
+    <p class="lede mt-m" style="max-width:46ch">GitHub stars for an open-source design platform that runs entirely on your own machine — Apache-2.0, no sign-up.</p>
+    <div class="geo-strip" style="justify-content:center">
+      <span class="geo-square"></span><span class="geo-triangle"></span><span class="geo-circle"></span>
+    </div>
+    <div class="notes">Stat highlight. The giant numeral wears the hard three-band gradient — the one place the tri-color split shows at full size.</div>
+  </section>
+
+  <!-- 7 · layout: chart-bar (pure CSS — no chart library) -->
+  <section class="slide" data-title="Stars by quarter">
+    <p class="kicker">Traction</p>
+    <h2 class="h2">GitHub stars by quarter</h2>
+    <div class="bar-chart">
+      <div class="bar" style="height:34%;background:var(--accent)"><em>21K</em><span>Q1 · stars</span></div>
+      <div class="bar" style="height:52%;background:var(--accent-2)"><em>31K</em><span>Q2 · stars</span></div>
+      <div class="bar" style="height:74%;background:var(--accent-3)"><em>44K</em><span>Q3 · stars</span></div>
+      <div class="bar" style="height:98%;background:var(--text-1)"><em>60K+</em><span>Q4 · stars</span></div>
+    </div>
+    <p class="dim2" style="margin-top:60px">Cumulative stars, illustrative quarterly split toward the real 60K+ total — each bar is a CSS block, no chart library anywhere in this file.</p>
+    <div class="notes">Bar chart rebuilt in pure CSS: solid primary fills, 2px strokes, 4px offset shadows. Q4 goes ink-black to close the sequence at the canonical 60K+ figure; the per-quarter split is demo data.</div>
+  </section>
+
+  <!-- 8 · layout: process-steps -->
+  <section class="slide" data-title="Workflow">
+    <p class="kicker">Chapter three · Workflow</p>
+    <h2 class="h2">Idea to delivery in four moves</h2>
+    <div class="grid g4 mt-l steps anim-stagger-list">
+      <div class="card"><h4 class="h4">Start</h4><p class="dim">Describe your goal in one sentence, or pick a template or plugin.</p></div>
+      <div class="card"><h4 class="h4">Direction</h4><p class="dim">Palette, type, and spacing flow into generation automatically.</p></div>
+      <div class="card"><h4 class="h4">Generate</h4><p class="dim">The agent produces real runnable files, previewed in a sandbox.</p></div>
+      <div class="card"><h4 class="h4">Ship</h4><p class="dim">Hand off to engineering, or turn it into video with HyperFrames.</p></div>
+    </div>
+    <div class="notes">Process steps. The counter chip sits flush in the card corner — square, blue, white mono numerals.</div>
+  </section>
+
+  <!-- 9 · layout: big-quote -->
+  <section class="slide center" data-title="Quote">
+    <p class="quote anim-fade-up">“Design is finally under <span class="gradient-text">version control.</span>”</p>
+    <p class="eyebrow mt-l">— Indie developer · on git-diffable design artifacts</p>
+    <div class="notes">Big quote, set in the display face, uppercase. The tri-color gradient lands on the final phrase only.</div>
+  </section>
+
+  <!-- 10 · layout: thanks / cta -->
+  <section class="slide center" data-title="Open">
+    <svg width="160" height="88" viewBox="0 0 220 120" aria-hidden="true" style="margin:0 auto 24px">
+      <rect x="2" y="34" width="84" height="84" fill="#e03c27" stroke="#111" stroke-width="3"/>
+      <polygon points="130,34 172,118 88,118" fill="#f4c430" stroke="#111" stroke-width="3"/>
+      <circle cx="176" cy="76" r="42" fill="#1d4eaf" stroke="#111" stroke-width="3"/>
+    </svg>
+    <h1 class="h1">Open.</h1>
+    <p class="lede mt-m" style="max-width:50ch">Frontier AI design, back on every creator's desk. github.com/nexu-io/open-design</p>
+    <div class="row wrap mt-l" style="gap:10px;justify-content:center">
+      <span class="pill pill-accent">Download · macOS / Windows</span>
+      <span class="pill pill-accent-2">Star on GitHub</span>
+      <span class="pill pill-accent-3">discord.gg/qhbcCH8Am4</span>
+    </div>
+    <div class="notes">Closer. Repeat the cover mark, restate the promise in one line, and hand the audience the CTA: download, star, join the Discord.</div>
+  </section>
+
+</div>
+
+<div class="deck-footer"><span>hps-bauhaus · MIT · based on lewislulu/html-ppt-skill</span><span id="counter">1 / 10</span></div>
+<div class="progress-bar"><span id="bar"></span></div>
+
+<script>
+(function () {
+  var deck = document.getElementById('deck');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var counter = document.getElementById('counter');
+  var bar = document.getElementById('bar');
+  var chip = document.getElementById('theme-chip');
+  var themes = ['bauhaus'];
+  var active = 0;
+  var lastKeyEvent = null;
+
+  function clamp(i) { return Math.max(0, Math.min(slides.length - 1, i)); }
+
+  function paint(i) {
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    bar.style.width = (((i + 1) / slides.length) * 100) + '%';
+  }
+
+  // Hash routing: #/N (1-based). replaceState keeps back-button clean and
+  // never throws inside a srcdoc iframe thanks to the try/catch.
+  function setHash(i) {
+    try { history.replaceState(null, '', '#/' + (i + 1)); } catch (_) { /* sandboxed */ }
+  }
+  function fromHash() {
+    var m = (location.hash || '').match(/^#\/(\d+)/);
+    return m ? clamp(parseInt(m[1], 10) - 1) : 0;
+  }
+
+  function go(i, instant) {
+    active = clamp(i);
+    deck.scrollTo({ left: active * deck.clientWidth, behavior: instant ? 'auto' : 'smooth' });
+    paint(active);
+    setHash(active);
+  }
+
+  function syncFromScroll() {
+    var i = Math.round(deck.scrollLeft / deck.clientWidth);
+    if (i !== active && i >= 0 && i < slides.length) { active = i; paint(i); setHash(i); }
+  }
+
+  function setTheme(name) {
+    document.documentElement.setAttribute('data-theme', name);
+    if (chip) chip.textContent = name;
+  }
+  function cycleTheme() {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var i = themes.indexOf(cur);
+    setTheme(themes[(i + 1) % themes.length]);
+  }
+
+  function onKey(e) {
+    if (e === lastKeyEvent) return; // dedupe: same Event passes both listeners
+    lastKeyEvent = e;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+    else if (e.key === 't' || e.key === 'T') { cycleTheme(); }
+  }
+
+  // Listen on both window and document in capture phase so keys work no
+  // matter which element holds focus inside a host iframe.
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+  deck.addEventListener('scroll', function () { window.requestAnimationFrame(syncFromScroll); }, { passive: true });
+  window.addEventListener('hashchange', function () { go(fromHash()); });
+  window.addEventListener('resize', function () { go(active, true); });
+
+  // Auto-focus so arrow keys work without a click.
+  document.body.setAttribute('tabindex', '-1');
+  document.body.style.outline = 'none';
+  function focusDeck() {
+    try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) { /* sandboxed */ }
+  }
+  document.addEventListener('mousedown', focusDeck);
+  window.addEventListener('load', focusDeck);
+
+  setTheme(document.documentElement.getAttribute('data-theme') || themes[0]);
+  go(fromHash(), true);
+  paint(active);
+  focusDeck();
+})();
+</script>
+</body>
+</html>

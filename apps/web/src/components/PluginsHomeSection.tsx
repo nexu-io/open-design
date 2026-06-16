@@ -41,8 +41,6 @@ interface Props {
   pendingShareAction?: { pluginId: string; action: PluginShareAction } | null;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   onOpenDetails: (record: InstalledPluginRecord) => void;
-  // Gallery only: ↗ opens the plugin's real example page in a new tab.
-  onOpenExternal?: (record: InstalledPluginRecord) => void;
   onPluginShareAction?: (
     record: InstalledPluginRecord,
     action: PluginShareAction,
@@ -65,7 +63,6 @@ export function PluginsHomeSection({
   pendingShareAction = null,
   onUse,
   onOpenDetails,
-  onOpenExternal,
   onPluginShareAction,
   onBrowseRegistry,
   preferDefaultFacet = true,
@@ -236,7 +233,6 @@ export function PluginsHomeSection({
                   onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                   layout={cardLayout}
-                  {...(onOpenExternal ? { onOpenExternal } : {})}
                 />
               ))}
               {hasMorePlugins ? (

@@ -44,10 +44,6 @@ interface Props {
   // is the minimal live-preview tile: a top bar (dot + name + open
   // fullscreen) over an eagerly-rendered example.html iframe.
   layout?: 'rich' | 'gallery';
-  // Gallery only: the ↗ that opens the real example page in a new tab.
-  // Fired alongside the default anchor navigation so analytics can tell
-  // "opened the finished page" apart from "opened the detail modal".
-  onOpenExternal?: (record: InstalledPluginRecord) => void;
 }
 
 const MAX_VISIBLE_TAGS = 3;
@@ -65,7 +61,6 @@ export function PluginCard({
   onOpenDetails,
   onShareAction,
   layout = 'rich',
-  onOpenExternal,
 }: Props) {
   const { locale } = useI18n();
   const [useMenuOpen, setUseMenuOpen] = useState(false);
@@ -94,10 +89,12 @@ export function PluginCard({
 
   if (layout === 'gallery') {
     // Live-preview tile: a macOS-window-style bar (status dot + plugin
-    // name + open-fullscreen) over an eagerly-rendered example.html
-    // iframe. The whole tile opens the detail surface; the ↗ link opens
-    // the real page in a new tab.
-    const previewSrc = preview.kind === 'html' ? preview.src : null;
+    // name) over an eagerly-rendered example.html iframe. The whole tile
+    // opens the detail surface.
+    // Decks render a fixed 16:9 stage; tag them so the gallery preview uses a
+    // 16:9 frame instead of the tall scroll-preview viewport (which would
+    // letterbox the stage and show a dark band above/below the slide).
+    const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
     return (
       <article
         role="listitem"
@@ -112,6 +109,7 @@ export function PluginCard({
           .join(' ')}
         data-plugin-id={record.id}
         data-preview-kind={preview.kind}
+        {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
         {...(isFeatured ? { 'data-featured': 'true' } : {})}
         // Mouse convenience: clicking anywhere on the tile opens details.
         // Keyboard/AT users get a real, announced control via the title
@@ -136,22 +134,6 @@ export function PluginCard({
           >
             {title}
           </button>
-          {previewSrc ? (
-            <a
-              className="plugins-home__gallery-open"
-              href={previewSrc}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenExternal?.(record);
-              }}
-              aria-label={`Open ${title} in a new tab`}
-              data-testid={`plugins-home-open-${record.id}`}
-            >
-              <Icon name="external-link" size={12} />
-            </a>
-          ) : null}
         </div>
         <div className="plugins-home__gallery-frame">
           <PreviewSurface
