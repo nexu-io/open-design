@@ -1775,12 +1775,20 @@ function OnboardingView({
     }
   }
 
+  function selectFirstFetchedProviderModel(models: readonly ProviderModelOption[]) {
+    const firstModel = models[0];
+    if (!firstModel || config.model.trim()) return;
+    onApiModelChange(firstModel.id);
+    updateApiConfig({ model: firstModel.id });
+  }
+
   async function fetchProviderModelsInline() {
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
     providerModelsAutoFetchKeyRef.current = inputKey;
     const cachedModels = activeProviderModelsCache[inputKey];
     if (cachedModels) {
+      selectFirstFetchedProviderModel(cachedModels);
       setProviderModelsState({
         status: 'done',
         inputKey,
@@ -1801,11 +1809,7 @@ function OnboardingView({
         apiKey: config.apiKey,
       });
       if (result.ok && result.models?.length) {
-        const firstModel = result.models[0];
-        if (firstModel && !config.model.trim()) {
-          onApiModelChange(firstModel.id);
-          updateApiConfig({ model: firstModel.id });
-        }
+        selectFirstFetchedProviderModel(result.models);
         activeSetProviderModelsCache((current) => ({
           ...current,
           [inputKey]: result.models ?? [],
