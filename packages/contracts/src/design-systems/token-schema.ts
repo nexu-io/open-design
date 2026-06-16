@@ -230,10 +230,9 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
     "--elev-ring-accent", // 1px brand ring used as primary-button edge
   ],
   suivi: [
-    "--accent-light", // lighter lavender for hover / accent contexts
-    "--text-md", // 16px intermediate tier between base and lg
-    "--radius-xs", // 4px — tags, micro chips
-    "--radius-xl", // 16px — hero containers
+    "--text-lede", // 16px intermediate tier between base and lg (h4, lead text)
+    "--radius-tag", // 4px — tag / chip border-radius
+    "--radius-hero", // 16px — modal and hero container border-radius
     "--surface-nav", // Caribbean Current header surface
     "--accent-surface", // light lavender surface for accent contexts
     "--teal", // secondary brand accent

@@ -25,7 +25,6 @@
   --accent-on: #ffffff;
   --accent-hover: color-mix(in oklab, var(--accent), black 10%);
   --accent-active: color-mix(in oklab, var(--accent), black 18%);
-  --accent-light: #d0aefe;
   --accent-surface: #f5e8ff;
 
   /* Secondary accent: Teal */
@@ -71,7 +70,7 @@
   --text-xs: 10px;
   --text-sm: 12px;
   --text-base: 14px;
-  --text-md: 16px;
+  --text-lede: 16px;
   --text-lg: 18px;
   --text-xl: 22px;
   --text-2xl: 32px;
@@ -105,11 +104,11 @@
   --section-y-phone: 24px;
 
   /* Radius */
-  --radius-xs: 4px;
+  --radius-tag: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-hero: 16px;
   --radius-2xl: 24px;
   --radius-pill: 9999px;
 

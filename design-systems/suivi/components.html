@@ -28,7 +28,6 @@
         --accent-on: #ffffff;
         --accent-hover: color-mix(in oklab, var(--accent), black 10%);
         --accent-active: color-mix(in oklab, var(--accent), black 18%);
-        --accent-light: #d0aefe;
         --accent-surface: #f5e8ff;
 
         /* Secondary accent: Teal */
@@ -74,7 +73,7 @@
         --text-xs: 10px;
         --text-sm: 12px;
         --text-base: 14px;
-        --text-md: 16px;
+        --text-lede: 16px;
         --text-lg: 18px;
         --text-xl: 22px;
         --text-2xl: 32px;
@@ -108,11 +107,11 @@
         --section-y-phone: 24px;
 
         /* Radius */
-        --radius-xs: 4px;
+        --radius-tag: 4px;
         --radius-sm: 6px;
         --radius-md: 8px;
         --radius-lg: 12px;
-        --radius-xl: 16px;
+        --radius-hero: 16px;
         --radius-2xl: 24px;
         --radius-pill: 9999px;
 
@@ -183,13 +182,13 @@
       h1 { font-size: var(--text-2xl); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-normal); }
       h2 { font-size: var(--text-xl); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-tight); }
       h3 { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-normal); }
-      h4 { font-size: var(--text-md); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-h4); }
+      h4 { font-size: var(--text-lede); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-h4); }
       h5 { font-size: var(--text-base); font-weight: var(--weight-regular); line-height: var(--leading-body); }
       h6 { font-size: var(--text-xs); font-weight: var(--weight-medium); line-height: var(--leading-body); text-transform: uppercase; letter-spacing: 0.05em; }
       .text-muted { color: var(--muted); }
       .text-accent { color: var(--accent); }
       .eyebrow { color: var(--meta); font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: 0.08em; text-transform: uppercase; }
-      .lead { max-width: 640px; color: var(--fg-2); font-size: var(--text-md); }
+      .lead { max-width: 640px; color: var(--fg-2); font-size: var(--text-lede); }
       .section-title { margin-block-end: var(--space-6); }
 
       /* Header */
@@ -259,7 +258,7 @@
       /* Tags */
       .tag {
         display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2);
-        border-radius: var(--radius-xs); font-size: var(--text-sm); font-weight: var(--weight-medium);
+        border-radius: var(--radius-tag); font-size: var(--text-sm); font-weight: var(--weight-medium);
       }
       .tag-lavender-mist { background: var(--tag-lavender-mist-bg); color: var(--tag-lavender-mist-fg); }
       .tag-lavender { background: var(--tag-lavender-bg); color: var(--tag-lavender-fg); }
@@ -276,7 +275,7 @@
       .progress-fill.teal { background: var(--brand-shamrock); }
       .progress-fill.lavender { background: var(--accent); }
       .progress-segmented { display: flex; gap: 2px; height: 8px; }
-      .progress-segmented .seg { flex: 1; border-radius: var(--radius-xs); }
+      .progress-segmented .seg { flex: 1; border-radius: var(--radius-tag); }
       .progress-segmented .seg-1 { background: var(--teal-surface); }
       .progress-segmented .seg-2 { background: var(--teal-light); }
       .progress-segmented .seg-3 { background: var(--brand-shamrock); }
@@ -293,7 +292,7 @@
       }
       .field input:focus, .field textarea:focus { outline: none; box-shadow: var(--focus-ring); border-color: var(--accent); }
       .field input.disabled { background: var(--bg); color: var(--muted); cursor: not-allowed; }
-      .field input.prefilled { background: var(--accent-surface); color: var(--accent); border-color: var(--accent-light); }
+      .field input.prefilled { background: var(--accent-surface); color: var(--accent); border-color: var(--mauve); }
       .field textarea { min-height: 80px; resize: vertical; }
 
       /* Switch & Checkbox */
@@ -302,7 +301,7 @@
       .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform var(--motion-fast); }
       .switch.active::after { transform: translateX(16px); }
       .switch.disabled { opacity: 0.4; cursor: not-allowed; }
-      .checkbox { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+      .checkbox { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: var(--radius-tag); display: flex; align-items: center; justify-content: center; cursor: pointer; }
       .checkbox.active { background: var(--brand-caribbean); border-color: var(--brand-caribbean); color: white; }
       .checkbox.active::after { content: "✓"; font-size: 11px; color: white; }
       .checkbox.disabled { opacity: 0.4; cursor: not-allowed; }
@@ -332,7 +331,7 @@
       .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; }
       .modal {
         width: 90%; max-width: 480px; background: var(--surface);
-        border-radius: var(--radius-xl); box-shadow: var(--elev-modal); overflow: hidden;
+        border-radius: var(--radius-hero); box-shadow: var(--elev-modal); overflow: hidden;
       }
       .modal-dark { background: var(--surface-nav); color: var(--teal-on); padding: var(--space-8); text-align: center; }
       .modal-dark h2 { color: var(--teal-on); margin-block-end: var(--space-3); }
@@ -450,7 +449,7 @@
             <div><h3>H3 — Medium 18px</h3></div>
             <div><h2>H2 — Medium 22px (tracking -1px)</h2></div>
             <div><h1>H1 — Medium 32px</h1></div>
-            <div style="margin-top: var(--space-6);"><p style="font-size: var(--text-md);">P1 — Regular 16px body text for primary content paragraphs.</p></div>
+            <div style="margin-top: var(--space-6);"><p style="font-size: var(--text-lede);">P1 — Regular 16px body text for primary content paragraphs.</p></div>
             <div><p style="font-size: var(--text-base); font-weight: var(--weight-medium); line-height: var(--leading-relaxed);">P2 — Medium 14px, 110% line height for compact secondary body.</p></div>
             <div><p style="font-size: var(--text-sm);">P3 — Regular 12px captions and metadata.</p></div>
           </div>
