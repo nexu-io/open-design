@@ -1382,8 +1382,31 @@ export async function deployToRender({
     }
   }
 
+  let preTriggerDeployId: string | undefined;
+  if (serviceId) {
+    try {
+      const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+      });
+      if (listDeploysResp.ok) {
+        const deploys = await listDeploysResp.json().catch(() => null);
+        if (Array.isArray(deploys) && deploys.length > 0) {
+          const item = deploys[0].deploy || deploys[0];
+          preTriggerDeployId = item.id;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   let deployId = '';
+  let isNewService = false;
   if (!serviceId) {
+    isNewService = true;
     // Create new service
     const createServiceResp = await fetch(`${RENDER_API}/services`, {
       method: 'POST',
@@ -1448,9 +1471,36 @@ export async function deployToRender({
     deployId = item?.id || '';
   }
 
+  // Poll up to 5 times (1s intervals) to resolve the new deploy ID if it wasn't returned immediately or is stale
+  if (!deployId || (!isNewService && deployId === preTriggerDeployId)) {
+    for (let i = 0; i < 5; i++) {
+      try {
+        const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
+          headers: {
+            Authorization: `Bearer ${config.token}`,
+            Accept: 'application/json',
+          },
+        });
+        if (listDeploysResp.ok) {
+          const deploys = await listDeploysResp.json().catch(() => null);
+          if (Array.isArray(deploys) && deploys.length > 0) {
+            const item = deploys[0].deploy || deploys[0];
+            if (item.id && (isNewService || item.id !== preTriggerDeployId)) {
+              deployId = item.id;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Ignore and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+
   // Poll deployment status
   if (deployId) {
-    await pollRenderDeploy(config, serviceId, deployId);
+    await pollRenderDeploy(config, serviceId!, deployId);
   }
 
   // 7. Wait for URL to be reachable
@@ -1464,7 +1514,7 @@ export async function deployToRender({
     status: link.status,
     statusMessage: link.statusMessage,
     reachableAt: link.reachableAt,
-    providerMetadata: { serviceId, serviceUrl },
+    providerMetadata: { serviceId, serviceUrl, deployId },
   };
 }
 
