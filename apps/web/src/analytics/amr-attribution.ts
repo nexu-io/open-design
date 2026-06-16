@@ -97,22 +97,57 @@ export function readAmrAttribution(now: Date = new Date()): AmrEntryAttribution 
   }
 }
 
-export function attributedAmrUrl(baseUrl: string, attribution: AmrEntryAttribution): string {
+// Resolves the device id to forward to AMR on a handoff, ONLY when the user has
+// opted into metrics; otherwise null. Prefers `config.installationId` from the
+// current render, falling back to the resolved telemetry device id, then null.
+//
+// In steady state these two are the same value (the analytics client seeds its
+// resolved id from `cfg.installationId`), so the AMR join key still matches the
+// telemetry / PostHog / Langfuse device identity. The precedence matters only
+// during a `Delete my data` rotation: `config.installationId` is the fresh
+// source-of-truth in the current render, while `resolvedDeviceId` (a module
+// global in the analytics client) only catches up later when the App-level
+// `setIdentity(...)` effect runs `applyIdentity()`. Reading `installationId`
+// first forwards the rotated id immediately instead of the stale pre-rotation
+// one, so the cross-product join never points at a deleted identity. Neither
+// input is the mount-time bootstrap UUID, so this never regresses to that.
+export function amrHandoffDeviceId(input: {
+  metricsConsent: boolean;
+  resolvedDeviceId: string | null;
+  installationId: string | null | undefined;
+}): string | null {
+  if (!input.metricsConsent) return null;
+  return input.installationId ?? input.resolvedDeviceId ?? null;
+}
+
+// Builds the AMR handoff URL with Open Design attribution params. When
+// `deviceId` is provided it is added as `od_device_id`, so AMR can link the
+// landing/registration directly back to this Open Design install instead of
+// only through the one-shot entry id. The caller passes it ONLY when the user
+// has consented to metrics: AMR is Open Design's official model service, so
+// this is a same-owner cross-product link, but it still respects the telemetry
+// opt-in. Pass null/undefined to omit it.
+export function attributedAmrUrl(
+  baseUrl: string,
+  attribution: AmrEntryAttribution,
+  deviceId?: string | null,
+): string {
+  const params: Record<string, string> = {
+    od_origin: attribution.sourceProduct,
+    od_entry_id: attribution.entryId,
+    od_entry_source: attribution.sourceDetail,
+    od_entry_at: attribution.occurredAt,
+  };
+  if (deviceId) params.od_device_id = deviceId;
   try {
     const url = new URL(baseUrl);
-    url.searchParams.set('od_origin', attribution.sourceProduct);
-    url.searchParams.set('od_entry_id', attribution.entryId);
-    url.searchParams.set('od_entry_source', attribution.sourceDetail);
-    url.searchParams.set('od_entry_at', attribution.occurredAt);
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
     return url.toString();
   } catch {
     const separator = baseUrl.includes('?') ? '&' : '?';
-    return `${baseUrl}${separator}${new URLSearchParams({
-      od_origin: attribution.sourceProduct,
-      od_entry_id: attribution.entryId,
-      od_entry_source: attribution.sourceDetail,
-      od_entry_at: attribution.occurredAt,
-    }).toString()}`;
+    return `${baseUrl}${separator}${new URLSearchParams(params).toString()}`;
   }
 }
 
