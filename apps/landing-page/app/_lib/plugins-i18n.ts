@@ -99,6 +99,14 @@ export interface PluginsCopy {
   detailTocTokens: string;
   detailTocGuide: string;
   detailTocRelated: string;
+  /**
+   * "See it in context" scenario showcase — the system's tokens applied to
+   * different artifact kinds (web / app / slides / poster). `scenarioLabels`
+   * is keyed by scenario id and deep-merged in getPluginsCopy.
+   */
+  scenariosHead: string;
+  scenariosLead: string;
+  scenarioLabels: Record<string, string>;
   /** Lowercase category suffix appended to design-system detail titles/H1 (e.g. "design system"). */
   detailSystemLabel: string;
   /** Placeholder for the client-side catalog filter on templates / systems. */
@@ -324,10 +332,19 @@ carry the hierarchy and color is used sparingly for intent.
     other: 'Other',
   },
   detailTocLabel: 'On this page',
-  detailTocPreview: 'Preview',
+  detailTocPreview: 'In context',
   detailTocTokens: 'Design tokens',
   detailTocGuide: 'DESIGN.md guide',
   detailTocRelated: 'Related',
+  scenariosHead: 'See it in context',
+  scenariosLead:
+    'The same design tokens applied across artifact kinds — a website, an app, a slide, a poster. Original mocks re-skinned with this system, not screenshots.',
+  scenarioLabels: {
+    web: 'Website',
+    app: 'App',
+    slides: 'Slides',
+    poster: 'Poster',
+  },
   detailSystemLabel: 'design system',
   searchPlaceholder: 'Search by name or keyword…',
   searchNoResults: 'No matches. Try a different keyword.',
@@ -3053,5 +3070,6 @@ export function getPluginsCopy(locale: LandingLocaleCode): PluginsCopy {
     subcategory: { ...en.subcategory, ...(partial.subcategory ?? {}) },
     detailBucketLabel: { ...en.detailBucketLabel, ...(partial.detailBucketLabel ?? {}) },
     tokenGroupLabels: { ...en.tokenGroupLabels, ...(partial.tokenGroupLabels ?? {}) },
+    scenarioLabels: { ...en.scenarioLabels, ...(partial.scenarioLabels ?? {}) },
   };
 }

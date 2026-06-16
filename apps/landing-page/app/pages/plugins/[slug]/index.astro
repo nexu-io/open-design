@@ -265,9 +265,18 @@ const jsonLd = [
     )}
 
     {hasPreview && systemRecord && (
-      <div id="preview">
-        <SystemPreview system={systemRecord} caption={pcopy.systemPreviewCaption(pluginTitle)} />
-      </div>
+      <section class="detail-block scenario-showcase" id="preview">
+        <h2>{pcopy.scenariosHead}</h2>
+        <p class="block-lead">{pcopy.scenariosLead}</p>
+        <div class="scenario-hero">
+          <SystemPreview system={systemRecord} scenario="web" caption={pcopy.scenarioLabels.web} />
+        </div>
+        <div class="scenario-grid">
+          <SystemPreview system={systemRecord} scenario="app" caption={pcopy.scenarioLabels.app} />
+          <SystemPreview system={systemRecord} scenario="slides" caption={pcopy.scenarioLabels.slides} />
+          <SystemPreview system={systemRecord} scenario="poster" caption={pcopy.scenarioLabels.poster} />
+        </div>
+      </section>
     )}
 
     {plugin.previewPoster && !isDesignSystem && (
@@ -600,6 +609,16 @@ const jsonLd = [
     display: block;
     border: 1px solid var(--line);
     background: #000;
+  }
+  /* Scenario showcase — system tokens applied across artifact kinds. */
+  .scenario-hero {
+    margin-bottom: 18px;
+  }
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+    align-items: start;
   }
   /* In-page anchor nav (design-system detail). Quiet horizontal mono row. */
   .detail-toc {

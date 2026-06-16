@@ -14,15 +14,23 @@
  */
 import type { SystemRecord } from '../_lib/catalog';
 
+type Scenario = 'web' | 'app' | 'slides' | 'poster';
+
 interface Props {
   system: SystemRecord;
   /** Caption (localized) shown under the mock. Omitted in compact mode. */
   caption?: string;
   /** Compact card-thumbnail variant (lean markup, no caption). */
   compact?: boolean;
+  /**
+   * Which themed mock to render. 'web' is the original landing-page mock
+   * (and the only one used by the compact card thumbnail); 'app' / 'slides'
+   * / 'poster' show the same design tokens applied to other artifact kinds.
+   */
+  scenario?: Scenario;
 }
 
-const { system, caption, compact = false } = Astro.props as Props;
+const { system, caption, compact = false, scenario = 'web' } = Astro.props as Props;
 
 const HEX = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
 const toRgb = (h: string): [number, number, number] => {
@@ -98,43 +106,110 @@ const domain = `${system.slug}.com`;
   </div>
 ) : (
 <figure class="sys-preview">
-  <div class="pv" style={vars} role="img" aria-label={caption}>
-    <div class="pv-chrome">
-      <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
-      <span class="pv-url">{domain}</span>
-    </div>
-    <div class="pv-screen">
-      <nav class="pv-nav">
-        <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
-        <span class="pv-links"><span>Product</span><span>Pricing</span><span>Docs</span></span>
-        <span class="pv-btn pv-btn-solid">Sign up</span>
-      </nav>
-      <div class="pv-hero">
-        <span class="pv-badge">NEW · LIVE PREVIEW</span>
-        <div class="pv-h1">Build something people love.</div>
-        <div class="pv-sub">A mock UI rendered with the {system.name} design tokens — colors pulled straight from its DESIGN.md.</div>
-        <div class="pv-cta-row">
-          <span class="pv-btn pv-btn-solid">Get started</span>
-          <span class="pv-btn pv-btn-ghost">Learn more</span>
+  <div class={`pv pv-${scenario}`} style={vars} role="img" aria-label={caption}>
+    {scenario === 'web' && (
+      <Fragment>
+        <div class="pv-chrome">
+          <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
+          <span class="pv-url">{domain}</span>
         </div>
-      </div>
-      <div class="pv-cards">
-        {['Fast', 'Secure', 'Simple'].map((t) => (
-          <div class="pv-card">
-            <span class="pv-card-icon"></span>
-            <div class="pv-card-title">{t}</div>
-            <div class="pv-card-line"></div>
-            <div class="pv-card-line short"></div>
+        <div class="pv-screen">
+          <nav class="pv-nav">
+            <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
+            <span class="pv-links"><span>Product</span><span>Pricing</span><span>Docs</span></span>
+            <span class="pv-btn pv-btn-solid">Sign up</span>
+          </nav>
+          <div class="pv-hero">
+            <span class="pv-badge">NEW · LIVE PREVIEW</span>
+            <div class="pv-h1">Build something people love.</div>
+            <div class="pv-sub">A mock UI rendered with the {system.name} design tokens — colors pulled straight from its DESIGN.md.</div>
+            <div class="pv-cta-row">
+              <span class="pv-btn pv-btn-solid">Get started</span>
+              <span class="pv-btn pv-btn-ghost">Learn more</span>
+            </div>
           </div>
-        ))}
+          <div class="pv-cards">
+            {['Fast', 'Secure', 'Simple'].map((t) => (
+              <div class="pv-card">
+                <span class="pv-card-icon"></span>
+                <div class="pv-card-title">{t}</div>
+                <div class="pv-card-line"></div>
+                <div class="pv-card-line short"></div>
+              </div>
+            ))}
+          </div>
+          <div class="pv-foot">
+            <span class="pv-input">you@email.com</span>
+            <span class="pv-btn pv-btn-solid">Subscribe</span>
+            <span class="pv-tag pv-tag-accent">Active</span>
+            <span class="pv-tag">Draft</span>
+          </div>
+        </div>
+      </Fragment>
+    )}
+
+    {scenario === 'app' && (
+      <Fragment>
+        <div class="pv-chrome">
+          <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
+        </div>
+        <div class="pv-app-body">
+          <aside class="pv-side">
+            <span class="pv-brand pv-side-brand"><span class="pv-logo"></span>{system.name}</span>
+            <span class="pv-nav-item pv-nav-item-active"><span class="pv-nav-ic"></span>Overview</span>
+            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Projects</span>
+            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Reports</span>
+            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Settings</span>
+          </aside>
+          <div class="pv-app-main">
+            <div class="pv-app-top">
+              <div class="pv-h2">Dashboard</div>
+              <span class="pv-btn pv-btn-solid">New</span>
+            </div>
+            <div class="pv-stats">
+              {['Revenue', 'Users', 'Churn'].map((t) => (
+                <div class="pv-stat">
+                  <div class="pv-stat-label">{t}</div>
+                  <div class="pv-stat-num"></div>
+                  <div class="pv-stat-bar"><span></span></div>
+                </div>
+              ))}
+            </div>
+            <div class="pv-rows">
+              {['', '', ''].map(() => (
+                <div class="pv-row">
+                  <span class="pv-row-dot"></span>
+                  <div class="pv-card-line"></div>
+                  <span class="pv-tag pv-tag-accent">Active</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Fragment>
+    )}
+
+    {scenario === 'slides' && (
+      <div class="pv-slide-face">
+        <span class="pv-badge">{system.name}</span>
+        <div class="pv-slide-title">Design that ships itself.</div>
+        <div class="pv-slide-sub">One DESIGN.md, every surface on-brand.</div>
+        <div class="pv-slide-bullets">
+          <span class="pv-bullet"><span class="pv-bullet-dot"></span><span class="pv-card-line"></span></span>
+          <span class="pv-bullet"><span class="pv-bullet-dot"></span><span class="pv-card-line short"></span></span>
+        </div>
+        <div class="pv-slide-foot"><span class="pv-logo"></span><span class="pv-slide-page">01 / 12</span></div>
       </div>
-      <div class="pv-foot">
-        <span class="pv-input">you@email.com</span>
-        <span class="pv-btn pv-btn-solid">Subscribe</span>
-        <span class="pv-tag pv-tag-accent">Active</span>
-        <span class="pv-tag">Draft</span>
+    )}
+
+    {scenario === 'poster' && (
+      <div class="pv-poster-face">
+        <span class="pv-poster-kicker">{system.name}</span>
+        <div class="pv-poster-h1">MAKE<br />IT<br />REAL</div>
+        <span class="pv-poster-rule"></span>
+        <span class="pv-poster-foot">Open Design · DESIGN.md</span>
       </div>
-    </div>
+    )}
   </div>
   <figcaption>{caption}</figcaption>
 </figure>
@@ -317,6 +392,214 @@ const domain = `${system.slug}.com`;
     color: var(--pv-accent-ink);
     border-color: transparent;
   }
+
+  /* ── Scenario: app / dashboard ─────────────────────────────────── */
+  .pv-h2 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .pv-app-body {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    min-height: 300px;
+  }
+  .pv-side {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 14px;
+    border-right: 1px solid var(--pv-line);
+  }
+  .pv-side-brand {
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .pv-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    color: var(--pv-muted);
+    padding: 7px 9px;
+    border-radius: 7px;
+  }
+  .pv-nav-item-active {
+    background: var(--pv-accent-soft);
+    color: var(--pv-accent);
+    font-weight: 600;
+  }
+  .pv-nav-ic {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    background: currentColor;
+    opacity: 0.55;
+  }
+  .pv-app-main {
+    padding: 20px 22px;
+  }
+  .pv-app-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .pv-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .pv-stat {
+    border: 1px solid var(--pv-line);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .pv-stat-label {
+    font-size: 12px;
+    color: var(--pv-muted);
+    margin-bottom: 10px;
+  }
+  .pv-stat-num {
+    width: 56%;
+    height: 16px;
+    border-radius: 5px;
+    background: var(--pv-ink);
+    opacity: 0.85;
+    margin-bottom: 12px;
+  }
+  .pv-stat-bar {
+    height: 6px;
+    border-radius: 4px;
+    background: var(--pv-line);
+    overflow: hidden;
+  }
+  .pv-stat-bar span {
+    display: block;
+    width: 60%;
+    height: 100%;
+    background: var(--pv-accent);
+  }
+  .pv-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .pv-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid var(--pv-line);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .pv-row .pv-card-line {
+    flex: 1;
+    margin: 0;
+  }
+  .pv-row-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    background: var(--pv-accent);
+    flex: none;
+  }
+
+  /* ── Scenario: slides ──────────────────────────────────────────── */
+  .pv-slide,
+  .pv-poster {
+    box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.28);
+  }
+  .pv-slide-face {
+    aspect-ratio: 16 / 9;
+    padding: 36px 40px;
+    display: flex;
+    flex-direction: column;
+  }
+  .pv-slide-title {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin: 14px 0 10px;
+  }
+  .pv-slide-sub {
+    font-size: 15px;
+    color: var(--pv-muted);
+  }
+  .pv-slide-bullets {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 22px;
+  }
+  .pv-bullet {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .pv-bullet-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--pv-accent);
+    flex: none;
+  }
+  .pv-bullet .pv-card-line {
+    flex: 1;
+    margin: 0;
+    height: 9px;
+  }
+  .pv-slide-foot {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pv-slide-page {
+    font-size: 12px;
+    color: var(--pv-muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Scenario: poster ──────────────────────────────────────────── */
+  .pv-poster-face {
+    aspect-ratio: 3 / 4;
+    padding: 30px 28px;
+    display: flex;
+    flex-direction: column;
+    background: var(--pv-accent);
+    color: var(--pv-accent-ink);
+  }
+  .pv-poster-kicker {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .pv-poster-h1 {
+    margin-top: auto;
+    font-size: 58px;
+    font-weight: 900;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+  }
+  .pv-poster-rule {
+    height: 6px;
+    width: 64px;
+    background: var(--pv-accent-ink);
+    margin: 18px 0;
+    opacity: 0.9;
+  }
+  .pv-poster-foot {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.85;
+  }
+
   /* Compact card-thumbnail variant */
   .pv-compact {
     border-radius: 10px;
