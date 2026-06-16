@@ -684,22 +684,40 @@ async function ensureGitHubRepository({
 async function pollNetlifyDeploy(config: DeployConfig, deploymentId: string, { timeoutMs = 60_000, intervalMs = 2_000 } = {}) {
   const startedAt = Date.now();
   let last: any = null;
-  while (Date.now() - startedAt <= timeoutMs) {
-    const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deploymentId)}`, {
-      headers: { Authorization: `Bearer ${config.token}` },
-    });
-    const json = await readNetlifyJson(resp);
-    if (!resp.ok) {
-      throw new DeployError(json?.message || `Netlify deploy status lookup failed (${resp.status}).`, 502, json);
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    try {
+      const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deploymentId)}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+        signal: controller.signal,
+      });
+      const json = await readNetlifyJson(resp);
+      if (!resp.ok) {
+        throw new DeployError(json?.message || `Netlify deploy status lookup failed (${resp.status}).`, 502, json);
+      }
+      last = json;
+      const state = typeof json?.state === 'string' ? json.state.toLowerCase() : '';
+      if (state === 'ready') return json;
+      if (state === 'error' || state === 'rejected') {
+        throw new DeployError(json?.error_message || json?.message || 'Netlify deployment failed.', 502, json);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        throw new DeployError('Netlify deployment poll timed out.', 504);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    last = json;
-    const state = typeof json?.state === 'string' ? json.state.toLowerCase() : '';
-    if (state === 'ready') return json;
-    if (state === 'error' || state === 'rejected') {
-      throw new DeployError(json?.error_message || json?.message || 'Netlify deployment failed.', 502, json);
-    }
-    if (Date.now() - startedAt >= timeoutMs) break;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
   return last;
 }
@@ -851,6 +869,15 @@ export async function deployToNetlify({
   for (const file of files) {
     await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
   }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
 
   // 4. Create or update Netlify site linked to the GitHub repo
   if (siteId) {
@@ -1118,30 +1145,109 @@ async function createOrUpdateGitHubFile(
   }
 }
 
+async function reconcileGitHubRepositoryFiles({
+  username,
+  repoName,
+  githubToken,
+  defaultBranch,
+  currentFiles,
+}: {
+  username: string;
+  repoName: string;
+  githubToken: string;
+  defaultBranch: string;
+  currentFiles: Set<string>;
+}) {
+  const treeUrl = `https://api.github.com/repos/${username}/${repoName}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=true`;
+  const treeResp = await fetch(treeUrl, {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Open-Design-Daemon',
+    },
+  });
+  if (!treeResp.ok) {
+    if (treeResp.status === 404 || treeResp.status === 409) {
+      return;
+    }
+    const errText = await treeResp.text();
+    throw new DeployError(`Failed to fetch GitHub repository tree: ${errText}`, 502);
+  }
+
+  const treeData = (await treeResp.json()) as any;
+  const remoteFiles = Array.isArray(treeData?.tree) ? treeData.tree : [];
+
+  for (const item of remoteFiles) {
+    if (item.type === 'blob') {
+      const path = item.path;
+      if (!currentFiles.has(path)) {
+        const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+        const deleteUrl = `https://api.github.com/repos/${username}/${repoName}/contents/${encodedPath}`;
+        const deleteResp = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            Accept: 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Open-Design-Daemon',
+          },
+          body: JSON.stringify({
+            message: `deploy: cleanup stale file ${path}`,
+            sha: item.sha,
+            branch: defaultBranch,
+          }),
+        });
+        if (!deleteResp.ok) {
+          const errText = await deleteResp.text();
+          throw new DeployError(`Failed to delete stale file ${path} from GitHub repository: ${errText}`, 502);
+        }
+      }
+    }
+  }
+}
+
 const RENDER_API = 'https://api.render.com/v1';
 
 async function pollRenderDeploy(config: DeployConfig, serviceId: string, deployId: string, { timeoutMs = 180_000, intervalMs = 2_000 } = {}) {
   const startedAt = Date.now();
   let last: any = null;
-  while (Date.now() - startedAt <= timeoutMs) {
-    const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(deployId)}`, {
-      headers: {
-        Authorization: `Bearer ${config.token}`,
-        Accept: 'application/json',
-      },
-    });
-    const json = (await resp.json().catch(() => null)) as any;
-    if (!resp.ok) {
-      throw new DeployError(json?.message || `Render deploy status lookup failed (${resp.status}).`, 502, json);
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), remaining);
+    try {
+      const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(deployId)}`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+      const json = (await resp.json().catch(() => null)) as any;
+      if (!resp.ok) {
+        throw new DeployError(json?.message || `Render deploy status lookup failed (${resp.status}).`, 502, json);
+      }
+      last = json;
+      const status = typeof json?.status === 'string' ? json.status.toLowerCase() : '';
+      if (status === 'live') return json;
+      if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
+        throw new DeployError(`Render deployment failed with status: ${json.status}.`, 502, json);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        throw new DeployError('Render deployment poll timed out.', 504);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    last = json;
-    const status = typeof json?.status === 'string' ? json.status.toLowerCase() : '';
-    if (status === 'live') return json;
-    if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
-      throw new DeployError(`Render deployment failed with status: ${json.status}.`, 502, json);
-    }
-    if (Date.now() - startedAt >= timeoutMs) break;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
   return last;
 }
@@ -1224,6 +1330,15 @@ export async function deployToRender({
   for (const file of files) {
     await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
   }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
 
   // 5. Get Owner ID from Render
   const ownersResp = await fetch(`${RENDER_API}/owners`, {
@@ -1392,12 +1507,13 @@ export async function deployToRailway({
 
   // 2. Ensure GitHub repository exists
   const repoName = `od-railway-${projectId}`;
-  await ensureGitHubRepository({
+  const repoInfo = await ensureGitHubRepository({
     username,
     repoName,
     githubToken: config.githubToken,
     isPrivate: false,
   });
+  const defaultBranch = repoInfo.defaultBranch;
 
   // Add a Staticfile to the files array if not present, so that Railway
   // (Nixpacks/Railpack) instantly and reliably detects this as a static site!
@@ -1415,6 +1531,15 @@ export async function deployToRailway({
   for (const file of files) {
     await createOrUpdateGitHubFile(username, repoName, config.githubToken, file.file, file.data);
   }
+
+  const currentFilePaths = new Set(files.map((f) => f.file));
+  await reconcileGitHubRepositoryFiles({
+    username,
+    repoName,
+    githubToken: config.githubToken,
+    defaultBranch,
+    currentFiles: currentFilePaths,
+  });
 
   // Helper to query Railway API
   const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
@@ -1639,13 +1764,13 @@ export async function deployToRailway({
           serviceUrl = `https://${domainCreateData.serviceDomainCreate.domain}`;
         }
       } catch (err) {
-        serviceUrl = `https://${repoName}.up.railway.app`;
+        throw err instanceof DeployError ? err : new DeployError(`Failed to generate Railway service domain: ${errorMessage(err, 'unknown error')}`, 502);
       }
     }
   }
 
   if (!serviceUrl) {
-    serviceUrl = `https://${repoName}.up.railway.app`;
+    throw new DeployError('Failed to resolve or create Railway service domain.', 502);
   }
 
   // 8. Wait for URL to be reachable
