@@ -158,11 +158,18 @@ const SHELL_TOOL_NAMES = new Set([
 ]);
 
 // Leading binaries of a shell command that only inspect state.
+// `find` is handled in its own branch below, not here: it only inspects until
+// it carries a mutating action (-delete / -exec / …), so a blanket entry would
+// misclassify those fixes as read-only.
 const READ_ONLY_SHELL_BINARIES = new Set([
-  'cat', 'ls', 'grep', 'rg', 'egrep', 'fgrep', 'find', 'head', 'tail', 'pwd', 'echo', 'printf',
+  'cat', 'ls', 'grep', 'rg', 'egrep', 'fgrep', 'head', 'tail', 'pwd', 'echo', 'printf',
   'which', 'type', 'wc', 'stat', 'file', 'tree', 'diff', 'jq', 'awk', 'date', 'test',
   'true', 'false', 'basename', 'dirname', 'realpath', 'readlink', 'cut', 'sort', 'uniq', 'column', 'cmp',
 ]);
+
+// `find` actions that delete, run a command, or write a file — these mutate, so
+// a successful `find` carrying one is progress, not an inspection.
+const MUTATING_FIND_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint|fprintf|fls)\b/u;
 
 /** First binary of a shell segment, path- and case-stripped (`/usr/bin/sed` -> `sed`). */
 function shellHead(segment: string): string {
@@ -217,8 +224,16 @@ export function isReadOnlyShellCommand(command: string): boolean {
   if (/>/u.test(redirs)) return false;
   for (const rawSeg of cmd.split(/\|\||&&|[;|]/u)) {
     const seg = unwrapEnvPrefix(rawSeg);
+    if (!seg) continue; // empty segment from a trailing/standalone separator
     const head = shellHead(seg);
-    if (!head) continue;
+    // A non-empty segment we cannot parse a head from (a subshell like
+    // `(sed -i ...)`, a quoted head like `"sed" -i ...`) may mutate, so treat
+    // it as progress instead of silently skipping it. (PR #3375 review.)
+    if (!head) return false;
+    if (head === 'find') {
+      if (MUTATING_FIND_ACTION.test(seg)) return false; // -delete / -exec / … mutate
+      continue; // a pure `find … -name …` only inspects
+    }
     if (head === 'sed' || head === 'perl') {
       if (/\s-[a-z]*i|\s--in-place/iu.test(seg)) return false; // in-place edit mutates
       continue;

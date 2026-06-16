@@ -223,6 +223,32 @@ describe('isReadOnlyShellCommand / isProgressSuccess', () => {
     }
   });
 
+  // PR #3375 review: mutating Bash fixes that were misclassified as read-only,
+  // so in halt mode a run actually changing files could still be terminated.
+  it('treats mutating find actions and unparseable segment heads as progress', () => {
+    for (const cmd of [
+      "find . -name '*.pyc' -delete", // -delete mutates
+      'find . -exec rm {} \\;',       // -exec runs a command
+      'find . -execdir rm {} ;',
+      "find . -name x -fprint out.txt",
+      '(sed -i s/a/b/ x.ts) && cat x.ts', // subshell head does not parse
+      '"sed" -i s/a/b/ x',                // quoted head does not parse
+    ]) {
+      expect(isReadOnlyShellCommand(cmd)).toBe(false);
+    }
+  });
+
+  it('keeps pure find and trailing separators read-only', () => {
+    for (const cmd of [
+      "find . -type f -name '*.ts'", // inspection only
+      'find . -maxdepth 2 -name x',
+      'ls;',          // trailing separator yields an empty segment, not a mutation
+      'cat x.ts ;',
+    ]) {
+      expect(isReadOnlyShellCommand(cmd)).toBe(true);
+    }
+  });
+
   it('treats a Bash fix as progress and a Bash read or read-only tool as non-progress', () => {
     expect(isProgressSuccess('Bash', 'Bash sed -i s/a/b/ x')).toBe(true);
     expect(isProgressSuccess('Bash', 'Bash cat x')).toBe(false);
