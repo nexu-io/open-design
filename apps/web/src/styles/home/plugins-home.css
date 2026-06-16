@@ -497,21 +497,6 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
-.plugins-home__gallery-open {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.plugins-home__gallery-open:hover {
-  background: var(--bg-panel);
-  color: var(--accent);
-}
 .plugins-home__gallery-frame {
   position: relative;
   height: 300px;
