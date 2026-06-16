@@ -114,23 +114,35 @@ describe("stageWebuiLauncherResources", () => {
       const desktop = readFileSync(join(stageRoot, "open-design-webui.desktop"), "utf8");
       const execLine = desktop.split(/\r?\n/).find((l) => l.startsWith("Exec="));
       if (execLine == null) throw new Error("no Exec= line in .desktop");
-      const match = /^Exec=sh -c '(.*)'$/.exec(execLine);
+      // The launcher passes the desktop-file location as a POSITIONAL argument
+      // (`sh -c '<body>' sh %k`), never interpolated into the quoted body. This
+      // models a spec-compliant launcher (e.g. GLib): %k is substituted as a
+      // single argv element, so a bundle path containing shell metacharacters
+      // (`'`, `"`, `$(...)`) arrives as literal data in `$1` instead of being
+      // re-parsed as shell source.
+      const match = /^Exec=sh -c '(.*)' sh %k$/.exec(execLine);
       if (match == null) throw new Error(`unexpected Exec shape: ${execLine}`);
-      const script = match[1].split("%k").join(kValue);
+      const body = match[1];
 
-      const markerPath = join(stageRoot, "launch-marker");
+      // Record the launch dir to a marker in a clean temp path — NOT inside
+      // stageRoot, whose name may itself contain quotes/metacharacters that
+      // would break the stub's own redirect quoting (a test-harness artifact,
+      // not the launcher behavior under test).
+      const markerDir = mkdtempSync(join(tmpdir(), "od-webui-marker-"));
+      const markerPath = join(markerDir, "marker");
       writeFileSync(
         join(stageRoot, "open-design.sh"),
         `#!/bin/sh\nprintf '%s' "$(pwd)" > "${markerPath}"\n`,
         "utf8",
       );
       chmodSync(join(stageRoot, "open-design.sh"), 0o755);
-      rmSync(markerPath, { force: true });
 
       // Run from an unrelated cwd so a missing/late `cd` cannot accidentally pass.
       const elsewhere = mkdtempSync(join(tmpdir(), "od-webui-elsewhere-"));
       try {
-        execFileSync("sh", ["-c", script], {
+        // argv after the body becomes $0=sh, $1=kValue — exactly how the desktop
+        // launcher hands %k to the script as a positional parameter.
+        execFileSync("sh", ["-c", body, "sh", kValue], {
           cwd: elsewhere,
           env: { ...process.env, SHELL: "true" },
           stdio: "ignore",
@@ -141,7 +153,11 @@ describe("stageWebuiLauncherResources", () => {
       } finally {
         rmSync(elsewhere, { force: true, recursive: true });
       }
-      return existsSync(markerPath) ? readFileSync(markerPath, "utf8") : null;
+      try {
+        return existsSync(markerPath) ? readFileSync(markerPath, "utf8") : null;
+      } finally {
+        rmSync(markerDir, { force: true, recursive: true });
+      }
     }
 
     it("launches from the bundle dir for a plain path and a file:// URI, and not when %k is empty", async () => {
@@ -198,6 +214,33 @@ describe("stageWebuiLauncherResources", () => {
       expect(runDesktopExec(stageRoot, `file://otherhost${desktopPath}`)).toBeNull();
 
       rmSync(stageRoot, { force: true, recursive: true });
+    });
+
+    it("reaches open-design.sh for bundle paths containing shell metacharacters (no injection)", async () => {
+      // The location of an extracted bundle is user-influenced. When %k was
+      // interpolated into the quoted `sh -c '...'` body, a directory name with a
+      // single quote, a double quote, a `$(...)` substitution, or a backtick
+      // broke the launcher (path re-parsed as shell source) — at best failing to
+      // launch, at worst executing the embedded command. Passing %k as a
+      // positional argument ($1) makes the path literal data, so the launcher
+      // still `cd`s into the bundle and runs ./open-design.sh start. If the path
+      // were still evaluated as shell, the `$(...)`/backtick names would expand
+      // to a different (or empty) path and `cd` would miss the real bundle dir,
+      // so reaching `bundleDir` is itself proof the metacharacters stayed inert.
+      const parent = mkdtempSync(join(tmpdir(), "od-webui-desktop-meta-"));
+      for (const dirName of ["o'reilly bundle", 'a"b', "x$(echo pwned)y", "y`echo pwned`z"]) {
+        const stageRoot = join(parent, dirName);
+        mkdirSync(stageRoot);
+        await stageWebuiLauncherResources(stageRoot, "linux");
+        const bundleDir = realpathSync(stageRoot);
+        const desktopPath = join(bundleDir, "open-design-webui.desktop");
+
+        expect(runDesktopExec(stageRoot, desktopPath)).toBe(bundleDir);
+
+        rmSync(stageRoot, { force: true, recursive: true });
+      }
+
+      rmSync(parent, { force: true, recursive: true });
     });
   });
 
