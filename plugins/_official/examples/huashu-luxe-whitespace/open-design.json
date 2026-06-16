@@ -1,0 +1,146 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-luxe-whitespace",
+  "title": "Luxe Whitespace",
+  "title_i18n": {
+    "en": "Luxe Whitespace",
+    "zh-CN": "奢华留白"
+  },
+  "version": "1.0.0",
+  "description": "Quiet-luxury decks with 70%+ whitespace: a warm off-white #FAFAF8 canvas, Inter 200-600 ultra-thin hierarchy, 120px weight-200 floating numerals with gold decimal points, one warm gold (#D4A574) spent only on hairlines and winning comparison bars, and gradient hairline separators (#E0DCD6) on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-build, expanded from a single showcase page into a full multi-section deck.",
+  "description_i18n": {
+    "en": "Quiet-luxury decks with 70%+ whitespace: a warm off-white #FAFAF8 canvas, Inter 200-600 ultra-thin hierarchy, 120px weight-200 floating numerals with gold decimal points, one warm gold (#D4A574) spent only on hairlines and winning comparison bars, and gradient hairline separators (#E0DCD6) on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design ppt-build, expanded from a single showcase page into a full multi-section deck.",
+    "zh-CN": "奢侈品级 70%+ 留白幻灯片：米白 #FAFAF8 底、Inter 200–600 超细字重层级、120px 超细数字悬浮 + 金色小数点、唯一暖金 #D4A574 只用于发丝线与获胜对比条、渐变发丝线分隔 #E0DCD6，1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design 的 ppt-build 单页范本扩展为完整多章节 deck。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "quiet-luxury",
+    "whitespace",
+    "minimal",
+    "huashu"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a quiet-luxury {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Luxe Whitespace system (based on huashu-design ppt-build): a fixed 1920×1080 canvas auto-scaled to the viewport; every page on the single warm off-white #FAFAF8 field with soft-black #2A2A2A ink (never #000, never a dark page); the locked page frame `padding: 64px 96px 48px 96px` with a top chrome row (10px/400/4px-tracking uppercase eyebrow left, 10px/300 source note right) and a bottom section (13px/300 insight line with weight-500 #666 emphasis left, 32px gold hairline + tracked brand text right); Inter 200–600 via one Google Fonts @import as the only family — weight 700+ is forbidden, emphasis steps 300→500. The single accent is warm gold #D4A574, spent only on hairlines, decimal points, units, gold full stops ending headlines, the active slide-dot pill, and winning comparison bars — ≤5 gold touches per page, never on a whole headline or surface. Signature devices on every page: ultra-thin floating numerals (120px weight-200 metrics with -4px tracking up to 240px heroes, gold span.dot decimal at weight 300, 28–56px gold superscript units at 0.8 opacity); 1px gradient hairline separators `linear-gradient(to bottom, transparent, #E0DCD6 50%, transparent)` between columns (never solid full-height borders); gold-vs-grey comparison bars (3px gold #D4A574 subject vs 2px grey #D8D5D0 baselines on #EEECEA tracks, right-aligned 80px labels, values outside the track; wide rows may use a gold→transparent right fade). Draw layouts from the locked enumeration: cover (104px thin headline + gold full stop + 280px ghost year at 5% opacity) / hairline-ruled contents / 240px big-number hero with gold-ruled side column / 2–3-card metrics theater with comparison groups (the upstream master) / full-width channel bars / hairline-separated timeline with 88px year numerals graded ghost→ink / centered quote with vertical gold fade hairline / before-after two-column (ghost vs ink+gold) / 2×2 stats grid with crossed gradient hairlines / thin closing sign-off. 70%+ of every page stays empty — one idea per page, at most 3 metric cards / 4 bar rows / 4 timeline columns; add pages rather than shrink whitespace. No emoji, no images, no shadows on content, no border-radius except the counter pill and bar tracks, no second color, no second font. Build a single self-contained HTML file by copying example.html and replacing content only — keep its design tokens, page chrome, hairline devices, and navigation script (←/→/Space keys, #/N hash routing, click zones, script-built gold dot indicator, counter pill) intact. Use the user's real numbers, never lorem ipsum or invented data; Chinese copy uses 「」 quotes and full-width punctuation; replace all fictional 素白/SOBLANC demo content.",
+        "zh-CN": "用「奢华留白」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}（页数 {{slideCount}}）：1920×1080 固定米白 #FAFAF8 画布、70% 以上留白、Inter 200–600 超细字重（禁用 700+）、120–240px 超细数字悬浮 + 金色小数点、唯一暖金 #D4A574 每页最多 5 处（发丝线/小数点/单位/句号/金色对比条）、渐变发丝线分隔 #E0DCD6、金灰对比条系统，版式从封面/目录/巨数/指标剧场/渠道条/时间线/引语/前后对照/指标矩阵/结尾枚举中取用。从 example.html 复制出单文件、只换内容，保留 token、页面框架、发丝线装置和导航脚本；用真实数据、替换全部「素白 SOBLANC」演示内容。完整规格以英文版为准（follow the en query above）。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Luxe Whitespace",
+          "title_i18n": {
+            "en": "Luxe Whitespace",
+            "zh-CN": "奢华留白"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "brand annual report deck",
+          "premium product launch deck",
+          "investor / board update deck",
+          "quiet-luxury keynote",
+          "portfolio / lookbook deck"
+        ],
+        "default": "brand annual report deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：2026 品牌年度报告",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "董事会 / 品牌客户 / VIP 会员",
+        "default": "decision makers"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

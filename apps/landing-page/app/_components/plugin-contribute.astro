@@ -1,0 +1,89 @@
+---
+/*
+ * Reusable "contribute a plugin" callout shown on every /plugins/ page
+ * (hub, category indexes, and detail pages). Points contributors at the
+ * GitHub PR flow — `plugins/_official/` for the catalogue entry plus the
+ * contribution guide. Pure link-out; no new repo files needed.
+ */
+import { getPluginsCopy } from '../_lib/plugins-i18n';
+import { localeFromPath } from '../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const pcopy = getPluginsCopy(locale);
+
+// Direct PR path — the bundled-plugin folder contributors add to (with
+// the contribution guide one click away in the repo root).
+const PR_URL =
+  'https://github.com/nexu-io/open-design/tree/main/plugins/_official';
+// Lower-barrier path — a prefilled issue for proposing a plugin without
+// opening a PR yourself. No labels set (avoids referencing a label that
+// might not exist).
+const ISSUE_URL =
+  'https://github.com/nexu-io/open-design/issues/new?title=' +
+  encodeURIComponent('[Plugin] ') +
+  '&body=' +
+  encodeURIComponent(
+    '**Plugin name:**\n\n' +
+      '**Type:** template / skill / design system\n\n' +
+      '**Link to your repo or files:**\n\n' +
+      '**What it does:**\n',
+  );
+---
+
+<aside class="plugin-contribute">
+  <div class="pc-text">
+    <h2 class="pc-title">{pcopy.contributeTitle}</h2>
+    <p class="pc-body">{pcopy.contributeBody}</p>
+  </div>
+  <div class="pc-actions">
+    <a class="btn btn-primary" href={PR_URL} target="_blank" rel="noopener">
+      {pcopy.contributeCta}
+    </a>
+    <a class="pc-guide" href={ISSUE_URL} target="_blank" rel="noopener">
+      {pcopy.contributeIssueCta}
+    </a>
+  </div>
+</aside>
+
+<style>
+  .plugin-contribute {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    flex-wrap: wrap;
+    margin: 8px 0 40px;
+    padding: 22px 28px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--paper-warm, #f5f5f5);
+  }
+  .pc-title {
+    margin: 0 0 8px;
+    font-size: 20px;
+  }
+  .pc-body {
+    margin: 0;
+    max-width: 560px;
+    color: var(--ink-soft, #434343);
+    line-height: 1.55;
+    font-size: 14.5px;
+  }
+  .pc-actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-shrink: 0;
+  }
+  .pc-guide {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink, #262626);
+    white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .plugin-contribute {
+      padding: 22px;
+    }
+  }
+</style>

@@ -14,7 +14,9 @@ import PreciseLazyload from '../_components/precise-lazyload.astro';
 import {
   heroBgImage,
   heroBgSrcset,
-  heroImage,
+  ogDefaultImage,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
 } from '../image-assets';
 import {
   LANDING_LOCALES,
@@ -184,7 +186,10 @@ const matterRuntime = readFileSync(
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={new URL(heroImage, Astro.site).toString()} />
+    <meta property="og:image" content={ogDefaultImage} />
+    <meta property="og:image:width" content={String(OG_IMAGE_WIDTH)} />
+    <meta property="og:image:height" content={String(OG_IMAGE_HEIGHT)} />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:locale" content={localeDef.ogLocale} />
     {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
       <meta property="og:locale:alternate" content={entry.ogLocale} />
@@ -193,7 +198,7 @@ const matterRuntime = readFileSync(
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content={new URL(heroImage, Astro.site).toString()} />
+    <meta name="twitter:image" content={ogDefaultImage} />
 
     {/*
      * Single @graph JSON-LD block — WebSite + Organization +

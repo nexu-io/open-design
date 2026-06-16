@@ -13,20 +13,20 @@ on:
         required: false
         type: string
         default: ""
-      runner_run_id:
-        description: Optional ci-runner run id override
+      owned_run_id:
+        description: Optional ci-owned run id override
         required: false
         type: string
         default: ""
-      hosted_run_id:
-        description: Optional ci-hosted run id override
+      github_run_id:
+        description: Optional ci-github run id override
         required: false
         type: string
         default: ""
 
 permissions:
   # Keep write access here even while ci-gate is manual-only: the parked manual
-  # path still needs to dispatch ci-runner / ci-hosted runs when operators do
+  # path still needs to dispatch ci-owned / ci-github runs when operators do
   # not provide explicit run-id overrides. Do not downgrade this to read-only
   # unless the dispatch bootstrap moves elsewhere.
   actions: write
@@ -44,7 +44,7 @@ jobs:
     # switched over to ci-gate in a separate follow-up.
     #
     # Manual-only parking note:
-    # ci-gate / ci-runner / ci-hosted no longer auto-trigger on PR / push /
+    # ci-gate / ci-owned / ci-github no longer auto-trigger on PR / push /
     # merge_group. Keep the manual path usable so operators can still run the
     # parked stack on demand while deeper ci-gate redesign work is in flight.
     name: Validate workspace gate
@@ -54,10 +54,10 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       TARGET_SHA: ${{ github.event_name == 'workflow_dispatch' && (inputs.target_sha || github.sha) || (github.event_name != 'workflow_dispatch' && (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) || '') }}
       TARGET_EVENT: ${{ github.event_name == 'workflow_dispatch' && (inputs.target_event || 'workflow_dispatch') || (github.event_name != 'workflow_dispatch' && github.event_name || '') }}
-      RUNNER_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id || '' }}
-      HOSTED_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.hosted_run_id || '' }}
-      RUNNER_WORKFLOW: ci-runner
-      HOSTED_WORKFLOW: ci-hosted
+      OWNED_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.owned_run_id || '' }}
+      GITHUB_RUN_ID_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.github_run_id || '' }}
+      OWNED_WORKFLOW: ci-owned
+      GITHUB_HOSTED_WORKFLOW: ci-github
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -74,8 +74,8 @@ jobs:
           set -euo pipefail
           target_sha='${{ inputs.target_sha }}'
           target_event='${{ inputs.target_event }}'
-          runner_run_id='${{ inputs.runner_run_id }}'
-          hosted_run_id='${{ inputs.hosted_run_id }}'
+          owned_run_id='${{ inputs.owned_run_id }}'
+          github_run_id='${{ inputs.github_run_id }}'
           has_target_override=0
           has_run_id_override=0
 
@@ -83,7 +83,7 @@ jobs:
             has_target_override=1
           fi
 
-          if [ -n "$runner_run_id" ] || [ -n "$hosted_run_id" ]; then
+          if [ -n "$owned_run_id" ] || [ -n "$github_run_id" ]; then
             has_run_id_override=1
           fi
 
@@ -95,23 +95,23 @@ jobs:
           # run ids. ci-gate can only bootstrap fresh child runs for the current
           # ref / workflow_dispatch event, so a looser combination would just
           # poll until timeout.
-          if [ "$has_target_override" = "1" ] && { [ -z "$runner_run_id" ] || [ -z "$hosted_run_id" ]; }; then
-            echo "target_sha/target_event overrides require both runner_run_id and hosted_run_id" >&2
+          if [ "$has_target_override" = "1" ] && { [ -z "$owned_run_id" ] || [ -z "$github_run_id" ]; }; then
+            echo "target_sha/target_event overrides require both owned_run_id and github_run_id" >&2
             exit 1
           fi
 
-          if [ "$has_run_id_override" = "1" ] && { [ -z "$runner_run_id" ] || [ -z "$hosted_run_id" ]; }; then
-            echo "runner_run_id and hosted_run_id must be supplied together" >&2
+          if [ "$has_run_id_override" = "1" ] && { [ -z "$owned_run_id" ] || [ -z "$github_run_id" ]; }; then
+            echo "owned_run_id and github_run_id must be supplied together" >&2
             exit 1
           fi
 
       - name: Record provider dispatch window
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id == '' && inputs.hosted_run_id == '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.owned_run_id == '' && inputs.github_run_id == '' }}
         shell: bash
         run: echo "PROVIDER_RUN_CREATED_AFTER=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       - name: Dispatch manual provider runs
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.runner_run_id == '' && inputs.hosted_run_id == '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.owned_run_id == '' && inputs.github_run_id == '' }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -124,12 +124,12 @@ jobs:
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
-            "repos/${{ github.repository }}/actions/workflows/ci-runner.yml/dispatches" \
+            "repos/${{ github.repository }}/actions/workflows/ci-owned.yml/dispatches" \
             -f ref='${{ github.ref_name }}'
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
-            "repos/${{ github.repository }}/actions/workflows/ci-hosted.yml/dispatches" \
+            "repos/${{ github.repository }}/actions/workflows/ci-github.yml/dispatches" \
             -f ref='${{ github.ref_name }}' \
             -f inputs[mode]='nix'
 

@@ -1,0 +1,108 @@
+---
+/*
+ * /privacy/ — Privacy Policy.
+ *
+ * Standard policy for the open-design.ai marketing site + the local-first
+ * product. English single page (legal text). DRAFT — should be reviewed
+ * by counsel before relying on it. Covers: who we are, what the website
+ * collects (analytics/cookies), the local-first/BYOK product stance,
+ * third parties, rights, contact.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+
+const updated = 'June 16, 2026';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Privacy Policy — Open Design',
+  url: new URL('/privacy/', Astro.site).toString(),
+  isPartOf: { '@type': 'WebSite', name: 'Open Design', url: Astro.site?.toString() },
+};
+---
+
+<Layout
+  title="Privacy Policy — Open Design"
+  description="How Open Design (Powerformer, Inc.) handles data on open-design.ai and in the local-first Open Design app."
+  jsonLd={jsonLd}
+>
+  <article class="legal">
+    <h1 class="legal-h1">Privacy Policy</h1>
+    <p class="legal-meta">Last updated: {updated}</p>
+
+    <p>This Privacy Policy explains how <strong>Powerformer, Inc.</strong> (“Open Design”, “we”, “us”) handles information in connection with the website <a href="https://open-design.ai">open-design.ai</a> and the Open Design application.</p>
+
+    <h2>1. Open Design is local-first</h2>
+    <p>The Open Design application runs on your own machine. Your projects, prompts, designs, and the API keys you provide (BYOK — “bring your own key”) stay on your device and are sent directly to the model providers you configure. We do not proxy, collect, or store your design content or your keys on our servers.</p>
+
+    <h2>2. Information the website collects</h2>
+    <p>When you visit open-design.ai we collect limited, standard analytics to understand traffic and improve the site:</p>
+    <ul>
+      <li><strong>Usage analytics</strong> — pages viewed, referrer, approximate location (from IP), device and browser type, via privacy-respecting analytics providers.</li>
+      <li><strong>Cookies / local storage</strong> — used for analytics and to remember preferences such as your language. You can control cookies through your browser and our cookie notice.</li>
+    </ul>
+    <p>We do not sell your personal information.</p>
+
+    <h2>3. Third-party services</h2>
+    <p>The website may use third-party analytics and infrastructure providers (for example, web analytics and hosting/CDN). These providers process data on our behalf under their own terms. Outbound links (GitHub, Discord, YouTube, etc.) are governed by those services’ own privacy policies.</p>
+
+    <h2>4. Your choices and rights</h2>
+    <p>Depending on your location, you may have the right to access, correct, or delete personal data we hold, and to object to or restrict certain processing. You can also disable cookies in your browser. To exercise any of these, contact us (below).</p>
+
+    <h2>5. Data retention &amp; security</h2>
+    <p>We retain website analytics only as long as needed for the purposes above, and apply reasonable technical and organizational measures to protect data. No method of transmission or storage is completely secure.</p>
+
+    <h2>6. Children</h2>
+    <p>Open Design is not directed to children under 13 (or the age required by your jurisdiction), and we do not knowingly collect their personal information.</p>
+
+    <h2>7. Changes</h2>
+    <p>We may update this policy from time to time. Material changes will be reflected by the “Last updated” date above.</p>
+
+    <h2>8. Contact</h2>
+    <p>Questions about this policy? Reach us via the <a href="https://github.com/nexu-io/open-design">Open Design GitHub repository</a> or the community <a href="https://discord.gg/9ptkbbqRu">Discord</a>.</p>
+  </article>
+
+  <style>
+    .legal {
+      max-width: 720px;
+    }
+    .legal-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink, #262626);
+    }
+    .legal-meta {
+      margin: 10px 0 32px;
+      font-size: 14px;
+      color: var(--ink-mute, #595959);
+    }
+    .legal h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .legal p,
+    .legal li {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink-soft, #434343);
+    }
+    .legal p {
+      margin: 0 0 14px;
+    }
+    .legal ul {
+      margin: 0 0 14px;
+      padding-left: 1.4em;
+    }
+    .legal li {
+      margin: 0 0 8px;
+    }
+    .legal a {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  </style>
+</Layout>

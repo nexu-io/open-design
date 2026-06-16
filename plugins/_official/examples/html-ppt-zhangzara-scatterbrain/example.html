@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scatterbrain — Post-it Inspired Presentation Template</title>
+    <title>Open Design — Post-it Inspired Presentation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Zilla+Slab:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Zilla+Slab:ital,wght@0,400;0,600;0,700;1,400&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --yellow: #ffe066;
@@ -18,11 +18,12 @@
             --green: #b2f2bb;
             --green-deep: #8ce99a;
             --orange: #ffcc80;
-            --purple: #d0bfff;
-            --cream: #faf8f3;
             --paper: #f7f5f0;
+            /* Warm white for worksheets and white notes: keeps every sheet
+               in the same paper family instead of cool screen-white. */
+            --sheet: #fffdf8;
             --ink: #2d2a26;
-            --ink-light: #5c5750;
+            --ink-light: #4f4a43;
             --shadow: rgba(45, 42, 38, 0.15);
             --shadow-deep: rgba(45, 42, 38, 0.25);
         }
@@ -31,10 +32,6 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
         }
 
         body {
@@ -135,56 +132,55 @@
             z-index: 0;
         }
 
-        /* Warm gradient background */
+        /* Warm desk background: one sunlit corner instead of a blob
+           collage, so the post-its stay the only color on the board. */
         .bg-warm::before {
-            background: 
-                radial-gradient(ellipse at 30% 20%, rgba(255, 224, 102, 0.4) 0%, transparent 50%),
-                radial-gradient(ellipse at 70% 80%, rgba(165, 216, 255, 0.3) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(255, 201, 201, 0.15) 0%, transparent 60%),
-                linear-gradient(160deg, #fdf8f0 0%, #f7f0e6 100%);
+            background:
+                radial-gradient(ellipse at 25% 15%, rgba(255, 224, 102, 0.28) 0%, transparent 55%),
+                linear-gradient(160deg, #fdf8f0 0%, #f6efe4 100%);
         }
 
-        /* Post-it note base styles */
+        /* Post-it note base styles.
+           Shading runs top-to-bottom (paper curls away from the board at the
+           bottom edge) rather than the generic 135deg card gradient. */
         .post-it {
             position: relative;
             padding: 2rem;
-            box-shadow: 
-                2px 3px 15px var(--shadow),
-                0 1px 3px var(--shadow-deep);
-            transition: transform 0.3s ease;
+            /* Tight contact shadow + soft lift at the bottom edge: a pinned
+               note sits flat at the top and lifts slightly where it curls. */
+            box-shadow:
+                0 1px 2px var(--shadow-deep),
+                2px 6px 12px -4px var(--shadow);
             z-index: 1;
         }
 
         .post-it-yellow {
             background: var(--yellow);
-            background: linear-gradient(135deg, var(--yellow) 0%, var(--yellow-deep) 100%);
+            background: linear-gradient(180deg, var(--yellow) 55%, var(--yellow-deep) 100%);
         }
 
         .post-it-blue {
             background: var(--blue);
-            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
+            background: linear-gradient(180deg, var(--blue) 55%, var(--blue-deep) 100%);
         }
 
         .post-it-pink {
             background: var(--pink);
-            background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+            background: linear-gradient(180deg, var(--pink) 55%, var(--pink-deep) 100%);
         }
 
         .post-it-green {
             background: var(--green);
-            background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
+            background: linear-gradient(180deg, var(--green) 55%, var(--green-deep) 100%);
         }
 
         .post-it-orange {
             background: var(--orange);
-        }
-
-        .post-it-purple {
-            background: var(--purple);
+            background: linear-gradient(180deg, var(--orange) 55%, #ffbe66 100%);
         }
 
         .post-it-white {
-            background: #fff;
+            background: var(--sheet);
             border: 2px solid var(--ink);
         }
 
@@ -266,11 +262,14 @@
             line-height: 1.4;
         }
 
+        /* Stamped index label: slab smallcaps reads like a rubber stamp,
+           where tracking-out a handwriting font never does. */
         .label {
-            font-family: 'Caveat', cursive;
-            font-size: 0.9rem;
+            font-family: 'Zilla Slab', serif;
+            font-weight: 600;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 0.15em;
+            letter-spacing: 0.16em;
             color: var(--ink-light);
         }
 
@@ -280,6 +279,25 @@
             z-index: 1;
             max-width: 1200px;
             width: 100%;
+        }
+
+        /* Entrance: the whole cluster settles onto the board.
+           Animating the wrapper (not the post-its) preserves every
+           individual rotate() transform. */
+        @keyframes settle {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .slide.active .slide-content {
+            animation: settle 0.55s cubic-bezier(.16,1,.3,1) both;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .slide.active .slide-content,
+            .bar-group {
+                animation: none;
+            }
         }
 
         /* ===== SLIDE 1: Title ===== */
@@ -336,7 +354,7 @@
         }
 
         .subtitle-text {
-            margin-top: 3rem;
+            margin: 3rem auto 0;
             font-family: 'Zilla Slab', serif;
             font-size: 1.3rem;
             font-style: italic;
@@ -428,10 +446,14 @@
             align-items: center;
         }
 
+        /* White worksheets share the post-it shadow language: tight contact
+           shadow + soft bottom lift, instead of a generic floating blur. */
         .chart-container {
-            background: #fff;
+            background: var(--sheet);
             padding: 2.5rem;
-            box-shadow: 2px 3px 15px var(--shadow);
+            box-shadow:
+                0 1px 2px var(--shadow-deep),
+                2px 8px 16px -6px var(--shadow);
             transform: rotate(-1deg);
         }
 
@@ -453,10 +475,13 @@
             font-size: 1.1rem;
         }
 
+        /* Ink stroke matches the chart bars so legend and chart read
+           as drawn by the same pen. */
         .legend-swatch {
-            width: 20px;
-            height: 20px;
-            border-radius: 3px;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--ink);
+            border-radius: 4px;
             flex-shrink: 0;
         }
 
@@ -466,10 +491,18 @@
             height: auto;
         }
 
+        /* Bars grow from their own baselines: transform-box keeps the
+           origin on each rect (not the SVG viewport), and the stagger
+           reads like notes being slapped on one at a time. */
         .bar-group {
-            animation: growBar 1s ease-out forwards;
+            animation: growBar 0.7s cubic-bezier(.16,1,.3,1) both;
+            transform-box: fill-box;
             transform-origin: bottom;
         }
+
+        .bar-group:nth-of-type(2) { animation-delay: 0.08s; }
+        .bar-group:nth-of-type(3) { animation-delay: 0.16s; }
+        .bar-group:nth-of-type(4) { animation-delay: 0.24s; }
 
         @keyframes growBar {
             from { transform: scaleY(0); }
@@ -576,17 +609,20 @@
         }
 
         .photo-frame {
-            background: #fff;
+            background: var(--sheet);
             padding: 1rem;
-            box-shadow: 2px 3px 15px var(--shadow);
+            box-shadow:
+                0 1px 2px var(--shadow-deep),
+                2px 8px 16px -6px var(--shadow);
             transform: rotate(-2deg);
         }
 
         .photo-frame .photo-inner {
             width: 100%;
             aspect-ratio: 4/3;
-            background: 
-                linear-gradient(135deg, #e9ecef 0%, #dee2e6 50%, #ced4da 100%);
+            /* Warm paper tone so the placeholder sits in the same family
+               as the board instead of a cool UI gray. */
+            background: linear-gradient(180deg, #f1ece2 0%, #e4dccc 100%);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -598,9 +634,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: 
-                radial-gradient(circle at 40% 40%, rgba(255,224,102,0.3) 0%, transparent 50%),
-                radial-gradient(circle at 60% 60%, rgba(165,216,255,0.3) 0%, transparent 50%);
+            background: radial-gradient(circle at 35% 30%, rgba(255, 224, 102, 0.25) 0%, transparent 60%);
         }
 
         .photo-placeholder {
@@ -641,9 +675,11 @@
         }
 
         .diagram-canvas {
-            background: #fff;
+            background: var(--sheet);
             padding: 2.5rem;
-            box-shadow: 2px 3px 15px var(--shadow);
+            box-shadow:
+                0 1px 2px var(--shadow-deep),
+                2px 8px 16px -6px var(--shadow);
             transform: rotate(-1deg);
             display: flex;
             flex-direction: column;
@@ -809,24 +845,6 @@
             pointer-events: none;
         }
 
-        .doodle-circle {
-            border: 3px solid var(--ink);
-            border-radius: 50%;
-        }
-
-        .doodle-line {
-            height: 3px;
-            background: var(--ink);
-            border-radius: 2px;
-        }
-
-        .doodle-squiggle {
-            stroke: var(--ink);
-            stroke-width: 3;
-            fill: none;
-            opacity: 0.15;
-        }
-
         /* Responsive */
         @media (max-width: 900px) {
             .two-col-layout,
@@ -879,14 +897,14 @@
             <div class="slide-content">
                 <div class="title-cluster">
                     <div class="post-it post-it-yellow main-title-postit pin">
-                        <h1>Scatterbrain</h1>
-                        <p class="handwritten" style="margin-top: 0.5rem; color: var(--ink-light);">A Post-it Inspired Template</p>
+                        <h1>Open Design</h1>
+                        <p class="handwritten" style="margin-top: 0.5rem; color: var(--ink-light);">Open-source · Local · Agent-driven</p>
                     </div>
-                    <div class="post-it post-it-blue title-accent-1 pin-blue">Remember this!</div>
-                    <div class="post-it post-it-pink title-accent-2 pin">Notes & Ideas</div>
+                    <div class="post-it post-it-blue title-accent-1 pin-blue">Apache-2.0!</div>
+                    <div class="post-it post-it-pink title-accent-2 pin">BYOK · No Sign-up</div>
                     <div class="post-it post-it-green title-accent-3">!</div>
                 </div>
-                <p class="subtitle-text">Collect your thoughts, pin your ideas, and watch the big picture emerge from the chaos of creativity.</p>
+                <p class="subtitle-text">From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, on your own machine.</p>
             </div>
             <svg class="doodle" style="top: 10%; left: 5%; width: 100px; height: 100px;" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="40" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
@@ -900,14 +918,14 @@
         <section class="slide bg-paper">
             <div class="slide-content">
                 <div class="statement-layout">
-                    <div class="post-it post-it-yellow statement-postit pin tape">
-                        <h2>"The best ideas start as scattered thoughts on sticky corners."</h2>
-                        <p style="margin-top: 1.5rem; font-style: italic;">Every great project begins with a single note, a fleeting thought, a moment of inspiration captured before it drifts away.</p>
-                        <p class="handwritten" style="margin-top: 1rem; text-align: right;">— The Creative Process</p>
+                    <div class="post-it post-it-yellow statement-postit pin">
+                        <h2>"Frontier AI design, back on every creator's desk."</h2>
+                        <p style="margin-top: 1.5rem; font-style: italic;">In April 2026, Claude Design proved an LLM can truly design — yet it is closed-source, paid, and cloud-only. Open Design sets that capability free.</p>
+                        <p class="handwritten" style="margin-top: 1rem; text-align: right;">— Why Open Design exists</p>
                     </div>
                 </div>
                 <div class="post-it post-it-blue side-note pin-blue">
-                    <p class="handwritten">Jot it down before you forget!</p>
+                    <p class="handwritten">No lock-in, ever!</p>
                 </div>
             </div>
             <svg class="doodle" style="top: 20%; left: 8%; width: 80px; height: 80px;" viewBox="0 0 80 80">
@@ -920,25 +938,25 @@
             <div class="slide-content">
                 <div class="two-col-layout">
                     <div class="post-it post-it-blue col-postit pin-blue" style="transform: rotate(-2deg);">
-                        <span class="label">01 / Discovery</span>
-                        <h3 style="margin-top: 1rem;">Finding the Problem</h3>
-                        <p>Every solution starts with understanding. We dive deep into research, interviews, and observation to uncover what truly matters.</p>
+                        <span class="label">01 / The Problem</span>
+                        <h3 style="margin-top: 1rem;">Locked in the Cloud</h3>
+                        <p>AI design capability exists — but today it lives behind a closed, paid, cloud-only product with no room to choose your own stack.</p>
                         <ul style="margin-top: 1rem;">
-                            <li>User research sessions</li>
-                            <li>Market analysis</li>
-                            <li>Stakeholder interviews</li>
-                            <li>Competitive landscape</li>
+                            <li>Closed-source and paid</li>
+                            <li>Cloud-only execution</li>
+                            <li>Locked to a single model</li>
+                            <li>No self-hosting, no BYOK</li>
                         </ul>
                     </div>
                     <div class="post-it post-it-yellow col-postit pin-gold" style="transform: rotate(1deg); margin-top: 3rem;">
-                        <span class="label">02 / Solution</span>
-                        <h3 style="margin-top: 1rem;">Crafting the Answer</h3>
-                        <p>With clarity comes creativity. We synthesize findings into actionable strategies and tangible designs.</p>
+                        <span class="label">02 / The Answer</span>
+                        <h3 style="margin-top: 1rem;">Open Design</h3>
+                        <p>The same frontier capability, rebuilt in the open — running on your own machine, with the agents you already use.</p>
                         <ul style="margin-top: 1rem;">
-                            <li>Ideation workshops</li>
-                            <li>Prototype development</li>
-                            <li>Iterative testing</li>
-                            <li>Final delivery</li>
+                            <li>Apache-2.0 open source</li>
+                            <li>Runs on your machine</li>
+                            <li>21 coding agents, plug-in</li>
+                            <li>Full-stack BYOK</li>
                         </ul>
                     </div>
                 </div>
@@ -954,8 +972,8 @@
         <section class="slide bg-cork">
             <div class="slide-content">
                 <div class="chart-layout">
-                    <div class="chart-container pin tape">
-                        <h3 style="text-align: center; margin-bottom: 2rem;">Quarterly Growth</h3>
+                    <div class="chart-container tape">
+                        <h3 style="text-align: center; margin-bottom: 2rem;">Community Growth</h3>
                         <svg class="sketch-chart" viewBox="0 0 400 250" style="max-height: 300px;">
                             <!-- Grid lines -->
                             <line x1="50" y1="200" x2="380" y2="200" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
@@ -963,23 +981,24 @@
                             <line x1="50" y1="100" x2="380" y2="100" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
                             <line x1="50" y1="50" x2="380" y2="50" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
 
-                            <!-- Bars -->
-                            <rect class="bar-group" x="70" y="120" width="50" height="80" fill="#ffe066" stroke="#2d2a26" stroke-width="2" rx="4"/>
-                            <rect class="bar-group" x="140" y="90" width="50" height="110" fill="#a5d8ff" stroke="#2d2a26" stroke-width="2" rx="4"/>
-                            <rect class="bar-group" x="210" y="60" width="50" height="140" fill="#ffc9c9" stroke="#2d2a26" stroke-width="2" rx="4"/>
-                            <rect class="bar-group" x="280" y="30" width="50" height="170" fill="#b2f2bb" stroke="#2d2a26" stroke-width="2" rx="4"/>
+                            <!-- Bars: pencil-sketch monochrome, hero yellow saved for the
+                                 current value (Q4) so the chart makes one point, not four -->
+                            <rect class="bar-group" x="70" y="120" width="50" height="80" fill="#fdfbf5" stroke="#2d2a26" stroke-width="2" rx="3"/>
+                            <rect class="bar-group" x="140" y="90" width="50" height="110" fill="#fdfbf5" stroke="#2d2a26" stroke-width="2" rx="3"/>
+                            <rect class="bar-group" x="210" y="60" width="50" height="140" fill="#fdfbf5" stroke="#2d2a26" stroke-width="2" rx="3"/>
+                            <rect class="bar-group" x="280" y="30" width="50" height="170" fill="#ffe066" stroke="#2d2a26" stroke-width="2.5" rx="3"/>
 
                             <!-- Labels -->
-                            <text x="95" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q1</text>
-                            <text x="165" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q2</text>
-                            <text x="235" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q3</text>
-                            <text x="305" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q4</text>
+                            <text x="95" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#4f4a43">Q1</text>
+                            <text x="165" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#4f4a43">Q2</text>
+                            <text x="235" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#4f4a43">Q3</text>
+                            <text x="305" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#4f4a43">Q4</text>
 
                             <!-- Value labels on bars -->
-                            <text x="95" y="110" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">24</text>
-                            <text x="165" y="80" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">38</text>
-                            <text x="235" y="50" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">52</text>
-                            <text x="305" y="20" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">71</text>
+                            <text x="95" y="110" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">18K</text>
+                            <text x="165" y="80" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">32K</text>
+                            <text x="235" y="50" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">47K</text>
+                            <text x="305" y="20" text-anchor="middle" font-family="Caveat" font-size="22" font-weight="700" fill="#2d2a26">60K+</text>
 
                             <!-- Axis -->
                             <line x1="50" y1="200" x2="380" y2="200" stroke="#2d2a26" stroke-width="2"/>
@@ -990,21 +1009,21 @@
                         <h3>Key Metrics</h3>
                         <div class="legend-item">
                             <div class="legend-swatch" style="background: var(--yellow);"></div>
-                            <span>Revenue Streams</span>
+                            <span>60K+ GitHub Stars</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-swatch" style="background: var(--blue);"></div>
-                            <span>User Acquisition</span>
+                            <span>300+ Contributors</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-swatch" style="background: var(--pink);"></div>
-                            <span>Market Expansion</span>
+                            <span>217+ Plugins</span>
                         </div>
                         <div class="legend-item">
                             <div class="legend-swatch" style="background: var(--green);"></div>
-                            <span>Product Lines</span>
+                            <span>129 Design Systems</span>
                         </div>
-                        <p class="handwritten" style="margin-top: 1.5rem; border-top: 2px solid var(--ink); padding-top: 1rem;">Steady upward trend across all channels this fiscal year.</p>
+                        <p class="handwritten" style="margin-top: 1.5rem; border-top: 2px solid var(--ink); padding-top: 1rem;">GitHub Stars by quarter — demo trajectory to 60K+.</p>
                     </div>
                 </div>
             </div>
@@ -1016,18 +1035,18 @@
                 <div class="three-col-layout">
                     <div class="post-it post-it-yellow feature-postit pin">
                         <div class="feature-icon">A</div>
-                        <h3>Strategy</h3>
-                        <p>Map out your vision with clarity and purpose. Define objectives, set milestones, and align your team.</p>
+                        <h3>Desktop-Native</h3>
+                        <p>Design happens on the desktop. Local files, Figma exports, and code repos are readable in place; agents get full terminal power.</p>
                     </div>
                     <div class="post-it post-it-blue feature-postit pin-blue">
                         <div class="feature-icon">B</div>
-                        <h3>Design</h3>
-                        <p>Craft experiences that resonate. From wireframes to polished interfaces, every pixel serves a function.</p>
+                        <h3>Plug in Agents</h3>
+                        <p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
                     </div>
                     <div class="post-it post-it-pink feature-postit pin">
                         <div class="feature-icon">C</div>
-                        <h3>Launch</h3>
-                        <p>Ship with confidence. Test, iterate, and release products that users genuinely love and remember.</p>
+                        <h3>It Learns You</h3>
+                        <p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p>
                     </div>
                 </div>
             </div>
@@ -1045,8 +1064,8 @@
                 <div class="timeline-layout">
                     <div class="timeline-row">
                         <div class="post-it post-it-yellow timeline-node pin">
-                            <h3>Phase One</h3>
-                            <p class="phase-label">Foundation</p>
+                            <h3>Step One</h3>
+                            <p class="phase-label">Pick & Direct</p>
                         </div>
                         <div class="timeline-connector">
                             <svg viewBox="0 0 200 60" preserveAspectRatio="none">
@@ -1055,13 +1074,13 @@
                             </svg>
                         </div>
                         <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
-                            <p>Establish core principles, gather requirements, and build the foundational architecture that everything else will stand upon.</p>
+                            <p>Describe your goal in one sentence or start from a template or plugin, then set the visual direction — palette, type, and spacing flow into generation automatically.</p>
                         </div>
                     </div>
                     <div class="timeline-row">
                         <div class="post-it post-it-blue timeline-node pin-blue">
-                            <h3>Phase Two</h3>
-                            <p class="phase-label">Creation</p>
+                            <h3>Step Two</h3>
+                            <p class="phase-label">Generate</p>
                         </div>
                         <div class="timeline-connector">
                             <svg viewBox="0 0 200 60" preserveAspectRatio="none">
@@ -1070,13 +1089,13 @@
                             </svg>
                         </div>
                         <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
-                            <p>Design prototypes, iterate through feedback cycles, and refine the product until every detail feels intentional.</p>
+                            <p>The agent reads full context and produces real runnable files, previewed and edited live in a sandbox until every detail feels intentional.</p>
                         </div>
                     </div>
                     <div class="timeline-row">
                         <div class="post-it post-it-green timeline-node pin-green">
-                            <h3>Phase Three</h3>
-                            <p class="phase-label">Delivery</p>
+                            <h3>Step Three</h3>
+                            <p class="phase-label">Ship & Learn</p>
                         </div>
                         <div class="timeline-connector">
                             <svg viewBox="0 0 200 60" preserveAspectRatio="none">
@@ -1085,7 +1104,7 @@
                             </svg>
                         </div>
                         <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
-                            <p>Launch to the world, measure impact, gather insights, and prepare for the next cycle of innovation.</p>
+                            <p>Hand off to engineering, or turn it into a marketing video with HyperFrames. Every choice becomes context for the next run.</p>
                         </div>
                     </div>
                 </div>
@@ -1096,20 +1115,20 @@
         <section class="slide bg-cork">
             <div class="slide-content">
                 <div class="imgtext-layout">
-                    <div class="photo-frame pin tape">
+                    <div class="photo-frame tape">
                         <div class="photo-inner">
                             <span class="photo-placeholder">[ Visual Content ]</span>
                         </div>
                     </div>
                     <div class="text-cluster">
                         <div class="post-it post-it-pink main-text-postit pin">
-                            <span class="label">Spotlight</span>
-                            <h3 style="margin-top: 1rem;">Capturing the Moment</h3>
-                            <p>Visual storytelling transforms abstract concepts into tangible understanding. A single image can communicate what paragraphs struggle to explain.</p>
-                            <p style="margin-top: 1rem;">We believe in the power of imagery to bridge gaps, evoke emotion, and create lasting impressions that words alone cannot achieve.</p>
+                            <span class="label">Outputs</span>
+                            <h3 style="margin-top: 1rem;">What Can You Make?</h3>
+                            <p>High-fidelity mobile and web prototypes, interactive dashboards, creative decks, posters, and product mockups — every artifact is a real runnable file.</p>
+                            <p style="margin-top: 1rem;">With HyperFrames, the same pipeline turns HTML into MP4 marketing shorts, product demos, and cinematic generative footage.</p>
                         </div>
                         <div class="post-it post-it-yellow mini-note pin-gold">
-                            <p class="handwritten">Visuals first, text second.</p>
+                            <p class="handwritten">Real files, git-diffable!</p>
                         </div>
                     </div>
                 </div>
@@ -1123,8 +1142,8 @@
         <section class="slide bg-paper">
             <div class="slide-content">
                 <div class="diagram-layout">
-                    <div class="diagram-canvas pin tape">
-                        <h3>Distribution Overview</h3>
+                    <div class="diagram-canvas tape">
+                        <h3>Plugin Ecosystem</h3>
                         <svg viewBox="0 0 280 200" style="max-width: 280px;">
                             <!-- Pie chart -->
                             <circle cx="100" cy="100" r="80" fill="#ffe066" stroke="#2d2a26" stroke-width="2"/>
@@ -1134,45 +1153,45 @@
                             <path d="M100 100 L60 170 A80 80 0 0 1 20 100 Z" fill="#ffcc80" stroke="#2d2a26" stroke-width="2"/>
 
                             <!-- Center hole for donut effect -->
-                            <circle cx="100" cy="100" r="25" fill="#fff" stroke="#2d2a26" stroke-width="2"/>
-                            <text x="100" y="105" text-anchor="middle" font-family="Shrikhand" font-size="14" fill="#2d2a26">Total</text>
+                            <circle cx="100" cy="100" r="25" fill="#fffdf8" stroke="#2d2a26" stroke-width="2"/>
+                            <text x="100" y="105" text-anchor="middle" font-family="Shrikhand" font-size="14" fill="#2d2a26">217+</text>
 
                             <!-- Legend -->
                             <rect x="200" y="40" width="15" height="15" fill="#ffe066" stroke="#2d2a26" stroke-width="1"/>
-                            <text x="225" y="52" font-family="Zilla Slab" font-size="12" fill="#5c5750">Alpha</text>
+                            <text x="225" y="52" font-family="Zilla Slab" font-size="12" fill="#4f4a43">Prototypes</text>
 
                             <rect x="200" y="70" width="15" height="15" fill="#a5d8ff" stroke="#2d2a26" stroke-width="1"/>
-                            <text x="225" y="82" font-family="Zilla Slab" font-size="12" fill="#5c5750">Beta</text>
+                            <text x="225" y="82" font-family="Zilla Slab" font-size="12" fill="#4f4a43">Slides</text>
 
                             <rect x="200" y="100" width="15" height="15" fill="#ffc9c9" stroke="#2d2a26" stroke-width="1"/>
-                            <text x="225" y="112" font-family="Zilla Slab" font-size="12" fill="#5c5750">Gamma</text>
+                            <text x="225" y="112" font-family="Zilla Slab" font-size="12" fill="#4f4a43">Posters</text>
 
                             <rect x="200" y="130" width="15" height="15" fill="#b2f2bb" stroke="#2d2a26" stroke-width="1"/>
-                            <text x="225" y="142" font-family="Zilla Slab" font-size="12" fill="#5c5750">Delta</text>
+                            <text x="225" y="142" font-family="Zilla Slab" font-size="12" fill="#4f4a43">Dashboards</text>
 
                             <rect x="200" y="160" width="15" height="15" fill="#ffcc80" stroke="#2d2a26" stroke-width="1"/>
-                            <text x="225" y="172" font-family="Zilla Slab" font-size="12" fill="#5c5750">Epsilon</text>
+                            <text x="225" y="172" font-family="Zilla Slab" font-size="12" fill="#4f4a43">Video</text>
                         </svg>
                     </div>
                     <div class="diagram-note post-it post-it-yellow pin">
                         <h3>Key Statistics</h3>
                         <div class="stat-row">
-                            <span class="stat-label">Total Reach</span>
-                            <span class="stat-value">128K</span>
+                            <span class="stat-label">GitHub Stars</span>
+                            <span class="stat-value">60K+</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Engagement</span>
-                            <span class="stat-value">84%</span>
+                            <span class="stat-label">Contributors</span>
+                            <span class="stat-value">300+</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Retention</span>
-                            <span class="stat-value">62%</span>
+                            <span class="stat-label">Plugins</span>
+                            <span class="stat-value">217+</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Satisfaction</span>
-                            <span class="stat-value">4.8</span>
+                            <span class="stat-label">Design Systems</span>
+                            <span class="stat-value">129</span>
                         </div>
-                        <p class="handwritten" style="margin-top: 1.5rem;">Numbers tell the story we need to hear.</p>
+                        <p class="handwritten" style="margin-top: 1.5rem;">Pie shows a demo split of the 217+ plugin library.</p>
                     </div>
                 </div>
             </div>
@@ -1186,24 +1205,24 @@
             <div class="slide-content">
                 <div class="compare-layout">
                     <div class="post-it post-it-blue compare-postit left pin-blue">
-                        <h3>Before</h3>
+                        <h3>Claude Design</h3>
                         <ul class="compare-list">
-                            <li>Scattered documentation</li>
-                            <li>Unclear ownership</li>
-                            <li>Inconsistent processes</li>
-                            <li>Reactive problem solving</li>
-                            <li>Silos between teams</li>
+                            <li>Closed-source and paid</li>
+                            <li>Cloud-only execution</li>
+                            <li>Locked to one model</li>
+                            <li>No self-hosting, no BYOK</li>
+                            <li>~$500 per month</li>
                         </ul>
                     </div>
                     <div class="compare-vs">vs</div>
                     <div class="post-it post-it-yellow compare-postit right pin-gold">
-                        <h3>After</h3>
+                        <h3>Open Design</h3>
                         <ul class="compare-list">
-                            <li>Centralized knowledge base</li>
-                            <li>Defined responsibilities</li>
-                            <li>Streamlined workflows</li>
-                            <li>Proactive planning</li>
-                            <li>Cross-functional alignment</li>
+                            <li>Apache-2.0 open source</li>
+                            <li>Runs on your machine</li>
+                            <li>21 coding agents via BYOK</li>
+                            <li>Fork and self-host freely</li>
+                            <li>~$73 per month (-80%)</li>
                         </ul>
                     </div>
                 </div>
@@ -1218,23 +1237,23 @@
             <div class="slide-content">
                 <div class="closing-cluster">
                     <div class="post-it post-it-yellow closing-main pin">
-                        <h2>Thanks for Sticking Around</h2>
-                        <p class="handwritten" style="margin-top: 1rem;">Every great idea starts with a little note.</p>
+                        <h2>Open · Local · Agent-Native</h2>
+                        <p class="handwritten" style="margin-top: 1rem;">Frontier AI design, back on every creator's desk.</p>
                     </div>
                     <div class="post-it post-it-blue closing-accent-1 pin-blue">
-                        <p class="handwritten">Keep the ideas flowing!</p>
+                        <p class="handwritten">Star us on GitHub!</p>
                     </div>
                     <div class="post-it post-it-pink closing-accent-2 pin">
-                        <p class="handwritten">Pin this somewhere safe.</p>
+                        <p class="handwritten">Download for macOS / Windows</p>
                     </div>
                     <div class="post-it post-it-green closing-accent-3 pin-green">
-                        <p class="handwritten">OK</p>
+                        <p class="handwritten">60K+</p>
                     </div>
                     <div class="post-it post-it-orange closing-accent-4 pin-gold">
                         <p class="handwritten">:)</p>
                     </div>
                 </div>
-                <p style="margin-top: 3rem; font-family: 'Zilla Slab', serif; font-style: italic; color: var(--ink-light); font-size: 1.1rem;">Questions, thoughts, or just want to say hello?</p>
+                <p style="margin-top: 3rem; font-family: 'Zilla Slab', serif; font-style: italic; color: var(--ink-light); font-size: 1.1rem;">github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
             </div>
             <svg class="doodle" style="top: 8%; right: 8%; width: 80px; height: 80px;" viewBox="0 0 80 80">
                 <polygon points="40,10 70,70 10,70" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>

@@ -1466,7 +1466,10 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: /Deploy to Cloudflare Pages/i })).toBeTruthy();
+    expect(within(dialog).queryByRole('heading', { name: /Publish share page/i })).toBeNull();
     const backdrop = document.body.querySelector('.viewer-modal-backdrop.deploy-flow-backdrop');
     expect(backdrop).toBeTruthy();
     expect(backdrop?.parentElement).toBe(document.body);
@@ -2535,7 +2538,10 @@ describe('FileViewer SVG artifacts', () => {
     expect(document.querySelector('.share-menu-social-grid')).toBeNull();
     fireEvent.click(socialShareItem);
 
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Publish share page/i })).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
     expect(screen.getAllByText('https://vercel.example').length).toBeGreaterThan(0);
   });
@@ -2599,8 +2605,9 @@ describe('FileViewer SVG artifacts', () => {
 
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'X' })).toBeNull();
-    const deployButtons = within(dialog).getAllByRole('button', { name: /^Deploy$/i });
+    const deployButtons = within(dialog).getAllByRole('button', { name: /Publish share page/i });
     fireEvent.click(deployButtons[deployButtons.length - 1]!);
 
     expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
@@ -2665,7 +2672,9 @@ describe('FileViewer SVG artifacts', () => {
     const socialShareItem = await screen.findByRole('menuitem', { name: /social share/i });
     fireEvent.click(socialShareItem);
 
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByRole('heading', { name: /Publish share page/i })).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'X' })).toBeTruthy();
     expect(screen.getAllByText(/requiring authentication/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText('https://protected.vercel.example').length).toBeGreaterThan(0);
@@ -2905,6 +2914,286 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Redo' })).toBeTruthy();
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
+  });
+
+  it('keeps the URL-load iframe warm while the Draw bar is open (no reload on close)', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    expect(urlFrame).toBeTruthy();
+    expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
+    const warmSrc = urlFrame?.getAttribute('src') ?? '';
+    expect(warmSrc).not.toBe('about:blank');
+    expect(warmSrc).toContain('/raw/');
+
+    // Opening Draw flips the *visible* frame to the materialized srcDoc bridge
+    // (see the test above), but the URL-load iframe must stay warm rather than
+    // park at about:blank — otherwise closing the bar re-fetches the whole
+    // artifact and the user sees a black → loading → reload after every
+    // screenshot. Regression guard for the post-screenshot refresh.
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      const active = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement | null;
+      expect(active?.getAttribute('data-od-active')).toBe('true');
+    });
+
+    const urlFrameDuringDraw = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+    expect(urlFrameDuringDraw).toBe(urlFrame);
+    expect(urlFrameDuringDraw?.getAttribute('data-od-active')).toBe('false');
+    expect(urlFrameDuringDraw?.getAttribute('src')).not.toBe('about:blank');
+    expect(urlFrameDuringDraw?.getAttribute('src')).toBe(warmSrc);
+  });
+
+  it('holds the preview steady while the Draw bar is open instead of live-reloading on a file change', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Hero V1</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Hero V1');
+    });
+
+    // Simulate an agent rewrite arriving via the chokidar live-reload signal
+    // (fresh liveHtml + bumped files-refresh + new mtime) WHILE the user is
+    // mid-mark. The preview must not yank itself out from under the
+    // annotation — that auto-refresh is the reported bug.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Hero V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    const duringDraw = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(duringDraw.srcdoc).toContain('Hero V1');
+    expect(duringDraw.srcdoc).not.toContain('Hero V2');
+
+    // Closing the Draw bar flushes the deferred update: the URL-load iframe
+    // returns active with the new mtime so the latest content lands in one
+    // clean pass.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(active.getAttribute('src') ?? '').toContain('v=999999');
+    });
+  });
+
+  it('drops the annotation freeze when switching files so the new artifact shows immediately', async () => {
+    const { container, rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'a.html', path: 'a.html' })}
+        liveHtml='<html><body><main data-od-id="hero">Artifact A</main></body></html>'
+      />,
+    );
+
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
+    });
+
+    // Switch to a different file while Draw is still open. The viewer must not
+    // stay pinned to file A's frozen snapshot — the per-file tool closes and
+    // the new artifact renders live. Regression guard for nettee's review on
+    // the freeze having no projectId/file.name reset.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'b.html', path: 'b.html' })}
+        liveHtml='<html><body><main data-od-id="hero">Artifact B</main></body></html>'
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
+      const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement | null;
+      expect(urlFrame?.getAttribute('data-od-active')).toBe('true');
+      expect(urlFrame?.getAttribute('src') ?? '').toContain('b.html');
+    });
+  });
+
+  it('closes the comment tool when switching files so a save cannot post to the previous file', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'a.html', path: 'a.html' })}
+        liveHtml='<html><body><main data-od-id="hero">A</main></body></html>'
+      />,
+    );
+
+    // Open Comment create mode — the side dock (`commentPanelOpen`) opens.
+    clickAgentTool('comment-panel-toggle');
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    });
+
+    // Switch files with Comment still open. boardMode alone closing isn't
+    // enough — the dock and the file-scoped save target must tear down too,
+    // else the dock lingers and the next save posts back to the previous file.
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype"
+        file={htmlPreviewFile({ name: 'b.html', path: 'b.html' })}
+        liveHtml='<html><body><main data-od-id="hero">B</main></body></html>'
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('false');
+      expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    });
+  });
+
+  it('materializes the srcDoc iframe only on first mode entry (not while hidden), then keeps it warm', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Materialize me</main></body></html>'
+      />,
+    );
+
+    // Passive preview: the hidden srcDoc iframe stays on the lazy shell. The
+    // artifact must NOT be rendered a second time while hidden — that ran a
+    // duplicate live mount and rendered scroll/reveal-animated content while
+    // invisible (the white-on-enter bug). Give any stray async a beat.
+    const before = container.querySelector('iframe[data-od-render-mode="srcdoc"]');
+    expect((before as HTMLIFrameElement).getAttribute('data-od-active')).toBe('false');
+    await new Promise((r) => setTimeout(r, 50));
+    {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+      expect(f.srcdoc).not.toContain('Materialize me');
+    }
+
+    // First mode entry materializes the srcDoc WHILE VISIBLE (reveal animations
+    // fire correctly there).
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.getAttribute('data-od-active')).toBe('true');
+      expect(f.srcdoc).toContain('Materialize me');
+    });
+
+    // Exit then re-enter: the iframe is the SAME DOM node (no remount) and stays
+    // materialized (sticky) — so every later toggle is an instant visibility
+    // swap, no re-load.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      expect((container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement).getAttribute('data-od-active')).toBe('true');
+    });
+    const hiddenAfterExit = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    expect(hiddenAfterExit).toBe(before);
+    expect(hiddenAfterExit.srcdoc).toContain('Materialize me');
+  });
+
+  it('always injects the manual-edit bridge into the preview srcDoc so entering Edit after materialization does not reload', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><main data-od-id="hero">Stable doc</main></body></html>'
+      />,
+    );
+
+    // Passive preview still uses the lazy shell; the first real materialization
+    // happens only after the user enters an interactive mode.
+    const initialSrcDocFrame = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+    expect(initialSrcDocFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+
+    // Materialize once via Draw. The manual-edit bridge must already be present
+    // even though Edit is NOT active — it boots dormant and only acts on the
+    // host's od-edit-mode message.
+    clickAgentTool('draw-overlay-toggle');
+    const materializedSrcDoc = await waitFor(() => {
+      const f = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(f.getAttribute('data-od-active')).toBe('true');
+      expect(f.srcdoc).toContain('Stable doc');
+      expect(f.srcdoc).toContain('data-od-edit-bridge');
+      return f.srcdoc;
+    });
+
+    // Leave Draw and enter Edit. Because the edit bridge was already in the
+    // materialized srcDoc, entering Edit must NOT change the document string —
+    // same string means the browser does not re-parse/reload it; editing
+    // activates via postMessage.
+    clickAgentTool('draw-overlay-toggle');
+    await waitFor(() => {
+      const urlFrame = container.querySelector('iframe[data-od-render-mode="url-load"]') as HTMLIFrameElement;
+      expect(urlFrame.getAttribute('data-od-active')).toBe('true');
+    });
+    clickAgentTool('manual-edit-mode-toggle');
+    await waitFor(() => {
+      const active = container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-active')).toBe('true');
+    });
+    const srcDocAfter = (container.querySelector('iframe[data-od-render-mode="srcdoc"]') as HTMLIFrameElement).srcdoc;
+    expect(srcDocAfter).toBe(materializedSrcDoc);
+  });
+
+  // The freeze / deferred-flush logic covers every interactive preview mode
+  // (`annotationFreezeActive` = Draw || Comment || Inspect; the URL freeze also
+  // covers manual Edit). Pin the non-Draw branches so a regression in any one
+  // can't slip through green. Inspect shares the exact `annotationFreezeActive`
+  // path as Comment and has no toggle in this prototype surface, so Comment
+  // stands in for both.
+  it('holds the preview steady while Comment mode is open instead of live-reloading on a file change', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Comment V1</main></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('board-mode-toggle'));
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Comment V1');
+    });
+
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Comment V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    const f = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(f.srcdoc).toContain('Comment V1');
+    expect(f.srcdoc).not.toContain('Comment V2');
+  });
+
+  it('holds the preview steady while manual Edit is open instead of live-reloading on a file change', async () => {
+    const { rerender } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
+        liveHtml='<html><body><main data-od-id="hero">Edit V1</main></body></html>'
+      />,
+    );
+    fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
+    await waitFor(() => {
+      const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(active.srcdoc).toContain('Edit V1');
+    });
+
+    rerender(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 999999 })}
+        filesRefreshKey={7}
+        liveHtml='<html><body><main data-od-id="hero">Edit V2</main></body></html>'
+      />,
+    );
+    await Promise.resolve();
+
+    const f = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(f.srcdoc).toContain('Edit V1');
+    expect(f.srcdoc).not.toContain('Edit V2');
   });
 
   it('preserves URL-loaded preview scroll when opening Draw', async () => {

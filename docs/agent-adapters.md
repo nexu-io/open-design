@@ -72,7 +72,7 @@ type AgentEvent =
 
 ## 2. Detection strategy
 
-Run all adapters' `detect()` in parallel on daemon start, then cache results in `~/.open-design/agents.json` with a 24h TTL. Re-detect on daemon `SIGHUP`.
+Run all adapters' `detect()` in parallel on daemon start, then cache results through daemon-managed storage with a 24h TTL. This document MUST NOT define daemon data paths; read the root `AGENTS.md` section **Daemon data directory contract** before changing or documenting that storage.
 
 Each adapter uses **two signals**:
 

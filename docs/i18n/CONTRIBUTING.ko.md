@@ -244,7 +244,7 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 ## 커밋과 pull request
 
 - **PR 하나에 관심사 하나.** skill 추가 + 파서 리팩터링 + 의존성 버전 업은 PR 세 개입니다.
-- **제목은 명령형 + 범위.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify .od layout`처럼 씁니다.
+- **제목은 명령형 + 범위.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`처럼 씁니다.
 - **PR 템플릿을 사용하세요.** [`.github/pull_request_template.md`](../../.github/pull_request_template.md)의 모든 섹션(Why, What users will see, Surface area, Screenshots(UI인 경우), Bug fix verification(버그 수정인 경우), Validation)을 채우세요. 빈 섹션에는 "채워주세요" 답변이 달립니다.
 - **본문에는 이유를 적으세요.** "이게 뭘 하는지"는 보통 diff만 봐도 알 수 있습니다. 정작 드러나지 않는 것은 "이게 왜 있어야 하는지"입니다.
 - **issue가 있다면 연결하세요.** issue가 없고 PR이 사소하지 않다면 먼저 issue를 열어주세요. 시간을 쏟기 전에 그 변경을 원하는지 합의할 수 있습니다.

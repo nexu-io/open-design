@@ -1,0 +1,121 @@
+---
+/*
+ * /faq/ — standalone FAQ page.
+ *
+ * Reuses the localized homepage FAQ (`getHomeFaq`) as a single source of
+ * truth so the dedicated page and the homepage never drift, and adds a
+ * FAQPage JSON-LD block (AI/GEO citability + rich results). Localized
+ * routes come from `[locale]/faq/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getHomeFaq, localeFromPath } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const faq = getHomeFaq(locale, {
+  origin: 'open-design.ai',
+  repo: 'github.com/nexu-io/open-design',
+});
+
+const HEAD = {
+  en: {
+    eyebrow: 'FAQ',
+    h1: 'Open Design FAQ',
+    lead: 'Common questions about Open Design — what it is, how it works, and how to get started.',
+    title: 'FAQ — Open Design',
+    desc: 'Frequently asked questions about Open Design: what it is, how to use it, pricing, models, and getting started.',
+  },
+  zh: {
+    eyebrow: '常见问题',
+    h1: 'Open Design 常见问题',
+    lead: '关于 Open Design 的常见问题——它是什么、怎么用、如何上手。',
+    title: '常见问题 — Open Design',
+    desc: 'Open Design 常见问题:它是什么、如何使用、模型与上手方式。',
+  },
+  'zh-tw': {
+    eyebrow: '常見問題',
+    h1: 'Open Design 常見問題',
+    lead: '關於 Open Design 的常見問題——它是什麼、怎麼用、如何上手。',
+    title: '常見問題 — Open Design',
+    desc: 'Open Design 常見問題:它是什麼、如何使用、模型與上手方式。',
+  },
+} satisfies Record<string, { eyebrow: string; h1: string; lead: string; title: string; desc: string }>;
+const h = HEAD[locale as keyof typeof HEAD] ?? HEAD.en;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  url: new URL('/faq/', Astro.site).toString(),
+  mainEntity: faq.map(({ q, a }) => ({
+    '@type': 'Question',
+    name: q,
+    acceptedAnswer: { '@type': 'Answer', text: a },
+  })),
+};
+---
+
+<Layout title={h.title} description={h.desc} jsonLd={jsonLd}>
+  <article class="faq-page">
+    <span class="faq-eyebrow">{h.eyebrow}</span>
+    <h1 class="faq-h1">{h.h1}<span class="faq-dot">.</span></h1>
+    <p class="faq-lead">{h.lead}</p>
+
+    <dl class="faq-list">
+      {faq.map(({ q, a }) => (
+        <div class="faq-item">
+          <dt class="faq-q">{q}</dt>
+          <dd class="faq-a">{a}</dd>
+        </div>
+      ))}
+    </dl>
+  </article>
+
+  <style>
+    .faq-page {
+      max-width: 720px;
+    }
+    .faq-eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink-mute, #595959);
+      margin-bottom: 18px;
+    }
+    .faq-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink, #262626);
+    }
+    .faq-dot {
+      color: var(--ui-brand, #63fe13);
+    }
+    .faq-lead {
+      margin: 16px 0 40px;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .faq-list {
+      margin: 0;
+    }
+    .faq-item {
+      padding: 24px 0;
+      border-top: 1px solid var(--line);
+    }
+    .faq-q {
+      margin: 0 0 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .faq-a {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink-soft, #434343);
+    }
+  </style>
+</Layout>

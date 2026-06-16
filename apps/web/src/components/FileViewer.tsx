@@ -12,11 +12,13 @@ import {
   anonymizeArtifactId,
   artifactKindToTracking,
   type TrackingProjectKind,
+  type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
+  trackArtifactDeployResult,
   trackArtifactHeaderClick,
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
@@ -90,6 +92,7 @@ import {
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
+  type UrlLoadDecision,
 } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
@@ -4469,15 +4472,13 @@ function HtmlViewer({
       | 'markdown'
       | 'template'
       | 'share_link'
-      | 'share_page'
-      | 'vercel'
-      | 'cloudflare_pages',
+      | 'share_page',
     fn: () => Promise<unknown> | unknown,
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
     const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
-    const trackingFormat = format as Exclude<typeof format, 'image'>;
+    const trackingFormat = format;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -4546,8 +4547,9 @@ function HtmlViewer({
       | 'reload'
       | 'preview'
       | 'source'
+      | 'screenshot'
       | 'tweaks'
-      | 'draw'
+      | 'mark'
       | 'comment'
       | 'pods'
       | 'inspect'
@@ -4650,8 +4652,10 @@ function HtmlViewer({
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
   const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const [deployModalOpen, setDeployModalOpen] = useState(false);
+  const [deployModalIntent, setDeployModalIntent] = useState<'deploy' | 'social-share'>('deploy');
   const closeDeployModal = useCallback(() => {
     setDeployModalOpen(false);
+    setDeployModalIntent('deploy');
   }, []);
   const [deployConfig, setDeployConfig] = useState<WebDeployConfigResponse | null>(null);
   const [deploying, setDeploying] = useState(false);
@@ -4697,6 +4701,19 @@ function HtmlViewer({
   const [manualEditMode, setManualEditModeRaw] = useState(false);
   const [manualEditSrcDocActive, setManualEditSrcDocActive] = useState(false);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
+  // Source snapshot frozen while a non-edit annotation pass (Mark/Draw,
+  // Comment, Inspect) is open. The file-watcher live-reload (chokidar →
+  // filesRefresh → preview refresh) would otherwise re-render the iframe
+  // mid-annotation whenever the agent rewrites the file — wiping in-progress
+  // strokes, the picked element, scroll, and focus. We hold the snapshot
+  // captured at mode entry and release it on exit, so the latest content
+  // flushes in exactly once when the user is done. Manual Edit keeps its own
+  // freeze (manualEditFrozenSource) because it also streams live style
+  // patches over postMessage. NOTE: this intentionally pauses the
+  // comment-mode agent-edit live refresh added with the §5162 cache-bust —
+  // the user reported that mid-comment refresh as disruptive; eventual
+  // consistency is preserved by the flush on close.
+  const [annotationFrozenSource, setAnnotationFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
@@ -4974,6 +4991,23 @@ function HtmlViewer({
   const [imageExportPreparedBlob, setImageExportPreparedBlob] = useState<{ format: ImageExportFormat; blob: Blob } | null>(null);
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   const imageExportPrepareIdRef = useRef(0);
+  // Threads the share-popover click → artifact_export_result(image) pair, the
+  // same correlation other export formats get via fireShareExport. The image
+  // export is a separate modal flow, so it owns its own request id / start.
+  const imageExportRequestIdRef = useRef<string | null>(null);
+  const imageExportStartedRef = useRef(0);
+  // Guards against double-emitting the image export result: each modal
+  // session (reset in openImageExportModal) resolves to exactly one
+  // success / failed / cancelled, no matter which exit path runs.
+  const imageExportResolvedRef = useRef(false);
+  // Same click→result correlation for Save as template, which now reports the
+  // export result only after the template is actually saved (not on open).
+  const templateExportRequestIdRef = useRef<string | null>(null);
+  const templateExportStartedRef = useRef(0);
+  // Same one-terminal-result guard as image export: a template session
+  // (reset in openSaveAsTemplateModal) emits exactly one success/failed/
+  // cancelled, whether it ends in a save or a modal dismiss.
+  const templateExportResolvedRef = useRef(false);
   const screenshotInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
@@ -5209,6 +5243,11 @@ function HtmlViewer({
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const livePreviewSource = inlinedSource ?? source;
+  // Annotation modes that should hold the preview still while open. Manual
+  // Edit is handled by its own freeze just below; these are the non-edit
+  // passes (Mark/Draw, Comment, Inspect) that also must not be yanked out
+  // from under the user by a background file change.
+  const annotationFreezeActive = drawOverlayOpen || boardMode || inspectMode;
   // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
   // source rewrite during edit (1.5s debounced set-style patches) stays
   // invisible to the iframe — live updates flow through od-edit-preview-style
@@ -5218,9 +5257,24 @@ function HtmlViewer({
       setManualEditFrozenSource(livePreviewSource);
     }
   }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
+  // Capture / release the annotation snapshot at mode entry / exit. Captured
+  // once (the `=== null` guard), so a mid-pass file change can't slip a fresh
+  // snapshot in; cleared on exit so `previewSource` falls back to the latest
+  // live source and the deferred update lands in one clean render.
+  useEffect(() => {
+    if (annotationFreezeActive) {
+      if (annotationFrozenSource === null && livePreviewSource != null) {
+        setAnnotationFrozenSource(livePreviewSource);
+      }
+    } else if (annotationFrozenSource !== null) {
+      setAnnotationFrozenSource(null);
+    }
+  }, [annotationFreezeActive, annotationFrozenSource, livePreviewSource]);
   const previewSource = (manualEditMode && manualEditFrozenSource !== null)
     ? manualEditFrozenSource
-    : livePreviewSource;
+    : (annotationFreezeActive && annotationFrozenSource !== null)
+      ? annotationFrozenSource
+      : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
   const manualEditRequiresSrcDoc = manualEditSrcDocActive && !urlModeBridge;
@@ -5243,7 +5297,7 @@ function HtmlViewer({
     [source],
   );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
+  const urlLoadDecision: UrlLoadDecision = {
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode,
@@ -5254,29 +5308,77 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
-  }) && !manualEditRequiresSrcDoc;
+  };
+  const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
+  // Hold the iframe URL still (it carries file.mtime) while the user is mid
+  // annotation/edit, mirroring the source freeze above. Otherwise a
+  // background file change bumps mtime → basePreviewSrcUrl → a URL-load
+  // reload right under an active mark/comment/edit/inspect. Captured once at
+  // mode entry via a ref and released on exit, so the deferred reload lands
+  // exactly once when the user is done.
+  const interactivePreviewModeActive = annotationFreezeActive || manualEditMode;
+  const frozenPreviewSrcUrlRef = useRef<string | null>(null);
+  if (interactivePreviewModeActive) {
+    if (frozenPreviewSrcUrlRef.current === null) {
+      frozenPreviewSrcUrlRef.current = basePreviewSrcUrl;
+    }
+  } else {
+    frozenPreviewSrcUrlRef.current = null;
+  }
+  const effectiveBasePreviewSrcUrl = frozenPreviewSrcUrlRef.current ?? basePreviewSrcUrl;
+  // Switching to a different file/project while an annotation tool is still
+  // open must NOT keep the viewer pinned to the previous artifact. The
+  // per-file annotation data is already reset on file.name change, but the
+  // freeze snapshots and the mode flags would otherwise survive — leaving the
+  // frozen source/URL stuck on the old file until the user manually closes the
+  // tool (and clearing the freeze alone would just re-freeze the old source
+  // before the new file's fetch lands). Close the per-file tools and drop both
+  // freezes on a file/project switch so the new artifact renders live, the way
+  // manualEditFrozenSource is reset just above.
+  useEffect(() => {
+    frozenPreviewSrcUrlRef.current = null;
+    setAnnotationFrozenSource(null);
+    setDrawOverlayOpen(false);
+    setBoardMode(false);
+    setInspectMode(false);
+    setSrcDocMaterialized(false);
+    // Closing boardMode alone is not enough: the comment dock renders off
+    // `commentPanelOpen` and a panel save reuses `activeCommentTarget` /
+    // `activePreviewCommentId`, both file-scoped. Left open across a file swap
+    // the dock stays visible and the next save would post back to the previous
+    // file/element. Fully tear the comment tool down here. (The composer data —
+    // activeCommentTarget, drafts, queued notes — is cleared by the file.name
+    // reset effect below; these are the UI-open flags it doesn't touch.)
+    setCommentPanelOpen(false);
+    setCommentCreateMode(false);
+    setActivePreviewCommentId(null);
+  }, [projectId, file.name]);
   const activePreviewSrcUrl = (
-    previewSrcUrl === basePreviewSrcUrl ||
-    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`)
+    previewSrcUrl === effectiveBasePreviewSrcUrl ||
+    previewSrcUrl.startsWith(`${effectiveBasePreviewSrcUrl}&`)
   )
     ? previewSrcUrl
-    : basePreviewSrcUrl;
+    : effectiveBasePreviewSrcUrl;
   useEffect(() => {
-    setPreviewSrcUrl(basePreviewSrcUrl);
+    setPreviewSrcUrl(effectiveBasePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
-  }, [basePreviewSrcUrl]);
+  }, [effectiveBasePreviewSrcUrl]);
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
   }, [useUrlLoadPreview]);
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
-    const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    // Defer the file-watcher live-reload while annotating; the effect re-runs
+    // when the mode closes (interactivePreviewModeActive flips) and applies
+    // the now-current URL in one pass.
+    if (interactivePreviewModeActive) return;
+    const nextSrc = `${effectiveBasePreviewSrcUrl}&fr=${filesRefreshKey}`;
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
@@ -5285,7 +5387,7 @@ function HtmlViewer({
       }
     }, 180);
     return () => window.clearTimeout(timeout);
-  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
+  }, [effectiveBasePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview, interactivePreviewModeActive]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -5306,15 +5408,33 @@ function HtmlViewer({
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       selectionBridge: true,
-      editBridge: manualEditRequiresSrcDoc,
+      // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
+      // export path), so the document is byte-identical across preview /
+      // comment / draw / edit. The bridge boots dormant (`enabled=false`) and
+      // only acts on the host's `od-edit-mode {enabled:true}` postMessage
+      // (sent by syncBridgeModes), with all its handlers gated on `enabled`
+      // and its styles scoped to `html[data-od-edit-mode]`. Gating injection on
+      // edit mode instead changed the srcdoc string on entering Edit, which
+      // re-parses the whole document — the "reload from scratch on switch" the
+      // user hit. Mirrors the always-on tweaks bridge rationale above.
+      editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
+  // Sticky once the srcDoc iframe has materialized the real artifact for the
+  // first time (i.e. the first entry into Mark/Edit/Comment/Inspect). Until
+  // then the srcDoc iframe stays on the lazy shell — so passive preview never
+  // runs a hidden second copy of the artifact (no double mount, and no white:
+  // we only materialize while the iframe is VISIBLE, where scroll/reveal
+  // animations fire correctly). Once materialized it stays real even back in
+  // URL-load mode (hidden), so every later mode toggle is an instant
+  // visibility swap with no re-load. Reset on file/project change.
+  const [srcDocMaterialized, setSrcDocMaterialized] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
   const urlPreviewKeepAliveKey = previewIframeKeepAliveKey(projectId, file.name);
   // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
@@ -5356,9 +5476,37 @@ function HtmlViewer({
   // a postMessage activation that can race (#2253) and strand the iframe blank
   // (#2361, #2791).
   const captureModeActive = drawOverlayOpen;
-  const useLazySrcDocTransport = !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview;
+  // Once `srcDocMaterialized` is set (after the first mode entry), keep the
+  // srcDoc iframe on the real artifact even when hidden behind URL-load, so
+  // re-entering a mode is an instant visibility swap rather than a re-mount +
+  // re-load. Direct-mount path (no #2361/#2791 postMessage race).
+  const useLazySrcDocTransport =
+    !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview && !srcDocMaterialized;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
-  const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
+  // Materialize the srcDoc iframe the first time it actually becomes the active
+  // (visible) transport — i.e. the first Mark/Edit/Comment/Inspect entry. We do
+  // NOT pre-render it while hidden/idle: that ran a second live copy during
+  // passive preview (double mount) and rendered scroll/reveal-animated content
+  // while invisible, which left it stuck blank (the white-on-enter bug). Doing
+  // it on first visible entry means the one materialization paints correctly,
+  // and the sticky flag keeps it warm for every subsequent toggle.
+  useEffect(() => {
+    if (!useUrlLoadPreview && !srcDocMaterialized) setSrcDocMaterialized(true);
+  }, [useUrlLoadPreview, srcDocMaterialized]);
+  // When the srcDoc switch is driven ONLY by Draw/annotation mode — an
+  // artifact that would otherwise URL-load — keep the URL-load iframe warm
+  // instead of parking it at about:blank. Draw is a quick "mark → screenshot →
+  // close" round-trip; parking forces a full artifact re-fetch the moment the
+  // overlay closes, which users see as a jarring black → loading → reload right
+  // after every screenshot. Sticky srcDoc modes (inspect / edit / palette /
+  // tweaks / comment / deck / focus-guard / sandbox-shim) keep parking, so two
+  // live copies never linger beyond the brief annotation pass.
+  const srcDocForcedOnlyByDraw =
+    drawOverlayOpen &&
+    !manualEditRequiresSrcDoc &&
+    shouldUrlLoadHtmlPreview({ ...urlLoadDecision, drawMode: false });
+  const urlTransportSrc =
+    useUrlLoadPreview || srcDocForcedOnlyByDraw ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     if (!canActivateSrcDocTransport({
       srcDoc,
@@ -5415,19 +5563,28 @@ function HtmlViewer({
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
-      if (!wasUrlLoadPreviewRef.current) {
+      // Remounting the srcDoc iframe on a render-mode flip resets it to a fresh
+      // lazy shell — needed ONLY for the lazy postMessage-activation path
+      // (#2253 shell-ready handshake). When the srcDoc iframe is direct-mounted
+      // (prewarmed, or an annotation mode), its content lives in the srcdoc
+      // attribute, so a remount would just throw away the warm render and force
+      // a reload. That is exactly the thrash users saw toggling Comment
+      // (URL-load) ↔ Mark (srcDoc): each flip remounted and reloaded. Keep the
+      // iframe alive in the direct-mount case so the toggle is a pure
+      // visibility swap.
+      if (!wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
         setSrcDocTransportResetKey((key) => key + 1);
       }
       wasUrlLoadPreviewRef.current = true;
       return;
     }
-    if (wasUrlLoadPreviewRef.current) {
+    if (wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
       setSrcDocTransportResetKey((key) => key + 1);
       activatedSrcDocTransportHtmlRef.current = null;
     }
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview]);
+  }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
   
   useEffect(() => {
     restorePreviewScrollPosition();
@@ -6609,6 +6766,25 @@ function HtmlViewer({
   // from the same artifact output surface as files.
   function openSaveAsTemplateModal() {
     setDownloadMenuOpen(false);
+    // Start the template click→result correlation; the result fires later from
+    // handleSaveAsTemplate once the save actually resolves.
+    const requestId = analytics.newRequestId();
+    templateExportRequestIdRef.current = requestId;
+    templateExportStartedRef.current = performance.now();
+    templateExportResolvedRef.current = false;
+    trackShareOptionPopoverClick(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        element: 'template',
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
     const defaultName =
       file.name.replace(/\.html?$/i, '') || t('fileViewer.templateNameDefault');
     setTemplateName(defaultName);
@@ -6617,6 +6793,34 @@ function HtmlViewer({
     setTemplateModalOpen(true);
   }
 
+  // Component-scoped so both the save flow and the modal Cancel button emit
+  // the one terminal result for a template export session.
+  const fireTemplateExportResult = (
+    result: 'success' | 'failed' | 'cancelled',
+    errorCode?: string,
+  ) => {
+    if (templateExportResolvedRef.current) return;
+    templateExportResolvedRef.current = true;
+    const requestId = templateExportRequestIdRef.current ?? analytics.newRequestId();
+    const started = templateExportStartedRef.current || performance.now();
+    trackArtifactExportResult(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        export_format: 'template',
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        export_duration_ms: Math.round(performance.now() - started),
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
+  };
+
   async function handleSaveAsTemplate() {
     const name = templateName.trim();
     if (!name) return;
@@ -6624,6 +6828,11 @@ function HtmlViewer({
     setTemplateNote(null);
     setTemplateSaveError(null);
     let savedName: string | null = null;
+    // Default to failed; flips to success only when the save resolves. The
+    // finally block reports exactly one artifact_export_result(template),
+    // covering the !tpl branch and any thrown error too.
+    let templateOutcome: 'success' | 'failed' = 'failed';
+    let templateErrorCode: string | undefined = 'UNKNOWN';
     try {
       const tpl = await saveTemplate({
         name,
@@ -6632,6 +6841,7 @@ function HtmlViewer({
       });
       if (!tpl) {
         setTemplateSaveError(t('fileViewer.savedTemplateFail'));
+        templateErrorCode = 'SAVE_FAILED';
         return;
       }
       savedName = tpl.name;
@@ -6641,8 +6851,11 @@ function HtmlViewer({
       setTemplateNote(t('fileViewer.savedTemplate', { name: tpl.name }));
       // Show success toast
       setTemplateSavedToast(t('fileViewer.savedTemplate', { name: tpl.name }));
+      templateOutcome = 'success';
+      templateErrorCode = undefined;
     } finally {
       setSavingTemplate(false);
+      fireTemplateExportResult(templateOutcome, templateErrorCode);
       if (savedName) {
         // Auto-clear the note so the menu doesn't keep stale state next open.
         setTimeout(() => setTemplateNote(null), 4000);
@@ -6650,9 +6863,13 @@ function HtmlViewer({
     }
   }
 
-  async function openDeployModal(nextProviderId: WebDeployProviderId = deployProviderId) {
+  async function openDeployModal(
+    nextProviderId: WebDeployProviderId = deployProviderId,
+    intent: 'deploy' | 'social-share' = 'deploy',
+  ) {
     setDeployMenuOpen(false);
     setDeployModalOpen(true);
+    setDeployModalIntent(intent);
     setDeployError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
@@ -6664,7 +6881,7 @@ function HtmlViewer({
     const providerWithDeployment = DEPLOY_PROVIDER_OPTIONS.find(
       (option) => deploymentsByProvider[option.id]?.url?.trim(),
     )?.id;
-    await openDeployModal(providerWithDeployment ?? deployProviderId);
+    await openDeployModal(providerWithDeployment ?? deployProviderId, 'social-share');
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -6730,10 +6947,38 @@ function HtmlViewer({
     setDeployError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
+    // Real-deploy analytics: report success only after the provider actually
+    // accepts the publish, failed on any hard error / missing config. This is
+    // distinct from the share-popover "opened" signal (artifact_export_result).
+    const deployStarted = performance.now();
+    const providerForTracking: TrackingDeployProvider =
+      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+    const firstConfigure = !deployConfig?.configured;
+    let savedNewToken = false;
+    const fireDeployResult = (
+      result: 'success' | 'failed' | 'cancelled',
+      errorCode?: string,
+    ) => {
+      trackArtifactDeployResult(analytics.track, {
+        page_name: 'artifact',
+        area: 'deploy_modal',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        provider: providerForTracking,
+        result,
+        saved_new_token: savedNewToken,
+        first_configure: firstConfigure,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        deploy_duration_ms: Math.round(performance.now() - deployStarted),
+        project_id: projectId,
+        project_kind: projectKind,
+      });
+    };
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       const typedToken = deployToken.trim();
       const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
+      savedNewToken = Boolean(hasNewToken);
       const cloudflareHints = cloudflareConfigHintsFromForm();
       const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
         cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
@@ -6749,7 +6994,12 @@ function HtmlViewer({
         !deployConfig?.configured;
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
-        if (!nextConfig) return;
+        if (!nextConfig) {
+          // saveDeployConfig bailed (missing/invalid token, e.g. user clicked
+          // Deploy without entering a key) — count as a failed deploy attempt.
+          fireDeployResult('failed', 'CONFIG_REQUIRED');
+          return;
+        }
         if (!nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
           throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
@@ -6764,6 +7014,7 @@ function HtmlViewer({
       setDeployment(next);
       setDeployResult(next);
       if (deployResultState(next.status) !== 'failed') {
+        fireDeployResult('success');
         setDeploySavedToast({
           message: t('fileViewer.deploySuccessToast'),
           details: t('fileViewer.deploySuccessToastDetails', {
@@ -6771,18 +7022,26 @@ function HtmlViewer({
             url: next.url,
           }),
         });
+      } else {
+        fireDeployResult('failed', `STATUS_${next.status ?? 'UNKNOWN'}`);
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
       const message = err instanceof Error
         ? err.message
         : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
-      if (message === t(option.tokenRequiredKey, { provider: t(option.labelKey) })) {
+      const tokenRequired =
+        message === t(option.tokenRequiredKey, { provider: t(option.labelKey) });
+      if (tokenRequired) {
         setDeployActionToast(message);
         deployTokenInputRef.current?.focus();
       } else {
         setDeployError(message);
       }
+      fireDeployResult(
+        'failed',
+        tokenRequired ? 'CONFIG_REQUIRED' : err instanceof Error ? err.name : 'UNKNOWN',
+      );
     } finally {
       setDeploying(false);
       setDeployPhase('idle');
@@ -6930,7 +7189,7 @@ function HtmlViewer({
   }
 
   function activateDrawTool() {
-    fireArtifactToolbarClick('draw');
+    fireArtifactToolbarClick('mark');
     const next = !drawOverlayOpen;
     if (!next) {
       setDrawOverlayOpen(false);
@@ -7334,6 +7593,7 @@ function HtmlViewer({
   ]);
 
   const handleCopyScreenshot = useCallback(async () => {
+    fireArtifactToolbarClick('screenshot');
     if (screenshotInFlightRef.current) return;
     screenshotInFlightRef.current = true;
     setExportToast({ message: t('fileViewer.screenshotCopying'), tone: 'loading' });
@@ -7399,6 +7659,25 @@ function HtmlViewer({
     flushSync(() => {
       setDownloadMenuOpen(false);
     });
+    // Start the image export's own click→result correlation (separate modal
+    // flow, so it can't ride fireShareExport).
+    const requestId = analytics.newRequestId();
+    imageExportRequestIdRef.current = requestId;
+    imageExportStartedRef.current = performance.now();
+    imageExportResolvedRef.current = false;
+    trackShareOptionPopoverClick(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        element: 'image',
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
     setImageExportError(null);
     setImageExportPreparedBlob(null);
     imageExportSnapshotDataUrlRef.current = null;
@@ -7413,17 +7692,50 @@ function HtmlViewer({
     void prepareImageExportBlob(format);
   };
 
+  // Component-scoped so both the save flow and the modal Cancel button can
+  // emit the one terminal result for an image export session.
+  const fireImageExportResult = (
+    result: 'success' | 'failed' | 'cancelled',
+    errorCode?: string,
+  ) => {
+    if (imageExportResolvedRef.current) return;
+    imageExportResolvedRef.current = true;
+    const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
+    const started = imageExportStartedRef.current || performance.now();
+    trackArtifactExportResult(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        export_format: 'image',
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        export_duration_ms: Math.round(performance.now() - started),
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
+  };
+
   async function handleImageExportSave() {
     const prepared = imageExportPreparedBlob;
     if (!prepared || prepared.format !== imageExportFormat) {
       setImageExportError(t('fileViewer.exportImageFailed'));
+      fireImageExportResult('failed', 'BLOB_NOT_READY');
       return;
     }
     setImageExportBusy(true);
     setImageExportError(null);
     try {
       const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
-      if (!target) return;
+      if (!target) {
+        // Not a terminal state: the modal stays open so the user can retry or
+        // Cancel. The cancelled result is emitted by the Cancel button.
+        return;
+      }
       const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
       if (target.method === 'download' && imageExportFormat === 'png' && preparedDataUrl) {
         downloadImageDataUrl(preparedDataUrl, target.filename);
@@ -7431,6 +7743,7 @@ function HtmlViewer({
         await target.save(prepared.blob);
       }
       setImageExportModalOpen(false);
+      fireImageExportResult('success');
       setImageExportSavedToast({
         message: target.method === 'picker'
           ? t('fileViewer.exportImageSaved')
@@ -7442,6 +7755,7 @@ function HtmlViewer({
     } catch (err) {
       console.warn('[exportAsImage] failed to save snapshot:', err);
       setImageExportError(t('fileViewer.exportImageFailed'));
+      fireImageExportResult('failed', err instanceof Error ? err.name : 'UNKNOWN');
     } finally {
       setImageExportBusy(false);
     }
@@ -7685,12 +7999,24 @@ function HtmlViewer({
         : t('fileViewer.copyShareLink');
   const shareMenuLabel = t('fileViewer.shareLabel');
   const deployMenuLabel = t('fileViewer.deployModalTitle') || 'Deploy';
+  const isSocialShareDeployModal = deployModalIntent === 'social-share';
+  const deployModalKicker = isSocialShareDeployModal
+    ? t('socialShare.projectSection')
+    : deployProviderLabel;
+  const deployModalTitle = isSocialShareDeployModal
+    ? t('socialShare.publishPageTitle')
+    : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+  const deployModalSubtitle = isSocialShareDeployModal
+    ? t('socialShare.publishPageSubtitle')
+    : t('fileViewer.deployModalSubtitle');
   const deployButtonLabel =
     deployPhase === 'deploying'
       ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
-        : deployMenuLabel;
+        : isSocialShareDeployModal
+          ? t('socialShare.publishPageTitle')
+          : deployMenuLabel;
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
@@ -8293,6 +8619,21 @@ function HtmlViewer({
                           role="menuitem"
                           title={shareUnavailableHint}
                           onClick={() => {
+                            // Share-intent-but-blocked signal: user wants a
+                            // share link but nothing is deployed yet.
+                            trackShareOptionPopoverClick(
+                              analytics.track,
+                              {
+                                page_name: 'artifact',
+                                area: 'share_option_popover',
+                                artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+                                artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+                                element: 'publish_required_guide',
+                                project_id: projectId,
+                                project_kind: projectKind,
+                              },
+                              { requestId: analytics.newRequestId() },
+                            );
                             setShareGuideToast(shareUnavailableHint);
                           }}
                         >
@@ -8317,13 +8658,11 @@ function HtmlViewer({
                           className="share-menu-item"
                           role="menuitem"
                           onClick={() => {
-                            const format =
-                              option.id === 'cloudflare-pages'
-                                ? 'cloudflare_pages'
-                                : option.id === 'vercel-self'
-                                  ? 'vercel'
-                                  : 'vercel';
-                            fireShareExport(format, () => openDeployModal(option.id));
+                            // Just open the deploy modal. The real publish is
+                            // tracked by artifact_deploy_result from
+                            // deployToSelectedProvider — no "popover opened"
+                            // export event here.
+                            void openDeployModal(option.id);
                           }}
                         >
                           <span className="share-menu-icon">
@@ -8342,7 +8681,10 @@ function HtmlViewer({
                         role="menuitem"
                         onClick={() => {
                           setDeployMenuOpen(false);
-                          fireShareExport('vercel', () => openSocialShareFlow());
+                          // Deploy-then-share also routes through the deploy
+                          // modal; the real publish is tracked by
+                          // artifact_deploy_result, not an export event.
+                          void openSocialShareFlow();
                         }}
                       >
                         <span className="share-menu-icon">
@@ -8484,9 +8826,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={savingTemplate}
                     onClick={() => {
-                      fireShareExport('template', () => {
-                        openSaveAsTemplateModal();
-                      });
+                      openSaveAsTemplateModal();
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
@@ -8919,6 +9259,9 @@ function HtmlViewer({
                 className="ghost-link button-like"
                 disabled={imageExportBusy}
                 onClick={() => {
+                  // User dismissed the image export modal without saving —
+                  // close the ui_click(image)→result funnel as cancelled.
+                  fireImageExportResult('cancelled', 'MODAL_DISMISSED');
                   setImageExportModalOpen(false);
                   setImageExportError(null);
                 }}
@@ -8978,6 +9321,9 @@ function HtmlViewer({
                 className="ghost-link button-like"
                 disabled={savingTemplate}
                 onClick={() => {
+                  // Dismissed without saving — close the ui_click(template)→
+                  // result funnel as cancelled.
+                  fireTemplateExportResult('cancelled', 'MODAL_DISMISSED');
                   setTemplateModalOpen(false);
                   setTemplateSaveError(null);
                 }}
@@ -9010,9 +9356,9 @@ function HtmlViewer({
           <div className="modal deploy-modal deploy-flow-modal" role="dialog" aria-modal="true">
             <div className="deploy-flow-modal__scroll">
               <div className="modal-head">
-                <div className="kicker">{deployProviderLabel}</div>
-                <h2>{t('fileViewer.deployToProvider', { provider: deployProviderLabel })}</h2>
-                <p className="subtitle">{t('fileViewer.deployModalSubtitle')}</p>
+                <div className="kicker">{deployModalKicker}</div>
+                <h2>{deployModalTitle}</h2>
+                <p className="subtitle">{deployModalSubtitle}</p>
               </div>
               <div className="deploy-form">
                 <div className={`deploy-social-share${activeProjectSocialShare ? '' : ' is-locked'}${socialShareBlockedState ? ` is-${socialShareBlockedState}` : ''}`}>

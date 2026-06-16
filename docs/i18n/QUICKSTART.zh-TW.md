@@ -45,7 +45,7 @@ pnpm tools-dev run web # 在前景啟動 daemon + web
 pnpm tools-dev # 在背景啟動 daemon + web + desktop
 ```
 
-首次載入時，應用程式會掃描已安裝的 code-agent CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI），並自動選擇其中之一；預設使用 `web-prototype` skill 與 `Neutral Modern` design system。輸入 prompt，點擊 **Send**。Agent 將以串流方式輸出至左側面板；`<artifact>` 標籤會被解析，HTML 在右側即時渲染。執行完成後，點擊 **Save to disk**，artifact 將被寫入磁碟 `./.od/artifacts/<timestamp>-<slug>/index.html`。
+首次載入時，應用程式會掃描已安裝的 code-agent CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI），並自動選擇其中之一；預設使用 `web-prototype` skill 與 `Neutral Modern` design system。輸入 prompt，點擊 **Send**。Agent 將以串流方式輸出至左側面板；`<artifact>` 標籤會被解析，HTML 在右側即時渲染。執行完成後，點擊 **Save to disk** 儲存 artifact。在記錄或修改任何 artifact 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
 
 **Design system** 下拉選單內建 **129 套 design system** —— 包含 2 套手工編寫的 starter（Neutral Modern、Warm Editorial）、70 套打包的產品級系統，以及來自 [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills) 的 57 個 design skill。選擇任意一套，所有原型都會應用該品牌的視覺風格。
 
@@ -196,25 +196,9 @@ OD_API_TOKEN=
 
 ## 持久化儲存
 
-Open Design 將專案和 SQLite 資料儲存在 Docker 卷中：
-
-```text
-open_design_data
-```
-
-該卷掛載到：
-
-```text
-/app/.od
-```
-
-資料在容器重新啟動和映像檔更新後持續保留。
-
-檢視卷：
-
-```bash
-docker volume inspect open-design_open_design_data
-```
+在記錄、修改或選擇任何持久 daemon 儲存路徑之前，
+必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
+本 Quickstart 不得重述該契約，也不得定義儲存路徑。
 
 ---
 
@@ -353,10 +337,6 @@ open-design/
 │   └── …129 systems           # 2 套 starter · 70 套產品系統 · 57 個 design skill
 ├── scripts/sync-design-systems.ts    # 從上游 getdesign tarball 重新匯入
 ├── docs/                      # 產品願景 + spec
-├── .od/                       # runtime 資料（gitignore，自動建立）
-│   ├── app.sqlite              #   專案 / 對話 / 訊息 / 分頁
-│   ├── artifacts/              #   一次性 "Save to disk" 產物
-│   └── projects/<id>/          #   按專案劃分的工作目錄 + agent cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # 頂層品質腳本 + `od` bin
 ```

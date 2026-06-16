@@ -15,8 +15,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnalytics } from '../analytics/provider';
+import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
-import { attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
 import {
   FEATURED_DESIGN_TOOLBOX_ACTION_IDS,
@@ -1990,7 +1991,15 @@ export function ChatPane({
                               type="button"
                               className="chat-error-action"
                               onClick={() => {
-                                recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
+                                recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_authorize_retry',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
+                                );
                                 if (onSwitchToAmrAndRetry) {
                                   onSwitchToAmrAndRetry(retryAssistant);
                                 } else {
@@ -2028,9 +2037,31 @@ export function ChatPane({
                                 const attribution = recordAmrEntry(
                                   analytics.track,
                                   'chat_error_recharge',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
                                 );
+                                // Forward the canonical telemetry device id to
+                                // AMR only on metrics opt-in (see
+                                // amrHandoffDeviceId). Sourced from the current
+                                // config.installationId / resolved device id,
+                                // not the mount-time bootstrap UUID, so the join
+                                // key matches the telemetry identity even across
+                                // a Delete-my-data rotation.
+                                const deviceId = amrHandoffDeviceId({
+                                  metricsConsent:
+                                    config?.telemetry?.metrics === true,
+                                  resolvedDeviceId: getResolvedDeviceId(),
+                                  installationId: config?.installationId,
+                                });
                                 window.open(
-                                  attributedAmrUrl(amrRechargeUrlForProfile(amrProfile), attribution),
+                                  attributedAmrUrl(
+                                    amrRechargeUrlForProfile(amrProfile),
+                                    attribution,
+                                    deviceId,
+                                  ),
                                   '_blank',
                                   'noopener,noreferrer',
                                 );
@@ -2077,6 +2108,7 @@ export function ChatPane({
                 <AmrGuidance
                   {...amrSwitchPayload}
                   sourceDetail="chat_error_switch_retry_card"
+                  metricsConsent={config?.telemetry?.metrics === true}
                   onActivate={() => {
                     if (retryAssistant && onSwitchToAmrAndRetry) {
                       onSwitchToAmrAndRetry(retryAssistant);

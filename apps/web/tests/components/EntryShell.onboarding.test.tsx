@@ -442,7 +442,34 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {});
 
     expect(screen.queryByText('Signing in…')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Continue$/i }).hasAttribute('disabled')).toBe(false);
+    // Switching to the Local runtime clears the AMR login-pending state. The
+    // Connect gate then keeps Continue gated (aria-disabled) until a usable
+    // local CLI is actually selected — here onAgentChange is mocked and never
+    // commits a selection, so no runtime is ready and Continue stays gated.
+    expect(
+      screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
+  it('surfaces a runtime-specific gate tooltip on the primary CTA', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    // AMR selected but signed out: the CTA is "Sign in to continue" and carries
+    // the AMR gate tooltip. It stays clickable (starts login), so not aria-disabled.
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
+    expect(signIn.getAttribute('data-tooltip')).toMatch(/Open Design AMR/i);
+    expect(signIn.getAttribute('aria-disabled')).not.toBe('true');
+
+    // Switch to Local with no committed agent: Continue is gated (aria-disabled)
+    // and the tooltip points the user at selecting a local CLI.
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+    const cont = screen.getByRole('button', { name: /^Continue$/i });
+    expect(cont.getAttribute('aria-disabled')).toBe('true');
+    expect(cont.getAttribute('data-tooltip')).toMatch(/local CLI/i);
   });
 
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {
@@ -769,7 +796,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/subscribe'))).toBe(false);
   });
 
-  it('reports about_you_submit exactly once when jumping to the newsletter step via the stepper', async () => {
+  it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
         loggedIn: true,
@@ -786,10 +813,10 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
     chooseDropdownOption('Your role', 'Engineer');
 
-    // Jump straight to the newsletter step via the clickable stepper,
-    // bypassing the primary Continue CTA. The survey snapshot must still
-    // fire exactly once — on the final Finish — not zero times.
-    fireEvent.click(screen.getByRole('button', { name: /Stay updated/i }));
+    // Advance to the newsletter step via Continue (the stepper no longer
+    // allows forward jumps past the current step). The survey snapshot must
+    // still fire exactly once — on the final Finish — not zero times.
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Stay in the loop' })).toBeTruthy();
     });
@@ -948,30 +975,24 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
   });
 
-  it('lets Skip exit onboarding without starting AMR login', async () => {
+  it('shows no Skip affordance on the Connect step', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
       jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
     );
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding();
+    await act(async () => {});
 
-    fireEvent.click(screen.getByRole('button', { name: /Skip/i }));
-
-    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
-    expect(props.onConfigPersist).not.toHaveBeenCalled();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/integrations/vela/login'))).toBe(false);
-    expect(findTrackedEvent('ui_click', (payload) => payload.element === 'skip')).toMatchObject({
-      page_name: 'onboarding',
-      area: 'runtime',
-      element: 'skip',
-      action: 'skip',
-    });
-    expect(latestTrackedEvent('onboarding_complete_result')).toMatchObject({
-      page_name: 'onboarding',
-      area: 'onboarding',
-      result: 'skipped',
-      completion_type: 'skipped',
-      runtime_type: 'amr_cloud',
-    });
+    // "Skip for now" was removed — Connect is a required step. The Connect
+    // step exposes no secondary Skip/Back button, onboarding is not completed
+    // from here, and no skip telemetry fires.
+    expect(screen.queryByRole('button', { name: /Skip/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Back$/i })).toBeNull();
+    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+    const skipClicks = trackedEvents('ui_click')
+      .map(([, payload]) => payload as Record<string, unknown>)
+      .filter((payload) => payload.element === 'skip');
+    expect(skipClicks).toHaveLength(0);
+    expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
 });

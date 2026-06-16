@@ -8,6 +8,7 @@
 // textarea can live centered in the hero.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import type {
   ApplyResult,
   ChatSessionMode,
@@ -357,18 +358,6 @@ export function HomeView({
         plugin_type: pluginType,
       });
       setDetailsRecord(record);
-    },
-    [analytics.track],
-  );
-  const handleCommunityOpenExternal = useCallback(
-    (record: InstalledPluginRecord) => {
-      trackCommunityGalleryClick(analytics.track, {
-        page_name: 'home',
-        area: 'community_gallery',
-        element: 'card_open_external',
-        plugin_id: record.sourceMarketplaceEntryName ?? record.id,
-        plugin_type: record.marketplaceTrust ?? 'official',
-      });
     },
     [analytics.track],
   );
@@ -1686,7 +1675,6 @@ export function HomeView({
           pendingApplyId={pendingApplyId}
           onUse={(record, action) => void routePluginUse(record, action)}
           onOpenDetails={handleCommunityOpenDetails}
-          onOpenExternal={handleCommunityOpenExternal}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
           cardLayout="gallery"
@@ -1735,18 +1723,18 @@ export function HomeView({
         ) : null}
       </AnimatePresence>
       {pendingReplacement ? (
-        <div className="home-hero-confirm__backdrop" role="presentation">
-          <div
-            className="home-hero-confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="home-hero-confirm-title"
-          >
-            <h2 id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</h2>
+        <Dialog
+          backdropClassName="home-hero-confirm__backdrop"
+          className="home-hero-confirm"
+          includeChromeClassName={false}
+          ariaLabelledBy="home-hero-confirm-title"
+          closeOnBackdrop={false}
+        >
+            <DialogTitle id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</DialogTitle>
             <p>
               {t('homeHero.confirmReplaceBody', { title: pendingReplacement.title })}
             </p>
-            <div className="home-hero-confirm__actions">
+            <DialogFooter className="home-hero-confirm__actions">
               <button
                 type="button"
                 className="home-hero-confirm__secondary"
@@ -1807,9 +1795,8 @@ export function HomeView({
               >
                 {t('homeHero.confirmReplace')}
               </button>
-            </div>
-          </div>
-        </div>
+            </DialogFooter>
+        </Dialog>
       ) : null}
     </div>
   );

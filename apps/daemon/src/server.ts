@@ -5,9 +5,6 @@ import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import dns from 'node:dns';
-import https from 'node:https';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -27,9 +24,40 @@ import {
   resolveExclusiveSurface,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
-import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import {
+  resolveDaemonCliPath,
+  resolveDaemonPluginPreviewsDir,
+  resolveDaemonResourceDir,
+  resolveDaemonResourceRoot,
+  resolveDataDir,
+  resolveProcessResourcesPath,
+} from './daemon-paths.js';
+export {
+  resolveDaemonCliPath,
+  resolveDaemonPluginPreviewsDir,
+  resolveDaemonResourceRoot,
+  resolveDataDir,
+} from './daemon-paths.js';
+import {
+  isStaticSpaFallbackRequest,
+  registerStaticSpaFallback,
+  resolveStaticSpaFallbackPath,
+} from './static-spa.js';
+export {
+  isStaticSpaFallbackRequest,
+  resolveStaticSpaFallbackPath,
+} from './static-spa.js';
+import {
+  createCompatApiError,
+  createCompatApiErrorResponse,
+  sendApiError,
+} from './http/api-errors.js';
+export {
+  createCompatApiError,
+  createCompatApiErrorResponse,
+} from './http/api-errors.js';
 import {
   applyBakedPreviews,
   resolvePluginPreviewsDir,
@@ -69,16 +97,9 @@ import {
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import {
-  cancelVelaLogin,
-  forgetVelaLogin,
-  mergeVelaEnv,
-  mirrorAmrEntryAnalytics,
-  parseAmrEntryAnalyticsPayload,
-  parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
-  spawnVelaLogin,
 } from './integrations/vela.js';
 import {
   amrAccountFailureDetails,
@@ -119,14 +140,12 @@ import {
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
-import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
   createPluginAssetCache,
   isCacheableExternalUrl,
 } from './plugin-asset-cache.js';
-import { syncCommunityPets } from './community-pets-sync.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
 import {
   applySandboxRuntimeEnv,
@@ -188,32 +207,13 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
-import {
-  getSurface,
-  listSurfacesForProject,
-  listSurfacesForRun,
-  prefillProjectSurface,
-  respondSurface as respondSurfaceRow,
-  revokeProjectSurface,
-} from './genui/index.js';
 import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './amr-image-staging.js';
-import {
-  applyAutomationProposal,
-  createAutomationProposal,
-  getAutomationProposal,
-  listAutomationProposals,
-  rejectAutomationProposal,
-} from './automation-proposals.js';
-import {
-  getAutomationSourcePacket,
-  ingestAutomationSource,
-  listAutomationSourcePackets,
-} from './automation-ingestions.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
+import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
@@ -261,7 +261,8 @@ import {
 import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
-  countNewHtmlArtifacts,
+  countNewArtifacts,
+  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from './run-artifacts.js';
@@ -306,7 +307,6 @@ import {
   FinalizeUpstreamError,
   isFinalizeProviderProtocol,
 } from './finalize-design.js';
-import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
@@ -481,7 +481,12 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
+import { registerAutomationRoutes } from './routes/automation.js';
+import { registerGenuiRoutes } from './routes/genui.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
+import { registerPluginAssetRoutes } from './routes/plugins/assets.js';
+import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.js';
+import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
@@ -489,6 +494,7 @@ import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
+import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
@@ -500,7 +506,9 @@ import { registerSocialShareRoutes } from './social-share-routes.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
-import { installRouteRegistrationGuard } from './route-registration-guard.js';
+import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
+import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
+import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
 import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
@@ -542,22 +550,6 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
-const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
-function cleanOptionalPath(value: string | undefined): string | null {
-  return typeof value === 'string' && value.trim().length > 0
-    ? path.resolve(value)
-    : null;
-}
-
-export function resolveDaemonCliPath(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = cleanOptionalPath(env[DAEMON_CLI_PATH_ENV]) ?? cleanOptionalPath(env.OD_BIN);
-  if (configured) return configured;
-
-  const packageJsonPath = require.resolve('@open-design/daemon/package.json');
-  return path.join(path.dirname(packageJsonPath), 'dist', 'cli.js');
-}
-
 const PROJECT_ROOT = resolveProjectRoot(__dirname);
 const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 
@@ -1297,89 +1289,13 @@ export function resolveSafePromptImagePaths(imagePaths, opts = {}) {
   return { safeImages, oversizedImages, failedImages };
 }
 
-function resolveProcessResourcesPath() {
-  if (
-    typeof process.resourcesPath === 'string' &&
-    process.resourcesPath.length > 0
-  ) {
-    return process.resourcesPath;
-  }
-
-  // Packaged daemon sidecars run under the bundled Node binary rather than the
-  // Electron root process, so `process.resourcesPath` is unavailable there.
-  // Infer the macOS app Resources directory from that bundled Node path.
-  const resourcesMarker = `${path.sep}Contents${path.sep}Resources${path.sep}`;
-  const markerIndex = process.execPath.indexOf(resourcesMarker);
-  if (markerIndex !== -1) {
-    return process.execPath.slice(0, markerIndex + resourcesMarker.length - 1);
-  }
-
-  const normalizedExecPath = process.execPath.toLowerCase();
-  const windowsResourceBinMarker =
-    `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
-  const windowsMarkerIndex = normalizedExecPath.indexOf(
-    windowsResourceBinMarker,
-  );
-  if (windowsMarkerIndex !== -1) {
-    return process.execPath.slice(
-      0,
-      windowsMarkerIndex + `${path.sep}resources`.length,
-    );
-  }
-
-  return null;
-}
-
-export function resolveDaemonResourceRoot({
-  configured = process.env[RESOURCE_ROOT_ENV],
-  safeBases = [
+const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
+  safeBases: [
     PROJECT_ROOT,
     resolveProcessResourcesPath(),
     process.env.OD_INSTALLATION_DIR,
   ],
-} = {}) {
-  if (!configured || configured.length === 0) return null;
-
-  const resolved = path.resolve(configured);
-  const normalizedSafeBases = safeBases
-    .filter((base) => typeof base === 'string' && base.length > 0)
-    .map((base) => path.resolve(base));
-
-  if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
-    throw new Error(
-      `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
-    );
-  }
-
-  return resolved;
-}
-
-function resolveDaemonResourceDir(resourceRoot, segment, fallback) {
-  return resourceRoot ? path.join(resourceRoot, segment) : fallback;
-}
-
-// Where the daemon reads the baked plugin-preview manifest from. In a packaged
-// build the bundled manifest lives under the resource root (OD_RESOURCE_ROOT,
-// Resources/open-design) like every other resource tree — NOT under PROJECT_ROOT,
-// which for the prebundled daemon resolves to Resources/app (two levels up from
-// the sidecar) and has no data/. An explicit OD_PLUGIN_PREVIEWS_DIR override and
-// the dev PROJECT_ROOT layout still win. Exported for regression coverage.
-export function resolveDaemonPluginPreviewsDir({ env = process.env, resourceRoot, projectRoot }) {
-  // Resolve the override from the injected `env` (absolute passthrough, relative
-  // against projectRoot) rather than re-reading process.env, so the helper is
-  // pure and the override path is actually testable.
-  const override = env.OD_PLUGIN_PREVIEWS_DIR;
-  if (override) {
-    return path.isAbsolute(override) ? override : path.resolve(projectRoot, override);
-  }
-  return resolveDaemonResourceDir(
-    resourceRoot,
-    path.join('data', 'plugin-previews'),
-    path.join(projectRoot, 'data', 'plugin-previews'),
-  );
-}
-
-const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot();
+});
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
 // when this project shipped with Vite; the daemon serves whatever the
@@ -1452,31 +1368,6 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
 );
 const OFFICIAL_MARKETPLACE_ID = 'official';
 const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
-
-export function isStaticSpaFallbackRequest(req) {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  if (req.path === '/api' || req.path.startsWith('/api/')) return false;
-  if (req.path === '/artifacts' || req.path.startsWith('/artifacts/')) return false;
-  if (req.path === '/frames' || req.path.startsWith('/frames/')) return false;
-  if (req.path === '/_next' || req.path.startsWith('/_next/')) return false;
-
-  const accept = req.get?.('accept') ?? '';
-  return accept.length === 0 || accept.includes('text/html') || accept.includes('*/*');
-}
-
-export function resolveStaticSpaFallbackPath(req, staticDir) {
-  const indexPath = path.join(staticDir, 'index.html');
-  if (!fs.existsSync(indexPath) || !isStaticSpaFallbackRequest(req)) return null;
-  return indexPath;
-}
-
-export function registerStaticSpaFallback(app, staticDir) {
-  app.get('/*splat', (req, res, next) => {
-    const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
-    if (indexPath == null) return next();
-    res.sendFile(indexPath);
-  });
-}
 
 function defaultMarketplaceSeedConfig(id) {
   return {
@@ -1551,48 +1442,6 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
   };
 }
 
-export function resolveDataDir(raw, projectRoot, options = {}) {
-  const value = raw?.trim();
-  if (!value) {
-    if (options.requireExplicit) {
-      throw new Error('OD_DATA_DIR is required when OD_SANDBOX_MODE is enabled');
-    }
-    return path.join(projectRoot, '.od');
-  }
-  // expandHomePrefix is shared with media-config.ts so OD_DATA_DIR and
-  // OD_MEDIA_CONFIG_DIR can never split state under a $HOME-style value.
-  // Some launchers (systemd unit files, NixOS modules, certain Docker
-  // entrypoints, Windows scheduled tasks) pass OD_DATA_DIR with literal
-  // $HOME or ${HOME} because the variable is never expanded by a shell;
-  // expandHomePrefix turns those (and the ~ shorthand, with both / and \
-  // separators) into os.homedir() before path.resolve runs so launch
-  // surfaces stay consistent.
-  const resolved = resolveProjectRelativePath(value, projectRoot);
-  try {
-    fs.mkdirSync(resolved, { recursive: true });
-    fs.accessSync(resolved, fs.constants.W_OK);
-  } catch (err) {
-    const e = err;
-    const currentUser = (() => {
-      try {
-        return os.userInfo().username;
-      } catch {
-        return process.env.USER ?? process.env.LOGNAME ?? 'unknown';
-      }
-    })();
-    const parentDir = path.dirname(resolved);
-    throw new Error(
-      [
-        `OD_DATA_DIR "${resolved}" is not writable: ${e.message}`,
-        `Current user: ${currentUser}`,
-        `Check whether the folder or one of its parents is owned by another user, is a symlink to a protected location, or was previously created with sudo.`,
-        `Try: ls -ld "${parentDir}" "${resolved}"`,
-        `If the folder should belong to you, fix ownership/permissions, for example: sudo chown -R "${currentUser}":staff "${parentDir}" && chmod -R u+rwX "${parentDir}"`,
-      ].join(' '),
-    );
-  }
-  return resolved;
-}
 const SANDBOX_MODE_ENABLED = isSandboxModeEnabled(process.env);
 const RUNTIME_DATA_DIR = resolveDataDir(process.env.OD_DATA_DIR, PROJECT_ROOT, {
   requireExplicit: SANDBOX_MODE_ENABLED,
@@ -2188,61 +2037,6 @@ export function composeProjectDisplayStatus(
  * @param {Omit<ApiError, 'code' | 'message'>} [init]
  * @returns {ApiError}
  */
-export function createCompatApiError(code, message, init = {}) {
-  return { code, message, ...init };
-}
-
-/**
- * @param {ApiErrorCode} code
- * @param {string} message
- * @param {Omit<ApiError, 'code' | 'message'>} [init]
- * @returns {ApiErrorResponse}
- */
-export function createCompatApiErrorResponse(code, message, init = {}) {
-  return { error: createCompatApiError(code, message, init) };
-}
-
-/**
- * @param {import('express').Response} res
- * @param {number} status
- * @param {ApiErrorCode} code
- * @param {string} message
- * @param {Omit<ApiError, 'code' | 'message'>} [init]
- */
-function sendApiError(res, status, code, message, init = {}) {
-  return res
-    .status(status)
-    .json(createCompatApiErrorResponse(code, message, init));
-}
-
-function normalizeProjectPluginFolderPath(input) {
-  const value = String(input ?? '').replace(/\\/g, '/').trim();
-  if (!value || value.includes('\0') || value.startsWith('/') || /^[A-Za-z]:\//.test(value)) {
-    throw new Error('plugin folder path must be a relative project path');
-  }
-  const parts = value.split('/').filter(Boolean);
-  if (parts.length === 0 || parts.some((part) => part === '.' || part === '..')) {
-    throw new Error('plugin folder path must not contain traversal segments');
-  }
-  return parts.join('/');
-}
-
-async function resolveProjectChildDirectory(projectRoot, relativePath) {
-  const rootReal = await fs.promises.realpath(projectRoot);
-  const candidate = path.resolve(projectRoot, relativePath);
-  const real = await fs.promises.realpath(candidate);
-  if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
-    throw new Error('plugin folder path escapes project dir');
-  }
-  const st = await fs.promises.stat(real);
-  if (!st.isDirectory()) {
-    const err = new Error('plugin folder path is not a directory');
-    err.code = 'ENOTDIR';
-    throw err;
-  }
-  return real;
-}
-
 function execFileBuffered(command, args, opts = {}) {
   return new Promise((resolve) => {
     execFile(command, args, { timeout: 120_000, maxBuffer: 1024 * 1024, ...opts }, (error, stdout, stderr) => {
@@ -2378,7 +2172,7 @@ function scanRunEventsForRetrySideEffects(events) {
     }
   }
   if (
-    countNewHtmlArtifacts(events) > 0 ||
+    countNewArtifacts(events) > 0 ||
     didRunCreateDesignSystemFile(events) ||
     countDesignSystemPreviewModules(events) > 0
   ) {
@@ -2786,6 +2580,9 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
+  }
+  if (type === 'conversation_title' && typeof data.title === 'string') {
+    return { kind: 'conversation_title', title: data.title };
   }
   if (type === 'thinking_delta' && typeof data.delta === 'string') {
     return { kind: 'thinking', text: data.delta };
@@ -3968,6 +3765,13 @@ const pluginUpload = multer({
   },
 });
 
+const pluginShareTaskStore = createPluginShareTaskStore({
+  randomUUID,
+  execCommandViaLoginShell,
+  OD_NODE_BIN,
+  OD_BIN,
+});
+
 // Project-scoped multi-file upload. Lands files directly in the project
 // folder (flat — same shape FileWorkspace expects), so the composer's
 // pasted/dropped/picked images become referenceable filenames the agent
@@ -4073,10 +3877,8 @@ function sendMulterError(res, err) {
 }
 
 const mediaTasks = new Map();
-const pluginShareTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
 const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
-const PLUGIN_SHARE_TERMINAL_STATUSES = new Set(['done', 'failed']);
 
 function hydrateMediaTask(row) {
   const task = {
@@ -4191,154 +3993,6 @@ function mediaTaskSnapshot(task, since = 0) {
   return snapshot;
 }
 
-function createPluginShareTask(taskId, projectId, info = {}) {
-  const task = {
-    id: taskId,
-    projectId,
-    status: 'queued',
-    action: info.action,
-    path: info.path,
-    progress: [],
-    result: null,
-    error: null,
-    startedAt: Date.now(),
-    endedAt: null,
-    waiters: new Set(),
-  };
-  pluginShareTasks.set(taskId, task);
-  return task;
-}
-
-function getLivePluginShareTask(taskId) {
-  return pluginShareTasks.get(taskId) ?? null;
-}
-
-function appendPluginShareTaskProgress(task, line) {
-  task.progress.push(String(line ?? ''));
-  notifyPluginShareTaskWaiters(task);
-}
-
-function notifyPluginShareTaskWaiters(task) {
-  const wakers = Array.from(task.waiters);
-  for (const w of wakers) {
-    try {
-      w();
-    } catch {
-      // Never let one bad waiter block the rest.
-    }
-  }
-  if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) && !task._gcScheduled) {
-    task._gcScheduled = true;
-    setTimeout(() => {
-      if (task.waiters.size === 0) {
-        pluginShareTasks.delete(task.id);
-      }
-    }, TASK_TTL_AFTER_DONE_MS).unref?.();
-  }
-}
-
-function pluginShareTaskSnapshot(task, since = 0) {
-  const snapshot = {
-    taskId: task.id,
-    action: task.action,
-    path: task.path,
-    status: task.status,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-    progress: task.progress.slice(since),
-    nextSince: task.progress.length,
-  };
-  if (task.status === 'done') snapshot.result = task.result;
-  if (task.status === 'failed') snapshot.error = task.error;
-  return snapshot;
-}
-
-function pluginShareActionToCli(action) {
-  if (action === 'publish-github') {
-    return {
-      argv: ['plugin', 'publish-repo'],
-      title: 'Publish repo',
-      command: 'od plugin publish-repo',
-      successMessage: 'Published plugin to GitHub.',
-      failureCode: 'publish-repo-failed',
-    };
-  }
-  return {
-    argv: ['plugin', 'open-design-pr'],
-    title: 'Open Design PR',
-    command: 'od plugin open-design-pr',
-    successMessage: 'Opened Open Design PR flow.',
-    failureCode: 'open-design-pr-failed',
-  };
-}
-
-function pluginShareProgressPlan(action) {
-  if (action === 'publish-github') {
-    return [
-      'Resolve GitHub owner and validate plugin metadata',
-      'Create or update the GitHub repository',
-      'Push plugin files',
-      'Return the repository URL',
-    ];
-  }
-  return [
-    'Ensure the Open Design fork exists',
-    'Clone the fork and prepare a branch',
-    'Copy the plugin into plugins/community',
-    'Push the branch and open the PR form',
-  ];
-}
-
-async function runPluginShareTask(task, folder) {
-  const share = pluginShareActionToCli(task.action);
-  appendPluginShareTaskProgress(task, `${share.title} started for ${task.path}`);
-  appendPluginShareTaskProgress(task, `$ ${share.command} ${task.path}`);
-  for (const step of pluginShareProgressPlan(task.action)) {
-    appendPluginShareTaskProgress(task, `- ${step}`);
-  }
-  const result = await execCommandViaLoginShell(OD_NODE_BIN, [
-    OD_BIN,
-    ...share.argv,
-    folder,
-    '--json',
-  ], { timeout: task.action === 'publish-github' ? 240_000 : 300_000 });
-  let payload = null;
-  try {
-    payload = result.stdout ? JSON.parse(result.stdout) : null;
-  } catch (error) {
-    payload = null;
-    appendPluginShareTaskProgress(task, `Failed to parse CLI JSON output: ${String(error?.message || error)}`);
-  }
-  const stepLog = payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [];
-  for (const line of stepLog) {
-    appendPluginShareTaskProgress(task, String(line).trim());
-  }
-  if (!result.ok || !payload?.ok) {
-    task.status = 'failed';
-    task.error = {
-      code: payload?.error?.label || share.failureCode,
-      message: payload?.error?.stderr || payload?.error?.stdout || result.stderr || result.stdout || `${share.title} failed.`,
-      log: stepLog.length > 0 ? stepLog : [result.stderr || result.stdout || `${share.command} failed`],
-    };
-    task.endedAt = Date.now();
-    notifyPluginShareTaskWaiters(task);
-    return;
-  }
-  const url = payload.repoUrl || payload.prUrl || undefined;
-  task.status = 'done';
-  task.result = {
-    message: url
-      ? (task.action === 'publish-github'
-          ? `Published plugin to ${url}.`
-          : `Opened Open Design PR flow at ${url}.`)
-      : share.successMessage,
-    ...(url ? { url } : {}),
-    log: stepLog,
-  };
-  task.endedAt = Date.now();
-  notifyPluginShareTaskWaiters(task);
-}
-
 export function createSseResponse(
   res,
   { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {},
@@ -4417,6 +4071,13 @@ export interface StartServerOptions {
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
+}
+
+export interface StartServerResult {
+  url: string;
+  server: import('node:http').Server;
+  shutdown: () => Promise<void> | void;
+  routeInventory: import('./route-registration-guard.js').RouteRegistration[];
 }
 
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
@@ -4651,6 +4312,103 @@ function resolveAcpStageTimeoutMs(): number | undefined {
   const raw = Number(process.env.OD_ACP_STAGE_TIMEOUT_MS);
   if (!Number.isFinite(raw)) return undefined;
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+type GeminiJsonEventStreamEvent = Record<string, unknown>;
+type BufferedStdoutChunk = { text: string; receivedAt: number };
+
+function parseGeminiJsonEventStreamEvents(text: string): GeminiJsonEventStreamEvent[] | null {
+  const lines = text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  const events: GeminiJsonEventStreamEvent[] = [];
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      events.push(obj as GeminiJsonEventStreamEvent);
+    } catch {
+      return null;
+    }
+  }
+  return events;
+}
+
+function isGeminiJsonEventStream(events: GeminiJsonEventStreamEvent[] | null): boolean {
+  if (!events || events.length === 0) return false;
+  const [firstEvent] = events;
+  if (
+    !firstEvent ||
+    firstEvent.type !== 'init' ||
+    typeof firstEvent.session_id !== 'string' ||
+    firstEvent.session_id.length === 0 ||
+    typeof firstEvent.model !== 'string' ||
+    firstEvent.model.length === 0
+  ) {
+    return false;
+  }
+  return events.every((event) => {
+    const type = event?.type;
+    return (
+      type === 'init' ||
+      type === 'message' ||
+      type === 'tool_use' ||
+      type === 'tool_result' ||
+      type === 'error' ||
+      type === 'result'
+    );
+  });
+}
+
+function geminiJsonEventStreamHasVisibleAssistantText(
+  events: GeminiJsonEventStreamEvent[] | null,
+): boolean {
+  if (!events) return false;
+  return events.some((event) => (
+    event.type === 'message' &&
+    event.role === 'assistant' &&
+    typeof event.content === 'string' &&
+    event.content.length > 0
+  ));
+}
+
+export function bufferedAntigravityGeminiFirstTokenAt(
+  chunks: readonly BufferedStdoutChunk[],
+): number | null {
+  if (chunks.length === 0) return null;
+  const text = chunks.map((chunk) => chunk.text).join('');
+  const events = parseGeminiJsonEventStreamEvents(text);
+  if (!isGeminiJsonEventStream(events)) return null;
+  if (!geminiJsonEventStreamHasVisibleAssistantText(events)) return null;
+
+  let offset = 0;
+  for (const line of text.split(/(\r?\n)/u)) {
+    const nextOffset = offset + line.length;
+    if (line.length > 0 && line.trim().length > 0) {
+      try {
+        const event = JSON.parse(line) as GeminiJsonEventStreamEvent;
+        if (
+          event?.type === 'message' &&
+          event.role === 'assistant' &&
+          typeof event.content === 'string' &&
+          event.content.length > 0
+        ) {
+          let consumed = 0;
+          for (const chunk of chunks) {
+            consumed += chunk.text.length;
+            if (consumed >= nextOffset) return chunk.receivedAt;
+          }
+          return chunks.at(-1)?.receivedAt ?? null;
+        }
+      } catch {
+        return null;
+      }
+    }
+    offset = nextOffset;
+  }
+  return null;
 }
 
 export async function startServer({
@@ -5049,6 +4807,13 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  const pluginInstallation = createPluginInstallationHelpers({
+    db,
+    installFromLocalFolder,
+    PLUGIN_REGISTRY_ROOTS,
+    PLUGIN_LOCKFILE_PATH,
+    PLUGIN_UPLOAD_MAX_BYTES,
+  });
   // Wire the upload-destination bridge to this db so multer can route
   // file uploads into baseDir-rooted projects' actual folders.
   projectMetadataLookup = (id) => {
@@ -5344,24 +5109,8 @@ export async function startServer({
     }
   });
 
-  // Plan §3.KK1 — non-SSE one-shot read of the event ring buffer.
-  // Useful for dashboards + the `od plugin events snapshot` CLI
-  // command that doesn't need a live tail.
-  app.get('/api/plugins/events/snapshot', async (req, res) => {
-    const since = Number(typeof req.query.since === 'string' ? req.query.since : 0);
-    const { pluginEventSnapshot } = await import('./plugins/events.js');
-    const events = pluginEventSnapshot(Number.isFinite(since) && since > 0 ? since : 0);
-    res.json({ events, count: events.length, generatedAt: Date.now() });
-  });
-
-  // Plan §3.KK2 — rolled-up stats over the buffer. Counts by kind +
-  // pluginId + oldest/newest timestamps + id range.
-  app.get('/api/plugins/events/stats', async (_req, res) => {
-    const { pluginEventSnapshot, summarisePluginEvents } = await import('./plugins/events.js');
-    res.json({
-      stats: summarisePluginEvents(pluginEventSnapshot()),
-      generatedAt: Date.now(),
-    });
+  registerPluginEventRoutes(app, {
+    http: { requireLocalDaemonRequest },
   });
 
   // Plan §3.NN1 — `od plugin events purge`. Operator escape
@@ -5406,42 +5155,6 @@ export async function startServer({
     }
   });
 
-  app.post('/api/plugins/events/purge', requireLocalDaemonRequest, async (_req, res) => {
-    try {
-      const { purgePluginEventBuffer } = await import('./plugins/events.js');
-      const result = purgePluginEventBuffer();
-      res.json({ ok: true, ...result });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.II1 — `od plugin events tail`. SSE-backed live event
-  // stream of plugin lifecycle events from the in-memory ring
-  // buffer. On open: emits the buffered backlog as 'event: backlog'
-  // entries (capped at the buffer's MAX), then forwards every
-  // newly-recorded event as 'event: plugin' with the same shape.
-  // Optional ?since=<id> trims the backlog.
-  app.get('/api/plugins/events', async (req, res) => {
-    const since = Number(typeof req.query.since === 'string' ? req.query.since : 0);
-    const { pluginEventSnapshot, subscribePluginEvents } = await import('./plugins/events.js');
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    // Emit the backlog so a tail consumer doesn't miss installs
-    // that happened just before they connected.
-    const backlog = pluginEventSnapshot(Number.isFinite(since) && since > 0 ? since : 0);
-    for (const ev of backlog) {
-      res.write(`event: backlog\ndata: ${JSON.stringify(ev)}\n\n`);
-    }
-
-    const unsubscribe = subscribePluginEvents((ev) => {
-      res.write(`event: plugin\ndata: ${JSON.stringify(ev)}\n\n`);
-    });
-    req.on('close', () => { unsubscribe(); });
-  });
 
   // Plan §3.LL1 — `od daemon db verify`. Runs SQLite
   // PRAGMA integrity_check (or quick_check when ?quick=1) +
@@ -5591,93 +5304,8 @@ export async function startServer({
     appConfig: { readAppConfig },
   });
 
-  app.get('/api/automation-source-packets', async (req, res) => {
-    try {
-      const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
-      const packets = await listAutomationSourcePackets(RUNTIME_DATA_DIR, { limit });
-      res.json({ packets });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.post('/api/automation-ingestions', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const result = await ingestAutomationSource(RUNTIME_DATA_DIR, body);
-      res.json(result);
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/automation-source-packets/:id', async (req, res) => {
-    try {
-      const packet = await getAutomationSourcePacket(RUNTIME_DATA_DIR, req.params.id);
-      if (!packet) return res.status(404).json({ error: 'automation source packet not found' });
-      res.json({ packet });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/automation-proposals', async (req, res) => {
-    try {
-      const rawStatus = typeof req.query.status === 'string' ? req.query.status : 'all';
-      const proposals = await listAutomationProposals(RUNTIME_DATA_DIR, {
-        status: rawStatus,
-      });
-      res.json({ proposals });
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.post('/api/automation-proposals', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const proposal = await createAutomationProposal(RUNTIME_DATA_DIR, body);
-      res.json({ proposal });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/automation-proposals/:id', async (req, res) => {
-    try {
-      const proposal = await getAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
-      if (!proposal) return res.status(404).json({ error: 'automation proposal not found' });
-      res.json({ proposal });
-    } catch (err) {
-      res.status(400).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.post('/api/automation-proposals/:id/apply', async (req, res) => {
-    try {
-      const result = await applyAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
-      res.json(result);
-    } catch (err) {
-      const message = String((err && err.message) || err);
-      const status = message.includes('not found') ? 404 : 400;
-      res.status(status).json({ error: message });
-    }
-  });
-
-  app.post('/api/automation-proposals/:id/reject', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const proposal = await rejectAutomationProposal(
-        RUNTIME_DATA_DIR,
-        req.params.id,
-        typeof body.reason === 'string' ? body.reason : undefined,
-      );
-      res.json({ proposal });
-    } catch (err) {
-      const message = String((err && err.message) || err);
-      const status = message.includes('not found') ? 404 : 400;
-      res.status(status).json({ error: message });
-    }
+  registerAutomationRoutes(app, {
+    paths: { RUNTIME_DATA_DIR },
   });
 
   // Reconcile follow-up — the inline POST /api/projects body that lived
@@ -5968,6 +5596,7 @@ export async function startServer({
     sendMulterError,
     sendLiveArtifactRouteError,
     createSseResponse,
+    getPublicBaseUrl,
     requireLocalDaemonRequest,
     isLocalSameOrigin,
     resolvedPortRef,
@@ -6699,86 +6328,6 @@ export async function startServer({
     res.json({ ok: true });
   });
 
-  const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
-  const AMR_API_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
-
-  function velaApiProxyBaseUrl(req) {
-    return `${getPublicBaseUrl(req)}${AMR_API_PROXY_PREFIX}`;
-  }
-
-  function velaProxyRequestBody(req) {
-    if (req.method === 'GET' || req.method === 'HEAD') return null;
-    if (Buffer.isBuffer(req.body)) return req.body;
-    if (typeof req.body === 'string') return Buffer.from(req.body);
-    if (req.body == null) return null;
-    return Buffer.from(JSON.stringify(req.body));
-  }
-
-  function shouldStreamVelaProxyRequest(req, body) {
-    return req.method !== 'GET' && req.method !== 'HEAD' && body == null;
-  }
-
-  function proxyAmrApiRequest(req, res) {
-    const suffix = req.originalUrl.slice(AMR_API_PROXY_PREFIX.length);
-    if (!suffix.startsWith('/api/v1/')) {
-      res.status(404).json({ error: 'unknown_amr_api_proxy_path' });
-      return;
-    }
-    const target = new URL(suffix, AMR_API_UPSTREAM_ORIGIN);
-    const body = velaProxyRequestBody(req);
-    const streamBody = shouldStreamVelaProxyRequest(req, body);
-    const headers = {};
-    for (const [key, value] of Object.entries(req.headers)) {
-      const lower = key.toLowerCase();
-      if (
-        lower === 'host' ||
-        lower === 'connection' ||
-        lower === 'transfer-encoding'
-      ) {
-        continue;
-      }
-      if (lower === 'content-length' && body) continue;
-      headers[key] = value;
-    }
-    if (body) headers['content-length'] = String(body.length);
-
-    const upstream = https.request(
-      target,
-      {
-        method: req.method,
-        headers,
-        lookup: (hostname, options, callback) => {
-          dns.lookup(hostname, { ...options, family: 4, all: false }, callback);
-        },
-      },
-      (upstreamRes) => {
-        res.status(upstreamRes.statusCode ?? 502);
-        for (const [key, value] of Object.entries(upstreamRes.headers)) {
-          if (value !== undefined) res.setHeader(key, value);
-        }
-        upstreamRes.pipe(res);
-      },
-    );
-    upstream.setTimeout(30_000, () => upstream.destroy(new Error('AMR API proxy timed out')));
-    upstream.on('error', (err) => {
-      if (!res.headersSent) {
-        res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
-      } else {
-        res.end();
-      }
-    });
-    if (body) upstream.write(body);
-    if (streamBody) {
-      req.pipe(upstream);
-    } else {
-      upstream.end();
-    }
-  }
-
-  // AMR (vela) login integration — see `apps/daemon/src/integrations/vela.ts`.
-  // The vela CLI owns the device-authorization UX (URL + code + browser open);
-  // these routes only surface enough state for Open Design's Settings card to
-  // show login status and trigger a login from a button.
   async function resolveAmrModelProbe() {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
@@ -6813,223 +6362,11 @@ export async function startServer({
     return { launchPath, env, configuredEnv, cacheKey };
   }
 
-  app.get('/api/amr/models', async (_req, res) => {
-    try {
-      const probe = await resolveAmrModelProbe();
-      const response = await amrModelLoadingCache.get(probe.cacheKey, {
-        fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
-        fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
-      });
-      res.json(response);
-    } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
-  app.get('/api/integrations/vela/status', async (_req, res) => {
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-      const status = readVelaLoginStatus(mergeVelaEnv(process.env, configuredEnv));
-      if (status.loggedIn) {
-        void resolveAmrModelProbe()
-          .then((probe) => {
-            amrModelLoadingCache.warm(probe.cacheKey, () =>
-              fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
-            );
-          })
-          .catch((err) => console.warn('[amr] model cache warm failed', err));
-      }
-      res.json(status);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.all('/api/integrations/vela/api-proxy/*splat', proxyAmrApiRequest);
-
-  app.post('/api/integrations/vela/login', async (req, res) => {
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-      const attribution = parseVelaLoginAttribution(req.body);
-      const spawned = await spawnVelaLogin({
-        configuredEnv,
-        attribution,
-        defaultApiUrl: velaApiProxyBaseUrl(req),
-      });
-      res.status(202).json(spawned);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // "already running" is a 409 (resolvable by waiting/polling); everything
-      // else (missing vela binary, spawn failure) is a 500.
-      const status = /already running/i.test(message) ? 409 : 500;
-      res.status(status).json({ error: message });
-    }
-  });
-
-  app.post('/api/integrations/vela/login/cancel', (_req, res) => {
-    try {
-      res.json(cancelVelaLogin());
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/integrations/vela/analytics-entry', async (req, res) => {
-    const payload = parseAmrEntryAnalyticsPayload(req.body);
-    if (!payload) {
-      res.status(400).json({ error: 'invalid_amr_entry_analytics' });
-      return;
-    }
-    // Consent gate. The web fetch wrapper attaches `x-od-analytics-*` headers
-    // only when Privacy → metrics is on (apps/web/src/analytics/provider.tsx),
-    // so a null context means the user is opted out — never forward the click
-    // to the external AMR endpoint. Mirrors the analytics-capture invariant.
-    const analyticsContext = readAnalyticsContext(req);
-    if (!analyticsContext) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    // Defense in depth: re-read telemetry.metrics from app-config so a stale
-    // header leak after opt-out still cannot ship behavior to AMR, matching
-    // createAnalyticsService.capture (apps/daemon/src/analytics.ts).
-    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-    if (appConfig.telemetry?.metrics !== true) {
-      res.status(202).json({ mirrored: false });
-      return;
-    }
-    const result = await mirrorAmrEntryAnalytics(payload, {
-      analyticsContext,
-      env: process.env,
-    });
-    res.status(202).json(result);
-  });
-
-  app.post('/api/integrations/vela/logout', async (_req, res) => {
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
-      forgetVelaLogin(mergeVelaEnv(process.env, configuredEnv));
-      delete process.env.VELA_RUNTIME_KEY;
-      delete process.env.VELA_LINK_URL;
-      const agentCliEnv = { ...(appConfig.agentCliEnv ?? {}) };
-      const amrEnv = { ...(agentCliEnv.amr ?? {}) };
-      delete amrEnv.VELA_RUNTIME_KEY;
-      delete amrEnv.VELA_LINK_URL;
-      if (Object.keys(amrEnv).length > 0) {
-        agentCliEnv.amr = amrEnv;
-      } else {
-        delete agentCliEnv.amr;
-      }
-      await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/skills', async (_req, res) => {
-    try {
-      const skills = await listAllSkills();
-      // Strip full body + on-disk dir from the listing — frontend fetches the
-      // body via /api/skills/:id when needed (keeps the listing payload small).
-      res.json({
-        skills: skills.map(({ body, dir: _dir, ...rest }) => ({
-          ...rest,
-          hasBody: typeof body === 'string' && body.length > 0,
-        })),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/skills/:id', async (req, res) => {
-    try {
-      const skills = await listAllSkills();
-      const skill = findSkillById(skills, req.params.id);
-      if (!skill) return res.status(404).json({ error: 'skill not found' });
-      const { dir: _dir, ...serializable } = skill;
-      res.json(serializable);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Codex hatch-pet registry — pets packaged by the upstream `hatch-pet`
-  // skill under `${CODEX_HOME:-$HOME/.codex}/pets/`. Surfaced so the web
-  // pet settings can offer one-click adoption of recently-hatched pets.
-  app.get('/api/codex-pets', async (_req, res) => {
-    try {
-      const result = await listCodexPets({
-        baseUrl: '',
-        bundledRoot: BUNDLED_PETS_DIR,
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // One-click community sync. Hits the Codex Pet Share + j20 Hatchery
-  // catalogs and drops every pet into `${CODEX_HOME:-$HOME/.codex}/pets/`
-  // so `GET /api/codex-pets` (and the web Pet settings) pick them up
-  // immediately. The body is intentionally tiny — we keep the heavier
-  // tuning knobs (`--limit`, `--concurrency`) on the CLI script and
-  // only surface `force` + `source` here.
-  app.post('/api/codex-pets/sync', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const sourceRaw = typeof body.source === 'string' ? body.source : 'all';
-      const source =
-        sourceRaw === 'petshare' || sourceRaw === 'hatchery'
-          ? sourceRaw
-          : 'all';
-      const result = await syncCommunityPets({
-        source,
-        force: Boolean(body.force),
-      });
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: String((err && err.message) || err) });
-    }
-  });
-
-  app.get('/api/codex-pets/:id/spritesheet', async (req, res) => {
-    try {
-      const sheet = await readCodexPetSpritesheet(req.params.id, {
-        bundledRoot: BUNDLED_PETS_DIR,
-      });
-      if (!sheet) {
-        return res
-          .status(404)
-          .type('text/plain')
-          .send('codex pet spritesheet not found');
-      }
-      const mime =
-        sheet.ext === 'webp'
-          ? 'image/webp'
-          : sheet.ext === 'gif'
-            ? 'image/gif'
-            : 'image/png';
-      res.type(mime);
-      // Same-origin callers (the web app proxies `/api/*` through to
-      // the daemon, so PetSettings adoption fetches arrive same-origin)
-      // do not need any CORS header here. We only echo
-      // `Access-Control-Allow-Origin` for sandboxed iframes / data:
-      // URIs (Origin: null) which need it to draw the bytes onto a
-      // canvas without tainting. Local pet bytes should not be exposed
-      // to arbitrary third-party origins via a wildcard ACAO.
-      if (req.headers.origin === 'null') {
-        res.setHeader('Access-Control-Allow-Origin', 'null');
-      }
-      res.setHeader('Cache-Control', 'no-store');
-      const buf = await fs.promises.readFile(sheet.absPath);
-      res.send(buf);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
+  registerVelaRoutes(app, {
+    paths: { RUNTIME_DATA_DIR },
+    appConfig: { readAppConfig },
+    http: { getPublicBaseUrl },
+    env: process.env,
   });
 
   app.get('/api/design-systems', async (_req, res) => {
@@ -7232,370 +6569,147 @@ export async function startServer({
     }
   });
 
-  // Plugin-system HTTP surface. Spec §11.5. Phase 1 wires the minimum set
-  // needed for the §12.5 walkthrough: list/get installed plugins, install
-  // (SSE), uninstall, apply (returns ApplyResult + snapshotId), atom catalog,
-  // and snapshot fetch by id (used by run replay tooling).
-  app.get('/api/plugins', async (_req, res) => {
-    try {
-      const plugins = applyBakedPreviews(listInstalledPlugins(db), PLUGIN_PREVIEWS_DIR);
-      res.json({ plugins });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/plugins/:id', async (req, res) => {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      res.json(plugin);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  async function finishUploadedPluginInstall(stagedFolder, source) {
-    const warnings = [];
-    const log = [];
-    let plugin = null;
-    let message = 'Install finished.';
-    try {
-      const pluginRoot = await findUploadedPluginRoot(stagedFolder);
-      for await (const ev of installFromLocalFolder(db, {
-        source,
-        roots: PLUGIN_REGISTRY_ROOTS,
-        _stagedFolder: pluginRoot,
-        _stagedSourceKind: 'user',
-        lockfilePath: PLUGIN_LOCKFILE_PATH,
-      })) {
-        if (ev.message) log.push(ev.message);
-        if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings);
-        if (ev.kind === 'success') {
-          plugin = ev.plugin;
-          message = `Installed ${ev.plugin.title}.`;
-          break;
+  const pluginRouteHelpers = {
+    PLUGIN_PREVIEWS_DIR,
+    applyBakedPreviews,
+    pluginUpload,
+    pluginInstallation,
+    sendMulterError,
+    decodeMultipartFilename,
+    connectorService,
+    buildConnectorProbe,
+    loadPluginRegistryView,
+    requireLocalDaemonRequest,
+    getProject,
+    sendApiError,
+    isLocalSameOrigin,
+    resolvedPortRef,
+    pluginShareTaskStore,
+    installOrUpgradePlugin: async (req, res, mode) => {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const id = req.params.id;
+      let source = '';
+      let marketplaceResolution = null;
+      if (mode === 'upgrade') {
+        const policy = body.policy === 'pinned' ? 'pinned' : 'latest';
+        const plugin = getInstalledPlugin(db, id);
+        if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No installed plugin with id "${id}".`, data: { id } } });
+        if (plugin.sourceKind === 'bundled') return res.status(409).json({ error: { code: 'bundled-plugin', message: `Plugin "${id}" was shipped bundled with the daemon and upgrades only via daemon-image upgrade. The bundled boot walker re-registers bundled plugins on every boot.`, data: { id, sourceKind: plugin.sourceKind } } });
+        source = plugin.source;
+        if (policy === 'latest' && plugin.sourceMarketplaceEntryName) {
+          const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
+          marketplaceResolution = resolvePluginInMarketplaces(db, plugin.sourceMarketplaceEntryName);
+          if (marketplaceResolution) source = marketplaceResolution.source;
         }
-        if (ev.kind === 'error') {
-          message = ev.message;
-          break;
+        if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`, data: { id } } });
+      } else {
+        source = typeof body.source === 'string' ? body.source : '';
+        if (!source) return res.status(400).json({ error: 'source is required' });
+        const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~');
+        const looksGithub = source.startsWith('github:');
+        const looksHttps = /^https:\/\//i.test(source);
+        if (!looksAbsolute && !looksGithub && !looksHttps) {
+          const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
+          let lookupName = source;
+          const lockfile = await readPluginLockfile(PLUGIN_LOCKFILE_PATH);
+          const locked = lockfile.plugins[source];
+          if (locked?.version && !source.includes('@')) lookupName = `${source}@${locked.version}`;
+          const resolved = resolvePluginInMarketplaces(db, lookupName);
+          if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
+          marketplaceResolution = resolved;
+          source = resolved.source;
         }
       }
-      return { ok: Boolean(plugin), plugin, warnings, message, log };
-    } finally {
-      await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
-    }
-  }
-
-  async function findUploadedPluginRoot(stagedFolder) {
-    if (await folderLooksLikePlugin(stagedFolder)) return stagedFolder;
-    const entries = await fs.promises.readdir(stagedFolder, { withFileTypes: true });
-    const dirs = entries.filter((entry) => entry.isDirectory());
-    const files = entries.filter((entry) => entry.isFile());
-    if (files.length === 0 && dirs.length === 1) {
-      const nested = path.join(stagedFolder, dirs[0].name);
-      if (await folderLooksLikePlugin(nested)) return nested;
-    }
-    return stagedFolder;
-  }
-
-  async function folderLooksLikePlugin(folder) {
-    const names = ['open-design.json', 'SKILL.md', path.join('.claude-plugin', 'plugin.json')];
-    for (const name of names) {
-      if (fs.existsSync(path.join(folder, name))) return true;
-    }
-    return false;
-  }
-
-  function safeUploadRelativePath(input) {
-    const value = String(input || '').replace(/\\/g, '/');
-    if (!value || value.includes('\0') || value.startsWith('/') || /^[A-Za-z]:\//.test(value)) {
-      throw new Error('invalid upload path');
-    }
-    const parts = value.split('/').filter(Boolean);
-    if (parts.length === 0 || parts.some((part) => part === '.' || part === '..')) {
-      throw new Error(`unsafe upload path: ${value}`);
-    }
-    return parts.join(path.sep);
-  }
-
-  async function extractPluginZipToFolder(buffer, stagedFolder) {
-    if (buffer.length > PLUGIN_UPLOAD_MAX_BYTES) {
-      throw new Error('zip file too large');
-    }
-    const zip = await JSZip.loadAsync(buffer);
-    let totalBytes = 0;
-    const entries = Object.values(zip.files);
-    if (entries.length === 0) throw new Error('zip contains no files');
-    for (const entry of entries) {
-      if (entry.dir) continue;
-      const rel = safeUploadRelativePath(entry.name);
-      const unixMode = typeof entry.unixPermissions === 'number' ? entry.unixPermissions : 0;
-      if ((unixMode & 0o170000) === 0o120000) {
-        throw new Error(`zip entry is a symbolic link: ${entry.name}`);
-      }
-      const content = await entry.async('nodebuffer');
-      totalBytes += content.length;
-      if (totalBytes > PLUGIN_UPLOAD_MAX_BYTES) {
-        throw new Error('zip extracted size exceeds 50 MiB');
-      }
-      const dest = path.join(stagedFolder, rel);
-      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      await fs.promises.writeFile(dest, content);
-    }
-  }
-
-  app.post('/api/plugins/upload-zip', (req, res) => {
-    pluginUpload.single('file')(req, res, async (err) => {
-      if (err) return sendMulterError(res, err);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+      const writeEvent = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (mode === 'upgrade') writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${body.policy === 'pinned' ? 'pinned' : 'latest'})` });
       try {
-        const file = req.file;
-        if (!file || !file.buffer) {
-          return res.status(400).json({ error: 'file is required' });
+        const basePlugin = mode === 'upgrade' ? getInstalledPlugin(db, id) : null;
+        for await (const ev of installPlugin(db, {
+          source,
+          roots: PLUGIN_REGISTRY_ROOTS,
+          ...(mode === 'upgrade' ? { eventKind: 'upgraded' } : {}),
+          sourceMarketplaceId: marketplaceResolution?.marketplaceId ?? basePlugin?.sourceMarketplaceId,
+          sourceMarketplaceEntryName: marketplaceResolution?.pluginName ?? basePlugin?.sourceMarketplaceEntryName,
+          sourceMarketplaceEntryVersion: marketplaceResolution?.pluginVersion ?? basePlugin?.sourceMarketplaceEntryVersion,
+          marketplaceTrust: marketplaceResolution?.marketplaceTrust ?? basePlugin?.marketplaceTrust,
+          resolvedSource: marketplaceResolution?.source ?? basePlugin?.resolvedSource,
+          resolvedRef: marketplaceResolution?.ref ?? basePlugin?.resolvedRef,
+          manifestDigest: marketplaceResolution?.manifestDigest ?? basePlugin?.manifestDigest,
+          archiveIntegrity: marketplaceResolution?.archiveIntegrity ?? basePlugin?.archiveIntegrity,
+          lockfilePath: PLUGIN_LOCKFILE_PATH,
+        })) {
+          writeEvent(ev.kind, ev);
+          if (ev.kind === 'success' || ev.kind === 'error') break;
         }
-        const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
-        await extractPluginZipToFolder(file.buffer, stagedFolder);
-        const result = await finishUploadedPluginInstall(
-          stagedFolder,
-          `upload:zip:${decodeMultipartFilename(file.originalname || 'plugin.zip')}`,
-        );
-        res.status(result.ok ? 200 : 400).json(result);
-      } catch (uploadErr) {
-        res.status(400).json({
-          ok: false,
-          warnings: [],
-          message: String(uploadErr?.message || uploadErr),
-          log: [],
-        });
+      } catch (err) {
+        writeEvent('error', { kind: 'error', message: String(err), warnings: [] });
+      } finally {
+        res.end();
       }
-    });
-  });
-
-  app.post('/api/plugins/upload-folder', (req, res) => {
-    pluginUpload.array('files', 500)(req, res, async (err) => {
-      if (err) return sendMulterError(res, err);
-      const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-folder-'));
+    },
+    handleShareProject: async (req, res) => {
       try {
-        const files = Array.isArray(req.files) ? req.files : [];
-        if (files.length === 0) {
-          await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
-          return res.status(400).json({ error: 'files are required' });
-        }
-        const rawPaths = req.body?.paths;
-        const paths = Array.isArray(rawPaths) ? rawPaths : rawPaths ? [rawPaths] : [];
-        let totalBytes = 0;
-        for (let i = 0; i < files.length; i += 1) {
-          const file = files[i];
-          totalBytes += file.buffer.length;
-          if (totalBytes > PLUGIN_UPLOAD_MAX_BYTES) {
-            throw new Error('folder upload exceeds 50 MiB');
-          }
-          const rel = safeUploadRelativePath(paths[i] || file.originalname);
-          const dest = path.join(stagedFolder, rel);
-          await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-          await fs.promises.writeFile(dest, file.buffer);
-        }
-        const result = await finishUploadedPluginInstall(stagedFolder, 'upload:folder');
-        res.status(result.ok ? 200 : 400).json(result);
-      } catch (uploadErr) {
-        await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
-        res.status(400).json({
-          ok: false,
-          warnings: [],
-          message: String(uploadErr?.message || uploadErr),
-          log: [],
-        });
-      }
-    });
-  });
-
-  app.post('/api/plugins/install', async (req, res) => {
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    let source = typeof body.source === 'string' ? body.source : '';
-    let marketplaceResolution: {
-      marketplaceId: string;
-      marketplaceTrust: 'official' | 'trusted' | 'restricted';
-      pluginName: string;
-      pluginVersion: string;
-      source: string;
-      ref?: string;
-      manifestDigest?: string;
-      archiveIntegrity?: string;
-    } | null = null;
-    if (!source) {
-      return res.status(400).json({ error: 'source is required' });
-    }
-    // Plan §3.A6: accept local folder, github:owner/repo[@ref][/subpath],
-    // and https://*.tar.gz / *.tgz sources. Plan §3.F3: also accept a
-    // bare plugin name and resolve it through the configured marketplaces.
-    // Other shapes are 400 so the error surface is clear.
-    const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~');
-    const looksGithub = source.startsWith('github:');
-    const looksHttps = /^https:\/\//i.test(source);
-    if (!looksAbsolute && !looksGithub && !looksHttps) {
-      // Treat the source as a plugin name and look it up in the
-      // marketplace registry. Match resolution returns the canonical
-      // source (github:… / https://…) so the installer can replay
-      // the same byte path that would happen if the user copy-pasted
-      // the source manually.
-      const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
-      let lookupName = source;
-      const lockfile = await readPluginLockfile(PLUGIN_LOCKFILE_PATH);
-      const locked = lockfile.plugins[source];
-      if (locked?.version && !source.includes('@')) {
-        lookupName = `${source}@${locked.version}`;
-      }
-      const resolved = resolvePluginInMarketplaces(db, lookupName);
-      if (!resolved) {
-        return res.status(404).json({
-          error: {
-            code: 'plugin-not-found',
-            message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`,
-            data: { name: source },
-          },
-        });
-      }
-      marketplaceResolution = resolved;
-      source = resolved.source;
-    }
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    const writeEvent = (event: string, data: unknown) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
-
-    try {
-      for await (const ev of installPlugin(db, {
-        source,
-        roots: PLUGIN_REGISTRY_ROOTS,
-        sourceMarketplaceId: marketplaceResolution?.marketplaceId,
-        sourceMarketplaceEntryName: marketplaceResolution?.pluginName,
-        sourceMarketplaceEntryVersion: marketplaceResolution?.pluginVersion,
-        marketplaceTrust: marketplaceResolution?.marketplaceTrust,
-        resolvedSource: marketplaceResolution?.source,
-        resolvedRef: marketplaceResolution?.ref,
-        manifestDigest: marketplaceResolution?.manifestDigest,
-        archiveIntegrity: marketplaceResolution?.archiveIntegrity,
-        lockfilePath: PLUGIN_LOCKFILE_PATH,
-      })) {
-        writeEvent(ev.kind, ev);
-        if (ev.kind === 'success' || ev.kind === 'error') break;
-      }
-    } catch (err) {
-      writeEvent('error', { kind: 'error', message: String(err), warnings: [] });
-    } finally {
-      res.end();
-    }
-  });
-
-  app.post('/api/plugins/:id/uninstall', async (req, res) => {
-    try {
-      const result = await uninstallPlugin(db, req.params.id, PLUGIN_REGISTRY_ROOTS);
-      if (!result.ok && !result.removedFolder) {
-        return res.status(404).json({ error: 'plugin not found', warning: result.warning });
-      }
-      res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.Z2 — `od plugin upgrade <id>` re-installs a plugin from
-  // its recorded source. Streams the same SSE shape as
-  // POST /api/plugins/install so CLIs and the web composer reuse
-  // the existing event handler.
-  //
-  // Rejected for source_kind='bundled': bundled plugins are
-  // shipped with the daemon image and the bundled boot walker
-  // re-registers them on every boot. Letting an operator
-  // 'upgrade' a bundled plugin would silently overwrite the
-  // daemon's authoritative copy and confuse the next boot.
-  app.post('/api/plugins/:id/upgrade', async (req, res) => {
-    const id = req.params.id;
-    const body = req.body && typeof req.body === 'object' ? req.body : {};
-    const policy = body.policy === 'pinned' ? 'pinned' : 'latest';
-    const plugin = getInstalledPlugin(db, id);
-    if (!plugin) {
-      return res.status(404).json({
-        error: { code: 'plugin-not-found', message: `No installed plugin with id "${id}".`, data: { id } },
-      });
-    }
-    if (plugin.sourceKind === 'bundled') {
-      return res.status(409).json({
-        error: {
-          code: 'bundled-plugin',
-          message: `Plugin "${id}" was shipped bundled with the daemon and upgrades only via daemon-image upgrade. The bundled boot walker re-registers bundled plugins on every boot.`,
-          data: { id, sourceKind: plugin.sourceKind },
-        },
-      });
-    }
-    let source = plugin.source;
-    let marketplaceResolution: {
-      marketplaceId: string;
-      marketplaceTrust: 'official' | 'trusted' | 'restricted';
-      pluginName: string;
-      pluginVersion: string;
-      source: string;
-      ref?: string;
-      manifestDigest?: string;
-      archiveIntegrity?: string;
-    } | null = null;
-    if (policy === 'latest' && plugin.sourceMarketplaceEntryName) {
-      const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
-      marketplaceResolution = resolvePluginInMarketplaces(db, plugin.sourceMarketplaceEntryName);
-      if (marketplaceResolution) {
-        source = marketplaceResolution.source;
-      }
-    }
-    if (!source) {
-      return res.status(409).json({
-        error: {
-          code: 'missing-source',
-          message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`,
-          data: { id },
-        },
-      });
-    }
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    const writeEvent = (event: string, data: unknown) => {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    };
-
-    writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${policy})` });
-
-    try {
-      for await (const ev of installPlugin(db, {
-        source,
-        roots: PLUGIN_REGISTRY_ROOTS,
-        eventKind: 'upgraded',
-        sourceMarketplaceId: marketplaceResolution?.marketplaceId ?? plugin.sourceMarketplaceId,
-        sourceMarketplaceEntryName: marketplaceResolution?.pluginName ?? plugin.sourceMarketplaceEntryName,
-        sourceMarketplaceEntryVersion: marketplaceResolution?.pluginVersion ?? plugin.sourceMarketplaceEntryVersion,
-        marketplaceTrust: marketplaceResolution?.marketplaceTrust ?? plugin.marketplaceTrust,
-        resolvedSource: marketplaceResolution?.source ?? plugin.resolvedSource,
-        resolvedRef: marketplaceResolution?.ref ?? plugin.resolvedRef,
-        manifestDigest: marketplaceResolution?.manifestDigest ?? plugin.manifestDigest,
-        archiveIntegrity: marketplaceResolution?.archiveIntegrity ?? plugin.archiveIntegrity,
-        lockfilePath: PLUGIN_LOCKFILE_PATH,
-      })) {
-        writeEvent(ev.kind, ev);
-        if (ev.kind === 'success' || ev.kind === 'error') break;
-      }
-    } catch (err) {
-      writeEvent('error', { kind: 'error', message: String(err), warnings: [] });
-    } finally {
-      res.end();
-    }
-  });
+        const sourcePlugin = getInstalledPlugin(db, req.params.id);
+        if (!sourcePlugin) return sendApiError(res, 404, 'NOT_FOUND', 'plugin not found');
+        if (!USER_PLUGIN_SOURCE_KINDS.has(sourcePlugin.sourceKind)) return res.status(409).json({ ok: false, code: 'plugin-not-shareable', message: 'Only user-installed plugins can start a share project.' });
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const action = normalizePluginShareAction(body.action);
+        if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'action must be publish-github or contribute-open-design');
+        const actionPluginId = PLUGIN_SHARE_ACTION_PLUGIN_IDS[action];
+        const actionPlugin = getInstalledPlugin(db, actionPluginId);
+        if (!actionPlugin) return res.status(409).json({ ok: false, code: 'share-action-plugin-missing', message: `The bundled action plugin "${actionPluginId}" is not installed. Restart the daemon so bundled plugins are registered.` });
+        const now = Date.now(); const id = randomId(); const cid = randomId(); const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id); const stagedPath = `plugin-source/${sourceSlug}`; const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath }); const metadata = { kind: 'prototype' }; const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata); await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
+        insertProject(db, { id, name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
+        insertConversation(db, { id: cid, projectId: id, title: null, createdAt: now, updatedAt: now });
+        const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
+        if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
+        const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
+        res.json({ ok: true, project, conversationId: cid, ...(resolved?.ok ? { appliedPluginSnapshotId: resolved.snapshotId } : {}), actionPluginId, sourcePluginId: sourcePlugin.id, stagedPath, prompt, message: `Created a ${PLUGIN_SHARE_ACTION_LABELS[action]} task for ${sourcePlugin.title || sourcePlugin.id}.` });
+      } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+    },
+    handlePluginTrust: async (req, res) => {
+      try {
+        const plugin = getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' });
+        const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'revoke' ? 'revoke' : 'grant';
+        const { validateCapabilityList, grantCapabilities, revokeCapabilities } = await import('./plugins/trust.js');
+        const { accepted, rejected } = validateCapabilityList(body.capabilities);
+        if (rejected.length > 0) return res.status(400).json({ error: { code: 'invalid-capability', message: `Capability validation failed: ${rejected.map((r) => r.capability).join(', ')}`, data: { rejected } } });
+        if (accepted.length === 0) return res.status(400).json({ error: { code: 'no-capabilities', message: 'capabilities[] is required and must contain at least one entry' } });
+        const next = action === 'revoke' ? revokeCapabilities({ db, pluginId: req.params.id, capabilities: accepted }) : grantCapabilities({ db, pluginId: req.params.id, capabilities: accepted });
+        const updated = getInstalledPlugin(db, req.params.id);
+        try { const { recordPluginEvent } = await import('./plugins/events.js'); recordPluginEvent({ kind: 'plugin.trust-changed', pluginId: req.params.id, details: { action, capabilities: accepted, total: next.length } }); } catch {}
+        res.status(action === 'grant' ? 201 : 200).json({ ok: true, id: req.params.id, action, capabilitiesGranted: next, plugin: updated });
+      } catch (err) { res.status(500).json({ error: String(err) }); }
+    },
+    handlePluginStats: async (res) => {
+      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db); const inventoryRows = db.prepare(`SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all(); res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
+    },
+    handleAppliedPluginExport: async (req, res) => {
+      try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const target = body.target === 'od' || body.target === 'claude-plugin' || body.target === 'agent-skill' ? body.target : null; if (!target) return res.status(400).json({ error: 'target must be one of: od, claude-plugin, agent-skill' }); const outDir = typeof body.outDir === 'string' && body.outDir.length > 0 ? body.outDir : null; if (!outDir) return res.status(400).json({ error: 'outDir is required' }); const { exportPlugin, ExportError } = await import('./plugins/export.js'); try { const result = await exportPlugin({ db, target, outDir, ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}), ...(typeof body.projectId === 'string' ? { projectId: body.projectId } : {}) }); res.json({ ok: true, ...result }); } catch (err) { if (err instanceof ExportError) return res.status(404).json({ error: err.message }); throw err; } } catch (err) { res.status(500).json({ error: String(err) }); }
+    },
+    handleProjectInstallFolder: async (req, res) => {
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
+    },
+    handleProjectPluginCli: async (req, res, action) => {
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
+    },
+    handleCandidateDraft: async (req, res) => {
+      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!result) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); res.status(result.ok ? 200 : 422).json(result); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+    },
+    handleCandidateShareTask: async (req, res) => {
+      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!draft) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (!draft.validation.ok) return res.status(422).json({ ok: false, code: 'plugin-draft-invalid', message: 'Generated plugin draft is invalid.', draft }); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: draft.draftPath }, draft.folder); res.status(202).json({ taskId: task.id, action, path: draft.draftPath, status: task.status, startedAt: task.startedAt, draft }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
+    },
+    handleProjectShareTask: async (req, res) => {
+      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
+      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action: PluginShareAction | null = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: relativePath }, folder); res.status(202).json({ taskId: task.id, action, path: relativePath, status: task.status, startedAt: task.startedAt }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
+    },
+  };
 
   // Plan §3.A1: shared helper used by every endpoint that has to resolve
   // plugin context against the live registry. Skills + design systems are
@@ -7668,751 +6782,6 @@ export async function startServer({
     return Array.from(byTaskKind.values());
   }
 
-  app.post('/api/plugins/:id/apply', async (req, res) => {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {};
-      const grantCaps = Array.isArray(body.grantCaps)
-        ? body.grantCaps.filter((c) => typeof c === 'string')
-        : [];
-      const locale = typeof body.locale === 'string' ? body.locale : undefined;
-
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
-      const computed = applyPlugin({ plugin, inputs, registry, locale, connectorProbe });
-      // Plan §3.B2 — apply-time grants are merged into the snapshot's
-      // capabilitiesGranted so the §9 capability gate sees them, but
-      // they are NOT written back to installed_plugins.capabilities_granted.
-      // The snapshot is the only place this ephemeral grant lives.
-      if (grantCaps.length > 0) {
-        const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]);
-        computed.result.capabilitiesGranted = Array.from(merged);
-        computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged);
-      }
-      res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest });
-    } catch (err) {
-      if (err instanceof MissingInputError) {
-        return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
-      }
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/plugins/:id/share-project', async (req, res) => {
-    try {
-      const sourcePlugin = getInstalledPlugin(db, req.params.id);
-      if (!sourcePlugin) {
-        sendApiError(res, 404, 'NOT_FOUND', 'plugin not found');
-        return;
-      }
-      if (!USER_PLUGIN_SOURCE_KINDS.has(sourcePlugin.sourceKind)) {
-        res.status(409).json({
-          ok: false,
-          code: 'plugin-not-shareable',
-          message: 'Only user-installed plugins can start a share project.',
-        });
-        return;
-      }
-
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const action = normalizePluginShareAction(body.action);
-      if (!action) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'action must be publish-github or contribute-open-design');
-        return;
-      }
-      const actionPluginId = PLUGIN_SHARE_ACTION_PLUGIN_IDS[action];
-      const actionPlugin = getInstalledPlugin(db, actionPluginId);
-      if (!actionPlugin) {
-        res.status(409).json({
-          ok: false,
-          code: 'share-action-plugin-missing',
-          message: `The bundled action plugin "${actionPluginId}" is not installed. Restart the daemon so bundled plugins are registered.`,
-        });
-        return;
-      }
-
-      const now = Date.now();
-      const id = randomId();
-      const cid = randomId();
-      const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id);
-      const stagedPath = `plugin-source/${sourceSlug}`;
-      const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath });
-      const metadata = { kind: 'prototype' };
-      const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata);
-      await copyPluginFolderForProjectContext(
-        sourcePlugin.fsPath,
-        path.join(projectRoot, 'plugin-source', sourceSlug),
-      );
-
-      insertProject(db, {
-        id,
-        name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`,
-        skillId: null,
-        designSystemId: null,
-        pendingPrompt: prompt,
-        metadata,
-        createdAt: now,
-        updatedAt: now,
-      });
-      insertConversation(db, {
-        id: cid,
-        projectId: id,
-        title: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
-      const resolved = resolvePluginSnapshot({
-        db,
-        body: {
-          pluginId: actionPluginId,
-          pluginInputs: {
-            source_plugin_id: sourcePlugin.id,
-            source_plugin_title: sourcePlugin.title || sourcePlugin.id,
-            source_plugin_version: sourcePlugin.version,
-            source_plugin_path: sourcePlugin.fsPath,
-            plugin_context_path: stagedPath,
-          },
-          locale: typeof body.locale === 'string' ? body.locale : undefined,
-        },
-        projectId: id,
-        conversationId: cid,
-        registry,
-        connectorProbe,
-      });
-      if (resolved && !resolved.ok) {
-        res.status(resolved.status).json(resolved.body);
-        return;
-      }
-
-      const project = getProject(db, id);
-      if (!project) {
-        sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
-        return;
-      }
-      res.json({
-        ok: true,
-        project,
-        conversationId: cid,
-        ...(resolved?.ok ? { appliedPluginSnapshotId: resolved.snapshotId } : {}),
-        actionPluginId,
-        sourcePluginId: sourcePlugin.id,
-        stagedPath,
-        prompt,
-        message: `Created a ${PLUGIN_SHARE_ACTION_LABELS[action]} task for ${sourcePlugin.title || sourcePlugin.id}.`,
-      });
-    } catch (err) {
-      res.status(400).json({ ok: false, message: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/plugins/:id/doctor', async (req, res) => {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const registry = await loadPluginRegistryView();
-      const connectorProbe = buildConnectorProbe(connectorService);
-      const report = doctorPlugin(plugin, registry, { connectorProbe });
-      res.json(report);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.A2 / spec §9.1: persistent capability grant. Body is
-  // `{ capabilities: string[], action?: 'grant' | 'revoke' }`. The daemon
-  // validates each entry against the §5.3 vocabulary; unknown / malformed
-  // strings come back as 400 with the offending list so the CLI can
-  // render exit-code-2 usage advice. The mutation goes through
-  // `grantCapabilities` / `revokeCapabilities` (the only writers of
-  // `installed_plugins.capabilities_granted` outside of install).
-  app.post('/api/plugins/:id/trust', async (req, res) => {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const action = body.action === 'revoke' ? 'revoke' : 'grant';
-      const { validateCapabilityList, grantCapabilities, revokeCapabilities } =
-        await import('./plugins/trust.js');
-      const { accepted, rejected } = validateCapabilityList(body.capabilities);
-      if (rejected.length > 0) {
-        return res.status(400).json({
-          error: {
-            code: 'invalid-capability',
-            message: `Capability validation failed: ${rejected.map((r) => r.capability).join(', ')}`,
-            data: { rejected },
-          },
-        });
-      }
-      if (accepted.length === 0) {
-        return res.status(400).json({
-          error: {
-            code: 'no-capabilities',
-            message: 'capabilities[] is required and must contain at least one entry',
-          },
-        });
-      }
-      const next = action === 'revoke'
-        ? revokeCapabilities({ db, pluginId: req.params.id, capabilities: accepted })
-        : grantCapabilities({ db, pluginId: req.params.id, capabilities: accepted });
-      const updated = getInstalledPlugin(db, req.params.id);
-      // Plan §3.JJ1 — emit a 'plugin.trust-changed' event so the
-      // ops live-tail surfaces capability mutations for security
-      // audit. Best-effort.
-      try {
-        const { recordPluginEvent } = await import('./plugins/events.js');
-        recordPluginEvent({
-          kind:     'plugin.trust-changed',
-          pluginId: req.params.id,
-          details:  { action, capabilities: accepted, total: next.length },
-        });
-      } catch {
-        // ignore — event recording never blocks the trust mutation.
-      }
-      res.status(action === 'grant' ? 201 : 200).json({
-        ok: true,
-        id: req.params.id,
-        action,
-        capabilitiesGranted: next,
-        plugin: updated,
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/atoms', (_req, res) => {
-    res.json({ atoms: FIRST_PARTY_ATOMS.map((a) => ({ ...a, taskKinds: a.taskKinds.slice() })) });
-  });
-
-  // Plan §3.AA2 — `od atoms info <id>`. Returns the catalog row +
-  // the bundled SKILL.md body (when one exists at
-  // plugins/_official/atoms/<id>/SKILL.md) so the caller can render
-  // a single page describing what the atom does + the prompt
-  // fragment that drives it.
-  app.get('/api/atoms/:id', async (req, res) => {
-    const id = req.params.id;
-    const atom = FIRST_PARTY_ATOMS.find((a) => a.id === id);
-    if (!atom) return res.status(404).json({ error: { code: 'atom-not-found', message: `Unknown atom "${id}"` } });
-    const body: Record<string, unknown> = {
-      ...atom,
-      taskKinds: atom.taskKinds.slice(),
-    };
-    try {
-      const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
-      const bodies = await loadAtomBodies(db, [id]);
-      if (bodies[0] && typeof bodies[0].body === 'string') {
-        body.skillBody = bodies[0].body;
-      }
-    } catch (err) {
-      // Best-effort; atom info still useful without the body.
-      console.warn(`[atoms] failed to load SKILL.md body for ${id}:`, err);
-    }
-    res.json(body);
-  });
-
-  // Plan §3.L3 / spec §10.3.5 / §9.2 — plugin asset endpoint.
-  //
-  // Serves a static file from inside an installed plugin's fsPath,
-  // sandboxed by:
-  //   - whitelisted plugin ids (the registry row),
-  //   - normalized relpath (no '..' / absolute / leading drive),
-  //   - the §9.2 preview CSP (default-src 'none'; script-src 'self'
-  //     'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'),
-  //   - X-Content-Type-Options: nosniff so the browser respects the
-  //     declared content type even on miss.
-  // The web GenUISurfaceRenderer's SandboxedComponentSurface points
-  // its iframe at this URL.
-  // Helper for the /preview + /example/:name routes below. Walks a
-  // list of candidate relpaths inside the plugin folder, picks the
-  // first one that exists + stays inside the fsPath, and serves it
-  // with the §9.2 sandboxed-iframe CSP (same shape as `/asset/*`).
-  // Pulled out so /preview and /example/:name share a single source
-  // of truth for the security envelope.
-  async function servePluginSandboxedHtml(
-    req: any,
-    res: any,
-    pickCandidates: (plugin: any) => Promise<string[]> | string[],
-  ): Promise<void> {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) {
-        res.status(404).json({ error: 'plugin not found' });
-        return;
-      }
-      const candidates = (await pickCandidates(plugin)).filter(
-        (p): p is string => typeof p === 'string' && p.length > 0,
-      );
-      const path = await import('node:path');
-      const fsp = await import('node:fs/promises');
-      const root = path.resolve(plugin.fsPath) + path.sep;
-      let resolved: string | null = null;
-      let resolvedRel: string | null = null;
-      for (const rel of candidates) {
-        if (rel.includes('..') || rel.startsWith('/') || rel.includes('\0')) continue;
-        const full = path.resolve(plugin.fsPath, rel);
-        if (!(full + path.sep).startsWith(root) && full !== path.resolve(plugin.fsPath)) continue;
-        try {
-          const st = await fsp.stat(full);
-          // Refuse symlinks — the install root may be writable so a
-          // symlink leak would defeat the containment check above.
-          const lst = await fsp.lstat(full);
-          if (lst.isSymbolicLink()) continue;
-          if (!st.isFile()) continue;
-          // 5 MiB cap — preview HTML is human-authored; refuse anything
-          // resembling a binary blob smuggled through this surface.
-          if (st.size > 5 * 1024 * 1024) {
-            res.status(413).json({ error: 'preview asset too large' });
-            return;
-          }
-          resolved = full;
-          resolvedRel = rel;
-          break;
-        } catch {
-          // try next candidate
-        }
-      }
-      if (!resolved) {
-        res.status(404).json({ error: 'preview not found' });
-        return;
-      }
-      let contentPath = resolved;
-      let contentRel = resolvedRel;
-      let buf = await fsp.readFile(resolved);
-      if (resolvedRel && /\.html?$/i.test(resolvedRel)) {
-        const shellTarget = iframeOnlyHtmlShellTarget(buf.toString('utf8'));
-        if (shellTarget) {
-          const targetFull = path.resolve(path.dirname(resolved), shellTarget);
-          const rootDir = path.resolve(plugin.fsPath);
-          const insideRoot =
-            (targetFull + path.sep).startsWith(root) ||
-            targetFull === rootDir;
-          if (insideRoot) {
-            try {
-              const st = await fsp.stat(targetFull);
-              const lst = await fsp.lstat(targetFull);
-              if (!lst.isSymbolicLink() && st.isFile() && st.size <= 5 * 1024 * 1024) {
-                buf = await fsp.readFile(targetFull);
-                contentPath = targetFull;
-                contentRel = path.relative(plugin.fsPath, targetFull).split(path.sep).join('/');
-              }
-            } catch {
-              // Keep the wrapper HTML if the iframe target cannot be read.
-            }
-          }
-        }
-      }
-      if (resolvedRel && /(^|\/)example-slides\.html$/i.test(resolvedRel)) {
-        const templateRel = resolvedRel.replace(
-          /(^|\/)example-slides\.html$/i,
-          '$1template.html',
-        );
-        const templateFull = path.resolve(plugin.fsPath, templateRel);
-        const templateInside =
-          (templateFull + path.sep).startsWith(root) ||
-          templateFull === path.resolve(plugin.fsPath);
-        if (templateInside) {
-          try {
-            const st = await fsp.stat(templateFull);
-            const lst = await fsp.lstat(templateFull);
-            if (!lst.isSymbolicLink() && st.isFile() && st.size <= 5 * 1024 * 1024) {
-              const title =
-                typeof plugin.title === 'string'
-                  ? plugin.title
-                  : typeof plugin.manifest?.title === 'string'
-                    ? plugin.manifest.title
-                    : req.params.id;
-              const tplHtml = await fsp.readFile(templateFull, 'utf8');
-              const slidesHtml = buf.toString('utf8');
-              buf = Buffer.from(assembleExample(tplHtml, slidesHtml, title), 'utf8');
-              contentPath = templateFull;
-              contentRel = templateRel;
-            }
-          } catch {
-            // Keep the raw fallback if the companion template is missing.
-          }
-        }
-      }
-      res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'",
-      );
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      const ext = path.extname(contentPath).toLowerCase();
-      const ct =
-        ext === '.html' ? 'text/html; charset=utf-8'
-        : ext === '.js'  ? 'application/javascript; charset=utf-8'
-        : ext === '.css' ? 'text/css; charset=utf-8'
-        : ext === '.json' ? 'application/json; charset=utf-8'
-        : ext === '.svg' ? 'image/svg+xml'
-        : ext === '.png' ? 'image/png'
-        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-        : 'application/octet-stream';
-      res.setHeader('Content-Type', ct);
-      if (ext === '.html' && typeof contentRel === 'string') {
-        buf = Buffer.from(
-          rewritePluginAssetUrls(
-            buf.toString('utf8'),
-            req.params.id,
-            path.posix.dirname(contentRel.replace(/\\/g, '/')),
-          ),
-          'utf8',
-        );
-      }
-      res.send(buf);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  }
-
-  function iframeOnlyHtmlShellTarget(html: string): string | null {
-    if (typeof html !== 'string' || html.length === 0) return null;
-    const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
-    if (!bodyMatch) return null;
-    const body = bodyMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
-    const iframeMatch = /^<iframe\b[^>]*\bsrc\s*=\s*(['"])([^'"]+)\1[^>]*>\s*(?:<\/iframe>)?\s*$/i.exec(body);
-    if (!iframeMatch) return null;
-    const src = iframeMatch[2].trim();
-    if (
-      !src ||
-      src.startsWith('/') ||
-      src.startsWith('//') ||
-      src.includes('\0') ||
-      /^[a-z][a-z0-9+.-]*:/i.test(src)
-    ) {
-      return null;
-    }
-    const pathOnly = src.split(/[?#]/)[0] ?? '';
-    if (!/\.html?$/i.test(pathOnly)) return null;
-    return pathOnly;
-  }
-
-  function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
-    if (typeof html !== 'string' || html.length === 0) return html;
-    const safeBase = baseDir === '.' ? '' : baseDir;
-    const withAttrs = html.replace(
-      /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
-      (match, attr, quote, rawValue, closeQuote) => {
-        const value = String(rawValue).trim();
-        // External media (cross-border CDN images/videos) is blocked by the
-        // sandbox CSP and is slow; route src/poster through the same-origin
-        // asset cache. href stays untouched (anchors + external stylesheets).
-        if (
-          /^https?:\/\//i.test(value) &&
-          !/\bhref\b/i.test(String(attr)) &&
-          isCacheableExternalUrl(value)
-        ) {
-          return `${attr}${quote}${assetCacheRewriteUrl(value)}${closeQuote}`;
-        }
-        if (
-          !value ||
-          value.startsWith('#') ||
-          value.startsWith('/') ||
-          value.startsWith('//') ||
-          value.includes('\0') ||
-          /^[a-z][a-z0-9+.-]*:/i.test(value)
-        ) {
-          return match;
-        }
-        const splitAt = value.search(/[?#]/);
-        const rel = splitAt === -1 ? value : value.slice(0, splitAt);
-        const suffix = splitAt === -1 ? '' : value.slice(splitAt);
-        const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
-        if (
-          normalized === '.' ||
-          normalized === '..' ||
-          normalized.startsWith('../') ||
-          path.posix.isAbsolute(normalized)
-        ) {
-          return match;
-        }
-        const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
-        return `${attr}${quote}${url}${closeQuote}`;
-      },
-    );
-    // Preview seeds also pull external media outside src/poster: CSS
-    // `background-image: url(...)`, and — most commonly in these templates —
-    // JS string constants like `const HERO = 'https://cdn/.../bg.png'` that get
-    // assigned to `style.backgroundImage` at runtime. Rewrite any quoted
-    // absolute media URL (covers JS literals + quoted CSS url() + quoted attrs)
-    // and any unquoted `url(...)`. Gating on a media extension keeps this from
-    // touching scripts, stylesheets, or fonts. URLs already rewritten by the
-    // attribute pass are percent-encoded inside `?url=` and no longer match.
-    const withQuoted = withAttrs.replace(
-      /(['"])(https?:\/\/[^'"]+)\1/g,
-      (match, quote, rawValue) => {
-        const value = String(rawValue).trim();
-        if (!isCacheableExternalUrl(value)) return match;
-        return `${quote}${assetCacheRewriteUrl(value)}${quote}`;
-      },
-    );
-    return withQuoted.replace(
-      /url\(\s*(https?:\/\/[^)'"\s]+)\s*\)/gi,
-      (match, rawValue) => {
-        const value = String(rawValue).trim();
-        if (!isCacheableExternalUrl(value)) return match;
-        return `url(${assetCacheRewriteUrl(value)})`;
-      },
-    );
-  }
-
-  // Plan §6 Phase 2B + spec §11.6 / §9.2 — plugin preview + examples.
-  //
-  // Two flavours wrap the same sandboxed-HTML envelope as `/asset/*`:
-  //   - `/preview` serves the plugin's preview entry (declared via
-  //     `od.preview.entry`, with fallbacks that walk the plugin's
-  //     own context.assets[] HTMLs, examples/*.html and assets/*.html).
-  //   - `/example/:name` serves an entry from `od.useCase.exampleOutputs[]`,
-  //     matched by basename or by index. Both reuse the same
-  //     traversal / containment guards as the asset route.
-  //
-  // The marketplace detail page (PluginDetailView) embeds /preview
-  // inside an `<iframe sandbox="allow-scripts">`. The §9.2 CSP keeps
-  // the preview from reaching back into /api/* even if its scripts
-  // try to fetch.
-  //
-  // Some bundled plugins (`example-guizang-ppt`, `example-html-ppt`,
-  // …) declare `od.preview.entry: "./index.html"` but actually ship
-  // the renderable HTML under `assets/example-slides.html` or
-  // `assets/template.html`. Returning 404 in that case lit up white
-  // tiles in the home gallery, so the candidates list always extends
-  // past the declared entry to walk a curated fallback chain.
-  //
-  // `assets/example-slides.html` is a special case: for guizang-ppt it
-  // is intentionally only the slide fragment. The old skill preview
-  // assembled it into `assets/template.html` at request time; the plugin
-  // route mirrors that so the marketplace card keeps the WebGL/e-ink
-  // magazine treatment instead of rendering unstyled fragments.
-  function collectPluginPreviewCandidates(plugin: unknown): string[] {
-    const candidates: string[] = [];
-    const seen = new Set<string>();
-    function push(rel: unknown): void {
-      if (typeof rel !== 'string') return;
-      const trimmed = rel.replace(/^\.\//, '');
-      if (!trimmed || seen.has(trimmed)) return;
-      seen.add(trimmed);
-      candidates.push(trimmed);
-    }
-
-    const manifest =
-      ((plugin as { manifest?: unknown }).manifest ?? {}) as Record<string, unknown>;
-    const od = (manifest.od ?? {}) as Record<string, unknown>;
-    const preview = (od.preview ?? {}) as Record<string, unknown>;
-
-    push(preview.entry);
-
-    const ctx = (od.context ?? {}) as Record<string, unknown>;
-    const assets = Array.isArray(ctx.assets) ? ctx.assets : [];
-    for (const a of assets) {
-      const rel = typeof a === 'string' ? a : null;
-      if (rel && /\.html?$/i.test(rel)) push(rel);
-    }
-
-    const useCase = (od.useCase ?? {}) as Record<string, unknown>;
-    const exampleOutputs = Array.isArray(useCase.exampleOutputs)
-      ? useCase.exampleOutputs
-      : [];
-    for (const ex of exampleOutputs) {
-      const p = (ex as { path?: unknown })?.path;
-      if (typeof p === 'string' && /\.html?$/i.test(p)) push(p);
-    }
-
-    push('preview/index.html');
-    push('index.html');
-    push('examples/index.html');
-    push('assets/index.html');
-    push('assets/preview.html');
-    push('assets/example.html');
-    push('assets/example-slides.html');
-    push('assets/template.html');
-    push('public/index.html');
-    push('dist/index.html');
-    return candidates;
-  }
-
-  // Last-resort discovery for plugins whose bundle ships HTML but
-  // doesn't match any of the conventional paths. We scan the plugin
-  // root and a handful of common subfolders (assets/, public/, dist/,
-  // examples/, preview/, templates/) for any `*.html` and surface
-  // the first one. The scan is shallow to avoid pathological large
-  // bundles, and the same containment guard inside
-  // servePluginSandboxedHtml validates each candidate before reading.
-  async function discoverPluginHtmlAssets(pluginFsPath: string): Promise<string[]> {
-    const path = await import('node:path');
-    const fsp = await import('node:fs/promises');
-    const dirs = ['', 'assets', 'public', 'dist', 'examples', 'preview', 'templates'];
-    const found: string[] = [];
-    for (const dir of dirs) {
-      const abs = path.resolve(pluginFsPath, dir);
-      try {
-        const entries = await fsp.readdir(abs, { withFileTypes: true });
-        for (const ent of entries) {
-          if (!ent.isFile()) continue;
-          if (!/\.html?$/i.test(ent.name)) continue;
-          found.push(dir ? `${dir}/${ent.name}` : ent.name);
-        }
-      } catch {
-        // dir missing — skip
-      }
-    }
-    return found;
-  }
-
-  app.get('/api/plugins/:id/preview', async (req, res) => {
-    await servePluginSandboxedHtml(req, res, async (plugin) => {
-      const curated = collectPluginPreviewCandidates(plugin);
-      const fsPath = (plugin as { fsPath?: unknown }).fsPath;
-      if (typeof fsPath !== 'string') return curated;
-      const discovered = await discoverPluginHtmlAssets(fsPath);
-      const seen = new Set(curated);
-      for (const rel of discovered) {
-        if (!seen.has(rel)) curated.push(rel);
-      }
-      return curated;
-    });
-  });
-
-  app.get('/api/plugins/:id/example/:name', async (req, res) => {
-    const name = String(req.params.name ?? '');
-    if (!name || /[\\/\0]|\.\./.test(name)) {
-      return res.status(400).json({ error: 'invalid example name' });
-    }
-    await servePluginSandboxedHtml(req, res, async (plugin) => {
-      const examples = ((plugin as { manifest?: { od?: { useCase?: { exampleOutputs?: Array<{ path?: unknown; title?: unknown }> } } } })
-        .manifest?.od?.useCase?.exampleOutputs ?? []) as Array<{ path?: unknown; title?: unknown }>;
-      const match = examples.find((e) => {
-        if (!e || typeof e.path !== 'string') return false;
-        const segments = e.path.split(/[\\/]/).filter(Boolean);
-        const base = segments[segments.length - 1] ?? '';
-        const baseStem = base.replace(/\.[^.]+$/, '');
-        // For `examples/<folder>/index.html` the conceptual "name"
-        // is the folder, not the inner basename.
-        const parent = segments.length >= 2 ? segments[segments.length - 2] : null;
-        const candidates = [base, baseStem, parent].filter((s): s is string => !!s);
-        if (typeof e.title === 'string') candidates.push(e.title);
-        return candidates.includes(name);
-      });
-      if (match && typeof match.path === 'string') return [match.path];
-      // Allow `examples/<name>/index.html` and `examples/<name>.html`
-      // so plugin authors can ship example folders without enumerating
-      // them in the manifest.
-      return [
-        `examples/${name}/index.html`,
-        `examples/${name}.html`,
-      ];
-    });
-  });
-
-  app.get('/api/plugins/:id/asset/*splat', async (req, res) => {
-    try {
-      const plugin = getInstalledPlugin(db, req.params.id);
-      if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-      const splatParam = req.params.splat;
-      const relpath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
-      // Reject obvious traversal up-front; the path resolution below
-      // normalizes again, but this catches the easy cases without
-      // touching disk.
-      if (!relpath || relpath.includes('..') || relpath.startsWith('/') || relpath.includes('\0')) {
-        return res.status(400).json({ error: 'invalid asset path' });
-      }
-      const path = await import('node:path');
-      const fsp = await import('node:fs/promises');
-      const resolved = path.resolve(plugin.fsPath, relpath);
-      // Final containment check — `resolved` must stay under fsPath.
-      const root = path.resolve(plugin.fsPath);
-      const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-      if (!(resolved + path.sep).startsWith(rootWithSep) && resolved !== root) {
-        return res.status(400).json({ error: 'asset escape rejected' });
-      }
-      const relativeSegments = path.relative(root, resolved).split(path.sep).filter(Boolean);
-      let current = root;
-      try {
-        const rootStat = await fsp.lstat(current);
-        if (rootStat.isSymbolicLink()) {
-          return res.status(404).json({ error: 'asset not found' });
-        }
-        for (const segment of relativeSegments) {
-          current = path.join(current, segment);
-          const stat = await fsp.lstat(current);
-          if (stat.isSymbolicLink()) {
-            return res.status(404).json({ error: 'asset not found' });
-          }
-        }
-      } catch {
-        return res.status(404).json({ error: 'asset not found' });
-      }
-      try {
-        const rootReal = await fsp.realpath(plugin.fsPath);
-        const resolvedReal = await fsp.realpath(resolved);
-        const rootRealWithSep = rootReal.endsWith(path.sep) ? rootReal : `${rootReal}${path.sep}`;
-        if (resolvedReal !== rootReal && !resolvedReal.startsWith(rootRealWithSep)) {
-          return res.status(400).json({ error: 'asset escape rejected' });
-        }
-      } catch {
-        return res.status(404).json({ error: 'asset not found' });
-      }
-      let buf;
-      try {
-        buf = await fsp.readFile(resolved);
-      } catch {
-        return res.status(404).json({ error: 'asset not found' });
-      }
-      // §9.2 preview CSP — sandboxed iframes get only inline script + style;
-      // no network, no external resources, no document-level forms.
-      res.setHeader(
-        'Content-Security-Policy',
-        "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'",
-      );
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      const ext = path.extname(resolved).toLowerCase();
-      const ct =
-        ext === '.html' ? 'text/html; charset=utf-8'
-        : ext === '.js'  ? 'application/javascript; charset=utf-8'
-        : ext === '.css' ? 'text/css; charset=utf-8'
-        : ext === '.json' ? 'application/json; charset=utf-8'
-        : ext === '.svg' ? 'image/svg+xml'
-        : ext === '.png' ? 'image/png'
-        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-        : 'application/octet-stream';
-      res.setHeader('Content-Type', ct);
-      res.send(buf);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Same-origin proxy + disk cache for the external media that plugin preview
-  // HTML references on cross-border CDNs. `rewritePluginAssetUrls` rewrites
-  // those URLs to this route so they satisfy the sandbox CSP (`img-src 'self'`)
-  // and load from local cache instead of re-paying cross-border latency.
-  // SSRF guards live in plugin-asset-cache.ts (scheme + private-address checks).
-  app.get('/api/asset-cache', async (req, res) => {
-    const rawUrl =
-      typeof req.query.url === 'string'
-        ? req.query.url
-        : Array.isArray(req.query.url) && typeof req.query.url[0] === 'string'
-          ? req.query.url[0]
-          : '';
-    if (!rawUrl) {
-      return res.status(400).json({ error: 'missing url query parameter' });
-    }
-    try {
-      const { buf, contentType } = await pluginAssetCache.get(rawUrl);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'");
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      return res.send(buf);
-    } catch (err) {
-      const status = err instanceof AssetCacheError ? err.status : 502;
-      return res.status(status).json({ error: err instanceof Error ? err.message : String(err) });
-    }
-  });
-
   // Plan §3.H2 / spec §12.2 — craft list endpoint.
   // Mirrors the daemon's existing /api/skills + /api/design-systems
   // discovery surface so `od craft list` is a thin wrapper over a
@@ -8475,517 +6844,66 @@ export async function startServer({
     }
   });
 
-  app.get('/api/applied-plugins/:snapshotId', (req, res) => {
+  registerPluginRoutes(app, {
+    db,
+    paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    plugins: {
+      listInstalledPlugins,
+      getInstalledPlugin,
+      installPlugin,
+      uninstallPlugin,
+      installFromLocalFolder,
+      applyPlugin,
+      doctorPlugin,
+      getSnapshot,
+      pruneExpiredSnapshots,
+      readPluginLockfile,
+      resolvePluginSnapshot,
+      MissingInputError,
+      pluginPromptBlock,
+      listSkillPluginCandidates,
+      dismissSkillPluginCandidate,
+      generateSkillPluginDraft,
+      FIRST_PARTY_ATOMS,
+    },
+    helpers: pluginRouteHelpers,
+  });
+  app.get('/api/atoms', (_req, res) => {
+    res.json({ atoms: FIRST_PARTY_ATOMS.map((a) => ({ ...a, taskKinds: a.taskKinds.slice() })) });
+  });
+  app.get('/api/atoms/:id', async (req, res) => {
+    const id = req.params.id;
+    const atom = FIRST_PARTY_ATOMS.find((a) => a.id === id);
+    if (!atom) return res.status(404).json({ error: { code: 'atom-not-found', message: `Unknown atom "${id}"` } });
+    const body = { ...atom, taskKinds: atom.taskKinds.slice() };
     try {
-      const snap = getSnapshot(db, req.params.snapshotId);
-      if (!snap) return res.status(404).json({ error: 'snapshot not found' });
-      res.json(snap);
+      const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
+      const bodies = await loadAtomBodies(db, [id]);
+      if (bodies[0] && typeof bodies[0].body === 'string') body.skillBody = bodies[0].body;
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      console.warn(`[atoms] failed to load SKILL.md body for ${id}:`, err);
     }
+    res.json(body);
+  });
+  registerPluginMarketplaceRoutes(app, {
+    db,
+    bundledMarketplaceEntries,
+    createMarketplaceFetcher,
+    marketplaceRegistryIdFromUrl,
+  });
+  registerPluginAssetRoutes(app, {
+    db,
+    pluginAssetCache,
+    AssetCacheError,
+    assetCacheRewriteUrl,
+    isCacheableExternalUrl,
+    assembleExample,
   });
 
-  // Plan §3.DD1 — `od plugin stats`. Aggregates the installed-
-  // plugin roster + the applied_plugin_snapshots roster into one
-  // health/inventory report. Pure helpers in plugins/stats.ts;
-  // the route wires the SQLite reads + merges on the way out.
-  app.get('/api/plugins/stats', async (_req, res) => {
-    try {
-      const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js');
-      const installed = listInstalledPlugins(db);
-      const inventoryRows = db.prepare(
-        `SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`,
-      ).all() as Array<{ status: 'fresh' | 'stale'; project_id: string | null; run_id: string | null; applied_at: number }>;
-      res.json({
-        plugins:   pluginInventoryStats(installed),
-        snapshots: snapshotInventoryStats(inventoryRows),
-        generatedAt: Date.now(),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.CC1 — `od plugin canon <snapshotId>`. Returns the
-  // canonical `## Active plugin` block the agent will see when
-  // this snapshot is spliced into the system prompt. Powered by
-  // the same renderPluginBlock() composeSystemPrompt() uses, so
-  // the CLI output is byte-equal to what the agent reads.
-  //
-  // Two response modes:
-  //   - default            : { snapshotId, pluginId, block }
-  //   - Accept: text/plain : raw block body for shell pipes
-  app.get('/api/applied-plugins/:snapshotId/canon', (req, res) => {
-    try {
-      const snap = getSnapshot(db, req.params.snapshotId);
-      if (!snap) return res.status(404).json({ error: 'snapshot not found' });
-      const block = pluginPromptBlock(snap);
-      const accepts = String(req.headers['accept'] ?? '').toLowerCase();
-      if (accepts.includes('text/plain')) {
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.send(block);
-        return;
-      }
-      res.json({ snapshotId: snap.snapshotId, pluginId: snap.pluginId, block });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.B4 / spec §6: marketplace registry minimum verbs.
-  // Phase 3 layers in `od plugin install <name>` resolution + the trust
-  // UI on top; this route set is the storage half.
-  app.get('/api/marketplaces', async (_req, res) => {
-    try {
-      const { listMarketplaces } = await import('./plugins/marketplaces.js');
-      res.json({ marketplaces: listMarketplaces(db) });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/marketplaces', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const url = typeof body.url === 'string' ? body.url : '';
-      if (!url) return res.status(400).json({ error: 'url is required' });
-      const trust = body.trust === 'trusted' || body.trust === 'official' ? body.trust : 'restricted';
-      const { addMarketplace } = await import('./plugins/marketplaces.js');
-      const result = await addMarketplace(db, {
-        url,
-        trust,
-        fetcher: createMarketplaceFetcher(
-          marketplaceRegistryIdFromUrl(url),
-          bundledMarketplaceEntries,
-        ),
-      });
-      if (!result.ok) {
-        return res.status(result.status).json({
-          error: { code: 'marketplace-add-failed', message: result.message, data: { errors: result.errors ?? [] } },
-        });
-      }
-      res.status(201).json(result.row);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/marketplaces/:id', async (req, res) => {
-    try {
-      const { getMarketplace } = await import('./plugins/marketplaces.js');
-      const row = getMarketplace(db, req.params.id);
-      if (!row) return res.status(404).json({ error: 'marketplace not found' });
-      res.json(row);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.delete('/api/marketplaces/:id', async (req, res) => {
-    try {
-      const { removeMarketplace } = await import('./plugins/marketplaces.js');
-      const ok = removeMarketplace(db, req.params.id);
-      if (!ok) return res.status(404).json({ error: 'marketplace not found' });
-      res.json({ ok: true });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/marketplaces/:id/refresh', async (req, res) => {
-    try {
-      const { getMarketplace, refreshMarketplace } = await import('./plugins/marketplaces.js');
-      const row = getMarketplace(db, req.params.id);
-      const seedId = row ? marketplaceRegistryIdFromUrl(row.url) ?? req.params.id : req.params.id;
-      const result = await refreshMarketplace(
-        db,
-        req.params.id,
-        createMarketplaceFetcher(seedId, bundledMarketplaceEntries),
-      );
-      if (!result.ok) {
-        return res.status(result.status).json({
-          error: { code: 'marketplace-refresh-failed', message: result.message, data: { errors: result.errors ?? [] } },
-        });
-      }
-      // Plan §3.JJ1 — emit a 'plugin.marketplace-refreshed' event
-      // so ops can audit catalog refreshes via the live tail.
-      try {
-        const { recordPluginEvent } = await import('./plugins/events.js');
-        recordPluginEvent({
-          kind:     'plugin.marketplace-refreshed',
-          pluginId: '',
-          details:  {
-            marketplaceId: req.params.id,
-            marketplaceVersion: result.row.version,
-            specVersion: result.row.specVersion,
-          },
-        });
-      } catch { /* best-effort */ }
-      res.json(result.row);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/marketplaces/:id/trust', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const trust = body.trust === 'trusted' || body.trust === 'restricted' || body.trust === 'official'
-        ? body.trust
-        : null;
-      if (!trust) {
-        return res.status(400).json({ error: 'trust must be one of: trusted, restricted, official' });
-      }
-      const { setMarketplaceTrust } = await import('./plugins/marketplaces.js');
-      const row = setMarketplaceTrust(db, req.params.id, trust);
-      if (!row) return res.status(404).json({ error: 'marketplace not found' });
-      res.json(row);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/marketplaces/:id/plugins', async (req, res) => {
-    try {
-      const { getMarketplace } = await import('./plugins/marketplaces.js');
-      const row = getMarketplace(db, req.params.id);
-      if (!row) return res.status(404).json({ error: 'marketplace not found' });
-      res.json({ plugins: row.manifest.plugins ?? [] });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.A5: list all applied snapshots; useful for `od plugin
-  // snapshots list` and the audit dashboard.
-  app.get('/api/applied-plugins', (_req, res) => {
-    try {
-      const rows = db
-        .prepare(`SELECT id FROM applied_plugin_snapshots ORDER BY applied_at DESC LIMIT 500`)
-        .all();
-      res.json({
-        snapshots: rows.map((r) => getSnapshot(db, (r).id)).filter((x) => x !== null),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-  app.get('/api/projects/:projectId/applied-plugins', (req, res) => {
-    try {
-      const rows = db
-        .prepare(`SELECT id FROM applied_plugin_snapshots WHERE project_id = ? ORDER BY applied_at DESC`)
-        .all(req.params.projectId);
-      res.json({
-        snapshots: rows.map((r) => getSnapshot(db, (r).id)).filter((x) => x !== null),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Phase 4 / spec §14 — exporter route. Materialises a publish-ready
-  // folder from the snapshot behind a given project (or an explicit
-  // snapshot id). The daemon writes through `outDir` on the host
-  // filesystem, so the CLI is the canonical caller; the route stays
-  // local-loopback-only.
-  app.post('/api/applied-plugins/export', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const target = body.target === 'od' || body.target === 'claude-plugin' || body.target === 'agent-skill'
-        ? body.target
-        : null;
-      if (!target) {
-        return res.status(400).json({ error: 'target must be one of: od, claude-plugin, agent-skill' });
-      }
-      const outDir = typeof body.outDir === 'string' && body.outDir.length > 0
-        ? body.outDir
-        : null;
-      if (!outDir) {
-        return res.status(400).json({ error: 'outDir is required' });
-      }
-      const { exportPlugin, ExportError } = await import('./plugins/export.js');
-      try {
-        const result = await exportPlugin({
-          db,
-          target,
-          outDir,
-          ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}),
-          ...(typeof body.projectId  === 'string' ? { projectId:  body.projectId  } : {}),
-        });
-        res.json({ ok: true, ...result });
-      } catch (err) {
-        if (err instanceof ExportError) {
-          return res.status(404).json({ error: err.message });
-        }
-        throw err;
-      }
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Plan §3.A5 / spec §16 Phase 5: operator escape hatch for forced
-  // snapshot pruning. The periodic worker (`startSnapshotGc`) runs the
-  // unreferenced-TTL sweep automatically; this endpoint additionally
-  // accepts `{ before: <unix-ms> }` to force-delete unreferenced rows
-  // older than the cutoff. Referenced rows (run_id IS NOT NULL) stay
-  // pinned forever per PB2 reproducibility-first.
-  app.post('/api/applied-plugins/prune', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const before = typeof body.before === 'number' ? body.before : undefined;
-      const result = pruneExpiredSnapshots(db, before ? { before } : {});
-      // Plan §3.JJ1 — emit a 'plugin.snapshot-pruned' event when
-      // anything was actually removed, so ops can track GC churn
-      // via the live tail.
-      if (result.removed > 0) {
-        try {
-          const { recordPluginEvent } = await import('./plugins/events.js');
-          recordPluginEvent({
-            kind:     'plugin.snapshot-pruned',
-            pluginId: '',
-            details:  { removed: result.removed, ...(before ? { before } : {}) },
-          });
-        } catch { /* best-effort */ }
-      }
-      res.json({ ok: true, removed: result.removed, ids: result.ids });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Phase 2A: GenUI surface read/write + devloop iteration history + replay.
-  // Spec §10.3 for the surface lifecycle, §10.2 for devloop, §11.5 for the
-  // route shapes. The surface writers go through `apps/daemon/src/genui/store.ts`
-  // (sole writer of `genui_surfaces`) so the F8 cross-conversation cache stays
-  // intact.
-  app.get('/api/runs/:runId/genui', (req, res) => {
-    try {
-      const surfaces = listSurfacesForRun(db, req.params.runId);
-      res.json({ runId: req.params.runId, surfaces });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/projects/:projectId/genui', (req, res) => {
-    try {
-      const surfaces = listSurfacesForProject(db, req.params.projectId);
-      res.json({ projectId: req.params.projectId, surfaces });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/runs/:runId/genui/:surfaceId/respond', async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const value = 'value' in body ? body.value : null;
-      const respondedBy =
-        body.respondedBy === 'agent' || body.respondedBy === 'auto'
-          ? body.respondedBy
-          : 'user';
-      // The CLI / web pass `surfaceId` (the plugin-declared id) — look up
-      // the matching pending row scoped to the run, then write through.
-      const stmt = db.prepare(
-        `SELECT id FROM genui_surfaces
-          WHERE run_id = ? AND surface_id = ? AND status = 'pending'
-          ORDER BY requested_at DESC LIMIT 1`,
-      );
-      const row = stmt.get(req.params.runId, req.params.surfaceId) as { id?: string } | undefined;
-      if (!row?.id) {
-        return res.status(404).json({ error: 'no pending surface for runId/surfaceId' });
-      }
-      const updated = respondSurfaceRow(db, { rowId: row.id, value, respondedBy });
-
-      // Plan §3.R1 / spec §10.3 / §21.5 — auto-bridge for the
-      // diff-review choice surface. When the surface id matches the
-      // auto-derived prefix, we immediately persist the decision into
-      // the run's project cwd so the next pipeline stage (handoff,
-      // typically) sees `<cwd>/review/decision.json` without a second
-      // turn through the agent. Best-effort: failures don't block the
-      // 200 response — the agent or a follow-up call can retry.
-      let diffReviewBridge: { ok: boolean; error?: string } | undefined;
-      if (isDiffReviewSurfaceId(req.params.surfaceId)) {
-        try {
-          const run = design.runs.get(req.params.runId);
-          const projectId = (run as { projectId?: string | null } | undefined)?.projectId ?? null;
-          if (projectId) {
-            const project = getProject(db, projectId);
-            const metadata = project?.metadata && typeof project.metadata === 'string'
-              ? JSON.parse(project.metadata)
-              : project?.metadata ?? undefined;
-            const cwd = resolveProjectDir(PROJECTS_DIR, projectId, metadata);
-            const bridgeResult = await applyDiffReviewDecisionToCwd({
-              cwd,
-              value,
-              reviewer: respondedBy === 'agent' || respondedBy === 'auto' ? 'agent' : 'user',
-            });
-            diffReviewBridge = bridgeResult.ok ? { ok: true } : { ok: false, error: bridgeResult.error };
-          } else {
-            diffReviewBridge = { ok: false, error: 'run is not linked to a project' };
-          }
-        } catch (err) {
-          diffReviewBridge = { ok: false, error: (err as Error).message };
-          console.warn('[plugins] diff-review bridge failed:', err);
-        }
-      }
-
-      const responsePayload: Record<string, unknown> = { ok: true, surface: updated };
-      if (diffReviewBridge) responsePayload.diffReviewBridge = diffReviewBridge;
-      res.json(responsePayload);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/projects/:projectId/genui/:surfaceId/revoke', (req, res) => {
-    try {
-      const changed = revokeProjectSurface(db, {
-        projectId: req.params.projectId,
-        surfaceId: req.params.surfaceId,
-      });
-      res.json({ ok: true, invalidated: changed });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/projects/:projectId/genui/prefill', (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const snapshotId = typeof body.snapshotId === 'string' ? body.snapshotId : '';
-      const surfaceId  = typeof body.surfaceId  === 'string' ? body.surfaceId  : '';
-      const persist    = body.persist === 'run' || body.persist === 'conversation' || body.persist === 'project'
-        ? body.persist
-        : 'project';
-      const kind = body.kind === 'form' || body.kind === 'choice' || body.kind === 'oauth-prompt'
-        ? body.kind
-        : 'confirmation';
-      if (!snapshotId || !surfaceId) {
-        return res.status(400).json({ error: 'snapshotId and surfaceId are required' });
-      }
-      const row = prefillProjectSurface(db, {
-        projectId:        req.params.projectId,
-        pluginSnapshotId: snapshotId,
-        surfaceId,
-        kind,
-        persist,
-        value:            'value' in body ? body.value : null,
-        schema:           body.schema,
-        expiresAt:        typeof body.expiresAt === 'number' ? body.expiresAt : null,
-      });
-      res.json({ ok: true, surface: row });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/runs/:runId/genui/:surfaceId', (req, res) => {
-    try {
-      const row = db.prepare(
-        `SELECT id FROM genui_surfaces
-          WHERE run_id = ? AND surface_id = ?
-          ORDER BY requested_at DESC LIMIT 1`,
-      ).get(req.params.runId, req.params.surfaceId) as { id?: string } | undefined;
-      if (!row?.id) return res.status(404).json({ error: 'surface not found' });
-      const surface = getSurface(db, row.id);
-      if (!surface) return res.status(404).json({ error: 'surface not found' });
-      // Plan §6 Phase 2A.5 — enrich the response with the surface
-      // spec (incl. schema, prompt, persist tier) pulled out of the
-      // pinned AppliedPluginSnapshot. This is what `od ui show`
-      // returns to headless callers so a code agent can inspect the
-      // JSON Schema before responding via `od ui respond --value-json`.
-      // The store only persists `schemaDigest` (for the cross-conv
-      // cache); the canonical schema lives on the snapshot.
-      let spec = null;
-      if (surface.pluginSnapshotId) {
-        const snap = getSnapshot(db, surface.pluginSnapshotId);
-        if (snap && Array.isArray(snap.genuiSurfaces)) {
-          spec = snap.genuiSurfaces.find((s) => s?.id === surface.surfaceId) ?? null;
-        }
-      }
-      res.json({ ...surface, spec });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/runs/:runId/devloop-iterations', (req, res) => {
-    try {
-      const iterations = listIterationsForRun(db, req.params.runId);
-      res.json({ runId: req.params.runId, iterations });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Replay: rebuild a run by reading its `applied_plugin_snapshot_id`
-  // and returning the snapshot for the caller (CLI / agent driver) to
-  // re-launch with. Phase 2A keeps replay headless: the daemon does not
-  // auto-restart the agent — it returns the materialized inputs that
-  // would re-produce the run if re-applied. Spec §8.2.1 invariants
-  // guarantee byte-equality across replays.
-  app.post('/api/runs/:runId/replay', (req, res) => {
-    try {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const explicitSnapshotId = typeof body.snapshotId === 'string' ? body.snapshotId : '';
-      let snapshotId = explicitSnapshotId;
-      if (!snapshotId) {
-        // Phase 2A keeps `runs` in-memory; the caller must pass `snapshotId`
-        // (e.g. the value persisted on the client after the original apply).
-        // Once `runs.applied_plugin_snapshot_id` lands as a SQL column, the
-        // server resolves the link itself.
-        return res.status(400).json({
-          error: 'snapshotId is required (runs are in-memory; pass the snapshotId returned by /api/plugins/:id/apply)',
-        });
-      }
-      const snapshot = getSnapshot(db, snapshotId);
-      if (!snapshot) return res.status(404).json({ error: 'snapshot not found' });
-      res.json({
-        ok:        true,
-        runId:     req.params.runId,
-        snapshotId,
-        snapshot,
-        // The caller re-launches the agent by re-applying these inputs;
-        // the digest match guarantees byte-equality (§8.2.1).
-        rerun: {
-          pluginId:             snapshot.pluginId,
-          pluginSpecVersion:    snapshot.pluginSpecVersion,
-          pluginVersion:        snapshot.pluginVersion,
-          inputs:               snapshot.inputs,
-          manifestSourceDigest: snapshot.manifestSourceDigest,
-        },
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/prompt-templates', async (_req, res) => {
-    try {
-      const templates = await listPromptTemplates(PROMPT_TEMPLATES_DIR);
-      res.json({
-        promptTemplates: templates.map(({ prompt: _prompt, ...rest }) => rest),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/prompt-templates/:surface/:id', async (req, res) => {
-    try {
-      const tpl = await readPromptTemplate(
-        PROMPT_TEMPLATES_DIR,
-        req.params.surface,
-        req.params.id,
-      );
-      if (!tpl)
-        return res.status(404).json({ error: 'prompt template not found' });
-      res.json({ promptTemplate: tpl });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
+  registerGenuiRoutes(app, {
+    db,
+    design,
+    paths: { PROJECTS_DIR },
   });
 
   // Showcase HTML for a design system — palette swatches, typography
@@ -9253,494 +7171,6 @@ export async function startServer({
     }
   });
 
-  app.get('/api/live-artifacts', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-      });
-      res.json({ artifacts });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.options('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, (_req, res) => {
-    res.status(204).end();
-  });
-
-  app.get('/api/live-artifacts/:artifactId/preview', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
-      if (variant === 'template' || variant === 'rendered-source') {
-        const html = await readLiveArtifactCode({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
-          artifactId: req.params.artifactId,
-          variant: variant === 'template' ? 'template' : 'rendered',
-        });
-        setLiveArtifactCodeHeaders(res);
-        return res.status(200).send(html);
-      }
-      if (variant !== 'rendered') {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'variant must be rendered, template, or rendered-source');
-      }
-
-      const record = await ensureLiveArtifactPreview({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      setLiveArtifactPreviewHeaders(res);
-      res.status(200).send(record.html);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const record = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/live-artifacts/:artifactId/refreshes', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const refreshes = await listLiveArtifactRefreshLogEntries({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      res.json({ refreshes });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/create', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:create');
-      if (!toolGrant) return;
-      const { projectId, input, templateHtml, provenanceJson, createdByRunId } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (requestRunOverride(createdByRunId, toolGrant.runId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'createdByRunId is derived from the tool token', {
-          details: { suppliedRunId: createdByRunId },
-        });
-      }
-
-      const record = await createLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-        input: input ?? {},
-        templateHtml,
-        provenanceJson,
-        createdByRunId: toolGrant.runId,
-      });
-      emitLiveArtifactEvent(toolGrant, 'created', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.get('/api/tools/live-artifacts/list', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:list');
-      if (!toolGrant) return;
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-      });
-      res.json({ artifacts });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/update', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:update');
-      if (!toolGrant) return;
-      const { projectId, artifactId, input, templateHtml, provenanceJson } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (typeof artifactId !== 'string' || artifactId.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
-      }
-
-      const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-        artifactId,
-        input: input ?? {},
-        templateHtml,
-        provenanceJson,
-      });
-      emitLiveArtifactEvent(toolGrant, 'updated', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.post('/api/tools/live-artifacts/refresh', async (req, res) => {
-    try {
-      const toolGrant = authorizeToolRequest(req, res, 'live-artifacts:refresh');
-      if (!toolGrant) return;
-      const { projectId, artifactId } = req.body || {};
-      if (requestProjectOverride(projectId, toolGrant.projectId)) {
-        return sendApiError(res, 403, 'FORBIDDEN', 'projectId is derived from the tool token', {
-          details: { suppliedProjectId: projectId },
-        });
-      }
-      if (typeof artifactId !== 'string' || artifactId.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'artifactId is required');
-      }
-
-      let result;
-      try {
-        result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId: toolGrant.projectId,
-          artifactId,
-          onStarted: ({ refreshId }) => {
-            emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
-          },
-        });
-      } catch (refreshErr) {
-        emitLiveArtifactRefreshEvent(toolGrant, {
-          phase: 'failed',
-          artifactId,
-          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
-        });
-        throw refreshErr;
-      }
-      emitLiveArtifactRefreshEvent(toolGrant, {
-        phase: 'succeeded',
-        artifactId,
-        refreshId: result.refresh.id,
-        title: result.artifact.title,
-        refreshedSourceCount: result.refresh.refreshedSourceCount,
-      });
-      res.json(result);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.patch('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-        input: req.body ?? {},
-      });
-      emitLiveArtifactEvent({ projectId }, 'updated', record.artifact);
-      res.json({ artifact: record.artifact });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.delete('/api/live-artifacts/:artifactId', async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      const existing = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      await deleteLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-        artifactId: req.params.artifactId,
-      });
-      updateProject(db, projectId, {});
-      emitLiveArtifactEvent({ projectId }, 'deleted', existing.artifact);
-      res.json({ ok: true });
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.options('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, (_req, res) => {
-    res.status(204).end();
-  });
-
-  app.post('/api/live-artifacts/:artifactId/refresh', requireLocalDaemonRequest, async (req, res) => {
-    try {
-      const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
-      if (!projectId) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
-      }
-
-      let result;
-      try {
-        result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
-          artifactId: req.params.artifactId,
-          onStarted: ({ refreshId }) => {
-            emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });
-          },
-        });
-      } catch (refreshErr) {
-        emitLiveArtifactRefreshEvent({ projectId }, {
-          phase: 'failed',
-          artifactId: req.params.artifactId,
-          error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
-        });
-        throw refreshErr;
-      }
-      emitLiveArtifactRefreshEvent({ projectId }, {
-        phase: 'succeeded',
-        artifactId: req.params.artifactId,
-        refreshId: result.refresh.id,
-        title: result.artifact.title,
-        refreshedSourceCount: result.refresh.refreshedSourceCount,
-      });
-      res.json(result);
-    } catch (err) {
-      sendLiveArtifactRouteError(res, err);
-    }
-  });
-
-  app.use('/artifacts', express.static(ARTIFACTS_DIR));
-
-  // ---- Deploy --------------------------------------------------------------
-
-  app.get('/api/deploy/config', async (req, res) => {
-    try {
-      const providerId =
-        typeof req.query.providerId === 'string' ? req.query.providerId : VERCEL_PROVIDER_ID;
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
-      }
-      /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = publicDeployConfigForProvider(providerId, await readDeployConfig(providerId));
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
-    }
-  });
-
-  app.put('/api/deploy/config', async (req, res) => {
-    try {
-      const input = req.body || {};
-      const providerId =
-        typeof input.providerId === 'string' ? input.providerId : VERCEL_PROVIDER_ID;
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'unsupported deploy provider');
-      }
-      /** @type {import('@open-design/contracts').DeployConfigResponse} */
-      const body = await writeDeployConfig(providerId, input);
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-    }
-  });
-
-  app.get('/api/deploy/cloudflare-pages/zones', async (_req, res) => {
-    try {
-      /** @type {import('@open-design/contracts').CloudflarePagesZonesResponse} */
-      const body = await listCloudflarePagesZones(await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID));
-      res.json(body);
-    } catch (err) {
-      const status = err instanceof DeployError ? err.status : 400;
-      const init =
-        err instanceof DeployError && err.details
-          ? { details: err.details }
-          : {};
-      sendApiError(res, status, 'BAD_REQUEST', String(err?.message || err), init);
-    }
-  });
-
-  app.get('/api/projects/:id/deployments', (req, res) => {
-    try {
-      /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
-      const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-    }
-  });
-
-  app.post('/api/projects/:id/deploy', async (req, res) => {
-    try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'unsupported deploy provider',
-        );
-      }
-      if (typeof fileName !== 'string' || !fileName.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-      }
-
-      const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const deployProject = getProject(db, req.params.id);
-      const files = await buildDeployFileSet(
-        PROJECTS_DIR,
-        req.params.id,
-        fileName,
-        { metadata: deployProject?.metadata },
-      );
-      const project = getProject(db, req.params.id);
-      const cloudflarePagesProjectName =
-        providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-          ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
-          : '';
-      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-        ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-            cloudflarePages,
-            priorMetadata: prior?.providerMetadata,
-          })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
-      const now = Date.now();
-      /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
-      const body = upsertDeployment(db, {
-        id: prior?.id ?? randomUUID(),
-        projectId: req.params.id,
-        fileName,
-        providerId,
-        url: result.url,
-        deploymentId: result.deploymentId,
-        deploymentCount: (prior?.deploymentCount ?? 0) + 1,
-        target: 'preview',
-        status: result.status,
-        statusMessage: result.statusMessage,
-        reachableAt: result.reachableAt,
-        cloudflarePages: result.cloudflarePages,
-        providerMetadata:
-          providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? (result.providerMetadata ?? cloudflarePagesDeploymentMetadata(cloudflarePagesProjectName))
-            : prior?.providerMetadata,
-        createdAt: prior?.createdAt ?? now,
-        updatedAt: now,
-      });
-      res.json(publicDeployment(body));
-    } catch (err) {
-      const status = err instanceof DeployError ? err.status : 400;
-      const init =
-        err instanceof DeployError && err.details
-          ? { details: err.details }
-          : {};
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-        init,
-      );
-    }
-  });
-
-  app.post('/api/projects/:id/deploy/preflight', async (req, res) => {
-    try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID } = req.body || {};
-      if (!isDeployProviderId(providerId)) {
-        return sendApiError(
-          res,
-          400,
-          'BAD_REQUEST',
-          'unsupported deploy provider',
-        );
-      }
-      if (typeof fileName !== 'string' || !fileName.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
-      }
-      const preflightProject = getProject(db, req.params.id);
-      /** @type {import('@open-design/contracts').DeployPreflightResponse} */
-      const body = await prepareDeployPreflight(
-        PROJECTS_DIR,
-        req.params.id,
-        fileName,
-        { metadata: preflightProject?.metadata, providerId },
-      );
-      res.json(body);
-    } catch (err) {
-      // DeployError is a known/expected outcome (validation, missing file).
-      // Anything else points at a bug or an unexpected runtime state, so
-      // surface it in the daemon log without leaking internals to the
-      // client which still gets a generic 400.
-      if (!(err instanceof DeployError)) {
-        console.error('[deploy/preflight]', err);
-      }
-      const status = err instanceof DeployError ? err.status : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
   app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
     const { apiKey, baseUrl, model, maxTokens } = req.body || {};
     try {
@@ -9836,719 +7266,29 @@ export async function startServer({
     }
   });
 
-  app.post(
-    '/api/projects/:id/deployments/:deploymentId/check-link',
-    async (req, res) => {
-      try {
-        const existing = getDeploymentById(
-          db,
-          req.params.id,
-          req.params.deploymentId,
-        );
-        if (!existing) {
-          return sendApiError(
-            res,
-            404,
-            'FILE_NOT_FOUND',
-            'deployment not found',
-          );
-        }
-        const stableCloudflareProjectName =
-          existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-            ? cloudflarePagesProjectNameFromDeployment(existing)
-            : '';
-        if (existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID && existing.cloudflarePages?.pagesDev?.url) {
-          const checked = await checkCloudflarePagesDeploymentLinks(existing);
-          const now = Date.now();
-          /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
-          const body = upsertDeployment(db, {
-            ...existing,
-            ...checked,
-            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
-            updatedAt: now,
-          });
-          return res.json(publicDeployment(body));
-        }
-        const checkUrl = stableCloudflareProjectName
-          ? `https://${stableCloudflareProjectName}.pages.dev`
-          : existing.url;
-        const result = await checkDeploymentUrl(checkUrl);
-        const now = Date.now();
-        /** @type {import('@open-design/contracts').CheckDeploymentLinkResponse} */
-        const body = upsertDeployment(db, {
-          ...existing,
-          url: checkUrl || existing.url,
-          status: result.reachable ? 'ready' : result.status || 'link-delayed',
-          statusMessage: result.reachable
-            ? 'Public link is ready.'
-            : result.statusMessage ||
-              'Vercel is still preparing the public link.',
-          reachableAt: result.reachable ? now : existing.reachableAt,
-          updatedAt: now,
-        });
-        res.json(publicDeployment(body));
-      } catch (err) {
-        sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
-      }
+  registerProjectPluginRoutes(app, {
+    db,
+    paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    plugins: {
+      listInstalledPlugins,
+      getInstalledPlugin,
+      installPlugin,
+      uninstallPlugin,
+      installFromLocalFolder,
+      applyPlugin,
+      doctorPlugin,
+      getSnapshot,
+      pruneExpiredSnapshots,
+      readPluginLockfile,
+      resolvePluginSnapshot,
+      MissingInputError,
+      pluginPromptBlock,
+      listSkillPluginCandidates,
+      dismissSkillPluginCandidate,
+      generateSkillPluginDraft,
+      FIRST_PARTY_ATOMS,
     },
-  );
-
-  // Shared device frames (iPhone, Android, iPad, MacBook, browser chrome).
-  // Skills can compose multi-screen / multi-device layouts by pointing at
-  // these files via `<iframe src="/frames/iphone-15-pro.html?screen=...">`.
-  // No mtime-based caching — frames are static and small.
-  app.use('/frames', express.static(FRAMES_DIR));
-
-  // Project files. Each project owns a flat folder under .od/projects/<id>/
-  // containing every file the user has uploaded, pasted, sketched, or that
-  // the agent has generated. Names are sanitized; paths are confined to the
-  // project's own folder (see apps/daemon/src/projects.ts).
-  app.get('/api/projects/:id/files', async (req, res) => {
-    try {
-      const since = Number(req.query?.since);
-      const project = getProject(db, req.params.id);
-      const files = await listFiles(PROJECTS_DIR, req.params.id, {
-        since: Number.isFinite(since) ? since : undefined,
-        metadata: project?.metadata,
-      });
-      /** @type {import('@open-design/contracts').ProjectFilesResponse} */
-      const body = { files };
-      res.json(body);
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  app.post('/api/projects/:id/plugins/install-folder', async (req, res) => {
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const warnings = [];
-      const log = [];
-      let plugin = null;
-      let message = 'Install finished.';
-      for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) {
-        if (ev.message) log.push(ev.message);
-        if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings);
-        if (ev.kind === 'success') {
-          plugin = ev.plugin;
-          message = `Installed ${ev.plugin.title}.`;
-          break;
-        }
-        if (ev.kind === 'error') {
-          message = ev.message;
-          break;
-        }
-      }
-      res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log });
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  app.post('/api/projects/:id/plugins/publish-github', async (req, res) => {
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
-        OD_BIN,
-        'plugin',
-        'publish-repo',
-        folder,
-        '--json',
-      ], { timeout: 240_000 });
-      const payload = result.stdout ? JSON.parse(result.stdout) : null;
-      if (!result.ok || !payload?.ok) {
-        res.status(500).json({
-          ok: false,
-          code: payload?.error?.label || 'publish-repo-failed',
-          message: payload?.error?.stderr || payload?.error?.stdout || 'GitHub repo publish failed.',
-          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'publish-repo failed'],
-        });
-        return;
-      }
-      res.json({
-        ok: true,
-        message: payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.',
-        ...(payload.repoUrl ? { url: payload.repoUrl } : {}),
-        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
-      });
-    } catch (err) {
-      res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
-    }
-  });
-
-  app.get('/api/projects/:id/plugin-candidates', (req, res) => {
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const includeDismissed = req.query.includeDismissed === 'true';
-      res.json({ candidates: listSkillPluginCandidates(db, req.params.id, includeDismissed) });
-    } catch (err) {
-      res.status(400).json({ error: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/dismiss', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const candidate = dismissSkillPluginCandidate(db, req.params.id, req.params.candidateId);
-    if (!candidate) {
-      sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
-      return;
-    }
-    if (candidate.assistantMessageId) {
-      db.prepare(`DELETE FROM messages WHERE id = ?`).run(candidate.assistantMessageId);
-    }
-    res.json({ ok: true, candidate });
-  });
-
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/draft', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId);
-      if (!result) {
-        sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
-        return;
-      }
-      res.status(result.ok ? 200 : 422).json(result);
-    } catch (err) {
-      res.status(400).json({ ok: false, message: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/projects/:id/plugin-candidates/:candidateId/share-tasks', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const action = body.action === 'publish-github' || body.action === 'contribute-open-design'
-        ? body.action
-        : null;
-      if (!action) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required');
-        return;
-      }
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId);
-      if (!draft) {
-        sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found');
-        return;
-      }
-      if (!draft.validation.ok) {
-        res.status(422).json({
-          ok: false,
-          code: 'plugin-draft-invalid',
-          message: 'Generated plugin draft is invalid.',
-          draft,
-        });
-        return;
-      }
-      const taskId = randomUUID();
-      const task = createPluginShareTask(taskId, req.params.id, {
-        action,
-        path: draft.draftPath,
-      });
-      task.status = 'running';
-      notifyPluginShareTaskWaiters(task);
-      void runPluginShareTask(task, draft.folder).catch((err) => {
-        task.status = 'failed';
-        task.error = {
-          code: 'plugin-share-task-failed',
-          message: String(err?.message || err),
-          log: [String(err?.stack || err?.message || err)],
-        };
-        task.endedAt = Date.now();
-        notifyPluginShareTaskWaiters(task);
-      });
-      res.status(202).json({
-        taskId,
-        action,
-        path: draft.draftPath,
-        status: task.status,
-        startedAt: task.startedAt,
-        draft,
-      });
-    } catch (err) {
-      res.status(400).json({ ok: false, message: String(err?.message || err) });
-    }
-  });
-
-  app.post('/api/projects/:id/plugins/contribute-open-design', async (req, res) => {
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
-        OD_BIN,
-        'plugin',
-        'open-design-pr',
-        folder,
-        '--json',
-      ], { timeout: 300_000 });
-      const payload = result.stdout ? JSON.parse(result.stdout) : null;
-      if (!result.ok || !payload?.ok) {
-        res.status(500).json({
-          ok: false,
-          code: payload?.error?.label || 'open-design-pr-failed',
-          message: payload?.error?.stderr || payload?.error?.stdout || 'Open Design PR creation failed.',
-          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'open-design-pr failed'],
-        });
-        return;
-      }
-      res.json({
-        ok: true,
-        message: payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.',
-        ...(payload.prUrl ? { url: payload.prUrl } : {}),
-        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
-      });
-    } catch (err) {
-      res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
-    }
-  });
-
-  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-        return;
-      }
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const action = body.action === 'publish-github' || body.action === 'contribute-open-design'
-        ? body.action
-        : null;
-      if (!action) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required');
-        return;
-      }
-      const relativePath = normalizeProjectPluginFolderPath(body.path);
-      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
-      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const taskId = randomUUID();
-      const task = createPluginShareTask(taskId, req.params.id, {
-        action,
-        path: relativePath,
-      });
-      task.status = 'running';
-      notifyPluginShareTaskWaiters(task);
-      void runPluginShareTask(task, folder).catch((err) => {
-        task.status = 'failed';
-        task.error = {
-          code: 'plugin-share-task-failed',
-          message: String(err?.message || err),
-          log: [String(err?.stack || err?.message || err)],
-        };
-        task.endedAt = Date.now();
-        notifyPluginShareTaskWaiters(task);
-      });
-      res.status(202).json({
-        taskId,
-        action,
-        path: relativePath,
-        status: task.status,
-        startedAt: task.startedAt,
-      });
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const task = getLivePluginShareTask(req.params.id);
-    if (!task) return res.status(404).json({ error: 'task not found' });
-
-    const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
-    const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
-      ? Number(req.body.timeoutMs)
-      : 25_000;
-    const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
-
-    const respond = () => {
-      if (res.writableEnded) return;
-      res.json(pluginShareTaskSnapshot(task, since));
-    };
-
-    if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) || task.progress.length > since) {
-      return respond();
-    }
-
-    let resolved = false;
-    const wake = () => {
-      if (resolved) return;
-      resolved = true;
-      task.waiters.delete(wake);
-      clearTimeout(timer);
-      respond();
-    };
-    task.waiters.add(wake);
-    const timer = setTimeout(wake, timeoutMs);
-    res.on('close', wake);
-  });
-
-  app.get('/api/projects/:id/search', async (req, res) => {
-    try {
-      const query = String(req.query.q ?? '');
-      if (!query) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'q query parameter is required');
-        return;
-      }
-      const pattern = req.query.pattern ? String(req.query.pattern) : null;
-      const max = Math.min(Number(req.query.max) || 200, 1000);
-      const searchProject = getProject(db, req.params.id);
-      const matches = await searchProjectFiles(PROJECTS_DIR, req.params.id, query, {
-        pattern,
-        max,
-        metadata: searchProject?.metadata,
-      });
-      res.json({ query, matches });
-    } catch (err) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
-    }
-  });
-
-  // Streams a ZIP of the project's on-disk tree so the "Download as .zip"
-  // share menu can hand the user the actual files they uploaded — e.g. the
-  // imported `ui-design/` folder — instead of a one-file snapshot of the
-  // rendered HTML. `root` scopes the archive to a subdirectory; without
-  // it, the whole project is packed.
-  app.get('/api/projects/:id/archive', async (req, res) => {
-    try {
-      const root = typeof req.query?.root === 'string' ? req.query.root : '';
-      const project = getProject(db, req.params.id);
-      const { buffer, baseName } = await buildProjectArchive(
-        PROJECTS_DIR,
-        req.params.id,
-        root,
-        project?.metadata,
-      );
-      const fallbackName = project?.name || req.params.id;
-      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
-      const filename = `${fileSlug}.zip`;
-      // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
-      // `filename*=UTF-8''…` lets modern browsers pick up project names
-      // with non-ASCII characters (accents, CJK, etc.) without mojibake.
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  // Batch archive: accepts a list of file names and returns a ZIP of just
-  // those files. Used by the Design Files panel multi-select download.
-  app.post('/api/projects/:id/archive/batch', async (req, res) => {
-    try {
-      const { files } = req.body || {};
-      if (!Array.isArray(files) || files.length === 0) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
-        return;
-      }
-      const project = getProject(db, req.params.id);
-      const { buffer } = await buildBatchArchive(
-        PROJECTS_DIR,
-        req.params.id,
-        files,
-        project?.metadata,
-      );
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
-      const filename = `${fileSlug}.zip`;
-      const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      );
-      res.send(buffer);
-    } catch (err) {
-      const code = err && err.code;
-      const status = code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err?.message || err),
-      );
-    }
-  });
-
-  // Preflight for the raw file route. Current artifact fetches are simple GETs
-  // (no preflight needed), but an explicit handler future-proofs the route if
-  // artifacts ever add custom request headers.
-  app.options(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, (req, res) => {
-    if (req.headers.origin === 'null') {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET');
-      res.header('Access-Control-Allow-Headers', 'Content-Type');
-    }
-    res.sendStatus(204);
-  });
-
-  app.get(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
-    try {
-      const projectId = String(req.params[0] ?? '');
-      const relPath = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
-      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
-      // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
-      // data: URIs, file://, and some sandboxed iframes also send null — all are
-      // local-only callers, so this is safe. Real cross-origin sites send a real
-      // origin and remain blocked by the browser's same-origin policy.
-      if (req.headers.origin === 'null') {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-      res.type(file.mime).send(file.buffer);
-    } catch (err) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
-    }
-  });
-
-  app.delete(/^\/api\/projects\/([^/]+)\/raw\/(.+)$/u, async (req, res) => {
-    try {
-      const projectId = String(req.params[0] ?? '');
-      const rawSplat = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
-      await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
-      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
-      const body = { ok: true };
-      res.json(body);
-    } catch (err) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
-    }
-  });
-
-  app.get('/api/projects/:id/files/:name/preview', async (req, res) => {
-    try {
-      const project = getProject(db, req.params.id);
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        req.params.id,
-        req.params.name,
-        project?.metadata,
-      );
-      const preview = await buildDocumentPreview(file);
-      res.json(preview);
-    } catch (err) {
-      const status =
-        err && err.statusCode
-          ? err.statusCode
-          : err && err.code === 'ENOENT'
-            ? 404
-            : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        err?.message || 'preview unavailable',
-      );
-    }
-  });
-
-  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)$/u, async (req, res) => {
-    try {
-      const projectId = String(req.params[0] ?? '');
-      const fileSplat = String(req.params[1] ?? '');
-      const project = getProject(db, projectId);
-      const file = await readProjectFile(
-        PROJECTS_DIR,
-        projectId,
-        fileSplat,
-        project?.metadata,
-      );
-      res.type(file.mime).send(file.buffer);
-    } catch (err) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
-    }
-  });
-
-  // Two ways to upload: multipart for binary files (images), and JSON
-  // {name, content, encoding} for sketches and pasted text. The frontend
-  // uses both depending on the file source.
-  app.post(
-    '/api/projects/:id/files',
-    (req, res, next) => {
-      upload.single('file')(req, res, (err) => {
-        if (err) return sendMulterError(res, err);
-        next();
-      });
-    },
-    async (req, res) => {
-      try {
-        const uploadProject = getProject(db, req.params.id);
-        await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
-        if (req.file) {
-          const buf = await fs.promises.readFile(req.file.path);
-          const desiredName = sanitizeName(
-            req.body?.name || req.file.originalname,
-          );
-          const meta = await writeProjectFile(
-            PROJECTS_DIR,
-            req.params.id,
-            desiredName,
-            buf,
-            {},
-            uploadProject?.metadata,
-          );
-          fs.promises.unlink(req.file.path).catch(() => {});
-          /** @type {import('@open-design/contracts').ProjectFileResponse} */
-          const body = { file: meta };
-          return res.json(body);
-        }
-        const { name, content, encoding, artifactManifest } = req.body || {};
-        if (typeof name !== 'string' || typeof content !== 'string') {
-          return sendApiError(
-            res,
-            400,
-            'BAD_REQUEST',
-            'name and content required',
-          );
-        }
-        if (artifactManifest !== undefined && artifactManifest !== null) {
-          const validated = validateArtifactManifestInput(
-            artifactManifest,
-            name,
-          );
-          if (!validated.ok) {
-            return sendApiError(
-              res,
-              400,
-              'BAD_REQUEST',
-              `invalid artifactManifest: ${validated.error}`,
-            );
-          }
-        }
-        const buf =
-          encoding === 'base64'
-            ? Buffer.from(content, 'base64')
-            : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(
-          PROJECTS_DIR,
-          req.params.id,
-          name,
-          buf,
-          { artifactManifest },
-          uploadProject?.metadata,
-        );
-        /** @type {import('@open-design/contracts').ProjectFileResponse} */
-        const body = { file: meta };
-        res.json(body);
-      } catch (err) {
-        if (err instanceof ArtifactPublicationBlockedError) {
-          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
-            details: { placeholders: err.placeholders },
-          });
-        }
-        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
-      }
-    },
-  );
-
-  app.delete('/api/projects/:id/files/:name', async (req, res) => {
-    try {
-      const delProject = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
-      /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
-      const body = { ok: true };
-      res.json(body);
-    } catch (err) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
-      sendApiError(
-        res,
-        status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
-        String(err),
-      );
-    }
+    helpers: pluginRouteHelpers,
   });
 
   app.get('/api/media/models', (_req, res) => {
@@ -11424,6 +8164,7 @@ export async function startServer({
       locale,
       research,
       context,
+      titleGeneration,
     } = chatBody;
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
@@ -11879,9 +8620,23 @@ export async function startServer({
       currentStableHash,
     );
     const browserUsePromptGuard = renderBrowserUseUnavailablePrompt(run.browserUse ?? null);
+    const titleGenerationRequested =
+      titleGeneration &&
+      typeof titleGeneration === 'object' &&
+      titleGeneration.enabled === true &&
+      !agentResumeCtx.isResuming;
+    const titleGenerationPrompt = titleGenerationRequested
+      ? [
+          'Internal title task:',
+          'Before answering the user request, emit exactly one short title marker:',
+          '<od-title>Title Here</od-title>',
+          'Rules: 2-6 words, preserve the user request language, no quotes, no markdown, no punctuation unless necessary.',
+          'Do not mention this title task to the user. Continue with the normal answer after the title marker.',
+        ].join('\n')
+      : '';
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, systemPrompt]
-      : [researchCommandContract, runContextPrompt, browserUsePromptGuard];
+      ? [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
+      : [researchCommandContract, runContextPrompt, browserUsePromptGuard, titleGenerationPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -13412,7 +10167,7 @@ export async function startServer({
     // time before deciding whether to forward it. The auth-prompt guard
     // in the close handler suppresses the buffer when the output is an
     // OAuth prompt; otherwise the flush below sends the chunks in order.
-    const plaintextStdoutBuffer: string[] = [];
+    const plaintextStdoutBuffer: BufferedStdoutChunk[] = [];
     // Arrival time of the first buffered plain-text stdout chunk
     // (antigravity). First-token timing is stamped from this value only
     // when the buffer is actually flushed to the client at close time. If
@@ -13427,6 +10182,9 @@ export async function startServer({
     // guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
+    const looksLikeGeminiJsonEventStream = (text: string) => (
+      isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text))
+    );
     // Event types that count as "the agent actually produced something the
     // user can see." Lifecycle markers (`status`) and meter readings
     // (`usage`) deliberately do NOT count — a model can emit token-usage
@@ -13468,6 +10226,15 @@ export async function startServer({
     // Claude has its own per-message guards in claude-stream.ts.
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
+    const titleMarkerStripper = createAgentTitleMarkerStripper({
+      enabled: Boolean(titleGenerationRequested),
+      emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
+    });
+
+    function flushAgentTitleMarkerBuffer() {
+      const visible = titleMarkerStripper.flush();
+      if (visible) emitGuardedTextDelta(visible);
+    }
 
     function guardTextDelta(delta) {
       return runGuard.feedText(delta);
@@ -13488,6 +10255,13 @@ export async function startServer({
           abortForRoleMarker(warn.marker);
         }
       }
+    }
+
+    function emitTitleFilteredGuardedTextDelta(delta: string) {
+      const visibleDelta = titleMarkerStripper.strip(delta);
+      if (!visibleDelta) return false;
+      emitGuardedTextDelta(visibleDelta);
+      return true;
     }
 
     // Detection-only is necessary but not sufficient: by the time we see
@@ -13654,6 +10428,14 @@ export async function startServer({
       }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
+      // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
+      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
+          noteFirstTokenAt();
+          agentProducedOutput = true;
+        }
+        return;
+      }
       noteFirstTokenFromAgentEvent(ev);
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
@@ -13664,6 +10446,24 @@ export async function startServer({
         return;
       }
       emitAgentEvent(ev);
+    };
+    const parseBufferedAntigravityGeminiJsonEventStream = () => {
+      if (
+        def.id !== 'antigravity' ||
+        plaintextStdoutBuffer.length === 0
+      ) {
+        return false;
+      }
+      const bufferedStdout = plaintextStdoutBuffer.map((chunk) => chunk.text).join('');
+      if (!looksLikeGeminiJsonEventStream(bufferedStdout)) return false;
+      trackingSubstantiveOutput = true;
+      const firstTokenAt = bufferedAntigravityGeminiFirstTokenAt(plaintextStdoutBuffer);
+      if (firstTokenAt !== null) noteFirstTokenAt(firstTokenAt);
+      const handler = createJsonEventStreamHandler('gemini', sendAgentEvent);
+      handler.feed(bufferedStdout);
+      handler.flush();
+      plaintextStdoutBuffer.length = 0;
+      return true;
     };
 
     if (def.streamFormat === 'claude-stream-json') {
@@ -13710,6 +10510,14 @@ export async function startServer({
         }
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
+        if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+          const visibleDelta = titleMarkerStripper.strip(ev.delta);
+          if (visibleDelta) {
+            noteFirstTokenAt();
+            send('agent', { ...ev, delta: visibleDelta });
+          }
+          return;
+        }
         noteFirstTokenFromAgentEvent(ev);
         emitAgentEvent(ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
@@ -13732,7 +10540,7 @@ export async function startServer({
         try {
           applyClaudeStreamJsonRunBookkeeping(run, ev);
         } catch {}
-      });
+      }, { suppressHtmlArtifactsAfterFileWrite: def.id === 'claude' });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
@@ -13744,11 +10552,13 @@ export async function startServer({
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
         noteAgentActivity();
-        noteFirstTokenFromAgentEvent(ev);
         if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
-          emitGuardedTextDelta(ev.delta);
+          if (emitTitleFilteredGuardedTextDelta(ev.delta)) {
+            noteFirstTokenAt();
+          }
           return;
         }
+        noteFirstTokenFromAgentEvent(ev);
         emitAgentEvent(ev);
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
@@ -13822,7 +10632,6 @@ export async function startServer({
             lastAgentEventPhase = summarizeAgentEventForInactivity(data);
           }
           noteAgentActivity();
-          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
             const failure = classifyAmrAccountFailure(
@@ -13840,10 +10649,13 @@ export async function startServer({
             }
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
-            emitGuardedTextDelta(data.delta);
+            if (emitTitleFilteredGuardedTextDelta(data.delta)) {
+              noteFirstTokenAt();
+            }
             return;
           }
           if (event === 'agent') {
+            noteFirstTokenFromAgentEvent(data);
             emitAgentEvent(data);
           } else {
             send(event, data);
@@ -13875,15 +10687,17 @@ export async function startServer({
       // suppressed OAuth-prompt path never reports a TTFT (PR #3412).
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
-        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = Date.now();
-        plaintextStdoutBuffer.push(String(chunk));
+        const receivedAt = Date.now();
+        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = receivedAt;
+        plaintextStdoutBuffer.push({ text: String(chunk), receivedAt });
       });
     } else {
       // Plain / BYOK mode: guard raw stdout chunks (#3247).
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
         const text = typeof chunk === 'string' ? chunk : String(chunk);
-        const safe = guardTextDelta(text);
+        const visibleText = titleMarkerStripper.strip(text);
+        const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
           noteFirstTokenAt();
           send('stdout', { chunk: safe });
@@ -13937,6 +10751,8 @@ export async function startServer({
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
       }
+      parseBufferedAntigravityGeminiJsonEventStream();
+      flushAgentTitleMarkerBuffer();
       if (agentStreamError) {
         markRpcCloseReason('stream_error');
         return finishWithRetryDecision('failed', code === 0 ? 1 : (code ?? 1), signal ?? null);
@@ -14254,8 +11070,11 @@ export async function startServer({
         noteFirstTokenAt(firstBufferedStdoutAt);
       }
       for (const chunk of plaintextStdoutBuffer) {
-        send('stdout', { chunk });
+        const visibleText = titleMarkerStripper.strip(chunk.text);
+        if (visibleText) send('stdout', { chunk: visibleText });
       }
+      const flushedTitleMarkerText = titleMarkerStripper.flush();
+      if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so
@@ -14863,6 +11682,26 @@ export async function startServer({
       const hintProjectKind = typeof analyticsHints.projectKind === 'string'
         ? analyticsHints.projectKind
         : null;
+      // Session-dimension hints (client-computed, behavior-irrelevant): the
+      // 0-based run turn index within the browser analytics session, whether
+      // it's the session's first run, and whether the project already had a
+      // generated artifact (run is an edit, not a first creation).
+      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
+        ? analyticsHints.turnIndex
+        : undefined;
+      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
+        ? analyticsHints.isFirstRun
+        : undefined;
+      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
+        ? analyticsHints.hasExistingArtifact
+        : undefined;
+      const sessionDimensionProps = {
+        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
+        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
+        ...(hintHasExistingArtifact !== undefined
+          ? { has_existing_artifact: hintHasExistingArtifact }
+          : {}),
+      };
       const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
       const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -14930,6 +11769,7 @@ export async function startServer({
         run_id: run.id,
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
+        ...sessionDimensionProps,
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -15074,9 +11914,25 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewHtmlArtifacts(run.events);
+        const artifactCount = countNewArtifacts(run.events);
         const designSystemCreated = didRunCreateDesignSystemFile(run.events);
         const previewModuleCount = countDesignSystemPreviewModules(run.events);
+        // First-touch activation milestones (first-artifact / first-design-
+        // system observed since this stamp shipped — NOT first-ever; see
+        // `deriveActivationMilestones`) written to the PostHog person record
+        // via `$set_once` below. Derived from this same run-outcome snapshot so
+        // the milestone lands at the exact success moment without a second
+        // event; `$set_once` keeps it pinned to the first qualifying run.
+        const activationMilestones = deriveActivationMilestones({
+          result,
+          artifactCount,
+          designSystemCreated,
+          // Gate the DS milestone on the same `isDesignSystemRun` condition the
+          // `run_finished.design_system_created` field uses below, so a plain
+          // chat run that writes a `DESIGN.md` doesn't overstate DS activation.
+          isDesignSystemRun,
+          capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
+        });
         const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
           events: run.events,
           exitCode: status.exitCode ?? null,
@@ -15108,6 +11964,13 @@ export async function startServer({
             // `design_system_generation` to match the run_created shape.
             area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
+            // PostHog person-property milestones. `$set_once` only writes a
+            // key that doesn't already exist, so the timestamp pins to the
+            // user's FIRST qualifying run observed since rollout (true
+            // first-ever only for users who onboard after rollout; the
+            // installed base gets their next qualifying run — see
+            // `deriveActivationMilestones`). Omitted when no milestone crossed.
+            ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             // `model_id` upgrades the request-side value with the
             // agent-reported model on terminal state; see
             // `finishedModelId` derivation above.
@@ -15814,7 +12677,12 @@ export async function startServer({
           console.log(`[od] daemon listening on ${url}`);
         }
         daemonUrl = url;
-        resolve(returnServer ? { url, server, shutdown: shutdownDaemonRuns } : url);
+        resolve(returnServer ? {
+          url,
+          server,
+          shutdown: shutdownDaemonRuns,
+          routeInventory: getRouteRegistrationInventory(app),
+        } : url);
       });
     } catch (error) {
       cleanupDaemonBackgroundWork();

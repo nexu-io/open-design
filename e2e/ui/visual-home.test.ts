@@ -4,6 +4,7 @@ import {
   captureVisual,
   configureVisualPage,
   gotoVisualHome,
+  scrollVisualLocatorIntoStableView,
   waitForVisualFonts,
   waitForVisualProjects,
 } from '@/playwright/visual';
@@ -69,7 +70,9 @@ test('[P2] captures the onboarding runtime selection surface', async ({ page }) 
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /Welcome|欢迎/i })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i }),
+  ).toBeVisible();
   await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
   await expect(
     page
@@ -107,7 +110,7 @@ test('[P2] captures the home plugin catalog surface', async ({ page }) => {
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   const community = home.getByTestId('plugins-home-section');
   await expect(community).toBeVisible();
-  await community.scrollIntoViewIfNeeded();
+  await scrollVisualLocatorIntoStableView(page, community);
   await expect(home.locator('article.plugins-home__card--gallery').first()).toBeVisible();
   await expect(home.getByTestId('plugins-home-search')).toBeVisible();
 

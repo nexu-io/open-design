@@ -153,25 +153,9 @@ OD_API_TOKEN=
 
 ## 영구 저장소
 
-Open Design은 프로젝트와 SQLite 데이터를 Docker 볼륨 안에 저장합니다.
-
-```text
-open_design_data
-```
-
-이 볼륨은 다음 경로에 마운트됩니다.
-
-```text
-/app/.od
-```
-
-데이터는 컨테이너를 재시작하거나 이미지를 업데이트해도 그대로 유지됩니다.
-
-볼륨을 확인하려면:
-
-```bash
-docker volume inspect open-design_open_design_data
-```
+영구 daemon 저장 경로를 문서화하거나, 변경하거나, 선택하기 전에
+반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
+이 Quickstart는 그 계약을 다시 서술하거나 저장 경로를 정의해서는 안 됩니다.
 
 ---
 
@@ -198,7 +182,7 @@ pnpm tools-dev run web # daemon + web을 포그라운드로 시작합니다
 pnpm tools-dev # daemon + web + desktop을 백그라운드로 시작합니다
 ```
 
-처음 로드하면 앱은 설치된 코드 에이전트 CLI(Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI)를 감지해 자동으로 선택하고, 기본값으로 `web-prototype` skill과 `Neutral Modern` 디자인 시스템을 씁니다. 프롬프트를 입력하고 **Send**를 누르세요. 에이전트가 왼쪽 패널에 스트리밍되고, `<artifact>` 태그가 파싱되면서 HTML이 오른쪽에 실시간으로 렌더링됩니다. 작업이 끝나면 **Save to disk**를 눌러 artifact를 `./.od/artifacts/<timestamp>-<slug>/index.html`에 저장하세요.
+처음 로드할 때 앱은 설치된 코드 에이전트 CLI(Claude Code / Codex / Gemini / OpenCode / Cursor Agent / Qwen)를 감지해 자동으로 선택하고, 기본값으로 `web-prototype` skill과 `Neutral Modern` design system을 사용합니다. 프롬프트를 입력하고 **Send**를 누르세요. 에이전트 출력은 왼쪽 패널에 스트리밍되고, `<artifact>` 태그가 파싱되어 HTML이 오른쪽에 실시간으로 렌더링됩니다. 완료되면 **Save to disk**로 artifact를 저장할 수 있습니다. artifact 저장 경로를 문서화하거나 변경하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
 
 **Design system** 드롭다운에는 71개의 내장 시스템이 들어 있습니다. 직접 작성한 스타터 2개(Neutral Modern, Warm Editorial)와 [`awesome-design-md`](https://github.com/VoltAgent/awesome-design-md)에서 가져온 69개의 제품 시스템으로, 카테고리별(AI & LLM, Developer Tools, Productivity, Backend, Design Tools, Fintech, E-Commerce, Media, Automotive)로 묶여 있습니다. 하나를 고르면 모든 프로토타입이 그 브랜드의 미감으로 입혀집니다. 여기에 [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills)에서 가져온 57개의 디자인 skill도 함께 제공됩니다.
 
@@ -357,10 +341,6 @@ open-design/
 │   └── …129개 시스템          # 스타터 2개 · 제품 시스템 70개 · 디자인 skill 57개
 ├── scripts/sync-design-systems.ts    # 업스트림 getdesign tarball에서 다시 import
 ├── docs/                      # 제품 비전 + 스펙
-├── .od/                       # 런타임 데이터 (gitignore 처리, 자동 생성)
-│   ├── app.sqlite              #   프로젝트 / 대화 / 메시지 / 탭
-│   ├── artifacts/              #   일회성 "Save to disk" 렌더링
-│   └── projects/<id>/          #   프로젝트별 작업 디렉터리 + 에이전트 cwd
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
 └── package.json               # 루트 품질 스크립트 + `od` bin
 ```

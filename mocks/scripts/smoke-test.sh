@@ -144,11 +144,31 @@ else
   fail "vela strict set_model gate did not reject (negative-path regression)"
 fi
 
+# Kimi — prompt-mode stream-json. Newer Kimi CLIs reject an `acp`
+# positional arg, so keep this smoke check on the real prompt-mode
+# launch shape OD uses in Settings and chat.
+kimi_out=$(kimi -p "Reply with only: ok" --output-format stream-json 2>/dev/null || true)
+if printf '%s' "$kimi_out" | grep -q '"role":"assistant"'; then
+  pass "kimi prompt-mode stream-json smoke passed"
+else
+  fail "kimi prompt-mode stream-json smoke failed"
+fi
+
+kimi_legacy_err="$amr_sandbox/kimi-legacy.err"
+if kimi acp -p "Reply with only: ok" --output-format stream-json \
+  > /dev/null 2> "$kimi_legacy_err"; then
+  fail "kimi legacy positional launch unexpectedly succeeded"
+elif grep -q 'too many arguments' "$kimi_legacy_err"; then
+  pass "kimi legacy positional launch fails with too many arguments"
+else
+  fail "kimi legacy positional launch failed without too many arguments"
+fi
+
 # ACP agents — JSON-RPC server. Send initialize+session/new+prompt and
 # verify the protocol responses come back in order.
 # kiro-cli and vibe-acp are the primary OD-facing bin names; test them
 # alongside the fallback names (kiro, vibe).
-for agent in hermes kimi kilo kiro kiro-cli vibe vibe-acp devin; do
+for agent in hermes kilo kiro kiro-cli vibe vibe-acp devin; do
   out=$(cat <<EOF | "$agent" 2>/dev/null
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"/tmp"}}

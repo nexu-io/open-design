@@ -78,38 +78,53 @@ const fmtDate = (d: Date) =>
     day: 'numeric',
   });
 const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
+// Cover art for each post. Unified "Figma-selection" editorial style: near-white
+// ground, ink-black line-art, a single acid-green selection frame, and a soft 3D
+// design-tool object. Generated via the `od-site-illustration` skill.
 const postImages: Record<string, { src: string; alt: string }> = {
+  'open-design-0-10-0-all-in-one-workspace': {
+    src: '/blog/open-design-0-10-0-all-in-one-workspace-cover.webp',
+    alt: 'A single unified design-workspace window — composer, canvas, and comment rail in one frame — held inside a green selection box on a near-white editorial ground',
+  },
+  'open-design-0-9-0-design-for-everyone': {
+    src: '/blog/open-design-0-9-0-design-for-everyone-cover.webp',
+    alt: 'An onboarding panel with a one-click sign-in and a bundled engine, selected in a green frame on a near-white editorial ground',
+  },
   'open-design-0-8-0-everything-is-a-plugin': {
-    src: '/blog/plate-15-plugin-engine-modular.webp',
-    alt: 'A central black cube engine core ringed by paper-tile plugins, an olive branch, and a bold red circle on a warm editorial study plate',
+    src: '/blog/open-design-0-8-0-everything-is-a-plugin-cover.webp',
+    alt: 'A central engine hub with plugin tiles docking into it, selected in a green frame on a near-white editorial ground',
   },
   'layout-layer-canvas-used-to-hide': {
-    src: '/blog/plate-13-layout-layer.webp',
-    alt: 'An abstract layout map emerging from a hidden canvas on a warm paper study plate',
+    src: '/blog/layout-layer-canvas-used-to-hide-cover.webp',
+    alt: 'A wireframe layout skeleton lifting out from beneath a canvas as its own layer, in a green selection frame on a near-white editorial ground',
   },
   'port-figma-workflow-open-design-plugin': {
-    src: '/blog/plate-14-figma-plugin-workflow.webp',
-    alt: 'An abstract workflow of frames, connectors, and a plugin module on a warm paper study plate',
+    src: '/blog/port-figma-workflow-open-design-plugin-cover.webp',
+    alt: 'A design frame being lifted out of a canvas and packaged into a portable plugin module, in a green selection frame on a near-white editorial ground',
+  },
+  'figma-alternative-open-design': {
+    src: '/blog/figma-alternative-open-design-cover.webp',
+    alt: 'A locked canvas window beside an open fanned stack of portable file sheets, in a green selection frame on a near-white editorial ground',
   },
   'open-source-alternative-to-claude-design': {
-    src: '/blog/plate-10-crystal-exploded.webp',
-    alt: 'An editorial plate with black crystal fragments arranged around a red circle',
+    src: '/blog/open-source-alternative-to-claude-design-cover.webp',
+    alt: 'A hosted cloud chained to a lock beside an open folder of portable plain-text files, in a green selection frame on a near-white editorial ground',
   },
   '31-skills-72-systems-how-the-library-works': {
-    src: '/blog/plate-11-ledger-compass.webp',
-    alt: 'An open notebook with a brass compass and leaf over a red circle study plate',
+    src: '/blog/31-skills-72-systems-how-the-library-works-cover.webp',
+    alt: 'An organized library grid of modular skill and system cards, selected in a green frame on a near-white editorial ground',
   },
   'byok-design-workflow-claude-codex-qwen': {
-    src: '/blog/plate-12-pure-abstract.webp',
-    alt: 'An abstract paper plate with a red circle, dotted fields, arcs, and leaves',
+    src: '/blog/byok-design-workflow-claude-codex-qwen-cover.webp',
+    alt: 'A single key wired to a row of interchangeable model engines with a provider toggle, in a green selection frame on a near-white editorial ground',
   },
   'byok-reality-check-5-things-that-break': {
-    src: '/blog/plate-09-geometric-solids.webp',
-    alt: 'A geometric study plate with a red circle, branch, sphere, and black cube',
+    src: '/blog/byok-reality-check-5-things-that-break-cover.webp',
+    alt: 'A workflow pipeline of connected nodes with a few break marks on the connectors, in a green selection frame on a near-white editorial ground',
   },
   'why-we-built-open-design-as-a-skill-layer': {
-    src: '/blog/plate-12-pure-abstract.webp',
-    alt: 'An abstract paper plate with layered circles, arcs, and botanical details',
+    src: '/blog/why-we-built-open-design-as-a-skill-layer-cover.webp',
+    alt: 'A thin layer sheet wrapping around an existing agent core, in a green selection frame on a near-white editorial ground',
   },
 };
 const getPostImage = (id: string) => postImages[id];
@@ -127,6 +142,11 @@ const localizedPostField = (
     category: post.data.category,
     locale,
   });
+  // A plain string under `i18n[locale][field]` is already the localized value —
+  // use it directly so hand-written frontmatter translations actually render on
+  // non-English cards instead of falling through to the synthetic template.
+  const direct = i18n?.[locale]?.[field];
+  if (typeof direct === 'string' && direct.trim()) return direct;
   return explicitLocalizedString(
     i18n?.[locale]?.[field] as Parameters<typeof explicitLocalizedString>[0],
     locale,

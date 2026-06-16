@@ -15,6 +15,7 @@ import {
   DEFAULT_LOCALE,
   LANDING_LOCALES,
   getCommonCopy,
+  getHeaderProductMenuCopy,
   getHomePageCopy,
   getLandingUiCopy,
   getLocaleDefinition,
@@ -165,6 +166,37 @@ const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DOCS = `${REPO}#readme`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const X_TWITTER = 'https://x.com/nexudotio';
+const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
+
+// Footer columns mirror the top-nav sections + `site-footer.astro` (the
+// sub-page footer) so the homepage and every sub-page share one footer
+// contract. Hrefs stay in lockstep with header.tsx (USE_CASE_HREFS / agent
+// routes); labels reuse the already-localized nav dropdown copy.
+const FOOTER_USE_CASE_HREFS = [
+  '/solutions/prototype/',
+  '/solutions/dashboard/',
+  '/solutions/slides/',
+  '/solutions/image/',
+  '/solutions/video/',
+  '/solutions/design-system/',
+] as const;
+
+const FOOTER_AGENTS = [
+  { name: 'Claude Code', route: 'claude-code-design' },
+  { name: 'Codex', route: 'codex-design' },
+  { name: 'Cursor', route: 'cursor-design' },
+  { name: 'Gemini CLI', route: 'gemini-design' },
+  { name: 'OpenCode', route: 'opencode-design' },
+] as const;
+
+// Legal / company labels — small inline map (en/zh/zh-tw, fallback en) kept
+// identical to `site-footer.astro` so the two footers never drift.
+const FOOTER_LEGAL = {
+  en: { company: 'Company', about: 'About', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents' },
+  zh: { company: '公司', about: '关于', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent' },
+  'zh-tw': { company: '公司', about: '關於', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent' },
+} satisfies Record<string, Record<string, string>>;
 
 const ext = {
   target: '_blank',
@@ -296,6 +328,9 @@ export default function Page({
   const commonCopy = getCommonCopy(locale);
   const home = getHomePageCopy(locale);
   const ui = getLandingUiCopy(locale);
+  const menu = getHeaderProductMenuCopy(locale);
+  const footL =
+    FOOTER_LEGAL[locale as keyof typeof FOOTER_LEGAL] ?? FOOTER_LEGAL.en;
   const localeDef = getLocaleDefinition(locale);
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
@@ -432,7 +467,13 @@ export default function Page({
                     the platform can't be named (Linux / undetermined / API
                     rate-limited) it falls back to the /download/ page (the
                     per-platform picker) rather than the GitHub releases list. */}
-                <a className='btn btn-primary' href={href('/download/')} data-download-cta data-download-chip-target>
+                <a
+                  className='btn btn-primary'
+                  href={href('/download/')}
+                  data-download-cta
+                  data-download-chip-target
+                  data-download-placement='hero'
+                >
                   <span className='arrow'>{iconDownload}</span>
                   {home.hero.download}
                 </a>
@@ -932,6 +973,7 @@ export default function Page({
                     href={href('/download/')}
                     data-download-cta
                     data-download-chip-target
+                    data-download-placement='cta'
                   >
                     <span className='arrow'>{iconDownload}</span>
                     {home.hero.download}
@@ -1017,55 +1059,48 @@ export default function Page({
           <div className='container sub-footer-inner'>
             <div className='sub-footer-grid'>
               <div className='sub-footer-col'>
-                <h5>{ui.footer.products}</h5>
+                <h5>{menu.product}</h5>
                 <ul>
-                  <li>
-                    <a href={href('/')}>Open Design</a>
-                  </li>
-                  <li>
-                    <a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a>
-                  </li>
-                  <li>
-                    <a href={href('/html-video/')}>{ui.footer.htmlVideo}</a>
-                  </li>
+                  <li><a href={href('/')}>Open Design</a></li>
+                  <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
+                  <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
                 </ul>
               </div>
+
               <div className='sub-footer-col'>
-                <h5>{commonCopy.header.nav.plugins}</h5>
+                <h5><a href={href('/solutions/')}>{menu.solution}</a></h5>
                 <ul>
-                  <li>
-                    <a href={href('/plugins/templates/')}>
-                      {commonCopy.header.nav.templates}
-                    </a>
-                  </li>
-                  <li>
-                    <a href={href('/plugins/skills/')}>
-                      {commonCopy.header.nav.skills}
-                    </a>
-                  </li>
-                  <li>
-                    <a href={href('/plugins/systems/')}>
-                      {commonCopy.header.nav.systems}
-                    </a>
-                  </li>
+                  {menu.useCaseItems.map((name, i) => (
+                    <li key={FOOTER_USE_CASE_HREFS[i]}>
+                      <a href={href(FOOTER_USE_CASE_HREFS[i]!)}>{name}</a>
+                    </li>
+                  ))}
                 </ul>
               </div>
+
               <div className='sub-footer-col'>
-                <h5>{ui.footer.resources}</h5>
+                <h5><a href={href('/agents/')}>{menu.agent}</a></h5>
                 <ul>
-                  <li>
-                    <a href={href('/official/')}>{ui.footer.official}</a>
-                  </li>
-                  <li>
-                    <a href={href('/quickstart/')}>{ui.footer.quickstart}</a>
-                  </li>
-                  <li>
-                    <a href={href('/agents/')}>{ui.footer.agents}</a>
-                  </li>
+                  {FOOTER_AGENTS.map((a) => (
+                    <li key={a.route}>
+                      <a href={href(`/agents/${a.route}/`)}>{a.name}</a>
+                    </li>
+                  ))}
+                  <li><a href={href('/agents/')}>{footL.allAgents} →</a></li>
                 </ul>
               </div>
+
               <div className='sub-footer-col'>
-                <h5>{ui.footer.compare}</h5>
+                <h5><a href={href('/plugins/')}>{commonCopy.header.nav.plugins}</a></h5>
+                <ul>
+                  <li><a href={href('/plugins/templates/')}>{commonCopy.header.nav.templates}</a></li>
+                  <li><a href={href('/plugins/skills/')}>{commonCopy.header.nav.skills}</a></li>
+                  <li><a href={href('/plugins/systems/')}>{commonCopy.header.nav.systems}</a></li>
+                </ul>
+              </div>
+
+              <div className='sub-footer-col'>
+                <h5><a href={href('/compare/')}>{ui.footer.compare}</a></h5>
                 <ul>
                   <li><a href={href('/alternatives/claude-design/')}>Claude Design</a></li>
                   <li><a href={href('/alternatives/figma/')}>Figma</a></li>
@@ -1075,17 +1110,51 @@ export default function Page({
                   <li><a href={href('/alternatives/framer/')}>Framer</a></li>
                 </ul>
               </div>
+
               <div className='sub-footer-col'>
-                <h5>{ui.footer.connect}</h5>
+                <h5>{menu.resources}</h5>
                 <ul>
-                  <li><a href={REPO} target='_blank' rel='noopener'>{ui.footer.github}</a></li>
-                  <li><a href={REPO_ISSUES} target='_blank' rel='noopener'>{ui.footer.issues}</a></li>
-                  <li><a href={REPO_RELEASES} target='_blank' rel='noopener'>{ui.footer.releases}</a></li>
-                  <li><a href={DISCORD} target='_blank' rel='noopener'>{ui.footer.discord}</a></li>
-                  <li><a href='https://x.com/nexudotio' target='_blank' rel='noopener'>{ui.footer.xTwitter}</a></li>
-                  <li><a href='/blog/rss.xml'>{ui.footer.rss}</a></li>
-                  <li><a href={href('/#contact')}>{commonCopy.header.nav.contact}</a></li>
+                  <li><a href={href('/blog/')}>{menu.resourceItems.blog}</a></li>
+                  <li><a href={href('/tutorials/')}>{menu.resourceItems.tutorials}</a></li>
+                  <li><a href={href('/download/')}>{menu.resourceItems.download}</a></li>
+                  <li><a href={href('/quickstart/')}>{ui.footer.quickstart}</a></li>
+                  <li><a href={href('/official/')}>{ui.footer.official}</a></li>
                 </ul>
+              </div>
+
+              <div className='sub-footer-col'>
+                <h5>{footL.company}</h5>
+                <ul>
+                  <li><a href={href('/about/')}>{footL.about}</a></li>
+                  <li><a href={href('/faq/')}>{footL.faq}</a></li>
+                  <li><a href={href('/privacy/')}>{footL.privacy}</a></li>
+                  <li><a href={href('/terms/')}>{footL.terms}</a></li>
+                  <li><a href={REPO} target='_blank' rel='noopener'>{ui.footer.github}</a></li>
+                  <li><a href={DISCORD} target='_blank' rel='noopener'>{ui.footer.discord}</a></li>
+                </ul>
+              </div>
+            </div>
+
+            <div className='foot-bar'>
+              <div className='foot-bar-left'>
+                <span className='foot-copy'>© 2026 Powerformer, Inc. · Apache-2.0</span>
+                <a href={href('/privacy/')}>{footL.privacy}</a>
+                <span className='foot-dot' aria-hidden='true'>·</span>
+                <a href={href('/terms/')}>{footL.terms}</a>
+              </div>
+              <div className='foot-social'>
+                <a href={X_TWITTER} target='_blank' rel='noopener' aria-label='X'>
+                  <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z' /></svg>
+                </a>
+                <a href={DISCORD} target='_blank' rel='noopener' aria-label='Discord'>
+                  <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.6 12.6 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127c-.598.349-1.22.645-1.873.891a.076.076 0 0 0-.04.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z' /></svg>
+                </a>
+                <a href={REPO} target='_blank' rel='noopener' aria-label='GitHub'>
+                  <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.5 11.5 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222 0 1.606-.014 2.898-.014 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' /></svg>
+                </a>
+                <a href={YOUTUBE} target='_blank' rel='noopener' aria-label='YouTube'>
+                  <svg viewBox='0 0 24 24' width='18' height='18' fill='currentColor' aria-hidden='true'><path d='M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z' /></svg>
+                </a>
               </div>
             </div>
             {/* Masthead sign-off — same markup contract as

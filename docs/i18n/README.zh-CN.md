@@ -264,7 +264,7 @@ Open Design (OD) 是开源替代品。同样的循环，同样的工件优先心
 
 - 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
 - 🧠 **默认品牌级。** 每次渲染都读取激活的 `DESIGN.md`——9 节 schema 涵盖色板、字体、间距、动效、语言风格、反模式。150 个系统随仓库发布（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma……）。放入文件夹，选择器自动识别。
-- 🖥️ **本地优先，每一层都可 BYOK。** macOS（Apple Silicon + Intel）和 Windows（x64）原生桌面应用。Linux AppImage 在可选发布通道。SQLite 存储在 `.od/app.sqlite`，文件在 `.od/projects/<id>/`，无遥测，无云端往返。
+- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先，不发生云端往返。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **三个平面上可组合。** **插件**承载可运行的工作流 · **技能**承载 Agent 的设计品味 · **设计系统**承载品牌。三者都是普通文件，任何人都可以编写、版本控制和发布。
 - 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。专门的插件用于将 Figma / Pencil 工作流迁移到 React / Next.js / Vue 代码。
 - 🔒 **隐私信条。** 一切都运行在持有你数据的环境中——你的笔记本、你团队的服务器、你的 Vercel 项目。需要网络时有 SSRF 防护的 BYOK 代理。
@@ -536,7 +536,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio 服务器                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·  │
@@ -550,7 +550,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | 前端 | Next.js 16 App Router + React 18 + TypeScript |
 | 守护进程 | Node 24 · Express · SSE 流式传输 · `better-sqlite3` |
-| 存储 | 文件在 `.od/projects/<id>/` + SQLite 在 `.od/app.sqlite` + `media-config.json`（gitignored，自动创建）。`OD_DATA_DIR` 可重定位全部。 |
+| 存储 | 在修改或记录 daemon 存储路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。本 README 不得复述该契约。 |
 | 预览 | 沙箱 `srcdoc` iframe + 流式 `<artifact>` 解析器 |
 | 导出 | HTML（内联）· PDF（浏览器打印）· PPTX（Agent 驱动）· ZIP · Markdown · MP4（HyperFrames） |
 | 桌面 | Electron 外壳 + 沙箱渲染进程 + sidecar IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |

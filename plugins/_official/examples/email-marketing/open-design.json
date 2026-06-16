@@ -24,7 +24,7 @@
     "en": "Email Marketing"
   },
   "version": "0.1.0",
-  "description": "A brand product-launch email — masthead with wordmark, hero image block,\nheadline lockup with skewed-italic accent, body copy, primary CTA, and a\nspecifications grid. Pure HTML email layout (centered single column, table\nfallback). Use when the brief asks for an \"email\", \"newsletter blast\",\n\"MJML\", \"product launch email\", or \"email template\".",
+  "description": "A brand product-launch email — masthead with wordmark, hero image block, headline lockup with skewed-italic accent, body copy, primary CTA, and a specifications grid. Pure HTML email layout (centered single column, table fallback). Use when the brief asks for an \"email\", \"newsletter blast\", \"MJML\", \"product launch email\", or \"email template\".",
   "description_i18n": {
     "zh-CN": "品牌产品发布电子邮件模板，包含报头、主图、斜体强调标题、正文、主要行动号召按钮和规格表格，采用HTML居中单栏布局。",
     "zh-TW": "品牌產品發布電子郵件範本，包含報頭、主圖、斜體強調標題、正文、主要行動呼籲按鈕和規格表格，採用HTML置中單欄佈局。",
@@ -43,7 +43,7 @@
     "ar": "قالب بريد إلكتروني لإطلاق المنتج مع رأس الصفحة، صورة رئيسية، عنوان مائل، نص أساسي، زر CTA رئيسي، وجدول مواصفات في تخطيط HTML بعمود واحد في المنتصف.",
     "tr": "Ürün lansmanı için e-posta şablonu: başlık, ana görsel, eğik vurgulu başlık, ana metin, birincil CTA butonu ve özellik tablosu içeren ortalanmış tek sütunlu HTML düzeni.",
     "uk": "Шаблон email для запуску продукту з шапкою, головним зображенням, заголовком курсивом, основним текстом, CTA-кнопкою та таблицею характеристик в одноколонковій HTML-версії.",
-    "en": "A brand product-launch email — masthead with wordmark, hero image block,\nheadline lockup with skewed-italic accent, body copy, primary CTA, and a\nspecifications grid. Pure HTML email layout (centered single column, table\nfallback). Use when the brief asks for an \"email\", \"newsletter blast\",\n\"MJML\", \"product launch email\", or \"email template\"."
+    "en": "A brand product-launch email — masthead with wordmark, hero image block, headline lockup with skewed-italic accent, body copy, primary CTA, and a specifications grid. Pure HTML email layout (centered single column, table fallback). Use when the brief asks for an \"email\", \"newsletter blast\", \"MJML\", \"product launch email\", or \"email template\"."
   },
   "license": "MIT",
   "author": {

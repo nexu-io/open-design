@@ -24,7 +24,7 @@
     "en": "Orbit Github"
   },
   "version": "0.1.0",
-  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when\nGitHub is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to GitHub. Pulls the past 24\nhours of PRs, review requests, issues, CI runs, and merges from the\nuser's authenticated GitHub connection and renders them in a layout\nthat mirrors GitHub's native Notifications + PR-diff visual language.\nThis skill should not be triggered manually — it is invoked by\nOrbit's daily-digest scheduler against live GitHub data.",
+  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when GitHub is the user's only connected connector, or when the user explicitly scopes their daily digest to GitHub. Pulls the past 24 hours of PRs, review requests, issues, CI runs, and merges from the user's authenticated GitHub connection and renders them in a layout that mirrors GitHub's native Notifications + PR-diff visual language. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live GitHub data.",
   "description_i18n": {
     "zh-CN": "根据 GitHub 连接器自动生成每日摘要的 Orbit 技能。拉取过去 24 小时的 PR、审查请求、问题、CI 运行和合并记录，以类似 GitHub 原生通知的布局呈现。由 Orbit 每日摘要调度器自动调用。",
     "zh-TW": "根據 GitHub 連接器自動生成每日摘要的 Orbit 技能。拉取過去 24 小時的 PR、審查請求、問題、CI 運行和合併記錄，以類似 GitHub 原生通知的佈局呈現。由 Orbit 每日摘要調度器自動調用。",
@@ -43,7 +43,7 @@
     "ar": "مهارة Orbit لإنشاء ملخصات يومية تلقائية بناءً على اتصالات GitHub. تسترد طلبات السحب ومراجعات الكود والمشكلات وعمليات CI والدمج من آخر 24 ساعة وتعرضها بأسلوب إشعارات GitHub الأصلي. يتم استدعاؤها تلقائيًا بواسطة مجدول الملخص اليومي في Orbit.",
     "tr": "GitHub bağlantılarına dayalı günlük özetleri otomatik olarak oluşturan Orbit becerisi. Son 24 saatteki PR'ları, inceleme isteklerini, sorunları, CI çalıştırmalarını ve birleştirmeleri alır ve GitHub'ın yerel bildirim stilinde görüntüler. Orbit günlük özet zamanlayıcısı tarafından otomatik olarak çağrılır.",
     "uk": "Навичка Orbit для автоматичного створення щоденних зведень на основі підключень GitHub. Отримує PR, запити на перевірку, завдання, запуски CI та злиття за останні 24 години та відображає їх у стилі нативних сповіщень GitHub. Автоматично викликається планувальником щоденних зведень Orbit.",
-    "en": "Open Orbit briefing skill — selected by the Orbit pipeline when\nGitHub is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to GitHub. Pulls the past 24\nhours of PRs, review requests, issues, CI runs, and merges from the\nuser's authenticated GitHub connection and renders them in a layout\nthat mirrors GitHub's native Notifications + PR-diff visual language.\nThis skill should not be triggered manually — it is invoked by\nOrbit's daily-digest scheduler against live GitHub data."
+    "en": "Open Orbit briefing skill — selected by the Orbit pipeline when GitHub is the user's only connected connector, or when the user explicitly scopes their daily digest to GitHub. Pulls the past 24 hours of PRs, review requests, issues, CI runs, and merges from the user's authenticated GitHub connection and renders them in a layout that mirrors GitHub's native Notifications + PR-diff visual language. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live GitHub data."
   },
   "license": "MIT",
   "author": {

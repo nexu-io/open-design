@@ -363,6 +363,86 @@ describe('SettingsDialog agent CLI env settings', () => {
     expect(next.agentCliEnv).toEqual({
       codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next' },
     });
+    expect(next.agentCliEnvIntent).toEqual({});
+  });
+
+  it('marks API key env values as explicit CLI overrides', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: { CODEX_HOME: '~/.codex-alt' },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'codex',
+      'CODEX_API_KEY',
+      '  sk-codex  ',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_HOME: '~/.codex-alt', CODEX_API_KEY: 'sk-codex' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
+    });
+  });
+
+  it('keeps the API key override marker when clearing a base URL with a key present', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        codex: {
+          CODEX_API_KEY: 'sk-codex',
+          OPENAI_BASE_URL: 'https://proxy.example/openai',
+        },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'codex',
+      'OPENAI_BASE_URL',
+      '',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      codex: { CODEX_API_KEY: 'sk-codex' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
+    });
+  });
+
+  it('removes the API key override marker when the last auth key is cleared', () => {
+    const config: AppConfig = {
+      ...baseConfig,
+      mode: 'daemon',
+      agentCliEnv: {
+        claude: {
+          CLAUDE_CONFIG_DIR: '~/.claude-2',
+          ANTHROPIC_API_KEY: 'sk-anthropic',
+        },
+      },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+      },
+    };
+
+    const next = updateAgentCliEnvValue(
+      config,
+      'claude',
+      'ANTHROPIC_API_KEY',
+      '',
+    );
+
+    expect(next.agentCliEnv).toEqual({
+      claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+    });
+    expect(next.agentCliEnvIntent).toEqual({});
   });
 
   it('removes empty per-agent CLI env entries', () => {

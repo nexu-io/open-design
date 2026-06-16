@@ -264,7 +264,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 - 🤖 **エージェントネイティブ、モデル非依存。** 私たちはエージェントを同梱しません。すでにあなたの `PATH` にある `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` がデザインエンジンです。ワンクリックで差し替えられます。
 - 🧠 **デフォルトでブランドグレード。** すべてのレンダリングはアクティブな `DESIGN.md` を読み取ります——パレット、タイポグラフィ、スペーシング、モーション、ボイス、アンチパターンをカバーする 9 セクションのスキーマです。150 のシステムがリポジトリに同梱されています（Linear、Stripe、Vercel、Airbnb、Apple、Tesla、Notion、Anthropic、Cursor、Supabase、Figma…）。フォルダをドロップすれば、ピッカーがそれを見つけます。
-- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** macOS（Apple Silicon + Intel）と Windows（x64）向けのネイティブデスクトップアプリ。Linux AppImage はオプションのリリースレーンで提供。SQLite は `.od/app.sqlite`、ファイルは `.od/projects/<id>/` に置かれ、テレメトリもクラウドへの往復もありません。
+- 🖥️ **ローカルファースト、あらゆるレイヤーで BYOK。** ネイティブデスクトップアプリはクラウドへの往復なしにローカルファーストのままです。デーモンデータパスを説明する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。
 - 🌍 **3 つの平面で組み合わせ可能。** **プラグイン**は実行可能なワークフローを運び · **スキル**はエージェントのデザインの審美眼を運び · **デザインシステム**はブランドを運びます。これら 3 つはすべて、誰もが作成・バージョン管理・公開できるプレーンファイルです。
 - 🔁 **既存のコードベースをリフレッシュ。** `git` リポジトリ + `DESIGN.md` をエージェントに渡せば、あなたの実際のコンポーネントをブランド仕様にリファクタリングします。専用のプラグインが Figma / Pencil のワークフローを React / Next.js / Vue のコードへと移行します。
 - 🔒 **信念としてのプライバシー。** すべてがあなたのデータのある場所——あなたのラップトップ、チームのサーバー、Vercel プロジェクト——で動作します。ネットワークが必要なときも、BYOK プロキシは SSRF からガードされています。
@@ -536,7 +536,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -550,7 +550,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 |---|---|
 | フロントエンド | Next.js 16 App Router + React 18 + TypeScript |
 | デーモン | Node 24 · Express · SSE ストリーミング · `better-sqlite3` |
-| ストレージ | ファイルは `.od/projects/<id>/` + SQLite は `.od/app.sqlite` + `media-config.json`（gitignore 対象、自動作成）。`OD_DATA_DIR` ですべてを再配置できます。 |
+| ストレージ | デーモンのストレージパスを変更または文書化する前に、ルートの `AGENTS.md` にある **Daemon data directory contract** を必ず読んでください。この README でそれを繰り返してはいけません。 |
 | プレビュー | サンドボックス化された `srcdoc` iframe + ストリーミング `<artifact>` パーサー |
 | エクスポート | HTML（インライン化） · PDF（ブラウザ印刷） · PPTX（エージェント駆動） · ZIP · Markdown · MP4（HyperFrames） |
 | デスクトップ | Electron シェル + サンドボックス化されたレンダラー + サイドカー IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |

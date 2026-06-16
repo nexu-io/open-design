@@ -28,7 +28,7 @@ import LocaleSwitcherScript from './locale-switcher-script.astro';
 import PreciseLazyload from './precise-lazyload.astro';
 import TemplateCardAutoplay from './template-card-autoplay.astro';
 import SiteFooter from './site-footer.astro';
-import { heroImage } from '../image-assets';
+import { ogDefaultImage } from '../image-assets';
 import {
   LANDING_LOCALES,
   alternateLinksForPath,
@@ -80,9 +80,10 @@ const alternateLinks = localeCanonicalOnly
 const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
 // Absolute URL for the social share card: og:image / twitter:image are read
 // by external crawlers outside the page-origin context, so a same-origin path
-// like `/hero-home.png?v=2` is unreliable for rich previews. `new URL()`
-// leaves an already-absolute `ogImage` untouched.
-const og = new URL(ogImage ?? heroImage, Astro.site).toString();
+// is unreliable for rich previews. The default is the site-wide OG card
+// (`ogDefaultImage`, already an absolute R2 URL); `new URL()` leaves an
+// already-absolute `ogImage` override untouched.
+const og = new URL(ogImage ?? ogDefaultImage, Astro.site).toString();
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(

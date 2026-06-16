@@ -21,6 +21,7 @@ import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { Toast } from './components/Toast';
+import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
@@ -2005,7 +2006,18 @@ function AppInner() {
   // EntryView / ProjectView split so the discovery surface stays
   // independent of any active project.
   let appMain: ReactNode;
-  if (route.kind === 'marketplace') {
+  const pendingFirstRunOnboardingRoute =
+    route.kind === 'home' &&
+    route.view === 'home' &&
+    config.onboardingCompleted !== true &&
+    !daemonConfigLoaded;
+  if (pendingFirstRunOnboardingRoute) {
+    appMain = (
+      <div className="entry-shell entry-shell--no-header">
+        <CenteredLoader label={t('entry.loadingWorkspace')} />
+      </div>
+    );
+  } else if (route.kind === 'marketplace') {
     appMain = <MarketplaceView />;
   } else if (route.kind === 'marketplace-detail') {
     appMain = <PluginDetailView pluginId={route.pluginId} />;

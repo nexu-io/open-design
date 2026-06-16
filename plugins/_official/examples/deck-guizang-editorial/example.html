@@ -1,88 +1,627 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>贵赞编辑墨水 · 章节封页</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400&family=Inter:wght@400;500;600&family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet" />
+<title>Guizang Editorial Ink · Open Design, Issue №26</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-  body { font-family: 'Inter','Noto Sans SC',system-ui,sans-serif; background:#0a0a0b; margin:0; }
-  .deck { display:grid; gap:24px; padding:24px; }
-  .slide { width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto; position:relative; overflow:hidden; }
-  .paper { background:#f1efea; color:#0a0a0b; }
-  .ink { background:#0a0a0b; color:#f1efea; }
-  .display { font-family:'Playfair Display','Noto Serif SC',serif; }
-  .body-serif { font-family:'Playfair Display','Noto Serif SC',serif; font-style:italic; }
-  .kicker { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; font-weight:500; }
-  .hairline { border:0; border-top:1px solid currentColor; opacity:0.3; }
-  .folio { font-feature-settings:'tnum'; font-variant-numeric:tabular-nums; }
+  /* tokens: warm editorial paper / warm off-black ink, single rubric-red accent */
+  :root{
+    --paper:#f1efea;
+    --ink:#16130f;
+    --ink-2:#3a382f;
+    --ink-3:#6b665b;
+    --rubric:#9c2b1f;        /* accent on paper */
+    --rubric-bright:#d96b4f; /* accent on ink */
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *,*::before,*::after{ box-sizing:border-box; }
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--ink); margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .deck{ display:grid; gap:24px; padding:24px; }
+  .slide{
+    width:100%; aspect-ratio:16/9; max-width:1280px; margin:0 auto;
+    position:relative; overflow:hidden;
+  }
+  .paper{ background:var(--paper); color:var(--ink); }
+  .ink{ background:var(--ink); color:var(--paper); }
+  .display{ font-family:'Playfair Display',serif; letter-spacing:-0.01em; }
+  .body-serif{ font-family:'Playfair Display',serif; font-style:italic; letter-spacing:0; }
+  .kicker{ font-size:11px; letter-spacing:0.14em; text-transform:uppercase; font-weight:500; }
+  .folio{ font-feature-settings:'tnum'; font-variant-numeric:tabular-nums; }
+
+  /* slide scaffold */
+  .pad{
+    position:absolute; inset:0; padding:48px;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .row{ display:flex; align-items:baseline; justify-content:space-between; }
+
+  /* slide chrome */
+  .masthead{ color:inherit; }
+  .ink .masthead{ opacity:0.66; }
+  .paper .masthead{ color:var(--ink-2); }
+  .tag{ letter-spacing:0.22em; }
+  .ink .tag{ color:var(--rubric-bright); opacity:1; }
+  .paper .tag{ color:var(--rubric); }
+  .footline .body-serif{ text-transform:none; letter-spacing:0; }
+  .ink .footline{ opacity:0.62; }
+  .paper .footline{ color:var(--ink-2); opacity:0.78; }
+
+  /* headlines */
+  .lede-kicker{ color:inherit; }
+  .ink .lede-kicker{ opacity:0.78; }
+  .paper .lede-kicker{ color:var(--ink-3); }
+  h1.display{
+    margin:16px 0 0; line-height:0.95; font-weight:500;
+    font-size:clamp(64px,9vw,150px);
+  }
+  h2.display{
+    margin:8px 0 0; line-height:1.02; font-weight:500;
+    font-size:clamp(36px,5vw,68px); max-width:20em;
+  }
+
+  /* L01 hero cover */
+  .hero-center{ text-align:center; }
+  .hero-center h1.display{ font-size:clamp(56px,7.6vw,112px); }
+  .hero-sub{
+    margin:28px 0 0; font-size:clamp(16px,1.6vw,21px); color:var(--ink-2);
+  }
+  .hero-lead{
+    margin:18px auto 0; max-width:58ch; font-size:14px; line-height:1.6;
+    color:var(--ink-2);
+  }
+  .hero-meta{
+    margin-top:26px; display:flex; justify-content:center; gap:14px;
+    color:var(--ink-3);
+  }
+  .hero-meta .sep{ color:var(--rubric); }
+
+  /* L07 hero question */
+  .question{
+    margin:18px 0 0; line-height:1.08; font-weight:500;
+    font-size:clamp(44px,6.6vw,90px); max-width:15em;
+  }
+
+  /* L03 numbers grid: hairline-ruled stats, no cards */
+  .num-grid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:32px; margin-top:16px;
+  }
+  .stat{ border-top:1px solid var(--ink); padding-top:16px; }
+  .stat .kicker{ color:var(--ink-3); }
+  .stat-num{
+    font-weight:500; line-height:1; margin-top:10px;
+    font-size:clamp(56px,6.5vw,84px);
+  }
+  .stat-num .body-serif{ font-size:0.48em; }
+  .stat p{
+    margin:12px 0 0; font-size:13px; line-height:1.4; color:var(--ink-2);
+    max-width:24ch;
+  }
+
+  /* L09 before / after ledger */
+  .split{ display:grid; grid-template-columns:1fr 1fr; gap:56px; margin-top:12px; }
+  .col-before{ opacity:0.55; }
+  .col-head{ color:var(--ink-3); margin-bottom:4px; }
+  .ledger-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-top:1px solid var(--ink); padding:11px 0 10px; font-size:14px;
+  }
+  .ledger-row .body-serif{ font-size:15px; }
+  .ledger-total{ border-top:2px solid var(--ink); font-weight:500; }
+  .ledger-total .body-serif{ color:var(--rubric); }
+
+  /* L06 pipeline / flow */
+  .steps{ display:grid; grid-template-columns:repeat(5,1fr); gap:28px; margin-top:16px; }
+  .step{ border-top:1px solid var(--ink); padding-top:14px; }
+  .step-no{
+    font-family:'Playfair Display',serif; font-style:italic; font-weight:400;
+    font-size:24px; color:var(--rubric); line-height:1;
+  }
+  .step h3{ margin:10px 0 0; font-size:15px; font-weight:500; letter-spacing:0; }
+  .step p{ margin:8px 0 0; font-size:12.5px; line-height:1.5; color:var(--ink-2); }
+
+  /* L05 image grid: equal-height pure-CSS plates */
+  .plates{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:18px;
+  }
+  .plate{ border:1px solid var(--ink); display:flex; flex-direction:column; margin:0; }
+  .plate-art{ height:96px; position:relative; margin:10px 10px 0; overflow:hidden; }
+  .plate-art .b{ position:absolute; background:var(--ink); }
+  .plate-art .b-line{ background:var(--ink); opacity:0.35; }
+  .plate-art .b-rubric{ background:var(--rubric); }
+  .plate-art .b-frame{ background:transparent; border:1px solid var(--ink); }
+  .plate-cap{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-top:1px solid var(--ink); margin-top:10px; padding:8px 10px;
+  }
+  .plate-cap .body-serif{ font-size:12px; color:var(--ink-2); }
+
+  /* L04 quote + image: text left, 16:10 plate right, baseline-aligned */
+  .media-split{
+    display:grid; grid-template-columns:7fr 5fr; gap:56px; align-items:end;
+    margin-top:12px;
+  }
+  .media-split .body-copy{
+    margin:18px 0 0; font-size:14px; line-height:1.65; color:var(--ink-2);
+    max-width:46ch;
+  }
+  .callout{
+    margin:22px 0 0; padding-left:16px; border-left:2px solid var(--rubric);
+    font-size:17px; line-height:1.5; color:var(--rubric);
+  }
+  .fig-wide{
+    margin:0; width:100%; aspect-ratio:16/10; position:relative;
+    border:1px solid var(--ink); overflow:hidden;
+  }
+  .fig-wide .b{ position:absolute; background:var(--ink); }
+  .fig-wide .specimen{
+    position:absolute; right:8%; bottom:4%; font-size:84px; line-height:1;
+    color:var(--ink); font-weight:500;
+  }
+  .fig-cap{
+    margin-top:8px; font-size:11px; color:var(--ink-3); text-align:right;
+  }
+
+  /* L08 big quote */
+  .bigquote{
+    margin:18px 0 0; font-weight:500; line-height:1.12;
+    font-size:clamp(38px,5.2vw,70px); max-width:18em;
+  }
+  .bigquote .body-serif{ font-weight:400; }
+  .attrib{ margin-top:28px; }
+  .attrib .body-serif{ font-size:17px; }
+
+  /* L10 mixed media: 8:4 text + tall plate */
+  .mixed{
+    display:grid; grid-template-columns:8fr 4fr; gap:56px; align-items:center;
+    margin-top:12px; flex:1; min-height:0;
+  }
+  .mixed .body-copy{
+    margin:16px 0 22px; font-size:14px; line-height:1.65; color:var(--ink-2);
+    max-width:50ch;
+  }
+  .link-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-top:1px solid var(--ink); padding:11px 0 10px; font-size:14px;
+    font-weight:500;
+  }
+  .link-row .body-serif{ font-weight:400; font-size:15px; color:var(--ink-2); }
+  .fig-tall{
+    margin:0; margin-left:auto; height:460px; max-height:100%; width:100%;
+    max-width:345px; position:relative; border:1px solid var(--ink);
+    overflow:hidden; display:flex; flex-direction:column;
+  }
+  .fig-tall .arch-label{ margin:12px 12px auto; }
+  .spine{
+    border-top:1px solid var(--ink); height:13%; position:relative;
+    display:flex; align-items:center; padding:0 12px;
+  }
+  .spine.s-fill{ background:var(--ink); }
+  .spine.s-rubric{ background:var(--rubric); }
+  .spine .kicker{ font-size:9px; letter-spacing:0.2em; color:var(--ink-3); }
+  .spine.s-fill .kicker, .spine.s-rubric .kicker{ color:var(--paper); opacity:0.85; }
+
+  /* entrance: transform/opacity only, staggered, reduced-motion safe */
+  @media (prefers-reduced-motion: no-preference){
+    .pad > *{ animation:rise .7s var(--ease) both; }
+    .pad > *:nth-child(2){ animation-delay:.07s; }
+    .pad > *:nth-child(3){ animation-delay:.14s; }
+    .pad > *:nth-child(4){ animation-delay:.21s; }
+    .pad > *:nth-child(5){ animation-delay:.28s; }
+    @keyframes rise{
+      from{ opacity:0; transform:translateY(14px); }
+      to{ opacity:1; transform:none; }
+    }
+  }
+  @media print{
+    body{ background:none; }
+    .deck{ gap:0; padding:0; }
+    .slide{ break-inside:avoid; }
+  }
 </style>
 </head>
 <body>
 <div class="deck">
 
-  <!-- L02 Act Divider · ink reverse -->
-  <section class="slide ink">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between kicker opacity-70">
+  <!-- 01 · L01 Hero Cover · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
         <span>OPEN DESIGN — Issue №26</span>
-        <span>Act II</span>
-        <span class="folio">04 / 12</span>
+        <span class="tag">Cover</span>
+        <span class="folio">01 / 10</span>
       </header>
-      <div>
-        <div class="kicker opacity-80">第二章</div>
-        <h1 class="display mt-4 leading-[0.95]" style="font-size:clamp(64px,9vw,160px); font-weight:500;">
-          为什么<br/>
-          <span class="body-serif">写作者</span>该写 HTML<br/>
-          而不是 Markdown。
+      <div class="hero-center">
+        <div class="kicker lede-kicker">A field guide · Apache-2.0 · BYOK · No sign-up</div>
+        <h1 class="display">
+          The design tool<br/>
+          <span class="body-serif">you actually own.</span>
         </h1>
+        <p class="body-serif hero-sub">An editorial on open, local, agent-driven design.</p>
+        <p class="hero-lead">
+          Open Design runs on your machine, speaks to 21 coding agents, and never asks
+          you to create an account. In this issue: the premise, the numbers, the method
+          — and what happens to the monthly bill.
+        </p>
+        <div class="kicker hero-meta">
+          <span>Open Source</span><span class="sep">/</span>
+          <span>Local-First</span><span class="sep">/</span>
+          <span>Bring Your Own Keys</span>
+        </div>
       </div>
-      <footer class="flex items-baseline justify-between kicker opacity-60">
-        <span>BY Open Design · 2026 SPRING</span>
-        <span class="body-serif normal-case tracking-normal">A magazine for editorial agents.</span>
+      <footer class="row kicker footline">
+        <span>github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</span>
+        <span class="body-serif">Set in Playfair Display &amp; Inter.</span>
       </footer>
     </div>
   </section>
 
-  <!-- L03 Big Numbers Grid · paper -->
-  <section class="slide paper">
-    <div class="absolute inset-0 p-12 flex flex-col justify-between">
-      <header class="flex items-baseline justify-between kicker" style="color:#3a382f">
+  <!-- 02 · L02 Act Divider · ink reverse -->
+  <section class="slide ink">
+    <div class="pad">
+      <header class="row kicker masthead">
         <span>OPEN DESIGN — Issue №26</span>
-        <span>Numbers</span>
-        <span class="folio">05 / 12</span>
+        <span class="tag">Act I</span>
+        <span class="folio">02 / 10</span>
       </header>
       <div>
-        <div class="kicker" style="color:#6b665b">By the numbers</div>
-        <h2 class="display mt-2 leading-[1.0]" style="font-size:clamp(36px,5vw,72px); font-weight:500;">
-          四个数字, <span class="body-serif">一条线</span> —— HTML 已经赢了。
+        <div class="kicker lede-kicker">Prologue · Apache-2.0 · Runs Locally · BYOK</div>
+        <h1 class="display">
+          Open Design,<br/>
+          <span class="body-serif">open &amp; local,</span><br/>
+          agent-driven.
+        </h1>
+      </div>
+      <footer class="row kicker footline">
+        <span>BY Open Design · 2026 SPRING</span>
+        <span class="body-serif">From idea to prototypes, slides &amp; HTML video — on your own machine.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 03 · L07 Hero Question · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">The Premise</span>
+        <span class="folio">03 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">Act I · One question first</div>
+        <div class="display question">
+          If an agent can do the work,<br/>
+          <span class="body-serif">why does your canvas live</span><br/>
+          in someone else&rsquo;s cloud?
+        </div>
+      </div>
+      <footer class="row kicker footline">
+        <span>No accounts. No seats. No upload.</span>
+        <span class="body-serif">Your files stay files — on your disk.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 04 · L03 Big Numbers Grid · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">Numbers</span>
+        <span class="folio">04 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">By the numbers</div>
+        <h2 class="display">
+          Four numbers, <span class="body-serif">one ecosystem</span> — Open Design is growing up.
         </h2>
       </div>
-      <div class="grid grid-cols-4 gap-8 mt-4">
-        <article class="border-t pt-4" style="border-color:#0a0a0b">
-          <div class="kicker" style="color:#6b665b">现有模板</div>
-          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">75</div>
-          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f"><span class="body-serif">+16</span> in this release; cover slides, docs, frames.</p>
+      <div class="num-grid">
+        <article class="stat">
+          <div class="kicker">GitHub Stars</div>
+          <div class="display stat-num">60<span class="body-serif">K+</span></div>
+          <p>Apache-2.0 <span class="body-serif">open source</span>; fork, self-host &amp; commercial use all allowed.</p>
         </article>
-        <article class="border-t pt-4" style="border-color:#0a0a0b">
-          <div class="kicker" style="color:#6b665b">本地 Agent</div>
-          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">17</div>
-          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">Claude · Codex · Cursor · Gemini · Copilot, all <span class="body-serif">stdin</span>.</p>
+        <article class="stat">
+          <div class="kicker">Plugins</div>
+          <div class="display stat-num">217<span class="body-serif">+</span></div>
+          <p>Prototypes · Slides · Posters · <span class="body-serif">dashboards</span> · weekly reports · OKR.</p>
         </article>
-        <article class="border-t pt-4" style="border-color:#0a0a0b">
-          <div class="kicker" style="color:#6b665b">平均生成</div>
-          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">80<span class="body-serif text-[40px]">s</span></div>
-          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">一份杂志风 PPT, <span class="body-serif">31KB</span> 自包含 HTML.</p>
+        <article class="stat">
+          <div class="kicker">Design Systems</div>
+          <div class="display stat-num">129</div>
+          <p>One-click import from GitHub / Figma / <span class="body-serif">local files</span>.</p>
         </article>
-        <article class="border-t pt-4" style="border-color:#0a0a0b">
-          <div class="kicker" style="color:#6b665b">API Keys</div>
-          <div class="display mt-2" style="font-size:84px; font-weight:500; line-height:1;">0</div>
-          <p class="mt-3 text-[13px] leading-snug" style="color:#3a382f">复用你 <span class="body-serif">已经登录</span>的 CLI session.</p>
+        <article class="stat">
+          <div class="kicker">Coding Agents</div>
+          <div class="display stat-num">21</div>
+          <p>Auto-detects CLIs on your PATH; <span class="body-serif">zero-config</span> hookup.</p>
         </article>
       </div>
-      <footer class="flex items-baseline justify-between kicker opacity-70" style="color:#3a382f">
-        <span>Source: HTML-Anything internal · 2026-05</span>
-        <span class="body-serif normal-case tracking-normal">Set in Playfair &amp; Inter.</span>
+      <footer class="row kicker footline">
+        <span>Star &amp; download: github.com/nexu-io/open-design</span>
+        <span class="body-serif">Set in Playfair &amp; Inter.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 05 · L09 Before / After · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">The Ledger</span>
+        <span class="folio">05 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">Act II · Monthly cost $500 &rarr; ~$73 (&minus;80%)</div>
+        <h2 class="display">
+          The monthly bill, <span class="body-serif">re-set in ink.</span>
+        </h2>
+      </div>
+      <div class="split">
+        <div class="col-before">
+          <div class="kicker col-head">Before — The subscription stack</div>
+          <div class="ledger-row"><span>Design tool, five seats</span><span class="body-serif">$180</span></div>
+          <div class="ledger-row"><span>Prototyping &amp; handoff</span><span class="body-serif">$120</span></div>
+          <div class="ledger-row"><span>Slides, docs &amp; whiteboards</span><span class="body-serif">$90</span></div>
+          <div class="ledger-row"><span>Stock, fonts &amp; exports</span><span class="body-serif">$110</span></div>
+          <div class="ledger-row ledger-total"><span>Total, per month</span><span class="body-serif">$500</span></div>
+        </div>
+        <div>
+          <div class="kicker col-head">After — Open Design</div>
+          <div class="ledger-row"><span>Open Design, Apache-2.0</span><span class="body-serif">$0</span></div>
+          <div class="ledger-row"><span>Sign-up &amp; seat licenses</span><span class="body-serif">none</span></div>
+          <div class="ledger-row"><span>Model usage, your own keys</span><span class="body-serif">~$73</span></div>
+          <div class="ledger-row"><span>Lock-in, export fees</span><span class="body-serif">none</span></div>
+          <div class="ledger-row ledger-total"><span>Total, per month</span><span class="body-serif">~$73 (&minus;80%)</span></div>
+        </div>
+      </div>
+      <footer class="row kicker footline">
+        <span>One studio&rsquo;s stack, measured over a quarter</span>
+        <span class="body-serif">BYOK: pay the model provider, not the middleman.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 06 · L06 Pipeline / Flow · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">The Method</span>
+        <span class="folio">06 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">Act II · How a brief becomes an artifact</div>
+        <h2 class="display">
+          From a sentence <span class="body-serif">to a shipped artifact.</span>
+        </h2>
+      </div>
+      <div class="steps">
+        <article class="step">
+          <div class="step-no">№1</div>
+          <h3>Describe</h3>
+          <p>Write the brief in plain language; attach a design system if you have one.</p>
+        </article>
+        <article class="step">
+          <div class="step-no">№2</div>
+          <h3>Delegate</h3>
+          <p>Any of 21 coding agents picks up the task — detected on your PATH, zero config.</p>
+        </article>
+        <article class="step">
+          <div class="step-no">№3</div>
+          <h3>Draft</h3>
+          <p>The agent writes real HTML, CSS &amp; SVG locally; no canvas, no lock-in.</p>
+        </article>
+        <article class="step">
+          <div class="step-no">№4</div>
+          <h3>Refine</h3>
+          <p>Annotate, compare, re-prompt; every revision is a file you can diff &amp; keep.</p>
+        </article>
+        <article class="step">
+          <div class="step-no">№5</div>
+          <h3>Ship</h3>
+          <p>Export decks, prototypes &amp; pages straight from disk — yours, forever.</p>
+        </article>
+      </div>
+      <footer class="row kicker footline">
+        <span>Works with the agents you already run</span>
+        <span class="body-serif">Claude, Codex, Gemini &amp; eighteen friends.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 07 · L05 Image Grid · paper · pure-CSS plates -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">The Plates</span>
+        <span class="folio">07 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">Act III · 217+ plugins in the case</div>
+        <h2 class="display">
+          One press, <span class="body-serif">six daily imprints.</span>
+        </h2>
+      </div>
+      <div class="plates">
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b b-frame" style="left:8%; top:8%; right:8%; bottom:0;"></i>
+            <i class="b" style="left:8%; top:8%; right:8%; height:14px;"></i>
+            <i class="b b-line" style="left:8%; top:34%; width:18%; bottom:0;"></i>
+            <i class="b b-rubric" style="left:32%; top:44%; width:26%; height:10px;"></i>
+            <i class="b b-line" style="left:32%; top:62%; width:52%; height:6px;"></i>
+            <i class="b b-line" style="left:32%; top:74%; width:40%; height:6px;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">Prototypes</span><span class="body-serif">clickable</span></figcaption>
+        </figure>
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b" style="left:8%; top:12%; width:42%; bottom:8%;"></i>
+            <i class="b b-line" style="left:58%; top:18%; width:34%; height:7px;"></i>
+            <i class="b b-line" style="left:58%; top:34%; width:28%; height:7px;"></i>
+            <i class="b b-rubric" style="left:58%; top:50%; width:18%; height:7px;"></i>
+            <i class="b b-line" style="left:58%; bottom:8%; width:34%; height:2px;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">Slide Decks</span><span class="body-serif">like this one</span></figcaption>
+        </figure>
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b b-rubric" style="left:36%; top:0; width:28%; bottom:18%;"></i>
+            <i class="b" style="left:36%; bottom:8%; width:28%; height:4px;"></i>
+            <i class="b b-line" style="left:10%; top:20%; width:16%; height:6px;"></i>
+            <i class="b b-line" style="right:10%; bottom:30%; width:16%; height:6px;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">Posters</span><span class="body-serif">print-ready</span></figcaption>
+        </figure>
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b b-line" style="left:8%; bottom:0; width:12%; height:36%;"></i>
+            <i class="b" style="left:26%; bottom:0; width:12%; height:62%;"></i>
+            <i class="b b-rubric" style="left:44%; bottom:0; width:12%; height:88%;"></i>
+            <i class="b b-line" style="left:62%; bottom:0; width:12%; height:48%;"></i>
+            <i class="b" style="left:80%; bottom:0; width:12%; height:72%;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">Dashboards</span><span class="body-serif">live data</span></figcaption>
+        </figure>
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b b-frame" style="left:8%; top:8%; right:8%; bottom:24%;"></i>
+            <i class="b" style="left:20%; top:30%; width:16px; height:16px;"></i>
+            <i class="b b-line" style="left:8%; bottom:10%; right:8%; height:3px;"></i>
+            <i class="b b-rubric" style="left:8%; bottom:10%; width:34%; height:3px;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">HTML Video</span><span class="body-serif">rendered</span></figcaption>
+        </figure>
+        <figure class="plate">
+          <div class="plate-art">
+            <i class="b" style="left:8%; top:12%; width:38%; height:8px;"></i>
+            <i class="b b-line" style="left:8%; top:34%; width:84%; height:5px;"></i>
+            <i class="b b-line" style="left:8%; top:48%; width:74%; height:5px;"></i>
+            <i class="b b-line" style="left:8%; top:62%; width:80%; height:5px;"></i>
+            <i class="b b-rubric" style="left:8%; top:78%; width:24%; height:5px;"></i>
+          </div>
+          <figcaption class="plate-cap"><span class="kicker">Weekly Reports</span><span class="body-serif">auto-set</span></figcaption>
+        </figure>
+      </div>
+      <footer class="row kicker footline">
+        <span>Every plate is a plugin; every plugin is a folder</span>
+        <span class="body-serif">Readable, forkable, yours.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 08 · L04 Quote + Image · paper -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">The Systems</span>
+        <span class="folio">08 / 10</span>
+      </header>
+      <div class="media-split">
+        <div>
+          <div class="kicker lede-kicker">Act III · 129 design systems, one click</div>
+          <h2 class="display">
+            Your brand, <span class="body-serif">set in type.</span>
+          </h2>
+          <p class="body-copy">
+            129 design systems import in one click — from GitHub, Figma or local files —
+            and every artifact the agent produces is set in your tokens, your spacing,
+            your voice. Not a template&rsquo;s.
+          </p>
+          <p class="body-serif callout">
+            &ldquo;A design system is the argument your company makes in public.
+            Open Design keeps you holding the pen.&rdquo;
+          </p>
+        </div>
+        <div>
+          <figure class="fig-wide">
+            <i class="b" style="left:0; top:0; width:18%; bottom:0;"></i>
+            <i class="b" style="left:18%; top:0; width:18%; bottom:0; opacity:0.66;"></i>
+            <i class="b" style="left:36%; top:0; width:18%; bottom:0; opacity:0.33;"></i>
+            <i class="b" style="left:54%; top:0; width:14%; bottom:0; background:var(--rubric);"></i>
+            <span class="display specimen">Aa</span>
+          </figure>
+          <div class="kicker fig-cap">Fig. 08 — Tokens, swatches &amp; a specimen</div>
+        </div>
+      </div>
+      <footer class="row kicker footline">
+        <span>Import once, apply everywhere</span>
+        <span class="body-serif">GitHub repos, Figma files, or a folder of CSS.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 09 · L08 Big Quote · ink reverse -->
+  <section class="slide ink">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">Voices</span>
+        <span class="folio">09 / 10</span>
+      </header>
+      <div>
+        <div class="kicker lede-kicker">Act IV · Margin note, set large</div>
+        <div class="display bigquote">
+          &ldquo;Tools you rent shape you to their roadmap.
+          <span class="body-serif">Tools you own shape themselves to yours.&rdquo;</span>
+        </div>
+        <div class="row attrib">
+          <span class="kicker">— The Open Design manifesto</span>
+          <span class="body-serif">Spring, 2026</span>
+        </div>
+      </div>
+      <footer class="row kicker footline">
+        <span>Apache-2.0 · forever forkable</span>
+        <span class="body-serif">The license is the promise.</span>
+      </footer>
+    </div>
+  </section>
+
+  <!-- 10 · L10 Mixed Media · paper · colophon / CTA -->
+  <section class="slide paper">
+    <div class="pad">
+      <header class="row kicker masthead">
+        <span>OPEN DESIGN — Issue №26</span>
+        <span class="tag">Colophon</span>
+        <span class="folio">10 / 10</span>
+      </header>
+      <div class="mixed">
+        <div>
+          <div class="kicker lede-kicker">Epilogue · The press is open</div>
+          <h2 class="display">
+            Join <span class="body-serif">the print run.</span>
+          </h2>
+          <p class="body-copy">
+            Open Design is built in public by 300+ contributors and starred by 60K+
+            readers. There is nothing to sign up for and no seat to license — clone it,
+            run it locally, bring your own keys, and start printing.
+          </p>
+          <div class="link-row"><span>github.com/nexu-io/open-design</span><span class="body-serif">source &amp; releases</span></div>
+          <div class="link-row"><span>discord.gg/qhbcCH8Am4</span><span class="body-serif">the press room</span></div>
+          <div class="link-row"><span>x.com/nexudotio</span><span class="body-serif">dispatches</span></div>
+        </div>
+        <figure class="fig-tall">
+          <div class="kicker arch-label" style="color:var(--ink-3);">The back catalogue</div>
+          <div class="spine"><span class="kicker">Issue №21 — Agents</span></div>
+          <div class="spine s-fill"><span class="kicker">Issue №22 — Tokens</span></div>
+          <div class="spine"><span class="kicker">Issue №23 — Plugins</span></div>
+          <div class="spine s-rubric"><span class="kicker">Issue №24 — Local</span></div>
+          <div class="spine"><span class="kicker">Issue №25 — BYOK</span></div>
+          <div class="spine s-fill"><span class="kicker">Issue №26 — Owned</span></div>
+        </figure>
+      </div>
+      <footer class="row kicker footline">
+        <span>OPEN DESIGN — Issue №26 · 2026 SPRING</span>
+        <span class="body-serif">Printed locally, on your machine.</span>
       </footer>
     </div>
   </section>
