@@ -90,6 +90,7 @@ import {
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
+  type UrlLoadDecision,
 } from './file-viewer-render-mode';
 import { saveTemplate } from '../state/projects';
 import type {
@@ -4698,6 +4699,19 @@ function HtmlViewer({
   const [manualEditMode, setManualEditModeRaw] = useState(false);
   const [manualEditSrcDocActive, setManualEditSrcDocActive] = useState(false);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
+  // Source snapshot frozen while a non-edit annotation pass (Mark/Draw,
+  // Comment, Inspect) is open. The file-watcher live-reload (chokidar →
+  // filesRefresh → preview refresh) would otherwise re-render the iframe
+  // mid-annotation whenever the agent rewrites the file — wiping in-progress
+  // strokes, the picked element, scroll, and focus. We hold the snapshot
+  // captured at mode entry and release it on exit, so the latest content
+  // flushes in exactly once when the user is done. Manual Edit keeps its own
+  // freeze (manualEditFrozenSource) because it also streams live style
+  // patches over postMessage. NOTE: this intentionally pauses the
+  // comment-mode agent-edit live refresh added with the §5162 cache-bust —
+  // the user reported that mid-comment refresh as disruptive; eventual
+  // consistency is preserved by the flush on close.
+  const [annotationFrozenSource, setAnnotationFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
@@ -5210,6 +5224,11 @@ function HtmlViewer({
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const livePreviewSource = inlinedSource ?? source;
+  // Annotation modes that should hold the preview still while open. Manual
+  // Edit is handled by its own freeze just below; these are the non-edit
+  // passes (Mark/Draw, Comment, Inspect) that also must not be yanked out
+  // from under the user by a background file change.
+  const annotationFreezeActive = drawOverlayOpen || boardMode || inspectMode;
   // Freeze the iframe input on the snapshot taken at Edit-mode entry. Any
   // source rewrite during edit (1.5s debounced set-style patches) stays
   // invisible to the iframe — live updates flow through od-edit-preview-style
@@ -5219,9 +5238,24 @@ function HtmlViewer({
       setManualEditFrozenSource(livePreviewSource);
     }
   }, [manualEditMode, manualEditFrozenSource, livePreviewSource]);
+  // Capture / release the annotation snapshot at mode entry / exit. Captured
+  // once (the `=== null` guard), so a mid-pass file change can't slip a fresh
+  // snapshot in; cleared on exit so `previewSource` falls back to the latest
+  // live source and the deferred update lands in one clean render.
+  useEffect(() => {
+    if (annotationFreezeActive) {
+      if (annotationFrozenSource === null && livePreviewSource != null) {
+        setAnnotationFrozenSource(livePreviewSource);
+      }
+    } else if (annotationFrozenSource !== null) {
+      setAnnotationFrozenSource(null);
+    }
+  }, [annotationFreezeActive, annotationFrozenSource, livePreviewSource]);
   const previewSource = (manualEditMode && manualEditFrozenSource !== null)
     ? manualEditFrozenSource
-    : livePreviewSource;
+    : (annotationFreezeActive && annotationFrozenSource !== null)
+      ? annotationFrozenSource
+      : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(source);
   const manualEditRequiresSrcDoc = manualEditSrcDocActive && !urlModeBridge;
@@ -5244,7 +5278,7 @@ function HtmlViewer({
     [source],
   );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
+  const urlLoadDecision: UrlLoadDecision = {
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode,
@@ -5255,29 +5289,77 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
-  }) && !manualEditRequiresSrcDoc;
+  };
+  const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
+  // Hold the iframe URL still (it carries file.mtime) while the user is mid
+  // annotation/edit, mirroring the source freeze above. Otherwise a
+  // background file change bumps mtime → basePreviewSrcUrl → a URL-load
+  // reload right under an active mark/comment/edit/inspect. Captured once at
+  // mode entry via a ref and released on exit, so the deferred reload lands
+  // exactly once when the user is done.
+  const interactivePreviewModeActive = annotationFreezeActive || manualEditMode;
+  const frozenPreviewSrcUrlRef = useRef<string | null>(null);
+  if (interactivePreviewModeActive) {
+    if (frozenPreviewSrcUrlRef.current === null) {
+      frozenPreviewSrcUrlRef.current = basePreviewSrcUrl;
+    }
+  } else {
+    frozenPreviewSrcUrlRef.current = null;
+  }
+  const effectiveBasePreviewSrcUrl = frozenPreviewSrcUrlRef.current ?? basePreviewSrcUrl;
+  // Switching to a different file/project while an annotation tool is still
+  // open must NOT keep the viewer pinned to the previous artifact. The
+  // per-file annotation data is already reset on file.name change, but the
+  // freeze snapshots and the mode flags would otherwise survive — leaving the
+  // frozen source/URL stuck on the old file until the user manually closes the
+  // tool (and clearing the freeze alone would just re-freeze the old source
+  // before the new file's fetch lands). Close the per-file tools and drop both
+  // freezes on a file/project switch so the new artifact renders live, the way
+  // manualEditFrozenSource is reset just above.
+  useEffect(() => {
+    frozenPreviewSrcUrlRef.current = null;
+    setAnnotationFrozenSource(null);
+    setDrawOverlayOpen(false);
+    setBoardMode(false);
+    setInspectMode(false);
+    setSrcDocMaterialized(false);
+    // Closing boardMode alone is not enough: the comment dock renders off
+    // `commentPanelOpen` and a panel save reuses `activeCommentTarget` /
+    // `activePreviewCommentId`, both file-scoped. Left open across a file swap
+    // the dock stays visible and the next save would post back to the previous
+    // file/element. Fully tear the comment tool down here. (The composer data —
+    // activeCommentTarget, drafts, queued notes — is cleared by the file.name
+    // reset effect below; these are the UI-open flags it doesn't touch.)
+    setCommentPanelOpen(false);
+    setCommentCreateMode(false);
+    setActivePreviewCommentId(null);
+  }, [projectId, file.name]);
   const activePreviewSrcUrl = (
-    previewSrcUrl === basePreviewSrcUrl ||
-    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`)
+    previewSrcUrl === effectiveBasePreviewSrcUrl ||
+    previewSrcUrl.startsWith(`${effectiveBasePreviewSrcUrl}&`)
   )
     ? previewSrcUrl
-    : basePreviewSrcUrl;
+    : effectiveBasePreviewSrcUrl;
   useEffect(() => {
-    setPreviewSrcUrl(basePreviewSrcUrl);
+    setPreviewSrcUrl(effectiveBasePreviewSrcUrl);
     setUrlSelectionBridgeReady(false);
-  }, [basePreviewSrcUrl]);
+  }, [effectiveBasePreviewSrcUrl]);
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
   }, [useUrlLoadPreview]);
 
   useEffect(() => {
     if (filesRefreshKey === 0) return;
-    const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    // Defer the file-watcher live-reload while annotating; the effect re-runs
+    // when the mode closes (interactivePreviewModeActive flips) and applies
+    // the now-current URL in one pass.
+    if (interactivePreviewModeActive) return;
+    const nextSrc = `${effectiveBasePreviewSrcUrl}&fr=${filesRefreshKey}`;
     const timeout = window.setTimeout(() => {
       if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
         urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
@@ -5286,7 +5368,7 @@ function HtmlViewer({
       }
     }, 180);
     return () => window.clearTimeout(timeout);
-  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
+  }, [effectiveBasePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview, interactivePreviewModeActive]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -5307,15 +5389,33 @@ function HtmlViewer({
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       selectionBridge: true,
-      editBridge: manualEditRequiresSrcDoc,
+      // Always inject the manual-edit bridge into the PREVIEW srcDoc (not the
+      // export path), so the document is byte-identical across preview /
+      // comment / draw / edit. The bridge boots dormant (`enabled=false`) and
+      // only acts on the host's `od-edit-mode {enabled:true}` postMessage
+      // (sent by syncBridgeModes), with all its handlers gated on `enabled`
+      // and its styles scoped to `html[data-od-edit-mode]`. Gating injection on
+      // edit mode instead changed the srcdoc string on entering Edit, which
+      // re-parses the whole document — the "reload from scratch on switch" the
+      // user hit. Mirrors the always-on tweaks bridge rationale above.
+      editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
   const [srcDocShellReady, setSrcDocShellReady] = useState(false);
+  // Sticky once the srcDoc iframe has materialized the real artifact for the
+  // first time (i.e. the first entry into Mark/Edit/Comment/Inspect). Until
+  // then the srcDoc iframe stays on the lazy shell — so passive preview never
+  // runs a hidden second copy of the artifact (no double mount, and no white:
+  // we only materialize while the iframe is VISIBLE, where scroll/reveal
+  // animations fire correctly). Once materialized it stays real even back in
+  // URL-load mode (hidden), so every later mode toggle is an instant
+  // visibility swap with no re-load. Reset on file/project change.
+  const [srcDocMaterialized, setSrcDocMaterialized] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
   const urlPreviewKeepAliveKey = previewIframeKeepAliveKey(projectId, file.name);
   // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
@@ -5357,9 +5457,37 @@ function HtmlViewer({
   // a postMessage activation that can race (#2253) and strand the iframe blank
   // (#2361, #2791).
   const captureModeActive = drawOverlayOpen;
-  const useLazySrcDocTransport = !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview;
+  // Once `srcDocMaterialized` is set (after the first mode entry), keep the
+  // srcDoc iframe on the real artifact even when hidden behind URL-load, so
+  // re-entering a mode is an instant visibility swap rather than a re-mount +
+  // re-load. Direct-mount path (no #2361/#2791 postMessage race).
+  const useLazySrcDocTransport =
+    !manualEditRequiresSrcDoc && !captureModeActive && useUrlLoadPreview && !srcDocMaterialized;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
-  const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
+  // Materialize the srcDoc iframe the first time it actually becomes the active
+  // (visible) transport — i.e. the first Mark/Edit/Comment/Inspect entry. We do
+  // NOT pre-render it while hidden/idle: that ran a second live copy during
+  // passive preview (double mount) and rendered scroll/reveal-animated content
+  // while invisible, which left it stuck blank (the white-on-enter bug). Doing
+  // it on first visible entry means the one materialization paints correctly,
+  // and the sticky flag keeps it warm for every subsequent toggle.
+  useEffect(() => {
+    if (!useUrlLoadPreview && !srcDocMaterialized) setSrcDocMaterialized(true);
+  }, [useUrlLoadPreview, srcDocMaterialized]);
+  // When the srcDoc switch is driven ONLY by Draw/annotation mode — an
+  // artifact that would otherwise URL-load — keep the URL-load iframe warm
+  // instead of parking it at about:blank. Draw is a quick "mark → screenshot →
+  // close" round-trip; parking forces a full artifact re-fetch the moment the
+  // overlay closes, which users see as a jarring black → loading → reload right
+  // after every screenshot. Sticky srcDoc modes (inspect / edit / palette /
+  // tweaks / comment / deck / focus-guard / sandbox-shim) keep parking, so two
+  // live copies never linger beyond the brief annotation pass.
+  const srcDocForcedOnlyByDraw =
+    drawOverlayOpen &&
+    !manualEditRequiresSrcDoc &&
+    shouldUrlLoadHtmlPreview({ ...urlLoadDecision, drawMode: false });
+  const urlTransportSrc =
+    useUrlLoadPreview || srcDocForcedOnlyByDraw ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     if (!canActivateSrcDocTransport({
       srcDoc,
@@ -5416,19 +5544,28 @@ function HtmlViewer({
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
-      if (!wasUrlLoadPreviewRef.current) {
+      // Remounting the srcDoc iframe on a render-mode flip resets it to a fresh
+      // lazy shell — needed ONLY for the lazy postMessage-activation path
+      // (#2253 shell-ready handshake). When the srcDoc iframe is direct-mounted
+      // (prewarmed, or an annotation mode), its content lives in the srcdoc
+      // attribute, so a remount would just throw away the warm render and force
+      // a reload. That is exactly the thrash users saw toggling Comment
+      // (URL-load) ↔ Mark (srcDoc): each flip remounted and reloaded. Keep the
+      // iframe alive in the direct-mount case so the toggle is a pure
+      // visibility swap.
+      if (!wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
         setSrcDocTransportResetKey((key) => key + 1);
       }
       wasUrlLoadPreviewRef.current = true;
       return;
     }
-    if (wasUrlLoadPreviewRef.current) {
+    if (wasUrlLoadPreviewRef.current && useLazySrcDocTransport) {
       setSrcDocTransportResetKey((key) => key + 1);
       activatedSrcDocTransportHtmlRef.current = null;
     }
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview]);
+  }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
   
   useEffect(() => {
     restorePreviewScrollPosition();
