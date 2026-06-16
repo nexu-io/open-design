@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -536,7 +537,24 @@ async function main(): Promise<void> {
   await commandStopOrStatus(command, flags.json === true, config);
 }
 
-void main().catch((error: unknown) => {
-  process.stderr.write(`open-design webui failed: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(1);
-});
+// Only drive the CLI when this module IS the process entrypoint. Importing it
+// (e.g. a focused unit test loading the banner helpers) must be side-effect
+// free — a top-level `void main()` would otherwise scaffold config and run the
+// real start flow on import. realpath both sides so a symlinked launch path
+// (such as the macOS `/tmp` -> `/private/tmp` alias) still matches the module.
+function isModuleEntrypoint(): boolean {
+  const entry = process.argv[1];
+  if (entry == null) return false;
+  try {
+    return realpathSync(entry) === realpathSync(SELF);
+  } catch {
+    return false;
+  }
+}
+
+if (isModuleEntrypoint()) {
+  void main().catch((error: unknown) => {
+    process.stderr.write(`open-design webui failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(1);
+  });
+}

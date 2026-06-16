@@ -35,6 +35,24 @@ function isPathWithin(base: string, target: string): boolean {
 }
 
 /**
+ * Canonicalizes a path through `realpath` when it exists on disk, falling back
+ * to the lexically resolved path otherwise (and on any realpath error). This
+ * lets containment checks see through symlink aliases — most importantly the
+ * macOS `/tmp` -> `/private/tmp` alias, where the launcher exports
+ * `OD_RESOURCE_ROOT=/tmp/.../resources/open-design` while the daemon's safe base
+ * resolves to `/private/tmp/.../resources`; without canonicalization the two
+ * read as different trees and a valid resource root is wrongly rejected.
+ */
+function canonicalizePath(value: string): string {
+  const resolved = path.resolve(value);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+/**
  * Returns the bundled-resources directory for a packaged no-Electron (WebUI)
  * install, or null when the daemon is not running from such a layout.
  *
@@ -105,7 +123,16 @@ export function resolveDaemonResourceRoot({
     .filter((base): base is string => typeof base === 'string' && base.length > 0)
     .map((base) => path.resolve(base));
 
-  if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
+  // Compare through realpath-canonicalized paths so a symlinked install (e.g.
+  // a WebUI archive unpacked under the macOS `/tmp` -> `/private/tmp` alias) is
+  // not rejected just because the configured root and the safe base reach the
+  // same tree via different symlink spellings.
+  const canonicalResolved = canonicalizePath(resolved);
+  const isWithinAnySafeBase = normalizedSafeBases.some(
+    (base) => isPathWithin(canonicalizePath(base), canonicalResolved),
+  );
+
+  if (!isWithinAnySafeBase) {
     throw new Error(
       `${RESOURCE_ROOT_ENV} must be under the workspace root or app resources path`,
     );

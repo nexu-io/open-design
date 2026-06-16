@@ -1,5 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   resolveBundledNodeAppResourcesPath,
   resolveDaemonCliPath,
@@ -111,6 +113,46 @@ describe('resolveDaemonResourceRoot', () => {
 
     expect(safeBase).toBe(path.join(appRoot, 'resources'));
     expect(resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toBe(configured);
+  });
+
+  // Packaged WebUI archive unpacked under a symlinked temp root (the macOS
+  // `/tmp` -> `/private/tmp` alias is the real-world trigger). The launcher
+  // exports OD_RESOURCE_ROOT through the symlink spelling while the daemon's
+  // safe base canonicalizes to the real path; the containment check must see
+  // through the alias instead of rejecting a valid resource root.
+  describe('symlinked install root (e.g. macOS /tmp -> /private/tmp)', () => {
+    const cleanups: Array<() => void> = [];
+    afterEach(() => {
+      while (cleanups.length > 0) cleanups.pop()?.();
+    });
+
+    it('accepts a resource root reached through a symlinked alias of its safe base', () => {
+      const realRoot = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'od-webui-symlink-')),
+      );
+      cleanups.push(() => fs.rmSync(realRoot, { recursive: true, force: true }));
+
+      const appRoot = path.join(realRoot, 'app');
+      fs.mkdirSync(path.join(appRoot, 'node_modules'), { recursive: true });
+      fs.mkdirSync(path.join(appRoot, 'resources', 'open-design'), { recursive: true });
+
+      // A sibling symlink that points back at realRoot, emulating how /tmp is a
+      // symlink to /private/tmp on macOS.
+      const aliasRoot = `${realRoot}-alias`;
+      fs.symlinkSync(realRoot, aliasRoot, 'dir');
+      cleanups.push(() => fs.rmSync(aliasRoot, { force: true }));
+
+      // Safe base is derived from the canonical node_modules project root...
+      const safeBase = resolveBundledNodeAppResourcesPath(
+        path.join(appRoot, 'node_modules'),
+      );
+      // ...while the launcher hands OD_RESOURCE_ROOT in via the alias spelling.
+      const configured = path.join(aliasRoot, 'app', 'resources', 'open-design');
+
+      expect(resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toBe(
+        path.resolve(configured),
+      );
+    });
   });
 });
 
