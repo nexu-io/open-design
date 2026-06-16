@@ -443,10 +443,33 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
 
     expect(screen.queryByText('Signing in…')).toBeNull();
     // Switching to the Local runtime clears the AMR login-pending state. The
-    // Connect gate then keeps Continue disabled until a usable local CLI is
-    // actually selected — here onAgentChange is mocked and never commits a
-    // selection, so no runtime is ready and Continue stays disabled.
-    expect(screen.getByRole('button', { name: /^Continue$/i }).hasAttribute('disabled')).toBe(true);
+    // Connect gate then keeps Continue gated (aria-disabled) until a usable
+    // local CLI is actually selected — here onAgentChange is mocked and never
+    // commits a selection, so no runtime is ready and Continue stays gated.
+    expect(
+      screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
+  it('surfaces a runtime-specific gate tooltip on the primary CTA', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    renderOnboarding();
+
+    // AMR selected but signed out: the CTA is "Sign in to continue" and carries
+    // the AMR gate tooltip. It stays clickable (starts login), so not aria-disabled.
+    const signIn = await screen.findByRole('button', { name: /Sign in to continue/i });
+    expect(signIn.getAttribute('data-tooltip')).toMatch(/Open Design AMR/i);
+    expect(signIn.getAttribute('aria-disabled')).not.toBe('true');
+
+    // Switch to Local with no committed agent: Continue is gated (aria-disabled)
+    // and the tooltip points the user at selecting a local CLI.
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+    const cont = screen.getByRole('button', { name: /^Continue$/i });
+    expect(cont.getAttribute('aria-disabled')).toBe('true');
+    expect(cont.getAttribute('data-tooltip')).toMatch(/local CLI/i);
   });
 
   it('cancels AMR login and re-enables onboarding after the login timeout', async () => {

@@ -1108,6 +1108,32 @@ function OnboardingView({
     (runtime === 'byok' && byokConnectionVerified);
   const connectStepBlocked =
     step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
+  // Which Connect gate is in the way, for the Continue tooltip. The three
+  // "blocked" reasons hold Continue disabled; `amr_signed_out` is the
+  // "Sign in to continue" CTA — still clickable, but the tooltip explains why
+  // the next steps need a runtime first.
+  const connectGateReason: 'no_runtime' | 'amr_signed_out' | 'local_agent_unavailable' | 'byok_unverified' | null =
+    step !== 0
+      ? null
+      : amrSelectedAndSignedOut
+        ? 'amr_signed_out'
+        : connectStepBlocked
+          ? runtime === 'local'
+            ? 'local_agent_unavailable'
+            : runtime === 'byok'
+              ? 'byok_unverified'
+              : 'no_runtime'
+          : null;
+  const connectGateTooltip =
+    connectGateReason === 'amr_signed_out'
+      ? t('settings.onboardingGateTooltipAmr')
+      : connectGateReason === 'local_agent_unavailable'
+        ? t('settings.onboardingGateTooltipLocal')
+        : connectGateReason === 'byok_unverified'
+          ? t('settings.onboardingGateTooltipByok')
+          : connectGateReason === 'no_runtime'
+            ? t('settings.onboardingGateTooltipNoRuntime')
+            : null;
 
   useEffect(() => {
     return () => {
@@ -1463,6 +1489,10 @@ function OnboardingView({
   }
   async function handlePrimaryAction() {
     if (newsletterSubmitting) return;
+    // Connect gate: the button is `aria-disabled` (not natively disabled, so it
+    // can still surface its tooltip on hover), so guard the click here — a
+    // blocked Continue must not advance past the Connect step.
+    if (connectStepBlocked) return;
     if (step === 0 && amrSelectedAndSignedOut) {
       const attribution = recordAmrEntry(
         analytics.track,
@@ -2175,14 +2205,18 @@ function OnboardingView({
             ) : null}
             <button
               type="button"
-              className="onboarding-view__primary"
+              className={`onboarding-view__primary${
+                connectGateTooltip ? ' od-tooltip' : ''
+              }`}
               onClick={handlePrimaryAction}
-              disabled={
-                amrLoginPending ||
-                amrLoginCancelPending ||
-                newsletterSubmitting ||
-                connectStepBlocked
-              }
+              // The Connect gate uses `aria-disabled`, not the native `disabled`
+              // attribute, so the button still receives hover/focus and can show
+              // its tooltip explaining what to configure. `handlePrimaryAction`
+              // guards the click. Truly-busy states stay natively disabled.
+              disabled={amrLoginPending || amrLoginCancelPending || newsletterSubmitting}
+              aria-disabled={connectStepBlocked || undefined}
+              data-tooltip={connectGateTooltip ?? undefined}
+              data-tooltip-placement="top"
               aria-busy={newsletterSubmitting ? true : undefined}
             >
               <span>{primaryActionLabel}</span>
