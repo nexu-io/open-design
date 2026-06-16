@@ -14,7 +14,7 @@ import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
-import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument } from '../artifacts/recover';
+import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import {
   findFirstQuestionForm,
@@ -1807,12 +1807,12 @@ export function ProjectView({
       sourceText?: string,
       options: { pointerMinMtime?: number } = {},
     ) => {
-      const recoveredHtml = recoverHtmlArtifactFromPrecedingDocument({
+      const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
         sourceText,
       });
-      const artifactToPersist = recoveredHtml ? { ...art, html: recoveredHtml } : art;
+      const artifactToPersist = persistedHtml === art.html ? art : { ...art, html: persistedHtml };
       const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
       // Pick a name that doesn't collide with an existing project file.
@@ -2951,7 +2951,11 @@ export function ProjectView({
                     nextFiles,
                     { minMtime: runStartedAt },
                   ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: artifactToPersist.html,
+                    artifactHtml: resolvePersistedArtifactHtml({
+                      artifactHtml: artifactToPersist.html,
+                      identifier: artifactToPersist.identifier,
+                      sourceText: replayedContent,
+                    }),
                     producedFiles: producedBeforeFallback,
                     readProjectHtml,
                   });
@@ -3966,7 +3970,11 @@ export function ProjectView({
             if (artifactToPersist?.html) {
               const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                artifactHtml: artifactToPersist.html,
+                artifactHtml: resolvePersistedArtifactHtml({
+                  artifactHtml: artifactToPersist.html,
+                  identifier: artifactToPersist.identifier,
+                  sourceText: finalText,
+                }),
                 producedFiles: producedBeforeFallback,
                 readProjectHtml,
               });

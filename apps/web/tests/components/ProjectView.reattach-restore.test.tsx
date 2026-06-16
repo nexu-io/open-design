@@ -8,6 +8,7 @@ import {
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
+import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -288,6 +289,41 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
       readProjectHtml,
     })).resolves.toBeNull();
     expect(readProjectHtml).not.toHaveBeenCalled();
+  });
+});
+
+// #4318: when the model emits a prose-only <artifact> next to a complete
+// same-turn <html> document, the call site must resolve the persisted HTML
+// (recovering the preceding document) BEFORE the dedup lookup. Feeding the raw
+// prose summary makes the normalized exact-match miss the same-turn Write file
+// and the recovered document persists a second time as a duplicate artifact.
+describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
+  const realHtml = '<!doctype html><html><head><title>Recovered</title></head><body><main><h1>Recovered</h1></main></body></html>';
+  const proseSummary = '(The complete document above is the delivered artifact.)';
+  const sourceText = `${realHtml}\n<artifact identifier="page" type="text/html">${proseSummary}</artifact>`;
+  const indexFile = { name: 'index.html', path: 'index.html', kind: 'html', mime: 'text/html' };
+  const readProjectHtml = () =>
+    vi.fn(async (name: string) => (name === 'index.html' ? realHtml : null));
+
+  it('binds the same-turn HTML write once the persisted HTML is resolved', async () => {
+    const persistedHtml = resolvePersistedArtifactHtml({
+      artifactHtml: proseSummary,
+      identifier: 'page',
+      sourceText,
+    });
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: persistedHtml,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBe(indexFile);
+  });
+
+  it('misses the match when fed the raw prose summary (the pre-fix regression)', async () => {
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: proseSummary,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBeNull();
   });
 });
 
