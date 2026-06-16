@@ -168,8 +168,9 @@ const READ_ONLY_SHELL_BINARIES = new Set([
 ]);
 
 // `find` actions that delete, run a command, or write a file — these mutate, so
-// a successful `find` carrying one is progress, not an inspection.
-const MUTATING_FIND_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint|fprintf|fls)\b/u;
+// a successful `find` carrying one is progress, not an inspection. `fprint\w*`
+// covers the whole file-writing family (-fprint, -fprintf, -fprint0) in one go.
+const MUTATING_FIND_ACTION = /\s-(?:delete|exec|execdir|ok|okdir|fprint\w*|fls)\b/u;
 
 /** First binary of a shell segment, path- and case-stripped (`/usr/bin/sed` -> `sed`). */
 function shellHead(segment: string): string {

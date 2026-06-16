@@ -231,6 +231,8 @@ describe('isReadOnlyShellCommand / isProgressSuccess', () => {
       'find . -exec rm {} \\;',       // -exec runs a command
       'find . -execdir rm {} ;',
       "find . -name x -fprint out.txt",
+      "find . -name '*.ts' -fprint0 out.bin", // -fprint0 writes a file too
+      'find . -fprintf out.txt "%p\\n"',
       '(sed -i s/a/b/ x.ts) && cat x.ts', // subshell head does not parse
       '"sed" -i s/a/b/ x',                // quoted head does not parse
     ]) {
