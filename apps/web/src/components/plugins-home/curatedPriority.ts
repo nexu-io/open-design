@@ -53,7 +53,9 @@ export const CURATED_LIVE_ARTIFACT_PLUGIN_IDS = [
 // Slides shelf, ahead of the standing curated deck picks below. Order here is
 // the exact display order requested (family roots first, then variants).
 const PINNED_SLIDE_PLUGIN_IDS = [
-  'example-frontend-slides',
+  // `example-frontend-slides` (the bare family-root template) is intentionally
+  // NOT pinned — its generic cover reads as filler at the top of the shelf, so
+  // it drops to the uncurated tail while the styled variants below still lead.
   'example-fs-creative-voltage',
   'example-fs-electric-studio',
   'example-fs-emerald-editorial',
