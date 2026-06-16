@@ -223,15 +223,26 @@ const domain = `${system.slug}.com`;
           <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
           <span class="pv-slide-page">01 / 12</span>
         </div>
-        <div class="pv-slide-body">
-          <span class="pv-badge">KEYNOTE</span>
-          <div class="pv-slide-title">Design that<br />ships itself.</div>
-          <div class="pv-slide-sub">One DESIGN.md — every surface on-brand.</div>
-        </div>
-        <div class="pv-slide-foot">
-          <span class="pv-bar"><span></span></span>
-          <span class="pv-bar"><span class="short"></span></span>
-          <span class="pv-bar"><span class="shorter"></span></span>
+        <div class="pv-slide-main">
+          <div class="pv-slide-text">
+            <span class="pv-badge">KEYNOTE</span>
+            <div class="pv-slide-title">Design that ships itself.</div>
+            <div class="pv-slide-sub">One DESIGN.md — every surface on-brand.</div>
+            <div class="pv-cta-row">
+              <span class="pv-btn pv-btn-solid">Next</span>
+              <span class="pv-btn pv-btn-ghost">Agenda</span>
+            </div>
+          </div>
+          <div class="pv-slide-visual" aria-hidden="true">
+            <div class="pv-slide-chart">
+              <span style="height:42%"></span>
+              <span style="height:64%"></span>
+              <span style="height:88%"></span>
+              <span style="height:72%"></span>
+            </div>
+            <div class="pv-slide-chip"></div>
+            <div class="pv-slide-chip short"></div>
+          </div>
         </div>
       </div>
     )}
@@ -459,11 +470,11 @@ const domain = `${system.slug}.com`;
   .pv-tab { width: 22px; height: 22px; border-radius: 7px; background: var(--pv-line); }
   .pv-tab-active { background: var(--pv-accent); }
 
-  /* ── Scenario: slides (16:9 landscape) ─────────────────────────── */
+  /* ── Scenario: slides (16:9 landscape, two-zone) ───────────────── */
   .pv-slide-face {
     aspect-ratio: 16 / 9;
     background: var(--pv-surface);
-    padding: 30px 38px;
+    padding: 26px 34px;
     display: flex;
     flex-direction: column;
   }
@@ -471,30 +482,53 @@ const domain = `${system.slug}.com`;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    margin-bottom: 8px;
   }
   .pv-slide-page { font-size: 12px; color: var(--pv-muted); letter-spacing: 0.08em; }
-  .pv-slide-body { margin-top: auto; }
-  .pv-slide-body .pv-badge { margin-bottom: 14px; }
+  .pv-slide-main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 28px;
+    align-items: center;
+  }
+  .pv-slide-text { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
   .pv-slide-title {
     font-family: var(--pv-font-display);
-    font-size: 38px;
+    font-size: 36px;
     font-weight: 800;
     letter-spacing: -0.02em;
-    line-height: 1.02;
-    margin-bottom: 12px;
+    line-height: 1.04;
   }
-  .pv-slide-sub { font-size: 15px; color: var(--pv-muted); }
-  .pv-slide-foot {
-    margin-top: auto;
+  .pv-slide-sub { font-size: 15px; color: var(--pv-muted); line-height: 1.5; }
+  .pv-slide-text .pv-cta-row { margin-top: 4px; }
+  /* Right zone: a themed "content" visual so the slide isn't half-empty. */
+  .pv-slide-visual {
+    align-self: stretch;
+    background: var(--pv-bg);
+    border: 1px solid var(--pv-line);
+    border-radius: var(--pv-radius);
+    padding: 20px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-top: 22px;
+    justify-content: flex-end;
+    gap: 12px;
   }
-  .pv-bar { display: block; height: 8px; border-radius: 4px; background: transparent; }
-  .pv-bar > span { display: block; height: 100%; width: 70%; border-radius: 4px; background: var(--pv-accent); }
-  .pv-bar > span.short { width: 48%; background: var(--pv-line); }
-  .pv-bar > span.shorter { width: 30%; background: var(--pv-line); }
+  .pv-slide-chart {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    min-height: 90px;
+  }
+  .pv-slide-chart span {
+    flex: 1;
+    border-radius: 5px 5px 0 0;
+    background: var(--pv-accent);
+  }
+  .pv-slide-chart span:nth-child(even) { background: var(--pv-accent-soft); }
+  .pv-slide-chip { height: 10px; border-radius: 5px; background: var(--pv-line); }
+  .pv-slide-chip.short { width: 60%; }
 
   /* ── Scenario: poster (portrait, accent used as highlight) ─────── */
   .pv-poster-face {

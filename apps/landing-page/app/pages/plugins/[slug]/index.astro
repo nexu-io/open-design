@@ -253,6 +253,8 @@ const jsonLd = [
       </div>
     </header>
 
+    <PluginContribute />
+
     {detailToc.length > 1 && (
       <nav class="detail-toc" aria-label={pcopy.detailTocLabel}>
         <span class="detail-toc-label">{pcopy.detailTocLabel}</span>
@@ -360,8 +362,6 @@ const jsonLd = [
         <figcaption>{pcopy.detailPreviewCaption}</figcaption>
       </figure>
     )}
-
-    <PluginContribute />
 
     {/*
       Share modal — same DOM shape as the legacy /skills/<slug>/
@@ -633,16 +633,22 @@ const jsonLd = [
       grid-template-columns: 1fr;
     }
   }
-  /* In-page anchor nav (design-system detail). Quiet horizontal mono row. */
+  /* In-page anchor nav (design-system detail) — a sticky section bar that
+     reflects the page's structure (schema) and stays reachable on scroll. */
   .detail-toc {
+    position: sticky;
+    top: 0;
+    z-index: 6;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 8px 18px;
-    margin: 0 0 36px;
+    margin: 0 0 32px;
     padding: 12px 0;
-    border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper, #fafafa) 88%, transparent);
+    backdrop-filter: saturate(1.1) blur(8px);
+    -webkit-backdrop-filter: saturate(1.1) blur(8px);
   }
   .detail-toc-label {
     font-family: var(--mono);
