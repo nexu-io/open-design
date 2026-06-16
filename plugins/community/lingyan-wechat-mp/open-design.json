@@ -1,0 +1,102 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "lingyan-wechat-mp",
+  "title": "LingYan WeChat Mini Program",
+  "title_i18n": {
+    "zh-CN": "灵言微信小程序",
+    "en": "LingYan WeChat Mini Program"
+  },
+  "version": "0.1.0",
+  "description": "A multi-screen WeChat Mini Program UI prototype for an AI-powered Chinese text creation tool. Covers blessing generation, couplet pairing, poem composition, and diss writing — with modern Chinese editorial design language (Noto Serif SC, cinnabar red accent, newspaper masthead typography). Use when the brief asks for a \"WeChat mini program\", \"AI writing tool\", \"Chinese text generation app\", \"blessing generator\", \"couplet app\", or \"poem writing app\".",
+  "description_i18n": {
+    "zh-CN": "AI 中文创作微信小程序多屏原型——覆盖祝福语生成、对联对仗、古诗创作、怼人文案等场景。采用「现代中文编辑」设计语言：Noto Serif SC 展示字体、朱砂红强调色、报纸报头排版节奏。适用于微信小程序、AI 写作工具、中文文案生成、祝福语、对联、古诗等需求。",
+    "en": "A multi-screen WeChat Mini Program UI prototype for an AI-powered Chinese text creation tool. Covers blessing generation, couplet pairing, poem composition, and diss writing — with modern Chinese editorial design language (Noto Serif SC, cinnabar red accent, newspaper masthead typography)."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "MOFANCITY",
+    "url": "https://github.com/MOFANCITY"
+  },
+  "plugin.repo": "https://github.com/MOFANCITY/lingyan-wechat-mp",
+  "tags": [
+    "prototype",
+    "wechat",
+    "mini-program",
+    "chinese",
+    "ai-writing",
+    "editorial",
+    "mobile",
+    "blessing",
+    "couplet",
+    "poem",
+    "multi-screen"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "mobile",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./examples/home.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a WeChat Mini Program for AI-powered Chinese text creation — blessing generation, couplet pairing, poem composition, and playful diss writing. Modern Chinese editorial style with cinnabar red accent.",
+        "zh-CN": "设计一个 AI 中文创作微信小程序——祝福语生成、对联对仗、古诗创作、怼人文案。现代中文编辑风格，朱砂红强调色。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/home.html",
+          "title": "LingYan Home"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "animation-discipline"
+      ],
+      "assets": [
+        "./examples/home.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/MOFANCITY/lingyan-wechat-mp"
+  },
+  "homepage": "https://github.com/MOFANCITY/lingyan-wechat-mp"
+}

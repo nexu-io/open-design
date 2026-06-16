@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>灵言</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg:        #faf9f7;
+  --surface:   #ffffff;
+  --surface-2: #f2f0ec;
+  --fg:        #1a1814;
+  --fg-2:      #4a4640;
+  --muted:     #96908a;
+  --divider:   #e4e0da;
+  --accent:    #c0392b;
+  --accent-lt: #fdf0ee;
+  --serif: "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
+  --sans:  -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+}
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--fg);
+  width: 390px;
+  height: 844px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Status bar */
+.status-bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--bg);
+}
+.status-bar .time { font-size: 15px; font-weight: 600; color: var(--fg); }
+.status-bar .icons { display: flex; gap: 6px; align-items: center; }
+
+/* Scrollable area */
+.content {
+  height: calc(844px - 44px - 83px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 20px 28px;
+  -webkit-overflow-scrolling: touch;
+}
+.content::-webkit-scrollbar { display: none; }
+
+/* ── Masthead ──────────────────────────────────────────────────────── */
+.masthead {
+  border-top: 3px solid var(--fg);
+  border-bottom: 1px solid var(--fg);
+  padding: 8px 0;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.2em;
+  line-height: 1;
+}
+.masthead-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.masthead-date {
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  font-family: var(--serif);
+}
+.points-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--divider);
+  border-radius: 2px;
+  font-size: 10.5px;
+  color: var(--fg-2);
+  cursor: pointer;
+  background: var(--surface);
+  letter-spacing: 0.04em;
+  transition: border-color 0.12s;
+}
+.points-chip:active { border-color: var(--accent); color: var(--accent); }
+
+/* ── Hero headline ─────────────────────────────────────────────────── */
+.hero {
+  padding: 0 0 16px;
+  border-bottom: 0.5px solid var(--divider);
+  margin-bottom: 18px;
+}
+.hero-headline {
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.18;
+  letter-spacing: 0.04em;
+}
+.hero-headline em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+/* ── Entry cards ───────────────────────────────────────────────────── */
+.entry-cards { margin-bottom: 20px; }
+
+/* Featured card — visual weight above minor cards */
+.card-feature {
+  border: 1px solid var(--divider);
+  border-top: 2.5px solid var(--fg);
+  border-radius: 2px;
+  background: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+  margin-bottom: 10px;
+  transition: box-shadow 0.18s cubic-bezier(0.22, 1, 0.36, 1), transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.card-feature:active { box-shadow: inset 0 0 0 1px var(--accent); transform: scale(0.985); }
+.card-feature-body { padding: 18px 16px 16px; }
+
+/* Stamp eyebrow — replaces left bar */
+.card-eyebrow {
+  display: inline-block;
+  font-size: 8.5px;
+  color: var(--accent);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: 1px;
+  padding: 2px 6px;
+  margin-bottom: 9px;
+}
+
+.card-title {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.06em;
+  line-height: 1.28;
+  margin-bottom: 5px;
+}
+.card-desc {
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.65;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+.card-cost { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; }
+.card-arrow { color: var(--muted); }
+
+/* 2-column minor grid */
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-minor {
+  border: 1px solid var(--divider);
+  border-radius: 2px;
+  padding: 13px 13px 11px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.14s, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.card-minor:active { background: var(--surface-2); transform: scale(0.97); }
+.card-minor .card-title { font-size: 16px; margin-bottom: 4px; }
+.card-minor .card-desc { font-size: 11px; }
+.card-minor .card-meta { margin-top: 10px; }
+
+/* Full-width minor */
+.card-minor-wide {
+  border: 1px solid var(--divider);
+  border-radius: 2px;
+  padding: 12px 14px;
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: background 0.14s, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.card-minor-wide:active { background: var(--surface-2); transform: scale(0.985); }
+.card-minor-wide .card-title { font-size: 16px; margin-bottom: 2px; }
+.card-minor-wide .card-desc { font-size: 11px; }
+.card-minor-wide .right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+/* ── Section rule ──────────────────────────────────────────────────── */
+.section-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 13px;
+}
+.section-rule::before { content: ''; flex: 0 0 20px; height: 1px; background: var(--fg); }
+.section-rule::after  { content: ''; flex: 1; height: 0.5px; background: var(--divider); }
+.section-rule span {
+  font-family: var(--serif);
+  font-size: 10px;
+  color: var(--fg-2);
+  letter-spacing: 0.22em;
+}
+
+/* ── Quick chips ───────────────────────────────────────────────────── */
+.quick-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-chips::-webkit-scrollbar { display: none; }
+.quick-chip {
+  border: 1px solid var(--divider);
+  border-radius: 2px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: var(--serif);
+  color: var(--fg-2);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--surface);
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  transition: border-color 0.12s, color 0.12s;
+}
+.quick-chip:active, .quick-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-lt);
+}
+
+/* ── Tab bar ───────────────────────────────────────────────────────── */
+.tab-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 83px;
+  background: var(--surface);
+  border-top: 1.5px solid var(--fg);
+  display: flex;
+  align-items: flex-start;
+  padding-top: 8px;
+  z-index: 10;
+}
+.tab-bar a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  height: 44px;
+  text-decoration: none;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  font-family: var(--serif);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tab-bar a svg { opacity: 0.38; transition: opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+.tab-bar a.active { color: var(--accent); }
+.tab-bar a.active svg { opacity: 1; stroke: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="status-bar">
+  <span class="time">9:41</span>
+  <div class="icons">
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="var(--fg)"><rect x="0" y="4" width="3" height="8" rx="0.5" opacity="0.3"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="0.5" opacity="0.6"/><rect x="9" y="0.5" width="3" height="11.5" rx="0.5"/><rect x="13.5" y="3" width="2" height="1.5" rx="0.3" fill="none" stroke="var(--fg)" stroke-width="0.8"/><rect x="14" y="4" width="1" height="5" rx="0.2"/></svg>
+    <svg width="15" height="12" viewBox="0 0 15 12" fill="var(--fg)"><path d="M7.5 2a9.3 9.3 0 0 1 6.3 2.4l1.2-1.3A11 11 0 0 0 7.5 0 11 11 0 0 0 0 3.1l1.2 1.3A9.3 9.3 0 0 1 7.5 2z"/><path d="M7.5 5a5.8 5.8 0 0 1 4 1.6l1.2-1.3A7.6 7.6 0 0 0 7.5 3.3 7.6 7.6 0 0 0 2.3 5.3l1.2 1.3A5.8 5.8 0 0 1 7.5 5z"/><circle cx="7.5" cy="9.5" r="2"/></svg>
+    <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="var(--fg)" stroke-opacity="0.35"/><rect x="2" y="2" width="16" height="8" rx="2" fill="var(--fg)"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="var(--fg)" opacity="0.4"/></svg>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- Masthead -->
+  <div class="masthead">
+    <div class="brand">灵言</div>
+    <div class="masthead-meta">
+      <div class="masthead-date">2026年6月15日</div>
+      <div class="points-chip" onclick="window.location.href='points-center.html'">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9.5 9.5C9.5 8.12 10.62 7 12 7s2.5 1.12 2.5 2.5M14.5 14.5c0 1.38-1.12 2.5-2.5 2.5s-2.5-1.12-2.5-2.5"/></svg>
+        <span id="pts">48</span> 积分
+      </div>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-headline">写不出来的话<br>让 <em>AI</em> 替你说</div>
+  </div>
+
+  <!-- Entry cards -->
+  <div class="entry-cards">
+
+    <!-- Featured -->
+    <div class="card-feature" onclick="window.location.href='blessing.html'">
+      <div class="card-feature-body">
+        <div class="card-eyebrow">核心功能</div>
+        <div class="card-title">AI 祝福</div>
+        <div class="card-desc">选一个场景，AI 帮你写出那封说不出口的心意。<br>生日、婚礼、节日、离别 — 总有一句替你开口。</div>
+      </div>
+    </div>
+
+    <!-- 2-col grid: diss + couplet -->
+    <div class="cards-grid">
+      <div class="card-minor" onclick="window.location.href='diss.html'">
+        <div class="card-title">AI 怼人</div>
+        <div class="card-desc">优雅回击，不憋屈</div>
+      </div>
+      <div class="card-minor" onclick="window.location.href='couplet.html'">
+        <div class="card-title">AI 对联</div>
+        <div class="card-desc">出上联，对下联</div>
+      </div>
+    </div>
+
+    <!-- Wide: poem -->
+    <div class="card-minor-wide" onclick="window.location.href='poem.html'">
+      <div>
+        <div class="card-title">AI 古诗</div>
+        <div class="card-desc">AI 起承，你转合，共写绝句</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Quick access -->
+  <div class="section-rule"><span>快速开始</span></div>
+  <div class="quick-chips">
+    <div class="quick-chip" onclick="window.location.href='blessing.html?scene=birthday'">生日祝福</div>
+    <div class="quick-chip" onclick="window.location.href='blessing.html?scene=wedding'">新婚贺词</div>
+    <div class="quick-chip" onclick="window.location.href='blessing.html?scene=spring'">春节祝福</div>
+    <div class="quick-chip" onclick="window.location.href='diss.html?scene=work'">工作 PUA</div>
+    <div class="quick-chip" onclick="window.location.href='diss.html?scene=love'">感情 PUA</div>
+    <div class="quick-chip" onclick="window.location.href='couplet.html?scene=spring'">春联</div>
+    <div class="quick-chip" onclick="window.location.href='poem.html?scene=5'">五言绝句</div>
+    <div class="quick-chip" onclick="window.location.href='poem.html?scene=7'">七言绝句</div>
+  </div>
+
+</div>
+
+<!-- Tab bar -->
+<nav class="tab-bar">
+  <a href="home.html" class="active">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>首页</span>
+  </a>
+  <a href="favorites.html">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    <span>收藏</span>
+  </a>
+  <a href="couplet.html">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3 0 0-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18"/></svg>
+    <span>创作</span>
+  </a>
+  <a href="profile-no-login.html">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>我的</span>
+  </a>
+</nav>
+
+<script>
+var pts = parseInt(localStorage.getItem('lingyanPoints') || '48', 10);
+document.getElementById('pts').textContent = pts;
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "generated-plugin/examples/home.html",
+  "entry": "generated-plugin/examples/home.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-06-16T10:23:40.624Z",
+  "updatedAt": "2026-06-16T10:23:40.624Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}
