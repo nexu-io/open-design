@@ -653,6 +653,7 @@ describe('POST /api/import/folder', () => {
   it('discovers nested React/Vite package shells and entries', async () => {
     const folder = makeFolder();
     await mkdir(path.join(folder, 'app'), { recursive: true });
+    await mkdir(path.join(folder, 'packages/admin/src'), { recursive: true });
     await mkdir(path.join(folder, 'packages/app/src'), { recursive: true });
     await writeFile(
       path.join(folder, 'package.json'),
@@ -664,6 +665,28 @@ describe('POST /api/import/folder', () => {
       }),
     );
     await writeFile(path.join(folder, 'app/page.tsx'), 'export default function Page(){return <main>Root Next</main>}');
+    await writeFile(
+      path.join(folder, 'packages/admin/package.json'),
+      JSON.stringify({
+        scripts: { dev: 'vite' },
+        dependencies: {
+          react: '18.0.0',
+          vite: '6.0.0',
+        },
+      }),
+    );
+    await writeFile(
+      path.join(folder, 'packages/admin/index.html'),
+      '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+    );
+    await writeFile(
+      path.join(folder, 'packages/admin/src/main.tsx'),
+      "import React from 'react';\nimport './Admin';\n",
+    );
+    await writeFile(
+      path.join(folder, 'packages/admin/src/Admin.tsx'),
+      'export function Admin(){return <main>Nested Admin</main>}',
+    );
     await writeFile(
       path.join(folder, 'packages/app/package.json'),
       JSON.stringify({
@@ -712,14 +735,36 @@ describe('POST /api/import/folder', () => {
         expect.objectContaining({
           kind: 'react-app',
           framework: 'Vite',
+          entryFile: 'packages/admin/src/main.tsx',
+          previewFile: 'packages/admin/index.html',
+          previewRuntimeRoot: 'packages/admin',
+        }),
+        expect.objectContaining({
+          kind: 'react-app',
+          framework: 'Vite',
           entryFile: 'packages/app/src/main.tsx',
           previewFile: 'packages/app/index.html',
           previewRuntimeRoot: 'packages/app',
         }),
       ]),
     );
-    const reactSurface = body.surfaces.find((surface) => surface.kind === 'react-app');
-    expect(reactSurface?.sourceFiles).toEqual(
+    const reactSurfaces = body.surfaces
+      .filter((surface) => surface.kind === 'react-app')
+      .sort((a, b) => a.entryFile.localeCompare(b.entryFile));
+    expect(reactSurfaces.map((surface) => surface.entryFile)).toEqual([
+      'packages/admin/src/main.tsx',
+      'packages/app/src/main.tsx',
+    ]);
+    const adminSurface = reactSurfaces.find((surface) => surface.entryFile === 'packages/admin/src/main.tsx');
+    expect(adminSurface?.sourceFiles).toEqual(
+      expect.arrayContaining([
+        'packages/admin/index.html',
+        'packages/admin/src/main.tsx',
+        'packages/admin/src/Admin.tsx',
+      ]),
+    );
+    const appSurface = reactSurfaces.find((surface) => surface.entryFile === 'packages/app/src/main.tsx');
+    expect(appSurface?.sourceFiles).toEqual(
       expect.arrayContaining([
         'packages/app/index.html',
         'packages/app/src/main.tsx',

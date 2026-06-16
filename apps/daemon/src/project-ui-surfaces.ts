@@ -76,6 +76,13 @@ interface GraphResult {
   externalDependencies: Map<string, ProjectUiExternalDependency>;
 }
 
+interface ReactAppEntry {
+  entryFile: string;
+  previewFile: string | null;
+  framework: string;
+  reasons: string[];
+}
+
 export async function discoverProjectUiSurfaces(input: {
   projectRoot: string;
   files: ProjectFile[];
@@ -110,8 +117,7 @@ export async function discoverProjectUiSurfaces(input: {
     }));
   }
 
-  const reactEntry = findReactAppEntry(ctx);
-  if (reactEntry) {
+  for (const reactEntry of findReactAppEntries(ctx)) {
     surfaces.push(await buildCodeSurface(ctx, reactEntry.entryFile, {
       kind: 'react-app',
       route: '/',
@@ -548,7 +554,8 @@ async function findAppShellHtmlFiles(ctx: DiscoveryContext): Promise<Set<string>
   return shellFiles;
 }
 
-function findReactAppEntry(ctx: DiscoveryContext): { entryFile: string; previewFile: string | null; framework: string; reasons: string[] } | null {
+function findReactAppEntries(ctx: DiscoveryContext): ReactAppEntry[] {
+  const entries: ReactAppEntry[] = [];
   for (const dir of reactAppCandidateDirs(ctx)) {
     const framework = frameworkForDir(ctx, dir);
     if (framework === 'Next.js') continue;
@@ -557,14 +564,14 @@ function findReactAppEntry(ctx: DiscoveryContext): { entryFile: string; previewF
     if (framework && !isReactAppFramework(framework)) continue;
     const previewCandidate = projectPathInDir(dir, 'index.html');
     const previewFile = ctx.fileMap.has(previewCandidate) ? previewCandidate : null;
-    return {
+    entries.push({
       entryFile,
       previewFile,
       framework: isReactAppFramework(framework) ? framework : 'React',
       reasons: [previewFile ? 'React app entry and HTML shell detected' : 'React app entry detected'],
-    };
+    });
   }
-  return null;
+  return entries;
 }
 
 function findNextRouteFiles(ctx: DiscoveryContext): string[] {
@@ -799,7 +806,8 @@ function dedupeSurfaces(surfaces: ProjectUiSurface[]): ProjectUiSurface[] {
   const seen = new Set<string>();
   const result: ProjectUiSurface[] = [];
   for (const surface of surfaces) {
-    const key = `${surface.kind}:${surface.route ?? surface.entryFile}`;
+    const runtimeRoot = surface.previewRuntimeRoot ?? '';
+    const key = `${surface.kind}:${runtimeRoot}:${surface.route ?? surface.entryFile}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(surface);
