@@ -5,6 +5,7 @@ import {
   computeDesignSignatureFromText,
   diffDesignSignatures,
   normalizeColor,
+  parseSignatureArgs,
   renderDiffForTerminal,
   renderSignatureForTerminal,
   type DesignSignature,
@@ -263,12 +264,23 @@ describe('diffDesignSignatures', () => {
     expect(diff.vitalityDelta).toBeLessThan(0);
   });
 
-  it('always emits at least one change when the fingerprint differs', () => {
+  it('treats a shadow-only change as a real change (regression)', () => {
+    // Same color, only the box-shadow offsets differ. Shadow tokens must be
+    // part of the fingerprint, otherwise the diff short-circuits to unchanged.
     const a = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #000}</style>');
     const b = computeDesignSignatureFromText('<style>x{box-shadow:0 4px 8px #000}</style>');
-    if (a.fingerprint !== b.fingerprint) {
-      expect(diffDesignSignatures(a, b).changes.length).toBeGreaterThan(0);
-    }
+    expect(a.fingerprint).not.toBe(b.fingerprint);
+    const diff = diffDesignSignatures(a, b);
+    expect(diff.unchanged).toBe(false);
+    const shadow = diff.changes.find((c) => c.area === 'shadow');
+    expect(shadow).toBeDefined();
+  });
+
+  it('reports added elevation as increased', () => {
+    const a = computeDesignSignatureFromText('<style>x{color:#111}</style>');
+    const b = computeDesignSignatureFromText('<style>x{color:#111;box-shadow:0 4px 8px #000}</style>');
+    const shadow = diffDesignSignatures(a, b).changes.find((c) => c.area === 'shadow');
+    expect(shadow?.direction).toBe('increased');
   });
 });
 
@@ -290,5 +302,54 @@ describe('renderDiffForTerminal', () => {
   it('emits no ANSI escape sequences', () => {
     const out = renderDiffForTerminal(b, diffDesignSignatures(a, b));
     expect(out.includes(String.fromCharCode(27))).toBe(false);
+  });
+});
+
+describe('parseSignatureArgs', () => {
+  it('reads a file path target', () => {
+    expect(parseSignatureArgs(['design.html'])).toEqual({
+      target: 'design.html',
+      against: undefined,
+      hasAgainst: false,
+      json: false,
+    });
+  });
+
+  // Regression: a bare `-` is the stdin target, not a flag. Previously the
+  // positional scan dropped anything starting with `-`, so `od signature -`
+  // never set a target and exited with the usage error.
+  it('treats a bare - as the stdin target', () => {
+    const parsed = parseSignatureArgs(['-']);
+    expect(parsed.target).toBe('-');
+  });
+
+  it('treats - as the target alongside --against and --json', () => {
+    const parsed = parseSignatureArgs(['-', '--against', 'prev.html', '--json']);
+    expect(parsed.target).toBe('-');
+    expect(parsed.against).toBe('prev.html');
+    expect(parsed.hasAgainst).toBe(true);
+    expect(parsed.json).toBe(true);
+  });
+
+  it('consumes the --against value so it is not read as the target', () => {
+    const parsed = parseSignatureArgs(['--against', 'prev.html', 'next.html']);
+    expect(parsed.target).toBe('next.html');
+    expect(parsed.against).toBe('prev.html');
+  });
+
+  it('supports the --against=<file> inline form', () => {
+    const parsed = parseSignatureArgs(['next.html', '--against=prev.html']);
+    expect(parsed.target).toBe('next.html');
+    expect(parsed.against).toBe('prev.html');
+  });
+
+  it('flags --against with no value (hasAgainst true, against undefined)', () => {
+    const parsed = parseSignatureArgs(['next.html', '--against']);
+    expect(parsed.hasAgainst).toBe(true);
+    expect(parsed.against).toBeUndefined();
+  });
+
+  it('reports no target when only flags are given', () => {
+    expect(parseSignatureArgs(['--json']).target).toBeUndefined();
   });
 });

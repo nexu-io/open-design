@@ -17,6 +17,7 @@ import {
   renderSignatureForTerminal,
   diffDesignSignatures,
   renderDiffForTerminal,
+  parseSignatureArgs,
 } from './design-signature.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
@@ -6616,32 +6617,13 @@ changed since the previous version.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
 
-  const json = args.includes('--json');
+  const { target, against, hasAgainst, json } = parseSignatureArgs(args);
 
-  // Parse --against <file> / --against=<file>, and exclude its value from the
-  // positional scan so the previous-version path isn't read as the target.
-  let against;
-  const positionals = [];
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--against') {
-      against = args[i + 1];
-      i++;
-      continue;
-    }
-    if (a.startsWith('--against=')) {
-      against = a.slice('--against='.length);
-      continue;
-    }
-    if (!a.startsWith('-')) positionals.push(a);
-  }
-
-  const target = positionals[0];
   if (!target) {
     console.error('Usage: od signature <file> [--against <file>] [--json]');
     process.exit(2);
   }
-  if (args.includes('--against') && !against) {
+  if (hasAgainst && !against) {
     console.error('--against requires a file path.');
     process.exit(2);
   }

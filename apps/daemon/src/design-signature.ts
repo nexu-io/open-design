@@ -57,6 +57,7 @@ export interface DesignSignature {
     fontFamilies: string[];
     spacing: string[];
     radius: string[];
+    shadow: string[];
   };
 }
 
@@ -79,7 +80,8 @@ export function computeDesignSignature(report: DesignExtractReport): DesignSigna
   const fontFamilies = uniqueFontFamilies(report.typography.map((t) => t.value));
   const spacing = uniqueLengths(report.spacing.map((s) => s.value));
   const radius = uniqueLengths(report.radius.map((r) => r.value));
-  const shadowCount = report.shadow.length;
+  const shadow = uniqueLengths(report.shadow.map((s) => s.value));
+  const shadowCount = shadow.length;
 
   const palette = scorePalette(colors);
   const rhythm = scoreRhythm(fontFamilies.length);
@@ -104,7 +106,7 @@ export function computeDesignSignature(report: DesignExtractReport): DesignSigna
   return {
     strands,
     vitality,
-    fingerprint: fingerprintOf(colors, spacing, radius, fontFamilies),
+    fingerprint: fingerprintOf({ colors, spacing, radius, fontFamilies, shadow }),
     counts: {
       colors: colors.length,
       fontFamilies: fontFamilies.length,
@@ -112,7 +114,7 @@ export function computeDesignSignature(report: DesignExtractReport): DesignSigna
       radius: radius.length,
       shadow: shadowCount,
     },
-    tokens: { colors, fontFamilies, spacing, radius },
+    tokens: { colors, fontFamilies, spacing, radius, shadow },
   };
 }
 
@@ -289,17 +291,23 @@ function dominantBaseUnit(pxValues: number[]): number {
 // A short, stable hash of the structural inputs. Equal designs (same tokens)
 // produce the same fingerprint; a single token change flips it. Deterministic
 // FNV-1a over the sorted, normalized token set — no crypto dependency needed.
-function fingerprintOf(
-  colors: string[],
-  spacing: string[],
-  radius: string[],
-  fontFamilies: string[],
-): string {
+function fingerprintOf(t: {
+  colors: string[];
+  spacing: string[];
+  radius: string[];
+  fontFamilies: string[];
+  shadow: string[];
+}): string {
+  // Every token kind the signature tracks must feed the hash, otherwise a
+  // change in an omitted kind (e.g. shadow) leaves the fingerprint equal and
+  // the diff reports "unchanged". Taking an object keeps the segments named so
+  // a new kind cannot be silently dropped.
   const basis = [
-    'c:' + colors.join(','),
-    's:' + spacing.join(','),
-    'r:' + radius.join(','),
-    'f:' + fontFamilies.join(','),
+    'c:' + t.colors.join(','),
+    's:' + t.spacing.join(','),
+    'r:' + t.radius.join(','),
+    'f:' + t.fontFamilies.join(','),
+    'sh:' + t.shadow.join(','),
   ].join('|');
   let hash = 0x811c9dc5;
   for (let i = 0; i < basis.length; i++) {
@@ -425,8 +433,20 @@ export function diffDesignSignatures(
     });
   }
 
-  // Density / overall vitality movement, only when nothing more specific fired
-  // but the fingerprint still differs (e.g. shadows changed).
+  // Shadow / elevation: report direction from the count, else just "changed".
+  if (!sameSet(prev.tokens.shadow, next.tokens.shadow)) {
+    const n = next.tokens.shadow.length;
+    const p = prev.tokens.shadow.length;
+    changes.push({
+      area: 'shadow',
+      direction: n > p ? 'increased' : n < p ? 'decreased' : 'changed',
+      summary:
+        n > p ? 'Elevation increased' : n < p ? 'Elevation reduced' : 'Shadows changed',
+    });
+  }
+
+  // Fallback only when the fingerprint differs but nothing above fired (should
+  // be unreachable now that every tracked token kind has an explicit branch).
   if (changes.length === 0) {
     changes.push({
       area: 'density',
@@ -466,6 +486,52 @@ export function renderDiffForTerminal(
 
 function arrow(d: ChangeDirection): string {
   return d === 'increased' ? '↑' : d === 'decreased' ? '↓' : '•';
+}
+
+// ---------------------------------------------------------------------------
+// CLI argument parsing. Extracted so the `od signature` arg handling is unit
+// testable without spawning a process. A bare `-` is the stdin target, not a
+// flag; `--against`'s value is consumed so it is not read as the target.
+// ---------------------------------------------------------------------------
+
+export interface SignatureArgs {
+  /** The artifact path, or `-` for stdin. undefined when none was given. */
+  target: string | undefined;
+  /** The previous-version path from --against, if any. */
+  against: string | undefined;
+  /** Whether --against was passed (so a missing value can be reported). */
+  hasAgainst: boolean;
+  /** Whether --json was passed. */
+  json: boolean;
+}
+
+export function parseSignatureArgs(args: string[]): SignatureArgs {
+  let against: string | undefined;
+  let hasAgainst = false;
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? '';
+    if (a === '--against') {
+      hasAgainst = true;
+      against = args[i + 1];
+      i++; // consume the value
+      continue;
+    }
+    if (a.startsWith('--against=')) {
+      hasAgainst = true;
+      against = a.slice('--against='.length);
+      continue;
+    }
+    // A bare `-` is the stdin target, not a flag. Anything else starting with
+    // `-` is a flag and is skipped from the positional scan.
+    if (a === '-' || !a.startsWith('-')) positionals.push(a);
+  }
+  return {
+    target: positionals[0],
+    against,
+    hasAgainst,
+    json: args.includes('--json'),
+  };
 }
 
 // --- diff helpers ----------------------------------------------------------
