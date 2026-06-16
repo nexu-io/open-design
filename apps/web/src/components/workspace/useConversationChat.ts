@@ -6,6 +6,7 @@ import { agentModelDisplayName } from '../../utils/agentLabels';
 import { randomUUID } from '../../utils/uuid';
 import { effectiveAgentModelChoice } from '../agentModelSelection';
 import {
+  checkpointBufferedRunEventId,
   createBufferedTextUpdates,
   finalizeActiveAssistantMessagesOnStop,
   resolveRetryTarget,
@@ -318,7 +319,12 @@ export function useConversationChat(
           if (isTerminalRunStatus(runStatus)) clearRefs();
         },
         onRunEventId: (lastRunEventId) => {
-          updateAssistant(assistantId, (prev) => ({ ...prev, lastRunEventId }));
+          checkpointBufferedRunEventId({
+            textBuffer,
+            updateMessage: (updater) => updateAssistant(assistantId, updater),
+            lastRunEventId,
+            persistSoon: () => {},
+          });
         },
       });
     },

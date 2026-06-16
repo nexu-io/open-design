@@ -2877,9 +2877,12 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
-            textBuffer.flush();
-            updateMessageById(message.id, (prev) => ({ ...prev, lastRunEventId }));
-            persistSoon();
+            checkpointBufferedRunEventId({
+              textBuffer,
+              updateMessage: (updater) => updateMessageById(message.id, updater),
+              lastRunEventId,
+              persistSoon,
+            });
           },
         })
           .catch((err) => {
@@ -3713,8 +3716,12 @@ export function ProjectView({
             }
           },
           onRunEventId: (lastRunEventId) => {
-            updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
-            persistAssistantSoon();
+            checkpointBufferedRunEventId({
+              textBuffer,
+              updateMessage: (updater) => updateMessageById(assistantId, updater),
+              lastRunEventId,
+              persistSoon: persistAssistantSoon,
+            });
           },
         });
         return true;
@@ -6404,6 +6411,22 @@ export function finalizeActiveAssistantMessagesOnStop(
 }
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;
+
+export function checkpointBufferedRunEventId({
+  textBuffer,
+  updateMessage,
+  lastRunEventId,
+  persistSoon,
+}: {
+  textBuffer: BufferedTextUpdates;
+  updateMessage: (updater: (prev: ChatMessage) => ChatMessage) => void;
+  lastRunEventId: string;
+  persistSoon: () => void;
+}) {
+  textBuffer.flush();
+  updateMessage((prev) => ({ ...prev, lastRunEventId }));
+  persistSoon();
+}
 
 export function createBufferedTextUpdates({
   updateMessage,
