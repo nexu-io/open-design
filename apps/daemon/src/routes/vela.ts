@@ -15,7 +15,9 @@ import {
   forgetVelaLogin,
   mergeVelaEnv,
   mirrorAmrEntryAnalytics,
+  mirrorAmrOnboardingProfileAnalytics,
   parseAmrEntryAnalyticsPayload,
+  parseAmrOnboardingProfileAnalyticsPayload,
   parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
@@ -209,10 +211,21 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const analyticsContext = readAnalyticsContext(req);
       const attribution = parseVelaLoginAttribution(req.body);
+      let loginAttribution = attribution;
+      if (attribution) {
+        if (analyticsContext && appConfig.telemetry?.metrics === true) {
+          loginAttribution = { ...attribution, odDeviceId: analyticsContext.deviceId };
+        } else {
+          const withoutDeviceId = { ...attribution };
+          delete withoutDeviceId.odDeviceId;
+          loginAttribution = withoutDeviceId;
+        }
+      }
       const spawned = await spawnVelaLogin({
         configuredEnv,
-        attribution,
+        attribution: loginAttribution,
         defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
       });
       res.status(202).json(spawned);
@@ -248,6 +261,30 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       return;
     }
     const result = await mirrorAmrEntryAnalytics(payload, {
+      analyticsContext,
+      env,
+    });
+    res.status(202).json(result);
+  });
+
+  app.post('/api/integrations/vela/analytics-profile', async (req, res) => {
+    const payload = parseAmrOnboardingProfileAnalyticsPayload(req.body);
+    if (!payload) {
+      res.status(400).json({ error: 'invalid_amr_profile_analytics' });
+      return;
+    }
+    const analyticsContext = readAnalyticsContext(req);
+    if (!analyticsContext) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    if (appConfig.telemetry?.metrics !== true) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    const canonicalPayload = { ...payload, odDeviceId: analyticsContext.deviceId };
+    const result = await mirrorAmrOnboardingProfileAnalytics(canonicalPayload, {
       analyticsContext,
       env,
     });

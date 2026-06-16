@@ -1991,7 +1991,15 @@ export function ChatPane({
                               type="button"
                               className="chat-error-action"
                               onClick={() => {
-                                recordAmrEntry(analytics.track, 'chat_error_authorize_retry');
+                                recordAmrEntry(
+                                  analytics.track,
+                                  'chat_error_authorize_retry',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
+                                );
                                 if (onSwitchToAmrAndRetry) {
                                   onSwitchToAmrAndRetry(retryAssistant);
                                 } else {
@@ -2029,6 +2037,11 @@ export function ChatPane({
                                 const attribution = recordAmrEntry(
                                   analytics.track,
                                   'chat_error_recharge',
+                                  new Date(),
+                                  {
+                                    metricsConsent:
+                                      config?.telemetry?.metrics === true,
+                                  },
                                 );
                                 // Forward the canonical telemetry device id to
                                 // AMR only on metrics opt-in (see
@@ -2095,6 +2108,7 @@ export function ChatPane({
                 <AmrGuidance
                   {...amrSwitchPayload}
                   sourceDetail="chat_error_switch_retry_card"
+                  metricsConsent={config?.telemetry?.metrics === true}
                   onActivate={() => {
                     if (retryAssistant && onSwitchToAmrAndRetry) {
                       onSwitchToAmrAndRetry(retryAssistant);

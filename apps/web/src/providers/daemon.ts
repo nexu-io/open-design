@@ -785,12 +785,15 @@ export interface StartVelaLoginResult {
 
 export async function startVelaLogin(
   attribution?: AmrEntryAttribution | null,
+  odDeviceId?: string | null,
 ): Promise<StartVelaLoginResult> {
   try {
+    const loginAttribution =
+      attribution && odDeviceId ? { ...attribution, odDeviceId } : attribution;
     const resp = await fetch('/api/integrations/vela/login', {
       method: 'POST',
-      headers: attribution ? { 'Content-Type': 'application/json' } : undefined,
-      body: attribution ? JSON.stringify({ attribution }) : undefined,
+      headers: loginAttribution ? { 'Content-Type': 'application/json' } : undefined,
+      body: loginAttribution ? JSON.stringify({ attribution: loginAttribution }) : undefined,
     });
     if (resp.ok) {
       const body = (await resp.json()) as { pid?: number };

@@ -5945,6 +5945,8 @@ export function ProjectView({
                 agents={agents}
                 artifactId={headerArtifact.artifact_id}
                 artifactKind={headerArtifact.artifact_kind}
+                metricsConsent={config.telemetry?.metrics === true}
+                installationId={config.installationId}
               />
               <EntrySettingsMenu
                 config={config}

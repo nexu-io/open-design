@@ -7,6 +7,7 @@ import {
   attributedAmrUrl,
   readAmrAttribution,
   recordAmrEntry,
+  syncAmrAttributionWithOnboardingProfile,
 } from '../../src/analytics/amr-attribution';
 import { saveOnboardingProfile } from '../../src/state/onboarding-profile';
 
@@ -31,6 +32,10 @@ describe('AMR attribution helper', () => {
       'inline_model_switcher_amr_row',
       'settings_amr_agent_card',
       'settings_amr_authorize',
+      'settings_amr_console',
+      'settings_amr_install',
+      'avatar_amr_console',
+      'handoff_amr_website',
       'chat_error_authorize_retry',
       'chat_error_recharge',
       'chat_error_switch_retry_card',
@@ -44,6 +49,7 @@ describe('AMR attribution helper', () => {
         track,
         source,
         new Date(`2026-06-03T12:00:${index.toString().padStart(2, '0')}.000Z`),
+        { metricsConsent: true },
       );
     }
 
@@ -55,7 +61,9 @@ describe('AMR attribution helper', () => {
     const track = vi.fn();
     const now = new Date('2026-06-03T12:00:00.000Z');
 
-    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now, {
+      metricsConsent: true,
+    });
 
     expect(attribution).toMatchObject({
       sourceProduct: 'open_design',
@@ -111,7 +119,9 @@ describe('AMR attribution helper', () => {
     const track = vi.fn();
     const now = new Date('2026-06-03T12:00:00.000Z');
 
-    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now, {
+      metricsConsent: true,
+    });
 
     expect(attribution).toMatchObject({
       odRole: 'pm',
@@ -134,6 +144,7 @@ describe('AMR attribution helper', () => {
       track,
       'chat_error_recharge',
       new Date('2026-06-03T12:00:00.000Z'),
+      { metricsConsent: true },
     );
 
     expect(attribution.odRole).toBeUndefined();
@@ -148,6 +159,7 @@ describe('AMR attribution helper', () => {
       track,
       'onboarding_amr_card',
       new Date('2026-06-03T12:00:00.000Z'),
+      { metricsConsent: true },
     );
 
     const second = recordAmrEntry(
@@ -164,6 +176,145 @@ describe('AMR attribution helper', () => {
       first,
     );
   });
+
+  it('syncs an existing AMR entry with onboarding profile after About you is submitted', () => {
+    const track = vi.fn();
+    const entryTime = new Date('2026-06-03T12:00:00.000Z');
+    const profileTime = new Date('2026-06-03T12:03:00.000Z');
+    const attribution = recordAmrEntry(track, 'onboarding_amr_card', entryTime);
+    fetchMock.mockClear();
+
+    const updated = syncAmrAttributionWithOnboardingProfile(
+      {
+        role: 'pm',
+        orgSize: 'startup',
+        useCase: ['product', 'design-system'],
+        source: 'github',
+      },
+      {
+        metricsConsent: true,
+        odDeviceId: 'od-install-abc',
+        now: profileTime,
+      },
+    );
+
+    expect(updated).toMatchObject({
+      entryId: attribution.entryId,
+      sourceDetail: 'onboarding_amr_card',
+      odDeviceId: 'od-install-abc',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+    expect(readAmrAttribution(profileTime)).toEqual(updated);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/analytics-profile',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      payload: {
+        pageName: 'open_design',
+        sourcePageName: 'onboarding',
+        area: 'onboarding',
+        element: 'about_you_submit',
+        action: 'submit_profile',
+        entryId: attribution.entryId,
+        sourceProduct: 'open_design',
+        sourceDetail: 'onboarding_amr_card',
+        entryOccurredAt: '2026-06-03T12:00:00.000Z',
+        profileOccurredAt: '2026-06-03T12:03:00.000Z',
+        odDeviceId: 'od-install-abc',
+        odRole: 'pm',
+        odOrgSize: 'startup',
+        odUseCase: ['product', 'design-system'],
+        odSource: 'github',
+      },
+    });
+  });
+
+  it('does not mirror AMR entry analytics without metrics consent', () => {
+    const track = vi.fn();
+    const now = new Date('2026-06-03T12:00:00.000Z');
+
+    const attribution = recordAmrEntry(track, 'chat_error_recharge', now);
+
+    expect(attribution).toMatchObject({
+      sourceProduct: 'open_design',
+      sourceDetail: 'chat_error_recharge',
+      occurredAt: '2026-06-03T12:00:00.000Z',
+    });
+    expect(readAmrAttribution(now)).toEqual(attribution);
+    expect(track).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not mirror AMR onboarding profile analytics without metrics consent', () => {
+    const track = vi.fn();
+    const entryTime = new Date('2026-06-03T12:00:00.000Z');
+    const profileTime = new Date('2026-06-03T12:03:00.000Z');
+    const attribution = recordAmrEntry(track, 'onboarding_amr_card', entryTime);
+    fetchMock.mockClear();
+
+    const updated = syncAmrAttributionWithOnboardingProfile(
+      {
+        role: 'pm',
+        orgSize: 'startup',
+        useCase: ['product', 'design-system'],
+        source: 'github',
+      },
+      { odDeviceId: null, now: profileTime },
+    );
+
+    expect(updated).toMatchObject({
+      entryId: attribution.entryId,
+      sourceDetail: 'onboarding_amr_card',
+      odRole: 'pm',
+      odOrgSize: 'startup',
+      odUseCase: ['product', 'design-system'],
+      odSource: 'github',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'settings_amr_console',
+    'avatar_amr_console',
+    'handoff_amr_website',
+  ] as const)(
+    'ignores %s attribution when About you is submitted later',
+    (sourceDetail) => {
+      const track = vi.fn();
+      const entryTime = new Date('2026-06-03T12:00:00.000Z');
+      const profileTime = new Date('2026-06-03T12:03:00.000Z');
+      const attribution = recordAmrEntry(track, sourceDetail, entryTime, {
+        metricsConsent: true,
+      });
+      fetchMock.mockClear();
+
+      const updated = syncAmrAttributionWithOnboardingProfile(
+        {
+          role: 'pm',
+          orgSize: 'startup',
+          useCase: ['product', 'design-system'],
+          source: 'github',
+        },
+        {
+          metricsConsent: true,
+          odDeviceId: 'od-install-abc',
+          now: profileTime,
+        },
+      );
+
+      expect(updated).toBeNull();
+      expect(readAmrAttribution(profileTime)).toEqual(attribution);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('expires stored attribution after seven days', () => {
     const track = vi.fn();

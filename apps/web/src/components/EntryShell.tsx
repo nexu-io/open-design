@@ -37,7 +37,13 @@ import {
   trackOnboardingRuntimeScanResult,
   trackPageView,
 } from '../analytics/events';
-import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import {
+  amrHandoffDeviceId,
+  recordAmrEntry,
+  syncAmrAttributionWithOnboardingProfile,
+  type AmrEntryAttribution,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
@@ -1446,7 +1452,10 @@ function OnboardingView({
         analytics.track,
         'onboarding_amr_sign_in_continue',
         new Date(),
-        { reuseExistingFrom: ['onboarding_amr_card'] },
+        {
+          metricsConsent: config.telemetry?.metrics === true,
+          reuseExistingFrom: ['onboarding_amr_card'],
+        },
       );
       void handleAmrSignInToContinue(attribution);
       return;
@@ -1502,7 +1511,12 @@ function OnboardingView({
       }
       if (amrLoginPollCancelledRef.current) return;
       beginAmrAuthTracking(attribution);
-      const loginResult = await startVelaLogin(attribution);
+      const odDeviceId = amrHandoffDeviceId({
+        metricsConsent: config.telemetry?.metrics === true,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId: config.installationId,
+      });
+      const loginResult = await startVelaLogin(attribution, odDeviceId);
       if (amrLoginPollCancelledRef.current) {
         resolveAmrAuthTracking(analytics.track, 'cancelled');
         if (loginResult.ok || loginResult.alreadyRunning) {
@@ -1608,6 +1622,22 @@ function OnboardingView({
       useCase: snapshot.useCase,
       source: snapshot.source,
     });
+    syncAmrAttributionWithOnboardingProfile(
+      {
+        role: snapshot.role,
+        orgSize: snapshot.orgSize,
+        useCase: snapshot.useCase,
+        source: snapshot.source,
+      },
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        odDeviceId: amrHandoffDeviceId({
+          metricsConsent: config.telemetry?.metrics === true,
+          resolvedDeviceId: getResolvedDeviceId(),
+          installationId: config.installationId,
+        }),
+      },
+    );
     trackOnboardingClick(analytics.track, {
       page_name: 'onboarding',
       area: 'about_you',
@@ -1896,7 +1926,12 @@ function OnboardingView({
                       featured
                       selected={runtime === 'amr'}
                       onClick={() => {
-                        recordAmrEntry(analytics.track, 'onboarding_amr_card');
+                        recordAmrEntry(
+                          analytics.track,
+                          'onboarding_amr_card',
+                          new Date(),
+                          { metricsConsent: config.telemetry?.metrics === true },
+                        );
                         setRuntime('amr');
                         onModeChange('daemon');
                         onAgentChange('amr');
