@@ -1141,7 +1141,7 @@ async function createOrUpdateGitHubFile(
 
   if (!putResp.ok) {
     const errBody = (await putResp.json().catch(() => null)) as any;
-    throw new Error(errBody?.message || `Failed to upload ${filePath} to GitHub.`);
+    throw new DeployError(errBody?.message || `Failed to upload ${filePath} to GitHub.`, 502, errBody);
   }
 }
 
@@ -1468,6 +1468,147 @@ export async function deployToRender({
   };
 }
 
+async function getLatestRailwayDeployment(
+  queryRailway: (query: string, variables?: JsonObject) => Promise<any>,
+  variables: { projectId: string; serviceId: string; environmentId: string }
+) {
+  const data = await queryRailway(`
+    query deployments($input: DeploymentListInput!) {
+      deployments(input: $input, first: 1) {
+        edges {
+          node {
+            id
+            status
+            url
+          }
+        }
+      }
+    }
+  `, {
+    input: {
+      projectId: variables.projectId,
+      serviceId: variables.serviceId,
+      environmentId: variables.environmentId,
+    }
+  });
+  return data?.deployments?.edges?.[0]?.node;
+}
+
+async function pollRailwayDeploy(
+  queryRailway: (query: string, variables?: JsonObject) => Promise<any>,
+  deploymentId: string,
+  { timeoutMs = 180_000, intervalMs = 2_000 } = {}
+) {
+  const startedAt = Date.now();
+  let last: any = null;
+  while (true) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = timeoutMs - elapsed;
+    if (remaining <= 0) break;
+
+    try {
+      const data = await queryRailway(`
+        query deployment($id: String!) {
+          deployment(id: $id) {
+            id
+            status
+          }
+        }
+      `, { id: deploymentId });
+      const deploy = data?.deployment;
+      if (!deploy) {
+        throw new DeployError('Railway deployment not found.', 502);
+      }
+      last = deploy;
+      const status = typeof deploy.status === 'string' ? deploy.status.toUpperCase() : '';
+      if (status === 'ACTIVE') return deploy;
+      if (status === 'FAILED' || status === 'CRASHED' || status === 'REMOVED') {
+        throw new DeployError(`Railway deployment failed with status: ${deploy.status}.`, 502, deploy);
+      }
+    } catch (err: any) {
+      if (err instanceof DeployError) throw err;
+      if (Date.now() - startedAt >= timeoutMs) {
+        throw new DeployError('Railway deployment poll timed out.', 504);
+      }
+    }
+
+    const nextRemaining = timeoutMs - (Date.now() - startedAt);
+    if (nextRemaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
+  }
+  return last;
+}
+
+export async function checkRailwayDeploymentLinks(existing: any) {
+  const metadata = existing.providerMetadata || {};
+  const { railwayProjectId, environmentId, serviceId, serviceUrl, railwayDeployId } = metadata;
+  if (!railwayDeployId) {
+    const result = await checkDeploymentUrl(serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(RAILWAY_PROVIDER_ID);
+    const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
+    const resp = await fetch(RAILWAY_API, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: `
+          query deployment($id: String!) {
+            deployment(id: $id) {
+              id
+              status
+            }
+          }
+        `,
+        variables: { id: railwayDeployId },
+      }),
+    });
+    const result = await resp.json().catch(() => null) as any;
+    if (!resp.ok || result?.errors) {
+      throw new Error(result?.errors?.[0]?.message || 'Railway API request failed');
+    }
+    const deploy = result.data?.deployment;
+    if (!deploy) {
+      throw new Error('Railway deployment not found');
+    }
+    const status = typeof deploy.status === 'string' ? deploy.status.toUpperCase() : '';
+    if (status === 'ACTIVE') {
+      const reach = await checkDeploymentUrl(serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (status === 'FAILED' || status === 'CRASHED' || status === 'REMOVED') {
+      return {
+        status: 'failed',
+        statusMessage: `Railway deployment failed with status: ${deploy.status}.`,
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Railway deployment is currently: ${deploy.status.toLowerCase()}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Railway deployment status: ${err.message || err}`,
+    };
+  }
+}
+
 export async function deployToRailway({
   config,
   files,
@@ -1525,7 +1666,6 @@ export async function deployToRailway({
       contentType: 'text/plain',
     });
   }
-
 
   // 3. Sync files to the GitHub repository using the GitHub API
   for (const file of files) {
@@ -1623,33 +1763,32 @@ export async function deployToRailway({
         }
       }
     `, { projectId: railwayProjectId });
-    const edges = envData?.environments?.edges || [];
-    const prodEnv = edges.find((edge: any) => edge?.node?.name === 'production') || edges[0];
-    environmentId = prodEnv?.node?.id;
+    const productionEnv = envData?.environments?.edges?.find(
+      (edge: any) => edge?.node?.name?.toLowerCase() === 'production'
+    ) || envData?.environments?.edges?.[0];
+    environmentId = productionEnv?.node?.id;
   }
 
   if (!environmentId) {
-    throw new DeployError('Failed to resolve Railway project environment.', 502);
+    throw new DeployError('Failed to resolve Railway environment.', 502);
   }
 
+  // 6. Fetch project services or create service linked to the GitHub repository
   let isNewService = false;
-  // 6. Fetch or create Railway Service linked to the repository
   if (!serviceId) {
     const serviceListData = await queryRailway(`
-      query project($id: String!) {
-        project(id: $id) {
-          services {
-            edges {
-              node {
-                id
-                name
-              }
+      query services($projectId: String!) {
+        services(projectId: $projectId) {
+          edges {
+            node {
+              id
+              name
             }
           }
         }
       }
-    `, { id: railwayProjectId });
-    const existingService = serviceListData?.project?.services?.edges?.find(
+    `, { projectId: railwayProjectId });
+    const existingService = serviceListData?.services?.edges?.find(
       (edge: any) => edge?.node?.name === railwayName
     );
     if (existingService) {
@@ -1680,6 +1819,21 @@ export async function deployToRailway({
 
   if (!serviceId) {
     throw new DeployError('Failed to resolve or create Railway service.', 502);
+  }
+
+  // Query and store the latest deploy ID from Railway before triggering build
+  let preTriggerDeployId: string | undefined;
+  if (!isNewService) {
+    try {
+      const latest = await getLatestRailwayDeployment(queryRailway, {
+        projectId: railwayProjectId,
+        serviceId,
+        environmentId,
+      });
+      preTriggerDeployId = latest?.id;
+    } catch {
+      // Ignore
+    }
   }
 
   // Trigger deployment to start the build programmatically (if it's not a newly created service, which automatically deploys)
@@ -1773,18 +1927,59 @@ export async function deployToRailway({
     throw new DeployError('Failed to resolve or create Railway service domain.', 502);
   }
 
-  // 8. Wait for URL to be reachable
-  const link = await waitForReachableDeploymentUrl([serviceUrl], { providerLabel: 'Railway', timeoutMs: 5_000 });
+  let railwayDeployId: string | undefined;
+  // Poll up to 5 times (1s intervals) to resolve the new deployment ID
+  for (let i = 0; i < 5; i++) {
+    try {
+      const latest = await getLatestRailwayDeployment(queryRailway, {
+        projectId: railwayProjectId,
+        serviceId,
+        environmentId,
+      });
+      if (latest?.id && (isNewService || latest.id !== preTriggerDeployId)) {
+        railwayDeployId = latest.id;
+        break;
+      }
+    } catch {
+      // Ignore and retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  let deployStatus = 'link-delayed';
+  let deployStatusMessage = 'Railway deployment is currently preparing.';
+  let reachableAt: number | undefined;
+
+  if (railwayDeployId) {
+    try {
+      const polled = await pollRailwayDeploy(queryRailway, railwayDeployId);
+      const status = typeof polled?.status === 'string' ? polled.status.toUpperCase() : '';
+      if (status === 'ACTIVE') {
+        const link = await waitForReachableDeploymentUrl([serviceUrl], { providerLabel: 'Railway', timeoutMs: 5_000 });
+        deployStatus = link.status;
+        deployStatusMessage = link.statusMessage;
+        reachableAt = link.reachableAt;
+      } else {
+        deployStatus = 'link-delayed';
+        deployStatusMessage = `Railway deployment is currently: ${polled?.status?.toLowerCase() || 'unknown'}.`;
+      }
+    } catch (err: any) {
+      throw err;
+    }
+  } else {
+    deployStatus = 'link-delayed';
+    deployStatusMessage = 'Failed to resolve the new Railway deployment ID.';
+  }
 
   return {
     providerId: RAILWAY_PROVIDER_ID,
-    url: link.url || serviceUrl,
-    deploymentId: serviceId,
+    url: serviceUrl,
+    deploymentId: railwayDeployId || serviceId,
     target: 'preview',
-    status: link.status,
-    statusMessage: link.statusMessage,
-    reachableAt: link.reachableAt,
-    providerMetadata: { railwayProjectId, environmentId, serviceId, serviceUrl },
+    status: deployStatus,
+    statusMessage: deployStatusMessage,
+    reachableAt,
+    providerMetadata: { railwayProjectId, environmentId, serviceId, serviceUrl, railwayDeployId },
   };
 }
 

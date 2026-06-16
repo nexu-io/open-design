@@ -13981,6 +13981,11 @@ function HtmlViewer({
             url: next.url,
           }),
         });
+        if (deployModalIntent === 'social-share') {
+          setActiveSocialShareProviderId(next.providerId);
+          setDeployModalOpen(false);
+          setSocialShareModalOpen(true);
+        }
       } else {
         fireDeployResult('failed', `STATUS_${next.status ?? 'UNKNOWN'}`);
       }

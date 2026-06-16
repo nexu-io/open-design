@@ -1430,8 +1430,33 @@ describe('netlify and railway deploys', () => {
             headers: { 'content-type': 'application/json' },
           });
         }
-        if (query.includes('query project(')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [] } } } }), {
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployments')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployment(')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status: 'ACTIVE',
+              },
+            },
+          }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -1486,13 +1511,14 @@ describe('netlify and railway deploys', () => {
     expect(result).toMatchObject({
       providerId: RAILWAY_PROVIDER_ID,
       url: 'https://od-railway-p1.up.railway.app',
-      deploymentId: 'service-1',
+      deploymentId: 'deploy-new',
       status: 'ready',
       providerMetadata: {
         railwayProjectId: 'railway-project-1',
         environmentId: 'environment-1',
         serviceId: 'service-1',
         serviceUrl: 'https://od-railway-p1.up.railway.app',
+        railwayDeployId: 'deploy-new',
       },
     });
     expect(uploadedPaths).toEqual(['index.html', 'Staticfile']);
@@ -1650,8 +1676,20 @@ describe('netlify and railway deploys', () => {
             },
           );
         }
-        if (query.includes('query project(')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [] } } } }), {
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployments')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -1718,6 +1756,7 @@ describe('netlify and railway deploys', () => {
 
   it('triggers Railway deployment mutation for existing services', async () => {
     const graphQlCalls: Array<{ query: string; variables: Record<string, unknown> }> = [];
+    let triggered = false;
     const files = [
       {
         file: 'index.html',
@@ -1759,10 +1798,33 @@ describe('netlify and railway deploys', () => {
         if (query.includes('query environments')) {
           return new Response(JSON.stringify({ data: { environments: { edges: [{ node: { id: 'environment-1', name: 'production' } }] } } }), { status: 200 });
         }
-        if (query.includes('query project(')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [{ node: { id: 'service-1', name: 'od-railway-p1' } }] } } } }), { status: 200 });
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'service-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          const deployNode = triggered
+            ? { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' }
+            : { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' };
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: deployNode }],
+              },
+            },
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (query.includes('query deployment(')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status: 'ACTIVE',
+              },
+            },
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
         }
         if (query.includes('mutation serviceInstanceDeploy')) {
+          triggered = true;
           return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
         }
         if (query.includes('query domains')) {
@@ -1863,8 +1925,33 @@ describe('netlify and railway deploys', () => {
             },
           );
         }
-        if (query.includes('query project(')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [] } } } }), {
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployments')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployment(')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status: 'ACTIVE',
+              },
+            },
+          }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -2027,8 +2114,33 @@ describe('netlify and railway deploys', () => {
             },
           );
         }
-        if (query.includes('query project(')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [] } } } }), {
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [] } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployments')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (query.includes('query deployment(')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status: 'ACTIVE',
+              },
+            },
+          }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
           });
@@ -2244,8 +2356,20 @@ describe('netlify and railway deploys', () => {
         if (query.includes('query environments')) {
           return new Response(JSON.stringify({ data: { environments: { edges: [{ node: { id: 'env-1', name: 'production' } }] } } }), { status: 200 });
         }
-        if (query.includes('query project($id: String!)')) {
-          return new Response(JSON.stringify({ data: { project: { services: { edges: [{ node: { id: 'srv-1', name: 'od-railway-p1' } }] } } } }), { status: 200 });
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'srv-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
         }
         if (query.includes('mutation serviceInstanceDeploy')) {
           return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
@@ -2280,6 +2404,276 @@ describe('netlify and railway deploys', () => {
         ],
       })
     ).rejects.toThrowError(/Service domain creation failed/);
+  });
+
+  it('polls and waits for the specific new Railway deployment rollout before checking reachability', async () => {
+    let triggered = false;
+    let deploymentPollCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-railway-p1', default_branch: 'main' }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/contents/')) {
+        if (method === 'GET') return new Response('', { status: 404 });
+        if (method === 'PUT') return new Response(JSON.stringify({ content: { sha: 'sha' } }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/git/trees/')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const parsed = JSON.parse(String(init?.body ?? '{}'));
+        const query = parsed.query || '';
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [{ node: { id: 'proj-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({ data: { environments: { edges: [{ node: { id: 'env-1', name: 'production' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'srv-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          const deployNode = triggered
+            ? { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' }
+            : { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' };
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: deployNode }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('query deployment(')) {
+          deploymentPollCount++;
+          const status = deploymentPollCount >= 2 ? 'ACTIVE' : 'BUILDING';
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status,
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('mutation serviceInstanceDeploy')) {
+          triggered = true;
+          return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
+        }
+        if (query.includes('query domains')) {
+          return new Response(JSON.stringify({ data: { domains: { serviceDomains: [{ domain: 'od-railway-p1.up.railway.app' }] } } }), { status: 200 });
+        }
+      }
+      if (url === 'https://od-railway-p1.up.railway.app' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const result = await deployToRailway({
+      config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+      priorMetadata: { serviceId: 'service-1' },
+    });
+
+    expect(result.status).toBe('ready');
+    expect(deploymentPollCount).toBe(2);
+  });
+
+  it('returns link-delayed if the new Railway deployment ID cannot be resolved', async () => {
+    let triggered = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-railway-p1', default_branch: 'main' }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/contents/')) {
+        if (method === 'GET') return new Response('', { status: 404 });
+        if (method === 'PUT') return new Response(JSON.stringify({ content: { sha: 'sha' } }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/git/trees/')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const parsed = JSON.parse(String(init?.body ?? '{}'));
+        const query = parsed.query || '';
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [{ node: { id: 'proj-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({ data: { environments: { edges: [{ node: { id: 'env-1', name: 'production' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'srv-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          // Always return the pre-trigger deploy ID so the difference check fails
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' } }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('mutation serviceInstanceDeploy')) {
+          triggered = true;
+          return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
+        }
+        if (query.includes('query domains')) {
+          return new Response(JSON.stringify({ data: { domains: { serviceDomains: [{ domain: 'od-railway-p1.up.railway.app' }] } } }), { status: 200 });
+        }
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const result = await deployToRailway({
+      config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+      priorMetadata: { serviceId: 'service-1' },
+    });
+
+    expect(result.status).toBe('link-delayed');
+    expect(result.statusMessage).toContain('Failed to resolve the new Railway deployment ID');
+  });
+
+  it('throws DeployError if the new Railway deployment fails', async () => {
+    let triggered = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-railway-p1', default_branch: 'main' }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/contents/')) {
+        if (method === 'GET') return new Response('', { status: 404 });
+        if (method === 'PUT') return new Response(JSON.stringify({ content: { sha: 'sha' } }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-railway-p1/git/trees/')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const parsed = JSON.parse(String(init?.body ?? '{}'));
+        const query = parsed.query || '';
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [{ node: { id: 'proj-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({ data: { environments: { edges: [{ node: { id: 'env-1', name: 'production' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'srv-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          const deployNode = triggered
+            ? { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' }
+            : { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' };
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: deployNode }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('query deployment(')) {
+          return new Response(JSON.stringify({
+            data: {
+              deployment: {
+                id: 'deploy-new',
+                status: 'FAILED',
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('mutation serviceInstanceDeploy')) {
+          triggered = true;
+          return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
+        }
+        if (query.includes('query domains')) {
+          return new Response(JSON.stringify({ data: { domains: { serviceDomains: [{ domain: 'od-railway-p1.up.railway.app' }] } } }), { status: 200 });
+        }
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRailway({
+        config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+        projectId: 'p1',
+        files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+        priorMetadata: { serviceId: 'service-1' },
+      })
+    ).rejects.toThrowError(/Railway deployment failed with status: FAILED/);
+  });
+
+  it('throws a 502 DeployError when GitHub PUT upload fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ message: 'GitHub repository is temporarily unavailable' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const files = [
+      {
+        file: 'index.html',
+        data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+        contentType: 'text/html',
+      },
+    ];
+
+    try {
+      await deployToRailway({
+        config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+        projectId: 'p1',
+        files,
+      });
+      throw new Error('Should have thrown');
+    } catch (err: any) {
+      expect(err.name).toBe('DeployError');
+      expect(err.status).toBe(502);
+      expect(err.message).toContain('GitHub repository is temporarily unavailable');
+    }
   });
 });
 

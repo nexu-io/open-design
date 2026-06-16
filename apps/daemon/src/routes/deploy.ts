@@ -288,7 +288,17 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { getProject } = ctx.projectStore;
-  const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
+  const {
+    getDeploymentById,
+    CLOUDFLARE_PAGES_PROVIDER_ID,
+    cloudflarePagesProjectNameFromDeployment,
+    checkCloudflarePagesDeploymentLinks,
+    checkDeploymentUrl,
+    upsertDeployment,
+    publicDeployment,
+    RAILWAY_PROVIDER_ID,
+    checkRailwayDeploymentLinks,
+  } = ctx.deploy;
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
@@ -315,6 +325,17 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
             'FILE_NOT_FOUND',
             'deployment not found',
           );
+        }
+        if (existing.providerId === RAILWAY_PROVIDER_ID) {
+          const checked = await checkRailwayDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
         }
         const stableCloudflareProjectName =
           existing.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
