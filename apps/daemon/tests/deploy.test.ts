@@ -640,6 +640,78 @@ describe('render deploys', () => {
     await assertionPromise;
     expect(aborted).toBe(true);
   });
+
+  it('polls and resolves new Render deploy when trigger response lacks deploy_id and new deploy fails', async () => {
+    let listDeploysCount = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-render-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 200 });
+      }
+      if (url.includes('/owners') && method === 'GET') {
+        return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      }
+      if (url.includes('/services?limit=100') && method === 'GET') {
+        return new Response(JSON.stringify([{ service: { id: 'render-service-1', name: 'od-render-p1', url: 'https://od-render-p1.onrender.com' } }]), { status: 200 });
+      }
+      if (url.includes('/services/render-service-1/deploys') && method === 'POST') {
+        // Trigger response lacks deploy ID
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      if (url.includes('/services/render-service-1/deploys?limit=1') && method === 'GET') {
+        listDeploysCount++;
+        if (listDeploysCount === 1) {
+          // Pre-trigger check
+          return new Response(JSON.stringify([{ deploy: { id: 'old-deploy-id' } }]), { status: 200 });
+        } else if (listDeploysCount === 2) {
+          // First poll after trigger: still old deploy ID
+          return new Response(JSON.stringify([{ deploy: { id: 'old-deploy-id' } }]), { status: 200 });
+        } else {
+          // Second poll after trigger: resolves new deploy ID
+          return new Response(JSON.stringify([{ deploy: { id: 'new-failed-deploy-id' } }]), { status: 200 });
+        }
+      }
+      if (url.includes('/deploys/new-failed-deploy-id') && method === 'GET') {
+        return new Response(JSON.stringify({ status: 'build_failed' }), { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRender({
+        config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+        priorMetadata: { serviceId: 'render-service-1', serviceUrl: 'https://od-render-p1.onrender.com' },
+      })
+    ).rejects.toThrowError(/Render deployment failed with status: build_failed/);
+
+    expect(listDeploysCount).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe('netlify and railway deploys', () => {
