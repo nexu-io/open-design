@@ -1118,6 +1118,17 @@
 .op-card-detail .op-path {
   max-width: 100%;
 }
+.op-card-file-detail {
+  flex-direction: row;
+  align-items: center;
+}
+.op-card-file-detail .op-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.op-card-file-detail .op-open {
+  flex: 0 0 auto;
+}
 .op-card-detail .op-command {
   margin: 0;
   font-size: 12px;

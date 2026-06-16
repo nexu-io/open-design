@@ -45,6 +45,7 @@ import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
+import { dedupeToolUsesById } from "../runtime/tool-events";
 import {
   isTodoWriteToolName,
   unfinishedTodosFromEvents,
@@ -417,12 +418,13 @@ function AssistantMessageImpl({
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
+  const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
   // we strip TodoWrite tool-groups out of the per-message flow to avoid the
   // same task list rendering twice.
   const settledUseIds = useMemo(
-    () => new Set(events.filter((e) => e.kind === "tool_use").map((e) => e.id)),
-    [events],
+    () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
+    [displayEvents],
   );
   // Live code boxes (Write/Edit streaming) append after everything else.
   const liveCodeBlocks = useMemo<Block[]>(() => {
@@ -437,7 +439,7 @@ function AssistantMessageImpl({
   }, [streaming, liveToolInput, settledUseIds]);
   // Compose the block list, then run the strip/suppress pipeline once.
   const blocks = useMemo(() => {
-    const rawBlocks = [...buildBlocks(events), ...liveCodeBlocks];
+    const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
     return placeConversationTodoCard(
       stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
       {
@@ -445,8 +447,8 @@ function AssistantMessageImpl({
         input: conversationTodoInput,
       },
     );
-  }, [events, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
-  const fileOps = useMemo(() => deriveFileOps(events), [events]);
+  }, [displayEvents, liveCodeBlocks, showConversationTodoCard, conversationTodoInput]);
+  const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
     () =>

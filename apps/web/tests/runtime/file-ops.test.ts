@@ -61,6 +61,22 @@ describe('deriveFileOps', () => {
     });
   });
 
+  it('deduplicates repeated tool_use events that share an id', () => {
+    const events: AgentEvent[] = [
+      use('Write', { file_path: '/repo/index.html', content: '<main />' }, 't1'),
+      use('Write', { file_path: '/repo/index.html', content: '<main />' }, 't1'),
+      ok('t1'),
+    ];
+    const rows = deriveFileOps(events);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      path: 'index.html',
+      ops: ['write'],
+      total: 1,
+    });
+    expect(countFileOps(rows).write).toBe(1);
+  });
+
   it('treats a missing tool_result as running and an isError result as error', () => {
     const events: AgentEvent[] = [
       use('Read', { file_path: '/repo/a.ts' }, 't1'),

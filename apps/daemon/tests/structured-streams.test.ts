@@ -587,7 +587,10 @@ describe('structured agent stream fixtures', () => {
       type: 'assistant',
       message: {
         id: 'msg-1',
-        content: [{ type: 'tool_use', id: 'toolu-1', name: 'Write', input: {} }],
+        content: [
+          { type: 'tool_use', id: 'toolu-1', name: 'Write', input: {} },
+          { type: 'tool_use', id: 'toolu-1', name: 'Write', input: {} },
+        ],
       },
     })}\n`);
     handler.flush();

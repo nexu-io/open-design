@@ -332,7 +332,7 @@ function FileWriteCard({
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
+          <div className="op-card-detail op-card-file-detail">
             <code className="op-path">{file}</code>
             <OpenInTabButton filePath={file} ctx={ctx} />
           </div>
@@ -382,7 +382,7 @@ function FileEditCard({
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
+          <div className="op-card-detail op-card-file-detail">
             <code className="op-path">{file}</code>
             <OpenInTabButton filePath={file} ctx={ctx} />
           </div>
@@ -424,7 +424,7 @@ function FileReadCard({
       </button>
       <div className={`accordion-collapsible${open ? ' open' : ''}`}>
         <div className="accordion-collapsible-inner">
-          <div className="op-card-detail">
+          <div className="op-card-detail op-card-file-detail">
             <code className="op-path">{file}</code>
             <OpenInTabButton filePath={file} ctx={ctx} />
           </div>
