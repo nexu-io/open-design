@@ -932,6 +932,11 @@ No configuration. No CLI installation. No API key required.
 
 **Skills become a real plugin ecosystem.** Skill bundles graduate into first-class Plugins: visible in the drawer, listable from the CLI, indexed on the site, and easier to explain to users. One extension model, one library, one mental model. The official GSAP plugin brings serious web animation into the agent loop, and Research Decision Room turns research prompts into structured multi-role reviews instead of one long answer. The on-site plugin library now mirrors the in-app taxonomy and reads natively across locales, and plugin and template detail pages turn from static listings into a real discovery surface — preview, install, try, share.
 
+<figure>
+  <img src="/blog/open-design-0-9-0-design-for-everyone-inline.webp" alt="A one-click connect button beside a bundled engine icon, selected in a green frame on a near-white editorial ground" />
+  <figcaption>Sign in once and the engine is already there — no CLI, no API-key scavenger hunt.</figcaption>
+</figure>
+
 ## What else lands in 0.9.0
 
 The release is wide. The pieces worth pulling forward:

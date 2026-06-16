@@ -1,0 +1,174 @@
+---
+/*
+ * Blog table of contents — sticky left rail on wide screens, a collapsible
+ * block on mobile. Highlights the section currently in view via a small
+ * scroll-spy script. Shared by every /blog/<slug>/ post so the layout stays
+ * consistent across the family.
+ */
+import type { TocEntry } from '../_lib/blog-toc';
+
+interface Props {
+  toc: TocEntry[];
+  label: string;
+}
+
+const { toc, label } = Astro.props;
+// Drop the trailing colon some locales add to the shared "On this page:" label.
+const heading = label.replace(/[:：]\s*$/, '');
+---
+
+{
+  toc.length > 1 && (
+    <nav class="blog-toc" aria-label={heading} data-blog-toc>
+      <span class="blog-toc-label">{heading}</span>
+      <ul class="blog-toc-list">
+        {toc.map((t) => (
+          <li class:list={['blog-toc-item', `is-depth-${t.depth}`]}>
+            <a class="blog-toc-link" href={`#${t.slug}`} data-toc-link={t.slug}>
+              {t.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+<style>
+  .blog-toc {
+    font-family: var(--sans);
+  }
+  .blog-toc-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 16px;
+  }
+  .blog-toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--line);
+  }
+  .blog-toc-item {
+    margin: 0;
+  }
+  .blog-toc-link {
+    display: block;
+    padding: 7px 0 7px 16px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    font-size: 13.5px;
+    line-height: 1.4;
+    color: var(--ink-mute);
+    text-decoration: none;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .blog-toc-item.is-depth-3 .blog-toc-link {
+    padding-left: 28px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .blog-toc-link:hover {
+    color: var(--ink);
+  }
+  .blog-toc-link.is-active {
+    color: var(--ink);
+    font-weight: 600;
+    border-left-color: var(--coral);
+  }
+
+  @media (max-width: 980px) {
+    .blog-toc {
+      margin-bottom: 36px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--paper-warm) 60%, white);
+    }
+    .blog-toc-label {
+      margin-bottom: 12px;
+    }
+  }
+</style>
+
+<script>
+  // Scroll-spy: highlight the section the reader is currently in. We pick the
+  // last heading whose top has scrolled above the offset line — robust on both
+  // free scroll and anchor clicks (after a click the jump fires scroll, which
+  // re-resolves to the clicked heading). A click also sets the active state
+  // immediately so the highlight never lags the tap.
+  const setup = () => {
+    const nav = document.querySelector<HTMLElement>('[data-blog-toc]');
+    if (!nav) return;
+    const links = Array.from(
+      nav.querySelectorAll<HTMLAnchorElement>('[data-toc-link]'),
+    );
+    if (links.length === 0) return;
+
+    const bySlug = new Map(links.map((l) => [l.dataset.tocLink ?? '', l]));
+    const targets = links
+      .map((l) => document.getElementById(l.dataset.tocLink ?? ''))
+      .filter((el): el is HTMLElement => Boolean(el));
+    if (targets.length === 0) return;
+
+    // Match `scroll-margin-top` on the headings so the line that decides
+    // "current section" sits where an anchor jump parks the heading.
+    const OFFSET = 132;
+    let activeId = '';
+    const setActive = (id: string) => {
+      if (!id || id === activeId) return;
+      activeId = id;
+      for (const link of links) {
+        const on = link.dataset.tocLink === id;
+        link.classList.toggle('is-active', on);
+        if (on) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      }
+    };
+
+    const resolve = () => {
+      let current = targets[0]!.id;
+      for (const t of targets) {
+        if (t.getBoundingClientRect().top - OFFSET <= 1) current = t.id;
+        else break;
+      }
+      // Near the very bottom, force the last section active so the final
+      // short heading can still light up.
+      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4) {
+        current = targets[targets.length - 1]!.id;
+      }
+      setActive(current);
+    };
+
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        resolve();
+        ticking = false;
+      });
+    };
+
+    for (const link of links) {
+      link.addEventListener('click', () => {
+        const id = link.dataset.tocLink ?? '';
+        setActive(id);
+      });
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    resolve();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+</script>
