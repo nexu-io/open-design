@@ -4980,6 +4980,10 @@ function HtmlViewer({
   // export is a separate modal flow, so it owns its own request id / start.
   const imageExportRequestIdRef = useRef<string | null>(null);
   const imageExportStartedRef = useRef(0);
+  // Guards against double-emitting the image export result: each modal
+  // session (reset in openImageExportModal) resolves to exactly one
+  // success / failed / cancelled, no matter which exit path runs.
+  const imageExportResolvedRef = useRef(false);
   // Same click→result correlation for Save as template, which now reports the
   // export result only after the template is actually saved (not on open).
   const templateExportRequestIdRef = useRef<string | null>(null);
@@ -7501,6 +7505,7 @@ function HtmlViewer({
     const requestId = analytics.newRequestId();
     imageExportRequestIdRef.current = requestId;
     imageExportStartedRef.current = performance.now();
+    imageExportResolvedRef.current = false;
     trackShareOptionPopoverClick(
       analytics.track,
       {
@@ -7528,30 +7533,35 @@ function HtmlViewer({
     void prepareImageExportBlob(format);
   };
 
+  // Component-scoped so both the save flow and the modal Cancel button can
+  // emit the one terminal result for an image export session.
+  const fireImageExportResult = (
+    result: 'success' | 'failed' | 'cancelled',
+    errorCode?: string,
+  ) => {
+    if (imageExportResolvedRef.current) return;
+    imageExportResolvedRef.current = true;
+    const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
+    const started = imageExportStartedRef.current || performance.now();
+    trackArtifactExportResult(
+      analytics.track,
+      {
+        page_name: 'artifact',
+        area: 'share_option_popover',
+        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+        export_format: 'image',
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        export_duration_ms: Math.round(performance.now() - started),
+        project_id: projectId,
+        project_kind: projectKind,
+      },
+      { requestId },
+    );
+  };
+
   async function handleImageExportSave() {
-    const fireImageExportResult = (
-      result: 'success' | 'failed' | 'cancelled',
-      errorCode?: string,
-    ) => {
-      const requestId = imageExportRequestIdRef.current ?? analytics.newRequestId();
-      const started = imageExportStartedRef.current || performance.now();
-      trackArtifactExportResult(
-        analytics.track,
-        {
-          page_name: 'artifact',
-          area: 'share_option_popover',
-          artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-          artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
-          export_format: 'image',
-          result,
-          ...(errorCode ? { error_code: errorCode } : {}),
-          export_duration_ms: Math.round(performance.now() - started),
-          project_id: projectId,
-          project_kind: projectKind,
-        },
-        { requestId },
-      );
-    };
     const prepared = imageExportPreparedBlob;
     if (!prepared || prepared.format !== imageExportFormat) {
       setImageExportError(t('fileViewer.exportImageFailed'));
@@ -7563,8 +7573,8 @@ function HtmlViewer({
     try {
       const target = await prepareImageExportTarget(exportTitle, imageExportFormat, { useNativePicker: false });
       if (!target) {
-        // Native picker dismissed by the user.
-        fireImageExportResult('cancelled');
+        // Not a terminal state: the modal stays open so the user can retry or
+        // Cancel. The cancelled result is emitted by the Cancel button.
         return;
       }
       const preparedDataUrl = imageExportSnapshotDataUrlRef.current;
@@ -9078,6 +9088,9 @@ function HtmlViewer({
                 className="ghost-link button-like"
                 disabled={imageExportBusy}
                 onClick={() => {
+                  // User dismissed the image export modal without saving —
+                  // close the ui_click(image)→result funnel as cancelled.
+                  fireImageExportResult('cancelled', 'MODAL_DISMISSED');
                   setImageExportModalOpen(false);
                   setImageExportError(null);
                 }}

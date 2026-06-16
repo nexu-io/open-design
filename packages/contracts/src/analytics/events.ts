@@ -37,6 +37,7 @@ export type AnalyticsEventName =
   | 'file_upload_result'
   // Artifact
   | 'artifact_export_result'
+  | 'artifact_deploy_result'
   // Feedback
   | 'feedback_submit_result'
   | 'assistant_feedback_click'
