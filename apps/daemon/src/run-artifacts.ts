@@ -1,9 +1,17 @@
-// Daemon-side helper that counts how many distinct `.html` files this
+// Daemon-side helper that counts how many distinct artifact files this
 // run produced or modified. Fed into v2 `run_finished.artifact_count`.
 //
-// Semantics (per product spec, 2026-05-21):
+// "Artifact" = a user-facing output file: HTML (prototypes / live artifacts /
+// slide decks all render from `.html`), plus generated media — images, video,
+// and audio — so media-kind projects no longer report a false zero. Supporting
+// assets an HTML run happens to write (e.g. `assets/*.png`) are also counted;
+// the metric's primary use is the boolean "did this run produce any artifact?"
+// funnel, where over-counting the exact number is harmless and under-counting
+// (the old HTML-only behaviour) was not.
+//
+// Semantics (per product spec, 2026-05-21; widened beyond HTML 2026-06-15):
 //   - Count is incremental for THIS run only, not cumulative across the
-//     project. If the run touched no `.html` files, the count is 0.
+//     project. If the run touched no artifact files, the count is 0.
 //   - A file written multiple times within the same run counts once
 //     (dedup by path) so a Write-then-Edit cycle on the same file
 //     reports one artifact, not two.
@@ -46,8 +54,40 @@ function extractToolFilePath(input: unknown): string | null {
   return null;
 }
 
-function isHtmlPath(path: string): boolean {
-  return path.toLowerCase().endsWith('.html');
+// Artifact-output file extensions. HTML covers prototypes / live artifacts /
+// slide decks; the media sets mirror the canonical kind classifier in
+// `projects.ts` (`.image` / `.video` / `.audio` buckets) so the counter agrees
+// with how the rest of the app classifies generated files.
+const ARTIFACT_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.html',
+  '.htm',
+  // image
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  // SVG renders as a user-facing artifact (`kindFor` buckets it as `sketch`,
+  // and the daemon / web artifact manifests treat `image/svg+xml` as a
+  // renderable output), so a run that writes only `logo.svg` must not report
+  // artifact_count: 0.
+  '.svg',
+  // video
+  '.mp4',
+  '.mov',
+  '.webm',
+  // audio
+  '.mp3',
+  '.wav',
+  '.m4a',
+]);
+
+function isArtifactPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return ARTIFACT_EXTENSIONS.has(lower.slice(dot));
 }
 
 function isDesignSystemFile(path: string): boolean {
@@ -95,7 +135,7 @@ function readToolResultIsError(data: unknown): boolean {
 // Generic write counter shared by all three predicates. Returns the
 // set of distinct paths the run successfully wrote / edited that
 // match `predicate`. Failure-pairing semantics match
-// `countNewHtmlArtifacts` so the three counters stay aligned.
+// `countNewArtifacts` so the counters stay aligned.
 function collectWrittenPathsMatching(
   events: readonly RunEventLike[],
   predicate: (path: string) => boolean,
@@ -144,60 +184,20 @@ export function didRunCreateDesignSystemFile(
 // Count of distinct preview modules the run wrote under `preview/`.
 // Fed into `run_finished.preview_module_count`. A run that wrote
 // `preview/index.html` only counts as 1 module preview (the
-// path-distinct semantics match countNewHtmlArtifacts).
+// path-distinct semantics match countNewArtifacts).
 export function countDesignSystemPreviewModules(
   events: readonly RunEventLike[],
 ): number {
   return collectWrittenPathsMatching(events, isPreviewModulePath).size;
 }
 
-export function countNewHtmlArtifacts(events: readonly RunEventLike[]): number {
-  if (!events || events.length === 0) return 0;
-
-  // First pass: collect tool_result records keyed by toolUseId so the
-  // second pass can resolve each tool_use's outcome without quadratic
-  // scanning. Default outcome for a tool_use with no matching result
-  // (run still streaming when this is called, or adapter swallowed
-  // the result) is "still in flight" — we treat that as NOT counting,
-  // since we can't confirm the artifact actually landed. The web-side
-  // `deriveFileOps` makes the same choice (status='running' for
-  // unmatched tool_use); aligning here keeps both pipelines in sync.
-  const resultByToolUseId = new Map<string, { isError: boolean }>();
-  for (const rec of events) {
-    if (rec?.event !== 'agent') continue;
-    const data = rec.data as { type?: string } | null | undefined;
-    if (data?.type !== 'tool_result') continue;
-    const id = readToolResultId(rec.data);
-    if (!id) continue;
-    resultByToolUseId.set(id, { isError: readToolResultIsError(rec.data) });
-  }
-
-  const writtenPaths = new Set<string>();
-  for (const rec of events) {
-    if (rec?.event !== 'agent') continue;
-    const data = rec.data as
-      | { type?: string; name?: unknown; input?: unknown }
-      | null
-      | undefined;
-    if (data?.type !== 'tool_use') continue;
-    if (typeof data.name !== 'string') continue;
-    if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) continue;
-    const path = extractToolFilePath(data.input);
-    if (!path) continue;
-    if (!isHtmlPath(path)) continue;
-    const toolUseId = readToolUseId(rec.data);
-    // No id: legacy / synthetic stream shapes that don't pair. Be
-    // conservative and skip; the dashboard would rather under-count
-    // than count attempts that may have failed silently.
-    if (!toolUseId) continue;
-    const outcome = resultByToolUseId.get(toolUseId);
-    // No matching result: tool still in flight at snapshot time, OR
-    // adapter never emitted one. Don't count either way.
-    if (!outcome) continue;
-    if (outcome.isError) continue;
-    writtenPaths.add(path);
-  }
-  return writtenPaths.size;
+// Count of distinct artifact files (HTML + image/video/audio) the run
+// successfully wrote or edited. Fed into `run_finished.artifact_count`.
+// Failure-pairing + path-dedup semantics come from the shared
+// `collectWrittenPathsMatching` helper (a tool_use whose tool_result reports
+// `isError` does not count; a file written then edited counts once).
+export function countNewArtifacts(events: readonly RunEventLike[]): number {
+  return collectWrittenPathsMatching(events, isArtifactPath).size;
 }
 
 // True iff the run raised an intent-clarification question. Fed into

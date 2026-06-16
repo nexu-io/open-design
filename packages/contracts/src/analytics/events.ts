@@ -1887,8 +1887,14 @@ export interface ArtifactToolbarClickProps {
     | 'reload'
     | 'preview'
     | 'source'
+    // Copies a screenshot of the current preview to the clipboard (does not
+    // start a run). Tracked so the preview-export tool's usage is measurable.
+    | 'screenshot'
     | 'tweaks'
-    | 'draw'
+    // The Mark (mark-pen) annotation tool. Renamed from `draw` to match the
+    // product label users see; the draw-overlay sub-toolbar keeps area
+    // `draw_toolbar`.
+    | 'mark'
     | 'comment'
     | 'pods'
     | 'inspect'
@@ -2545,7 +2551,26 @@ export interface RunCreatedProps {
   entry_from?:
     | 'new_project'
     | 'chat_composer'
+    // Preview-annotation entries: `comment` (comment/board pin flow) and
+    // `mark` (Mark draw-overlay flow). Both run against an existing artifact.
+    | 'comment'
+    | 'mark'
+    // `next_step`: composer seeded by a guided Next-step action (best-effort,
+    // tagged on the following send). `question_answer`: submitting answers to
+    // an inline `<question-form>` clarification.
+    | 'next_step'
+    | 'question_answer'
     | TrackingDesignSystemRunEntryFrom;
+  // Session-dimension run context (0-based `turn_index` within the browser
+  // analytics session, `is_first_run` === turn_index 0). Lets the dashboard
+  // sequence a session's runs and read "did this session reach an artifact,
+  // and on which turn?". Optional: omitted when the client could not compute
+  // them (e.g. storage unavailable).
+  turn_index?: number;
+  is_first_run?: boolean;
+  // True when the project already had a generated artifact when this run
+  // started (project-scoped) — i.e. the run is an edit, not a first creation.
+  has_existing_artifact?: boolean;
   project_source?: TrackingProjectSource;
   project_id: string;
   conversation_id: string | null;

@@ -4546,8 +4546,9 @@ function HtmlViewer({
       | 'reload'
       | 'preview'
       | 'source'
+      | 'screenshot'
       | 'tweaks'
-      | 'draw'
+      | 'mark'
       | 'comment'
       | 'pods'
       | 'inspect'
@@ -6930,7 +6931,7 @@ function HtmlViewer({
   }
 
   function activateDrawTool() {
-    fireArtifactToolbarClick('draw');
+    fireArtifactToolbarClick('mark');
     const next = !drawOverlayOpen;
     if (!next) {
       setDrawOverlayOpen(false);
@@ -7334,6 +7335,7 @@ function HtmlViewer({
   ]);
 
   const handleCopyScreenshot = useCallback(async () => {
+    fireArtifactToolbarClick('screenshot');
     if (screenshotInFlightRef.current) return;
     screenshotInFlightRef.current = true;
     setExportToast({ message: t('fileViewer.screenshotCopying'), tone: 'loading' });

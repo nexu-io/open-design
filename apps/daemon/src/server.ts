@@ -260,7 +260,7 @@ import {
 import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
-  countNewHtmlArtifacts,
+  countNewArtifacts,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from './run-artifacts.js';
@@ -2170,7 +2170,7 @@ function scanRunEventsForRetrySideEffects(events) {
     }
   }
   if (
-    countNewHtmlArtifacts(events) > 0 ||
+    countNewArtifacts(events) > 0 ||
     didRunCreateDesignSystemFile(events) ||
     countDesignSystemPreviewModules(events) > 0
   ) {
@@ -11583,6 +11583,26 @@ export async function startServer({
       const hintProjectKind = typeof analyticsHints.projectKind === 'string'
         ? analyticsHints.projectKind
         : null;
+      // Session-dimension hints (client-computed, behavior-irrelevant): the
+      // 0-based run turn index within the browser analytics session, whether
+      // it's the session's first run, and whether the project already had a
+      // generated artifact (run is an edit, not a first creation).
+      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
+        ? analyticsHints.turnIndex
+        : undefined;
+      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
+        ? analyticsHints.isFirstRun
+        : undefined;
+      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
+        ? analyticsHints.hasExistingArtifact
+        : undefined;
+      const sessionDimensionProps = {
+        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
+        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
+        ...(hintHasExistingArtifact !== undefined
+          ? { has_existing_artifact: hintHasExistingArtifact }
+          : {}),
+      };
       const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
       const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -11650,6 +11670,7 @@ export async function startServer({
         run_id: run.id,
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
+        ...sessionDimensionProps,
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -11794,7 +11815,7 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewHtmlArtifacts(run.events);
+        const artifactCount = countNewArtifacts(run.events);
         const designSystemCreated = didRunCreateDesignSystemFile(run.events);
         const previewModuleCount = countDesignSystemPreviewModules(run.events);
         const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({

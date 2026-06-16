@@ -9,6 +9,7 @@ import { detectOpenDesignHostClientType } from '@open-design/host';
 
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
+const RUN_TURN_INDEX_KEY = 'open-design:analytics.run_turn_index';
 
 function randomUuid(): string {
   // Prefer the standard crypto.randomUUID — present in every modern browser
@@ -50,6 +51,26 @@ export function getSessionId(): string {
     return fresh;
   } catch {
     return randomUuid();
+  }
+}
+
+// Claim the next 0-based run turn index for the current browser analytics
+// session and advance the counter. Lives in sessionStorage so it shares the
+// exact lifetime of the `session_id` above — both reset together when the tab
+// session ends. Call this once per run that is actually being created (at the
+// create-run dispatch), so `run_created`/`run_finished` can sequence a
+// session's runs. Returns null when storage is unavailable (SSR / privacy
+// mode), so callers omit the hint rather than reporting a misleading turn 0.
+export function claimRunTurnIndex(): { turnIndex: number; isFirstRun: boolean } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(RUN_TURN_INDEX_KEY);
+    const current = raw ? Number.parseInt(raw, 10) : 0;
+    const turnIndex = Number.isFinite(current) && current >= 0 ? current : 0;
+    window.sessionStorage.setItem(RUN_TURN_INDEX_KEY, String(turnIndex + 1));
+    return { turnIndex, isFirstRun: turnIndex === 0 };
+  } catch {
+    return null;
   }
 }
 
