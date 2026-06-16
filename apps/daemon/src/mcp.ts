@@ -14,20 +14,34 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  type JSONRPCMessage,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
+import type { Readable, Writable } from 'node:stream';
 
 import { postCreateArtifactRequest } from './artifact-create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
+const MCP_IDLE_EXIT_TIMEOUT_MS = 30 * 60 * 1000;
+const MCP_IDLE_EXIT_POLL_MS = 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
+interface RunMcpStdioOptions extends RunMcpOptions {
+  stdin?: Readable;
+  stdout?: Writable;
+  idleExit?: McpIdleExitControllerOptions;
+}
+interface McpIdleExitControllerOptions {
+  idleTimeoutMs?: number;
+  pollIntervalMs?: number;
+  now?: () => number;
+}
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -432,8 +446,17 @@ const TOOL_DEFS = [
   },
 ];
 
-export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
+export async function runMcpStdio({ daemonUrl, stdin, stdout, idleExit: idleExitOptions }: RunMcpStdioOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  const idleExit = createMcpIdleExitController(idleExitOptions);
+  const withMcpActivity = async <T>(run: () => Promise<T> | T): Promise<T> => {
+    const endActivity = idleExit.beginActivity();
+    try {
+      return await run();
+    } finally {
+      endActivity();
+    }
+  };
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -533,11 +556,11 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  server.setRequestHandler(ListToolsRequestSchema, async () => withMcpActivity(() => ({
     tools: TOOL_DEFS,
-  }));
+  })));
 
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  server.setRequestHandler(ListResourcesRequestSchema, async () => withMcpActivity(async () => {
     const [skillsData, dsData] = await Promise.all([
       getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
       getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
@@ -567,9 +590,9 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       });
     }
     return { resources };
-  });
+  }));
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => withMcpActivity(async () => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
@@ -609,27 +632,122 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         },
       ],
     };
-  });
+  }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req) => withMcpActivity(async () => {
     const name = req.params?.name;
     const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
     return handleMcpToolCall(baseUrl, name, args);
-  });
+  }));
 
-  const transport = new StdioServerTransport();
+  const transport = new StdioServerTransport(stdin, stdout);
+  trackMcpTransportActivity(transport, idleExit);
   await server.connect(transport);
 
   // server.connect() only *starts* the transport; it resolves once the
   // stdio reader is wired up, not when the stream closes. Hold the
   // process open until the client disconnects (stdin EOF) so the cli.ts
   // top-level `process.exit(0)` doesn't kill us mid-handshake.
-  await new Promise<void>((resolve) => {
-    const done = () => resolve();
-    transport.onclose = done;
-    process.stdin.once('end', done);
-    process.stdin.once('close', done);
+  let clientClosedDone: (() => void) | null = null;
+  const clientClosed = new Promise<void>((resolve) => {
+    clientClosedDone = () => {
+      idleExit.stop();
+      resolve();
+    };
+    transport.onclose = clientClosedDone;
+    const input = stdin ?? process.stdin;
+    input.once('end', clientClosedDone);
+    input.once('close', clientClosedDone);
   });
+  try {
+    await Promise.race([clientClosed, idleExit.waitForIdleExit()]);
+  } finally {
+    idleExit.stop();
+    if (clientClosedDone) {
+      const input = stdin ?? process.stdin;
+      input.off('end', clientClosedDone);
+      input.off('close', clientClosedDone);
+    }
+    await server.close().catch(() => undefined);
+  }
+}
+
+function trackMcpTransportActivity(
+  transport: StdioServerTransport,
+  idleExit: ReturnType<typeof createMcpIdleExitController>,
+) {
+  const existingOnMessage = transport.onmessage;
+  transport.onmessage = (message: JSONRPCMessage) => {
+    idleExit.markActivity();
+    existingOnMessage?.(message);
+  };
+}
+
+function createMcpIdleExitController(options: McpIdleExitControllerOptions = {}) {
+  const idleTimeoutMs = options.idleTimeoutMs ?? MCP_IDLE_EXIT_TIMEOUT_MS;
+  const pollIntervalMs = options.pollIntervalMs ?? MCP_IDLE_EXIT_POLL_MS;
+  const now = options.now ?? Date.now;
+  let lastActivity = now();
+  let activeRequests = 0;
+  let resolved = false;
+  let interval: ReturnType<typeof setInterval> | null = null;
+  let resolveIdle: (() => void) | null = null;
+  let waitPromise: Promise<void> | null = null;
+
+  const clearIdleInterval = () => {
+    if (!interval) return;
+    clearInterval(interval);
+    interval = null;
+  };
+
+  const stop = () => {
+    if (resolved) return;
+    resolved = true;
+    clearIdleInterval();
+    resolveIdle?.();
+  };
+
+  const markActivity = () => {
+    lastActivity = now();
+  };
+
+  const beginActivity = () => {
+    activeRequests += 1;
+    markActivity();
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      activeRequests = Math.max(0, activeRequests - 1);
+      markActivity();
+    };
+  };
+
+  const waitForIdleExit = () => {
+    if (resolved) {
+      return Promise.resolve();
+    }
+    if (waitPromise) {
+      return waitPromise;
+    }
+    waitPromise = new Promise<void>((resolve) => {
+      resolveIdle = resolve;
+      clearIdleInterval();
+      interval = setInterval(() => {
+        if (activeRequests > 0) return;
+        if (now() - lastActivity >= idleTimeoutMs) stop();
+      }, pollIntervalMs);
+      interval.unref?.();
+    });
+    return waitPromise;
+  };
+
+  return {
+    markActivity,
+    beginActivity,
+    waitForIdleExit,
+    stop,
+  };
 }
 
 function ok(payload: unknown) {
@@ -1755,4 +1873,4 @@ function errorMessage(err: unknown): string {
 }
 
 // Exported for unit tests only.
-export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };
+export { extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall, createMcpIdleExitController };
