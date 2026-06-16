@@ -4167,14 +4167,7 @@ describe('SettingsDialog about interactions', () => {
     expect(second.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the releases page when the latest release info is stale', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    fetchLatestGithubReleaseInfoMock.mockResolvedValue({
-      tagName: 'v0.4.1',
-      htmlUrl: 'https://github.com/nexu-io/open-design/releases/tag/v0.4.1',
-      stale: true,
-    });
-
+  it('shows development builds as unsupported for in-app updates', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       {
@@ -4182,22 +4175,66 @@ describe('SettingsDialog about interactions', () => {
         appVersionInfo: {
           version: '0.4.1',
           channel: 'beta',
-          packaged: true,
+          packaged: false,
           platform: 'darwin',
           arch: 'arm64',
         },
       },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Install latest' }));
+    expect(screen.getByText(en['settings.updateStatusDevelopment'])).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
+    expect(screen.getByLabelText(en['settings.updatePreviewLabel'])).toBeTruthy();
 
-    await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://github.com/nexu-io/open-design/releases',
-        '_blank',
-        'noopener,noreferrer',
-      );
+    fireEvent.click(screen.getByRole('button', { name: en['settings.updateViewReleases'] }));
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://github.com/nexu-io/open-design/releases');
+  });
+
+  it('lets development builds preview update states and action transitions', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.4.1',
+          channel: 'beta',
+          packaged: false,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
+      target: { value: 'available' },
     });
-    expect(screen.queryByText(en['settings.alreadyLatest'])).toBeNull();
+
+    expect(screen.getByText('New version 0.4.2 found. Preparing download.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en['settings.updateNow'] })).toBeNull();
+    expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
+      target: { value: 'downloading' },
+    });
+
+    expect(screen.getByText('Downloading update 42%.')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: en['updater.downloading'] }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
+      target: { value: 'downloaded' },
+    });
+
+    expect(screen.getByText('Version 0.4.2 is ready to install.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: en['settings.updateNow'] })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
+      target: { value: 'not-available' },
+    });
+
+    expect(screen.getByText(en['settings.updateStatusUpToDate'])).toBeTruthy();
+    expect(screen.getByRole('button', { name: en['settings.updateRecheck'] })).toBeTruthy();
   });
 });
