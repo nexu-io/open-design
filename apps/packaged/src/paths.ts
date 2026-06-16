@@ -42,6 +42,29 @@ function expandHomePrefix(raw: string): string {
   return raw;
 }
 
+// The packaged runtime contract requires OD_DATA_DIR to be absolute: a relative
+// value would make namespaceBaseRoot/log/runtime/daemon-data paths cwd-relative,
+// forking the runtime tree from the daemon's data dir. Both the Electron-packaged
+// resolver and the WebUI launcher resolver MUST fail fast through this one guard
+// so they reject relative paths identically. `expanded` is the home-expanded
+// value; `rawValue` is the original env string, echoed in the error for the user.
+function assertAbsoluteOdDataDir(expanded: string, rawValue: string): void {
+  const isAbs = process.platform === "win32"
+    ? win32.isAbsolute(expanded)
+    : isAbsolute(expanded);
+  if (isAbs) return;
+  throw new PackagedPathAccessError(
+    [
+      "Open Design's packaged runtime requires OD_DATA_DIR to be an absolute path.",
+      "",
+      `Configured value: ${rawValue}`,
+      "",
+      "Set OD_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\OpenDesign on Windows or /Users/you/OpenDesign on macOS/Linux) and relaunch Open Design.",
+    ].join("\n"),
+    { title: "Open Design cannot start with this OD_DATA_DIR" },
+  );
+}
+
 function getScopedPackagedDataRootNamespace(raw: string): string | null {
   const parts = raw.replace(/[\\/]+$/g, "").split(/[\\/]+/);
   const last = parts.length - 1;
@@ -58,21 +81,7 @@ function resolvePackagedDataRoot(
   const odDataDir = env.OD_DATA_DIR?.trim();
   if (odDataDir) {
     const expanded = expandHomePrefix(odDataDir);
-    const isAbs = process.platform === "win32"
-      ? win32.isAbsolute(expanded)
-      : isAbsolute(expanded);
-    if (!isAbs) {
-      throw new PackagedPathAccessError(
-        [
-          "Open Design's packaged runtime requires OD_DATA_DIR to be an absolute path.",
-          "",
-          `Configured value: ${odDataDir}`,
-          "",
-          "Set OD_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\OpenDesign on Windows or /Users/you/OpenDesign on macOS/Linux) and relaunch Open Design.",
-        ].join("\n"),
-        { title: "Open Design cannot start with this OD_DATA_DIR" },
-      );
-    }
+    assertAbsoluteOdDataDir(expanded, odDataDir);
     const scopedNamespace = getScopedPackagedDataRootNamespace(expanded);
     if (scopedNamespace) {
       if (scopedNamespace !== namespace) {
@@ -113,6 +122,10 @@ export function resolveWebuiNamespacesRoot(input: {
   const odDataDir = input.odDataDir?.trim();
   if (odDataDir) {
     const expanded = expandHomePrefix(odDataDir);
+    // Same absolute-path contract as resolvePackagedDataRoot(): a relative
+    // OD_DATA_DIR (or a relative dataDir the launcher copies into the env) must
+    // fail fast here instead of producing a cwd-relative namespaces root.
+    assertAbsoluteOdDataDir(expanded, odDataDir);
     if (getScopedPackagedDataRootNamespace(expanded) != null) {
       // `<base>/namespaces/<ns>/data` → `<base>/namespaces`
       return join(expanded, "..", "..");

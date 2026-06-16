@@ -259,4 +259,24 @@ describe("resolveWebuiNamespacesRoot", () => {
       join(HOME, ".local", "share", "open-design", "namespaces"),
     );
   });
+
+  // A relative OD_DATA_DIR (or a relative dataDir the launcher copies into
+  // OD_DATA_DIR) must fail fast through the SAME guard as resolvePackagedDataRoot,
+  // not silently build a cwd-relative namespaces/log/runtime tree.
+  it("rejects a relative OD_DATA_DIR with PackagedPathAccessError (same contract as packaged data root)", () => {
+    expect(() =>
+      resolveWebuiNamespacesRoot({ odDataDir: join("relative", "open-design-data"), home: HOME }),
+    ).toThrow(PackagedPathAccessError);
+    // A bare relative segment must be rejected too.
+    expect(() => resolveWebuiNamespacesRoot({ odDataDir: "open-design-data", home: HOME })).toThrow(
+      PackagedPathAccessError,
+    );
+    // The relative scoped form must not slip past the scoped-namespace branch.
+    expect(() =>
+      resolveWebuiNamespacesRoot({
+        odDataDir: join("rel", "namespaces", "release-stable", "data"),
+        home: HOME,
+      }),
+    ).toThrow(PackagedPathAccessError);
+  });
 });
