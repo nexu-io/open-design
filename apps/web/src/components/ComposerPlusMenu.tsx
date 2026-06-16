@@ -457,9 +457,7 @@ export function ComposerPlusMenu({
             testId="composer-plus-plugins"
             onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
-            flyoutClassName={
-              filteredPlugins.length > 0 ? 'plus-menu__flyout--plugins' : undefined
-            }
+            flyoutClassName="plus-menu__flyout--plugins"
           >
             <div className="plus-menu__plugin-pane">
               <div className="plus-menu__plugin-main">

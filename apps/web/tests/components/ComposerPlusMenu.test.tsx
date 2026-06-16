@@ -272,6 +272,47 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
     }
   });
 
+  it('keeps the plugins flyout width class for empty search in a left-opening layout', () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 420 });
+
+    try {
+      renderMenu();
+      const trigger = screen.getByTestId('plus-trigger') as HTMLButtonElement;
+      trigger.getBoundingClientRect = () =>
+        ({
+          x: 620,
+          y: 376,
+          top: 376,
+          left: 620,
+          right: 648,
+          bottom: 404,
+          width: 28,
+          height: 28,
+          toJSON: () => ({}),
+        }) as DOMRect;
+
+      fireEvent.click(trigger);
+      const menu = screen.getByRole('menu');
+      expect(menu.className).toContain('plus-menu__popup--flyout-left');
+
+      fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+      const pluginSearch = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
+      fireEvent.change(pluginSearch, {
+        target: { value: 'definitely-no-plugin' },
+      });
+
+      const flyout = document.querySelector('.plus-menu__flyout') as HTMLDivElement;
+      expect(screen.getByText('No installed plugins')).toBeTruthy();
+      expect(flyout.className).toContain('plus-menu__flyout--plugins');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
+    }
+  });
+
   it('contains flyouts inside the menu when neither side has enough room', () => {
     const originalInnerWidth = window.innerWidth;
     const originalInnerHeight = window.innerHeight;
