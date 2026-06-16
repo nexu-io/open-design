@@ -64,6 +64,7 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { shouldStopWebForDaemonRestart } from "./daemon-restart-policy.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
@@ -655,10 +656,17 @@ async function startDaemon(
   const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
     const daemonBuildFreshness = await daemonCliBuildFreshness(config);
-    if (daemonBuildFreshness.stale || (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort)) {
-      const webToStop = existingWeb ?? await inspectWebRuntime(runtimeLookup(config));
-      if (webToStop?.url != null) {
-        await stopApp(config, APP_KEYS.WEB);
+    const stopWebForTrustedOriginRefresh = shouldStopWebForDaemonRestart({
+      shouldRefreshWebOrigin,
+      daemonTrustedWebOriginPort,
+      webPort,
+    });
+    if (daemonBuildFreshness.stale || stopWebForTrustedOriginRefresh) {
+      if (stopWebForTrustedOriginRefresh) {
+        const webToStop = existingWeb ?? await inspectWebRuntime(runtimeLookup(config));
+        if (webToStop?.url != null) {
+          await stopApp(config, APP_KEYS.WEB);
+        }
       }
       await stopApp(config, APP_KEYS.DAEMON);
       existing = null;

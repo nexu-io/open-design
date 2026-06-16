@@ -23,6 +23,17 @@ import {
 } from '../../src/state/projects';
 import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
 
+const projectViewHarness = vi.hoisted(() => ({
+  chatPane: {
+    activeConversationId: undefined as string | null | undefined,
+    rendered: false,
+  },
+  fileWorkspace: {
+    autoPreviewDesignArtifacts: undefined as boolean | undefined,
+    preferredPreviewFile: undefined as string | null | undefined,
+  },
+}));
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
@@ -101,21 +112,27 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: ({ tabsState, onTabsStateChange }: {
+  FileWorkspace: ({ tabsState, onTabsStateChange, autoPreviewDesignArtifacts, preferredPreviewFile }: {
     tabsState: { tabs: string[]; active: string | null };
     onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
-  }) => (
-    <div data-testid="file-workspace">
-      <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
-      <button
-        type="button"
-        data-testid="close-all-tabs"
-        onClick={() => onTabsStateChange({ tabs: [], active: null })}
-      >
-        close all tabs
-      </button>
-    </div>
-  ),
+    autoPreviewDesignArtifacts?: boolean;
+    preferredPreviewFile?: string | null;
+  }) => {
+    projectViewHarness.fileWorkspace.autoPreviewDesignArtifacts = autoPreviewDesignArtifacts;
+    projectViewHarness.fileWorkspace.preferredPreviewFile = preferredPreviewFile;
+    return (
+      <div data-testid="file-workspace">
+        <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
+        <button
+          type="button"
+          data-testid="close-all-tabs"
+          onClick={() => onTabsStateChange({ tabs: [], active: null })}
+        >
+          close all tabs
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -123,7 +140,11 @@ vi.mock('../../src/components/Loading', () => ({
 }));
 
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: () => <div data-testid="chat-pane" />,
+  ChatPane: ({ activeConversationId }: { activeConversationId?: string | null }) => {
+    projectViewHarness.chatPane.activeConversationId = activeConversationId;
+    projectViewHarness.chatPane.rendered = true;
+    return <div data-testid="chat-pane" />;
+  },
 }));
 
 const mockedListConversations = vi.mocked(listConversations);
@@ -162,10 +183,10 @@ const conversation: Conversation = {
   updatedAt: 1,
 };
 
-function renderProjectView() {
+function renderProjectView(projectOverride: Project = project) {
   return render(
     <ProjectView
-      project={project}
+      project={projectOverride}
       routeFileName={null}
       config={config}
       agents={[] as AgentInfo[]}
@@ -200,6 +221,10 @@ describe('ProjectView tab URL hydration', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    projectViewHarness.chatPane.activeConversationId = undefined;
+    projectViewHarness.chatPane.rendered = false;
+    projectViewHarness.fileWorkspace.autoPreviewDesignArtifacts = undefined;
+    projectViewHarness.fileWorkspace.preferredPreviewFile = undefined;
   });
 
   it('syncs a persisted active tab to the URL before the file list has hydrated', async () => {
@@ -341,5 +366,27 @@ describe('ProjectView tab URL hydration', () => {
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
     expect(mockedCacheTabsLocally).not.toHaveBeenCalled();
+  });
+
+  it('renders project-location imports before conversation hydration and keeps artifact auto-preview on', async () => {
+    const importedProject: Project = {
+      ...project,
+      metadata: {
+        kind: 'prototype',
+        importedFrom: 'project-location',
+        entryFile: 'packages/app/src/main.tsx',
+      },
+    };
+    mockedListConversations.mockReturnValue(new Promise<Conversation[]>(() => {}));
+    mockedLoadTabs.mockResolvedValue({ tabs: [], active: null, hasSavedState: true });
+    mockedFetchProjectFiles.mockResolvedValue([]);
+
+    renderProjectView(importedProject);
+
+    await screen.findByTestId('chat-pane');
+    expect(projectViewHarness.chatPane.rendered).toBe(true);
+    expect(projectViewHarness.chatPane.activeConversationId).toBeNull();
+    expect(projectViewHarness.fileWorkspace.autoPreviewDesignArtifacts).toBe(true);
+    expect(projectViewHarness.fileWorkspace.preferredPreviewFile).toBe('packages/app/src/main.tsx');
   });
 });

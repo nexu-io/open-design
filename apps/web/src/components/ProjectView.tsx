@@ -188,6 +188,7 @@ import {
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
+import { isExistingProjectImport } from './existing-project-import';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
 import type { DesignFilesScope } from './DesignFilesPanel';
 import { FileWorkspace } from './FileWorkspace';
@@ -1310,8 +1311,8 @@ export function ProjectView({
         })
     : [];
   const newConversationDisabled = creatingConversation;
-  const importedFolderChatFallback = project.metadata?.importedFrom === 'folder';
-  const canRenderChatPane = Boolean(activeConversationId || conversationLoadError || importedFolderChatFallback);
+  const existingProjectChatFallback = isExistingProjectImport(project.metadata);
+  const canRenderChatPane = Boolean(activeConversationId || conversationLoadError || existingProjectChatFallback);
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -5942,7 +5943,7 @@ export function ProjectView({
           designFilesScope={designFilesScope}
           onClearDesignFilesScope={() => setDesignFilesScope(null)}
           preferredPreviewFile={project.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
+          autoPreviewDesignArtifacts={isExistingProjectImport(project.metadata)}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}

@@ -54,6 +54,7 @@ import type {
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon, type IconName } from "./Icon";
+import { isExistingProjectImport } from './existing-project-import';
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import {
@@ -313,10 +314,6 @@ export interface ChatSendMeta {
    *  this send (e.g. 'mark' when the turn is sent from the Mark draw overlay).
    *  Behavior never depends on it; it only shapes PostHog props. */
   entryFrom?: ChatAnalyticsEntryFrom;
-}
-
-function isExistingProjectImport(metadata: ProjectMetadata | undefined): boolean {
-  return metadata?.importedFrom === 'folder' || metadata?.importedFrom === 'project-location';
 }
 
 /**

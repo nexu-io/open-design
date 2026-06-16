@@ -203,6 +203,60 @@ describe('ChatPane imported folder surfaces', () => {
     expect(composerMocks.restoreDraft).not.toHaveBeenCalled();
   });
 
+  it('loads discovered UI surfaces for project-location imports with no active conversation', async () => {
+    const metadata: ProjectMetadata = {
+      kind: 'prototype',
+      importedFrom: 'project-location',
+      entryFile: 'packages/app/src/main.tsx',
+    };
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (typeof url === 'string' && url.includes('/ui-surfaces')) {
+        return json({
+          surfaces: [
+            {
+              id: 'nested-vite',
+              label: 'Nested Vite app',
+              route: '/',
+              kind: 'react-app',
+              confidence: 'medium',
+              framework: 'Vite',
+              entryFile: 'packages/app/src/main.tsx',
+              previewFile: 'packages/app/index.html',
+              previewRuntimeRoot: 'packages/app',
+              previewPath: '/',
+              previewStatus: 'needs-setup',
+              sourceFiles: ['packages/app/index.html', 'packages/app/src/main.tsx'],
+              styleFiles: [],
+              scriptFiles: [],
+              assetFiles: [],
+              fontFiles: [],
+              externalDependencies: [],
+              reasons: ['React app entry and HTML shell detected'],
+              mtime: 20,
+            },
+          ],
+          generatedAt: '2026-06-02T00:00:00.000Z',
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    renderPane({
+      activeConversationId: null,
+      conversations: [],
+      messages: [],
+      projectMetadata: metadata,
+      projectFiles: [
+        file('packages/app/index.html', 'html', 20),
+        file('packages/app/src/main.tsx', 'code', 19),
+      ],
+    });
+
+    const surfaces = await screen.findByTestId('chat-ui-surfaces');
+    expect(within(surfaces).getByText('Nested Vite app')).toBeTruthy();
+    expect(screen.queryByText('chat.startTitle')).toBeNull();
+  });
+
   it('starts a managed runtime preview for source-mapped screens', async () => {
     const metadata: ProjectMetadata = {
       kind: 'prototype',

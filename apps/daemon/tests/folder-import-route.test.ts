@@ -642,6 +642,84 @@ describe('POST /api/import/folder', () => {
     );
   });
 
+  it('discovers nested React/Vite package shells and entries', async () => {
+    const folder = makeFolder();
+    await mkdir(path.join(folder, 'app'), { recursive: true });
+    await mkdir(path.join(folder, 'packages/app/src'), { recursive: true });
+    await writeFile(
+      path.join(folder, 'package.json'),
+      JSON.stringify({
+        dependencies: {
+          next: '16.0.0',
+          react: '18.0.0',
+        },
+      }),
+    );
+    await writeFile(path.join(folder, 'app/page.tsx'), 'export default function Page(){return <main>Root Next</main>}');
+    await writeFile(
+      path.join(folder, 'packages/app/package.json'),
+      JSON.stringify({
+        scripts: { dev: 'vite' },
+        dependencies: {
+          '@vitejs/plugin-react': 'latest',
+          react: '18.0.0',
+          vite: '6.0.0',
+        },
+      }),
+    );
+    await writeFile(
+      path.join(folder, 'packages/app/index.html'),
+      '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+    );
+    await writeFile(
+      path.join(folder, 'packages/app/src/main.tsx'),
+      "import React from 'react';\nimport './App';\n",
+    );
+    await writeFile(path.join(folder, 'packages/app/src/App.tsx'), 'export function App(){return <main>Nested Vite</main>}');
+
+    const importResp = await importFolder({ baseDir: folder });
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as { project: { id: string } };
+
+    const resp = await fetch(`${baseUrl}/api/projects/${project.id}/ui-surfaces`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as {
+      surfaces: Array<{
+        kind: string;
+        framework: string | null;
+        entryFile: string;
+        previewFile: string | null;
+        previewRuntimeRoot: string | null;
+        sourceFiles: string[];
+      }>;
+    };
+
+    expect(body.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'next-route',
+          framework: 'Next.js',
+          entryFile: 'app/page.tsx',
+        }),
+        expect.objectContaining({
+          kind: 'react-app',
+          framework: 'Vite',
+          entryFile: 'packages/app/src/main.tsx',
+          previewFile: 'packages/app/index.html',
+          previewRuntimeRoot: 'packages/app',
+        }),
+      ]),
+    );
+    const reactSurface = body.surfaces.find((surface) => surface.kind === 'react-app');
+    expect(reactSurface?.sourceFiles).toEqual(
+      expect.arrayContaining([
+        'packages/app/index.html',
+        'packages/app/src/main.tsx',
+        'packages/app/src/App.tsx',
+      ]),
+    );
+  });
+
   it('does not let root Next signals classify a nested non-Next package src/pages tree', async () => {
     const folder = makeFolder();
     await mkdir(path.join(folder, 'app'), { recursive: true });

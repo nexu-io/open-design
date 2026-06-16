@@ -38,6 +38,18 @@ const IMPORT_SPEC_RE =
 const CSS_IMPORT_RE = /@import\s+(?:url\()?['"]?([^'")]+)['"]?\)?/g;
 const CSS_URL_RE = /url\(\s*['"]?([^'")]+)['"]?\s*\)/g;
 const JSX_STATIC_ASSET_RE = /\b(?:src|href|poster)\s*=\s*["']([^"']+)["']/g;
+const REACT_APP_ENTRY_CANDIDATES = [
+  'src/main.tsx',
+  'src/main.jsx',
+  'src/main.ts',
+  'src/main.js',
+  'src/index.tsx',
+  'src/index.jsx',
+  'src/App.tsx',
+  'src/App.jsx',
+  'app/main.tsx',
+  'app/main.jsx',
+];
 
 type FileMap = Map<string, ProjectFile>;
 
@@ -103,7 +115,7 @@ export async function discoverProjectUiSurfaces(input: {
     surfaces.push(await buildCodeSurface(ctx, reactEntry.entryFile, {
       kind: 'react-app',
       route: '/',
-      framework: framework ?? reactEntry.framework,
+      framework: reactEntry.framework,
       previewFile: reactEntry.previewFile,
       confidence: 'medium',
       reasons: reactEntry.reasons,
@@ -525,8 +537,11 @@ async function findAppShellHtmlFiles(ctx: DiscoveryContext): Promise<Set<string>
     const text = await readProjectText(ctx, html);
     if (!text) continue;
     const hasRoot = /\bid=["'](?:root|app|__next)["']/i.test(text);
-    const hasSourceScript = /<script\b[^>]+src=["']\/?src\/[^"']+\.[cm]?[jt]sx?["']/i.test(text);
-    if (hasRoot && hasSourceScript && (ctx.framework === 'Vite' || ctx.framework === 'React')) {
+    const hasSourceScript = /<script\b[^>]+src=["'](?:\.\/|\/)?src\/[^"']+\.[cm]?[jt]sx?["']/i.test(text);
+    const htmlDir = projectDirForFile(html);
+    const framework = frameworkForDir(ctx, htmlDir);
+    const hasLocalReactEntry = reactEntryFileForDir(ctx, htmlDir) != null;
+    if (hasRoot && hasSourceScript && (isReactAppFramework(framework) || (!framework && hasLocalReactEntry))) {
       shellFiles.add(html);
     }
   }
@@ -534,28 +549,22 @@ async function findAppShellHtmlFiles(ctx: DiscoveryContext): Promise<Set<string>
 }
 
 function findReactAppEntry(ctx: DiscoveryContext): { entryFile: string; previewFile: string | null; framework: string; reasons: string[] } | null {
-  const candidates = [
-    'src/main.tsx',
-    'src/main.jsx',
-    'src/main.ts',
-    'src/main.js',
-    'src/index.tsx',
-    'src/index.jsx',
-    'src/App.tsx',
-    'src/App.jsx',
-    'app/main.tsx',
-    'app/main.jsx',
-  ];
-  const entryFile = candidates.find((candidate) => ctx.fileMap.has(candidate));
-  if (!entryFile) return null;
-  if (ctx.framework === 'Next.js') return null;
-  const previewFile = ctx.fileMap.has('index.html') ? 'index.html' : null;
-  return {
-    entryFile,
-    previewFile,
-    framework: ctx.framework ?? 'React',
-    reasons: [previewFile ? 'React app entry and HTML shell detected' : 'React app entry detected'],
-  };
+  for (const dir of reactAppCandidateDirs(ctx)) {
+    const framework = frameworkForDir(ctx, dir);
+    if (framework === 'Next.js') continue;
+    const entryFile = reactEntryFileForDir(ctx, dir);
+    if (!entryFile) continue;
+    if (framework && !isReactAppFramework(framework)) continue;
+    const previewCandidate = projectPathInDir(dir, 'index.html');
+    const previewFile = ctx.fileMap.has(previewCandidate) ? previewCandidate : null;
+    return {
+      entryFile,
+      previewFile,
+      framework: isReactAppFramework(framework) ? framework : 'React',
+      reasons: [previewFile ? 'React app entry and HTML shell detected' : 'React app entry detected'],
+    };
+  }
+  return null;
 }
 
 function findNextRouteFiles(ctx: DiscoveryContext): string[] {
@@ -663,6 +672,59 @@ function previewRuntimeRootForSurface(
 
 function packageInfoForFile(ctx: DiscoveryContext, file: string): PackageInfo | null {
   return nearestPackageInfoForFile(ctx, file) ?? ctx.rootPackage;
+}
+
+function reactAppCandidateDirs(ctx: DiscoveryContext): string[] {
+  const dirs = new Set<string>(['']);
+  for (const pkg of ctx.packages) dirs.add(pkg.dir);
+  for (const html of findHtmlScreenFiles(ctx.files)) dirs.add(projectDirForFile(html));
+  return [...dirs].sort((a, b) => {
+    if (a === b) return 0;
+    if (a === '') return -1;
+    if (b === '') return 1;
+    return compareProjectPaths(a, b);
+  });
+}
+
+function reactEntryFileForDir(ctx: DiscoveryContext, dir: string): string | null {
+  for (const candidate of REACT_APP_ENTRY_CANDIDATES) {
+    const entryFile = projectPathInDir(dir, candidate);
+    if (ctx.fileMap.has(entryFile)) return entryFile;
+  }
+  return null;
+}
+
+function projectDirForFile(file: string): string {
+  const dir = path.posix.dirname(normalizeProjectPath(file));
+  return dir === '.' ? '' : dir;
+}
+
+function projectPathInDir(dir: string, file: string): string {
+  const normalizedDir = normalizeProjectPath(dir);
+  return normalizeProjectPath(normalizedDir ? path.posix.join(normalizedDir, file) : file);
+}
+
+function frameworkForDir(ctx: DiscoveryContext, dir: string): string | null {
+  const normalizedDir = normalizeProjectPath(dir);
+  const pkg = ctx.packages.find((candidate) => candidate.dir === normalizedDir);
+  const deps = pkg?.dependencies ?? {};
+  if ('next' in deps) return 'Next.js';
+  if ('vite' in deps) return 'Vite';
+  if ('react' in deps) return 'React';
+  if ('vue' in deps) return 'Vue';
+  if ('svelte' in deps || '@sveltejs/kit' in deps) return 'Svelte';
+  if (hasNextConfigInDir(ctx, normalizedDir)) return 'Next.js';
+  if (hasViteConfigInDir(ctx, normalizedDir)) return 'Vite';
+  return normalizedDir === '' ? ctx.framework : null;
+}
+
+function hasViteConfigInDir(ctx: DiscoveryContext, dir: string): boolean {
+  return ['vite.config.js', 'vite.config.mjs', 'vite.config.cjs', 'vite.config.ts']
+    .some((name) => ctx.fileMap.has(normalizeProjectPath(path.posix.join(dir, name))));
+}
+
+function isReactAppFramework(framework: string | null): framework is 'Vite' | 'React' {
+  return framework === 'Vite' || framework === 'React';
 }
 
 function nearestPackageInfoForFile(ctx: DiscoveryContext, file: string): PackageInfo | null {

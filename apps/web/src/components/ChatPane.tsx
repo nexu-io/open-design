@@ -52,6 +52,7 @@ import {
 } from './ChatComposer';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon, type IconName } from './Icon';
+import { isExistingProjectImport } from './existing-project-import';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import type { SettingsSection } from './SettingsDialog';
@@ -1486,7 +1487,7 @@ export function ChatPane({
   }, []);
   useEffect(() => {
     let cancelled = false;
-    if (!projectId || projectMetadata?.importedFrom !== 'folder') {
+    if (!projectId || !isExistingProjectImport(projectMetadata)) {
       activeImportedProjectIdRef.current = null;
       setImportedProjectSurfacesState({ status: 'idle', surfaces: [], error: null });
       setImportedSurfacePreviewStates({});
@@ -1590,7 +1591,7 @@ export function ChatPane({
       });
     }
   }, [projectId, importedProjectSurfacesState.status, importedProjectSurfacesState.surfaces]);
-  const showImportedFolderSurfaces = projectMetadata?.importedFrom === 'folder';
+  const showImportedFolderSurfaces = isExistingProjectImport(projectMetadata);
   const importedSurfacePaneActive =
     showImportedFolderSurfaces &&
     messages.length === 0 &&
