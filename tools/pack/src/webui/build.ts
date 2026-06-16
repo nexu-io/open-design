@@ -44,6 +44,22 @@ export function webuiArchiveName(input: {
   return `open-design-webui-${input.version}-${input.platform}-${input.arch}.${ext}`;
 }
 
+// The final archive MUST live under the namespace-scoped output root, not the
+// shared platform root. Two builds with the same version/platform/arch but
+// different `--namespace` would otherwise both write
+// `out/<platform>/<archive>` and the later run silently clobbers the earlier
+// one — namespace-scoped output is the multi-instance safety boundary every
+// other pack lane keeps. The public filename is unchanged.
+export function resolveWebuiArchivePath(
+  config: ToolPackBuildOnlyConfig,
+  version: string,
+): string {
+  return join(
+    config.roots.output.namespaceRoot,
+    webuiArchiveName({ platform: config.platform, arch: config.arch, version }),
+  );
+}
+
 // Maps the tools-pack platform/arch identity onto the prebuild-install
 // `--platform`/`--arch` (Node `process.platform`/`process.arch`) values used to
 // fetch the matching better-sqlite3 N-API prebuild. WebUI requires the user's
@@ -265,7 +281,7 @@ export async function buildPackedWebui(config: ToolPackBuildOnlyConfig): Promise
 
   // 6) archive
   const kind = webuiArchiveKind(platform);
-  const archivePath = join(config.roots.output.platformRoot, webuiArchiveName({ platform, arch, version }));
+  const archivePath = resolveWebuiArchivePath(config, version);
   const sevenZip = platform === "win" ? winResources.sevenZipExe : null;
   await createWebuiArchive(stageRoot, archivePath, kind, sevenZip);
 

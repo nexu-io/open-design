@@ -20,11 +20,13 @@ import {
   addWebuiBuildOptions,
   prebuiltSqliteTarget,
   pruneBuildOnlyNativeModules,
+  resolveWebuiArchivePath,
   resolveWebuiPackConfig,
   stageWebuiLauncherResources,
   webuiArchiveName,
   webuiArchiveKind,
 } from "../src/webui/build.js";
+import type { ToolPackBuildOnlyConfig } from "../src/config.js";
 
 describe("webuiArchiveName", () => {
   it("names per platform/arch/version", () => {
@@ -34,6 +36,39 @@ describe("webuiArchiveName", () => {
       .toBe("open-design-webui-0.8.1-linux-x64.tar.gz");
     expect(webuiArchiveName({ platform: "win", arch: "x64", version: "0.8.1" }))
       .toBe("open-design-webui-0.8.1-win-x64.zip");
+  });
+});
+
+describe("resolveWebuiArchivePath", () => {
+  // Only the fields resolveWebuiArchivePath reads.
+  function configFor(namespace: string): ToolPackBuildOnlyConfig {
+    return {
+      platform: "linux",
+      arch: "x64",
+      roots: {
+        output: {
+          platformRoot: join("/out", "linux"),
+          namespaceRoot: join("/out", "linux", "namespaces", namespace),
+        },
+      },
+    } as unknown as ToolPackBuildOnlyConfig;
+  }
+
+  it("writes the archive under the namespace-scoped output root, not the shared platform root", () => {
+    const config = configFor("release-beta");
+    const path = resolveWebuiArchivePath(config, "0.8.1");
+
+    // Public filename is unchanged...
+    expect(path.endsWith(webuiArchiveName({ platform: "linux", arch: "x64", version: "0.8.1" }))).toBe(true);
+    // ...but it lives under the namespace root, not the shared platform root.
+    expect(path.startsWith(config.roots.output.namespaceRoot)).toBe(true);
+    expect(path.startsWith(join(config.roots.output.platformRoot, "open-design-webui"))).toBe(false);
+  });
+
+  it("keeps two namespaces' archives from clobbering each other", () => {
+    const a = resolveWebuiArchivePath(configFor("release-beta"), "0.8.1");
+    const b = resolveWebuiArchivePath(configFor("release-preview"), "0.8.1");
+    expect(a).not.toBe(b);
   });
 });
 

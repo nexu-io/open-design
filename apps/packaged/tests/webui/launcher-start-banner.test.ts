@@ -11,7 +11,7 @@ const LAUNCHER_SRC = fileURLToPath(new URL("../../src/webui/launcher.ts", import
 // regression back to `process.pid` is unambiguous.
 const WORKER_PID = process.pid + 4242;
 
-const handle = { webUrl: "http://192.168.1.10:7700/", daemonUrl: "http://192.168.1.10:7701/" };
+const handle = { webUrl: "http://192.168.1.10:7700/", daemonUrl: "http://192.168.1.10:7701/", webPort: 7700 };
 const config = { port: 7700 } as unknown as Parameters<typeof buildStartBannerPayload>[0]["config"];
 
 describe("start banner pid", () => {
@@ -54,6 +54,25 @@ describe("start banner pid", () => {
     const payload = JSON.parse(writes.join(""));
     expect(payload.pid).toBe(WORKER_PID);
     expect(payload.pid).not.toBe(process.pid);
+  });
+
+  it("reports the bound web port from the handle, not config.port, for a `--port 0` ephemeral bind", () => {
+    // `--port 0` / `OD_WEB_PORT=0` lets the web child bind an ephemeral port; the
+    // real port lives on the handle (runServer derives it from the sidecar's
+    // reported URL). The banner must advertise that, never config.port (0).
+    const ephemeralHandle = { webUrl: "http://192.168.1.10:54321/", daemonUrl: null, webPort: 54321 };
+    const zeroConfig = { port: 0 } as unknown as Parameters<typeof buildStartBannerPayload>[0]["config"];
+    const payload = buildStartBannerPayload({
+      pid: WORKER_PID,
+      handle: ephemeralHandle,
+      config: zeroConfig,
+      token: null,
+      tokenPersisted: null,
+      background: true,
+    });
+    expect(payload.webPort).toBe(54321);
+    expect(payload.webPort).not.toBe(0);
+    expect(payload.url).toBe("http://192.168.1.10:54321/");
   });
 });
 

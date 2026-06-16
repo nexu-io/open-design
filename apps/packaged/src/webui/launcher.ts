@@ -138,11 +138,29 @@ function discoverConfigFile(explicitPath: string | undefined): ConfigDiscovery {
   return { configFile: loadConfigFile(configPath), configPath, scaffold };
 }
 
-function browserUrl(config: ResolvedWebuiConfig): string {
-  // resolveDisplayHost turns a bind-all host (0.0.0.0) into the machine's real
-  // LAN IP so the printed address is actually openable; composeHttpUrl brackets
-  // IPv6 literals so the URL stays parseable.
-  return composeHttpUrl(resolveDisplayHost(config.host), config.port);
+// Parse a positive bound port from a sidecar's reported URL, or null when the
+// URL is absent/unparseable or carries no explicit port.
+function portFromUrl(url: string | null | undefined): number | null {
+  try {
+    const port = Number(new URL(url ?? "").port);
+    return Number.isInteger(port) && port > 0 ? port : null;
+  } catch {
+    return null;
+  }
+}
+
+// Build the user-facing web URL and its port. resolveDisplayHost turns a
+// bind-all host (0.0.0.0) into the machine's real LAN IP so the printed address
+// is openable; composeHttpUrl brackets IPv6 literals. Prefer the ACTUALLY bound
+// port from the web sidecar's reported URL — `--port 0` binds an ephemeral port,
+// so advertising config.port (0) would write `:0` into the banner/STATUS/
+// web-root.json instead of the real port. Fall back to config.port.
+function browserUrl(
+  config: ResolvedWebuiConfig,
+  boundWebUrl: string | null,
+): { url: string; port: number } {
+  const port = portFromUrl(boundWebUrl) ?? config.port;
+  return { url: composeHttpUrl(resolveDisplayHost(config.host), port), port };
 }
 
 // The daemon binds `config.host`, so its direct API is reachable at the same
@@ -169,7 +187,7 @@ function cmdBase(): string {
   return process.platform === "win32" ? "open-design.cmd" : "./open-design.sh";
 }
 
-type ServeHandle = { webUrl: string; daemonUrl: string | null };
+type ServeHandle = { webUrl: string; daemonUrl: string | null; webPort: number };
 
 // Starts daemon+web sidecars, writes identities, and stands up the desktop IPC
 // server (STATUS/SHUTDOWN). Shared by the detached background worker and by
@@ -226,7 +244,7 @@ async function runServer(config: ResolvedWebuiConfig): Promise<ServeHandle> {
     await identity.close().catch(() => undefined);
     throw new Error("web sidecar failed to produce URL — check logs/web/latest.log");
   }
-  const displayUrl = browserUrl(config);
+  const { url: displayUrl, port: effectiveWebPort } = browserUrl(config, webUrl);
   const daemonUrl = daemonDirectUrlFor(config, sidecars.daemon.url ?? null);
   const t = webuiMessages(currentLocale());
 
@@ -259,7 +277,7 @@ async function runServer(config: ResolvedWebuiConfig): Promise<ServeHandle> {
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
 
-  return { webUrl: displayUrl, daemonUrl };
+  return { webUrl: displayUrl, daemonUrl, webPort: effectiveWebPort };
 }
 
 // Pure builder for the `--json` start payload. The `pid` MUST be the process
@@ -283,11 +301,13 @@ export function buildStartBannerPayload(opts: {
   background: boolean;
   tokenPersisted: boolean | null;
 } {
-  const { webUrl, daemonUrl } = opts.handle;
+  const { webUrl, daemonUrl, webPort } = opts.handle;
   return {
     pid: opts.pid,
     url: webUrl,
-    webPort: opts.config.port,
+    // The handle carries the ACTUALLY bound web port (real port even for a
+    // `--port 0` ephemeral bind); config.port may still be 0 here.
+    webPort,
     daemonUrl,
     token: opts.token,
     background: opts.background,
@@ -360,7 +380,9 @@ async function waitForWebuiReady(
     } catch (error) {
       return failWith(error instanceof Error ? error.message : String(error));
     }
-    if (status != null) return { webUrl: status.url, daemonUrl: status.daemonUrl };
+    if (status != null) {
+      return { webUrl: status.url, daemonUrl: status.daemonUrl, webPort: portFromUrl(status.url) ?? 0 };
+    }
     await sleep(200);
   }
   return failWith();
