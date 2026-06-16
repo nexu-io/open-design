@@ -1797,6 +1797,57 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     }
     return false;
   }
+  function verticalScrollRange(){
+    var targets = scrollTargets();
+    var value = 0;
+    for (var i=0; i<targets.length; i++) {
+      var candidate = targets[i];
+      value = Math.max(value, Math.max(0, (candidate.scrollHeight || 0) - (candidate.clientHeight || 0)));
+    }
+    return value;
+  }
+  function slidesStackedVertically(list){
+    // True when the slides are laid out as a vertical stack (each slide starts
+    // lower than the one before it). This is what separates a vertical long-form
+    // deck from a horizontal track / class-toggle / overlay deck, whose slides
+    // share the same top. It guards the vertical-scroll path so it can never
+    // fire on a horizontal deck that merely happens to also overflow vertically.
+    if (!list || list.length < 2) return false;
+    var prevTop = null;
+    var increasing = 0;
+    for (var i=0; i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        if (prevTop !== null && rect.top - prevTop > 1) increasing += 1;
+        prevTop = rect.top;
+      } catch (_) { return false; }
+    }
+    return increasing >= 1;
+  }
+  function isVerticalScrollDeck(list){
+    // A long-form deck whose scenes are stacked in one continuous scroll
+    // surface: real vertical scroll room plus vertically-stacked slides, and no
+    // horizontal scroll (which the horizontal path above already owns).
+    return verticalScrollRange() > 1 && !hasHorizontalScroll() && slidesStackedVertically(list);
+  }
+  function activeIndexFromVerticalScroll(list){
+    // The active scene is the one occupying the vertical center of the viewport.
+    // Using each slide's box (not scrollTop / innerHeight) keeps the counter
+    // accurate even when scenes are not all exactly one viewport tall.
+    var mid = Math.max(1, window.innerHeight) / 2;
+    var best = -1;
+    var bestDist = Infinity;
+    for (var i=0; i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        if (rect.top <= mid && rect.bottom >= mid) return i;
+        var center = rect.top + (rect.bottom - rect.top) / 2;
+        var dist = Math.abs(center - mid);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      } catch (_) {}
+    }
+    return best;
+  }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
       var cl = list[i].classList;
@@ -1818,6 +1869,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (isScrollDeck()) {
       var w = Math.max(1, window.innerWidth);
       return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
+    }
+    if (isVerticalScrollDeck(list)) {
+      var byVerticalScroll = activeIndexFromVerticalScroll(list);
+      if (byVerticalScroll >= 0) return byVerticalScroll;
     }
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
@@ -1986,6 +2041,32 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     }
     setTimeout(report, 380);
   }
+  function scrollGoVertical(i){
+    var list = slides();
+    var next = Math.max(0, Math.min(list.length - 1, i));
+    var target = list[next];
+    // rect.top is the target scene's offset from the viewport top. Scrolling
+    // each container BY that delta (relative to its own current scrollTop)
+    // brings the scene to the top without depending on which container owns the
+    // scroll, so a non-scrolling sibling can't inflate the target and overshoot.
+    var delta = null;
+    if (target) {
+      try { delta = target.getBoundingClientRect().top; } catch (_) {}
+    }
+    var targets = scrollTargets();
+    for (var t=0; t<targets.length; t++) {
+      var current = Number(targets[t].scrollTop || 0);
+      var top = delta === null
+        ? next * Math.max(1, window.innerHeight)
+        : Math.max(0, current + delta);
+      try {
+        targets[t].scrollTo({ top: top, behavior: 'smooth' });
+      } catch (_) {
+        try { targets[t].scrollTop = top; } catch (__) {}
+      }
+    }
+    setTimeout(report, 380);
+  }
   function targetFor(action, list){
     var i = activeIndex(list);
     if (action === 'next') return i + 1;
@@ -2002,6 +2083,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       scrollGo(target);
       return;
     }
+    if (isVerticalScrollDeck(list)) {
+      scrollGoVertical(target);
+      return;
+    }
     if (canSetActive(list) && setActive(target)) return;
     if (transformGo(target)) return;
     if (action === 'next') dispatchKey('ArrowRight');
@@ -2015,6 +2100,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
     if (isScrollDeck()) { scrollGo(target); return; }
+    if (isVerticalScrollDeck(list)) { scrollGoVertical(target); return; }
     if (canSetActive(list) && setActive(target)) return;
     if (transformGo(target)) return;
     var current = activeIndex(list);
