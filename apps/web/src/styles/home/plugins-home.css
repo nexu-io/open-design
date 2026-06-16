@@ -98,10 +98,12 @@
   appearance: none;
   display: none;
 }
-/* Reset the global `button { ... }` defaults (padding 6/12, border,
-   radius-sm) so the 18×18 hit target actually fits the icon glyph
-   instead of clipping it down to zero. */
-.plugins-home__search-clear {
+/* Override the shared <Button> component's own padding (6/12) and sizing.
+   The reset must be scoped under `.plugins-home__search` so it out-specifies
+   the Button CSS-module class (`.button_button__…`); a bare
+   `.plugins-home__search-clear` only ties that class and loses, leaving the
+   24px horizontal padding to crush the X glyph down to zero width. */
+.plugins-home__search .plugins-home__search-clear {
   position: absolute;
   right: 5px;
   display: inline-flex;
@@ -109,17 +111,18 @@
   justify-content: center;
   width: 20px;
   height: 20px;
+  min-width: 0;
   padding: 0;
   border-radius: 50%;
   color: var(--text-muted);
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.plugins-home__search-clear:hover {
+.plugins-home__search .plugins-home__search-clear:hover {
   background: var(--border-soft, var(--border));
   border-color: transparent;
   color: var(--text);
 }
-.plugins-home__search-clear:focus-visible {
+.plugins-home__search .plugins-home__search-clear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
