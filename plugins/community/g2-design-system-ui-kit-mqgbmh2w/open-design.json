@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "g2-design-system-ui-kit-mqgbmh2w",
+  "title": "G2 design system UI Kit",
+  "version": "0.1.0",
+  "description": "This UI kit is the applied interface reference for the design system. Open `index.html` to review the composed app surface, then reuse the modular role components under `components/` when building new product-like artifa",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
