@@ -445,12 +445,25 @@ export function shapeSystem(
   };
 }
 
+/**
+ * True for the canonical English `DESIGN.md` entry (id `<slug>/DESIGN`), false
+ * for localized `DESIGN.<locale>.md` bodies (id `<slug>/DESIGN.<locale>`). The
+ * catalog/card grid must only see one record per system, so it filters to the
+ * English entries; the localized bodies are picked up only by the detail page.
+ */
+function isEnglishSystemEntry(id: string): boolean {
+  // Astro lowercases glob ids: `DESIGN.md` → `<slug>/design`, while a localized
+  // body `DESIGN-<locale>.md` → `<slug>/design-<locale>`.
+  return (id.split('/')[1] ?? '') === 'design';
+}
+
 export async function getSystemRecords(
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): Promise<ReadonlyArray<SystemRecord>> {
   if (!SHOULD_CACHE_CATALOG) {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -463,6 +476,7 @@ export async function getSystemRecords(
   const promise = (async () => {
     const entries = await getCollection('systems');
     return entries
+      .filter((entry) => isEnglishSystemEntry(entry.id))
       .map((entry) => shapeSystem(entry, locale))
       .sort((a, b) => a.name.localeCompare(b.name));
   })();

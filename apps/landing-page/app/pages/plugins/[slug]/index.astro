@@ -135,10 +135,22 @@ const hasPreview = !!(systemRecord && systemRecord.palette.length > 0);
  * leading `# ...` heading is hidden via CSS so the page keeps a single
  * H1 (the brand "<X> design system" title above).
  */
+/*
+ * Prefer the localized body `DESIGN-<locale>.md` for the curated subset that
+ * ships one, and fall back to the English `DESIGN.md` for every other
+ * system/locale. English pages always use the canonical entry.
+ *
+ * Astro's glob loader lowercases ids and drops dots, so `DESIGN.md` →
+ * `<slug>/design` and `DESIGN-zh.md` → `<slug>/design-zh` (the hyphen
+ * survives — hence the hyphen convention rather than `DESIGN.<locale>.md`).
+ */
+const systemEntries = isDesignSystem ? await getCollection('systems') : [];
+const enEntryId = `${plugin.slug}/design`;
+const localeEntryId = `${plugin.slug}/design-${locale}`;
 const systemEntry = isDesignSystem
-  ? (await getCollection('systems')).find(
-      (e) => (e.id.split('/')[0] ?? e.id) === plugin.slug,
-    )
+  ? (locale !== 'en'
+      ? systemEntries.find((e) => e.id === localeEntryId)
+      : undefined) ?? systemEntries.find((e) => e.id === enEntryId)
   : undefined;
 const SystemContent = systemEntry ? (await render(systemEntry)).Content : null;
 

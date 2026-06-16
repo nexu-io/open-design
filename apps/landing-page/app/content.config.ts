@@ -72,9 +72,15 @@ const designTemplates = defineCollection({
 // human-meaningful fields (H1, `> Category:`, palette hex codes) at
 // page-render time.
 const systems = defineCollection({
+  // `DESIGN.md` is the English source; `DESIGN.<locale>.md` (e.g.
+  // `DESIGN.zh.md`) are optional localized bodies for a curated subset of
+  // popular brands. The catalog reads only the English entries (so cards
+  // aren't duplicated); the detail page prefers the locale entry and falls
+  // back to English. Astro strips the final `.md`, so ids are `<slug>/DESIGN`
+  // or `<slug>/DESIGN.<locale>`.
   loader: glob({
     base: '../../design-systems',
-    pattern: '*/DESIGN.md',
+    pattern: '*/DESIGN*.md',
   }),
   schema: z.object({ i18n: localizedContentSchema }).passthrough(),
 });
