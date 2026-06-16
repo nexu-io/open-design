@@ -1793,7 +1793,7 @@ export const en: Dict = {
   'preview.usePlugin': 'Use plugin',
   'preview.usePluginOnly': 'Use plugin only',
   'preview.usePluginOnlyDesc': 'Use the plugin structure and write the content yourself',
-  'preview.replicateContent': 'Replicate this content',
+  'preview.replicateContent': 'Make same',
   'preview.replicateContentDesc': 'Use the example prompt to recreate the preview',
   'preview.shareMenu': 'Share',
   'preview.exportMenu': 'Export',
