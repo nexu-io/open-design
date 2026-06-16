@@ -136,6 +136,10 @@ export interface Dict {
   'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
+  'settings.onboardingGateTooltipNoRuntime': string;
+  'settings.onboardingGateTooltipAmr': string;
+  'settings.onboardingGateTooltipLocal': string;
+  'settings.onboardingGateTooltipByok': string;
   'settings.onboardingRecommended': string;
   'settings.onboardingAmrCloudOfficialBadge': string;
   'settings.onboardingLocalTitle': string;

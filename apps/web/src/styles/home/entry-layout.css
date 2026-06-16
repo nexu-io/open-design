@@ -1989,6 +1989,20 @@
   box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+/* Connect gate: aria-disabled (not native disabled, so the tooltip still
+   fires on hover) reads as disabled — dimmed, not-allowed, and no hover lift. */
+.onboarding-view__primary[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.onboarding-view__primary[aria-disabled='true']:hover {
+  transform: none;
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+
 .onboarding-view__primary:focus-visible,
 .onboarding-view__secondary:focus-visible,
 .onboarding-view__ghost:focus-visible,

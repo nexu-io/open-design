@@ -243,13 +243,13 @@ describe('onboarding -> home AMR selection (end to end)', () => {
     // Bootstrap routes a first-run user into onboarding; the AMR runtime is
     // the recommended default and the mocked status reports it signed in.
     // AMR detection lags the first agent probe, so the Connect gate keeps
-    // Continue disabled until vela/status confirms the signed-in account.
-    // Wait for the enabled state — clicking a disabled button is a no-op.
+    // Continue `aria-disabled` until vela/status confirms the signed-in
+    // account. Wait for the gate to clear — a gated click is a no-op.
     await waitFor(
       () => {
         expect(
-          screen.getByRole('button', { name: /^Continue$/i }).hasAttribute('disabled'),
-        ).toBe(false);
+          screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled'),
+        ).not.toBe('true');
       },
       { timeout: 5000 },
     );
