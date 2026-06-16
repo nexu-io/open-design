@@ -398,7 +398,6 @@ import {
   SandboxImportedProjectError,
   sanitizeName,
   searchProjectFiles,
-  resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
