@@ -246,19 +246,31 @@ export function runAskedUserQuestion(
   return emittedRenderableQuestionForm(text);
 }
 
-// First-touch activation milestones a brand-new user crosses, written to the
-// PostHog person record via `$set_once` on `run_finished` (the authoritative
-// daemon-side run-outcome event that already carries `artifact_count` and
-// `design_system_created`). Two milestones the growth funnel needs to segment
-// a fresh user without replaying their whole event history:
+// First-touch activation milestones, written to the PostHog person record via
+// `$set_once` on `run_finished` (the authoritative daemon-side run-outcome
+// event that already carries `artifact_count` and `design_system_created`).
+// Two milestones the growth funnel needs to segment a user without replaying
+// their whole event history:
 //
-//   - `first_artifact_at`        — the user has ever produced an artifact
-//   - `first_design_system_at`   — the user has ever generated a design system
+//   - `first_artifact_at`        — first run, observed since this stamp shipped,
+//                                  in which the user produced an artifact
+//   - `first_design_system_at`   — first run, observed since this stamp shipped,
+//                                  in which the user generated a design system
 //
-// `$set_once` semantics mean each timestamp sticks to the FIRST qualifying
-// run and is never overwritten by later runs, so the value doubles as a
-// time-to-first-value signal. The two are independent: a single design-system
-// run that also emits HTML artifacts legitimately crosses both at once.
+// IMPORTANT — "first observed since rollout", NOT "first ever". `$set_once`
+// only writes a key that does not already exist on the person, and this is the
+// only writer, so the timestamp is pinned to the user's first qualifying run
+// AFTER this code ships. For users who onboard after rollout that equals their
+// true first-ever milestone (and a faithful time-to-first-value signal). For
+// the pre-existing installed base it does NOT: a user who already produced an
+// artifact before rollout gets the timestamp of their next qualifying run
+// instead. There is no historical backfill in this path, so cohorts and
+// time-to-first-value built on these keys are only sound for post-rollout
+// users — segment older accounts by first-seen date before relying on them
+// (nettee review on PR #4362).
+//
+// The two are independent: a single design-system run that also emits HTML
+// artifacts legitimately crosses both at once.
 //
 // Only a SUCCESSFUL run counts — a failed/cancelled run that happened to touch
 // a file is not a milestone (mirrors the `artifact_count` funnel's "generation

@@ -383,8 +383,8 @@ describe('runAskedUserQuestion', () => {
 });
 
 // `deriveActivationMilestones` powers the `$set_once` person-property stamp on
-// `run_finished` — the first-touch "has produced an artifact / has generated a
-// design system" segmentation. Pins: only successful runs count, a design
+// `run_finished` — the first-touch "produced an artifact / generated a design
+// system (first observed since rollout)" segmentation. Pins: only successful runs count, a design
 // system requires `designSystemCreated`, both can fire from one run, and a
 // no-milestone run returns undefined so the caller omits `$set_once`.
 describe('deriveActivationMilestones', () => {
