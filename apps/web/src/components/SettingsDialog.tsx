@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, ChangeEvent, Dispatch, SetStateAction } from 'react';
+import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
@@ -8,11 +8,6 @@ import {
   executionModeToTracking,
   settingsSectionToTracking,
 } from '@open-design/contracts/analytics';
-import type {
-  OpenDesignHostUpdaterChannel,
-  OpenDesignHostUpdaterState,
-  OpenDesignHostUpdaterStatusSnapshot,
-} from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry } from '../analytics/amr-attribution';
 import {
@@ -211,33 +206,6 @@ const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/release
 
 type AboutUpdatePrimaryAction = 'check' | 'download' | 'install';
 type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
-const ABOUT_UPDATE_PREVIEW_STATUS_STATES = [
-  'idle',
-  'checking',
-  'not-available',
-  'available',
-  'downloading',
-  'downloaded',
-  'installing',
-  'error',
-  'unsupported',
-] as const satisfies readonly OpenDesignHostUpdaterState[];
-const ABOUT_UPDATE_PREVIEW_STATES = ['actual', ...ABOUT_UPDATE_PREVIEW_STATUS_STATES] as const;
-type AboutUpdatePreviewState = (typeof ABOUT_UPDATE_PREVIEW_STATES)[number];
-type AboutUpdatePreviewStatusState = (typeof ABOUT_UPDATE_PREVIEW_STATUS_STATES)[number];
-
-const ABOUT_UPDATE_PREVIEW_LABEL_KEYS = {
-  actual: 'settings.updatePreviewActual',
-  idle: 'settings.updatePreviewIdle',
-  checking: 'settings.updatePreviewChecking',
-  'not-available': 'settings.updatePreviewUpToDate',
-  available: 'settings.updatePreviewAvailable',
-  downloading: 'settings.updatePreviewDownloading',
-  downloaded: 'settings.updatePreviewDownloaded',
-  installing: 'settings.updatePreviewInstalling',
-  error: 'settings.updatePreviewError',
-  unsupported: 'settings.updatePreviewUnsupported',
-} satisfies Record<AboutUpdatePreviewState, keyof Dict>;
 
 export interface AboutUpdateControl {
   primaryAction: AboutUpdatePrimaryAction | null;
@@ -251,9 +219,8 @@ export interface AboutUpdateControl {
 export function deriveAboutUpdateControl(
   model: UpdaterModel,
   appVersionInfo: AppVersionInfo | null,
-  options: { showUpdaterStateInDevelopment?: boolean } = {},
 ): AboutUpdateControl {
-  if (appVersionInfo?.packaged === false && !options.showUpdaterStateInDevelopment) {
+  if (appVersionInfo?.packaged === false) {
     return {
       primaryAction: null,
       primaryLabelKey: null,
@@ -359,118 +326,6 @@ export function deriveAboutUpdateControl(
         statusTone: 'neutral',
       };
   }
-}
-
-function nextAboutUpdatePreviewVersion(currentVersion: string | null | undefined): string {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(currentVersion ?? '');
-  if (!match) return '0.10.3';
-  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
-}
-
-function aboutUpdatePreviewChannel(channel: string | undefined): OpenDesignHostUpdaterChannel {
-  if (channel === 'nightly' || channel === 'preview' || channel === 'stable') return channel;
-  return 'beta';
-}
-
-function createAboutUpdatePreviewStatus(
-  state: AboutUpdatePreviewStatusState,
-  appVersionInfo: AppVersionInfo | null,
-): OpenDesignHostUpdaterStatusSnapshot {
-  const currentVersion = appVersionInfo?.version ?? '0.10.2';
-  const availableVersion = nextAboutUpdatePreviewVersion(currentVersion);
-  const channel = aboutUpdatePreviewChannel(appVersionInfo?.channel);
-  const artifact = {
-    name: 'Open Design Beta.dmg',
-    platformKey: 'macAppleSilicon',
-    type: 'dmg',
-    url: `${OPEN_DESIGN_RELEASES_URL}/download/v${availableVersion}/Open%20Design%20Beta.dmg`,
-  };
-  const base: OpenDesignHostUpdaterStatusSnapshot = {
-    arch: appVersionInfo?.arch ?? 'arm64',
-    capabilities: {
-      canApplyInPlace: false,
-      canDownload: true,
-      canOpenInstaller: true,
-      requiresManualInstall: true,
-    },
-    channel,
-    currentVersion,
-    enabled: true,
-    mode: 'package-launcher',
-    platform: appVersionInfo?.platform ?? 'darwin',
-    state,
-    supported: true,
-  };
-
-  if (state === 'unsupported') {
-    return {
-      ...base,
-      capabilities: {
-        canApplyInPlace: false,
-        canDownload: false,
-        canOpenInstaller: false,
-        requiresManualInstall: false,
-      },
-      enabled: false,
-      supported: false,
-    };
-  }
-
-  if (state === 'not-available') {
-    return {
-      ...base,
-      lastCheckedAt: new Date(0).toISOString(),
-    };
-  }
-
-  if (state === 'error') {
-    return {
-      ...base,
-      error: {
-        code: 'preview-update-check-failed',
-        message: 'Preview update check failed.',
-      },
-    };
-  }
-
-  if (state === 'available') {
-    return {
-      ...base,
-      artifact,
-      artifactUrl: artifact.url,
-      availableVersion,
-    };
-  }
-
-  if (state === 'downloading') {
-    return {
-      ...base,
-      availableVersion,
-      incoming: {
-        arch: base.arch,
-        artifact,
-        channel,
-        progress: {
-          receivedBytes: 42,
-          totalBytes: 100,
-        },
-        startedAt: new Date(0).toISOString(),
-        version: availableVersion,
-      },
-    };
-  }
-
-  if (state === 'downloaded' || state === 'installing') {
-    return {
-      ...base,
-      artifact,
-      artifactUrl: artifact.url,
-      availableVersion,
-      downloadPath: '/tmp/Open Design Beta.dmg',
-    };
-  }
-
-  return base;
 }
 
 interface Props {
@@ -1626,13 +1481,11 @@ export function SettingsDialog({
   // provider preset. The account-model auto-switch must never overwrite a
   // deliberate choice, even when that choice equals the provider preset id.
   const apiModelUserSelectedRef = useRef(false);
-  const aboutPreviewTransitionRef = useRef(0);
   const [apiModelCustomEditing, setApiModelCustomEditing] = useState(false);
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
   const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
-  const [aboutUpdatePreviewState, setAboutUpdatePreviewState] = useState<AboutUpdatePreviewState>('actual');
   const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
 
@@ -1652,31 +1505,9 @@ export function SettingsDialog({
     };
   }, []);
 
-  const canPreviewAboutUpdateStates = appVersionInfo?.packaged === false;
-  const aboutUpdatePreviewActive = canPreviewAboutUpdateStates && aboutUpdatePreviewState !== 'actual';
-  const displayedAboutUpdaterModel = useMemo(
-    () => aboutUpdatePreviewActive
-      ? deriveUpdaterModel(
-          createAboutUpdatePreviewStatus(aboutUpdatePreviewState, appVersionInfo),
-          { hostAvailable: true },
-        )
-      : aboutUpdaterModel,
-    [aboutUpdatePreviewActive, aboutUpdatePreviewState, aboutUpdaterModel, appVersionInfo],
-  );
-
-  useEffect(() => {
-    if (!canPreviewAboutUpdateStates && aboutUpdatePreviewState !== 'actual') {
-      setAboutUpdatePreviewState('actual');
-    }
-  }, [aboutUpdatePreviewState, canPreviewAboutUpdateStates]);
-
   const aboutUpdateControl = useMemo(
-    () => deriveAboutUpdateControl(
-      displayedAboutUpdaterModel,
-      appVersionInfo,
-      { showUpdaterStateInDevelopment: aboutUpdatePreviewActive },
-    ),
-    [aboutUpdatePreviewActive, displayedAboutUpdaterModel, appVersionInfo],
+    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
+    [aboutUpdaterModel, appVersionInfo],
   );
 
   const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
@@ -1693,27 +1524,7 @@ export function SettingsDialog({
   }, [t]);
 
   const handleAboutUpdateAction = useCallback(async () => {
-    if (aboutUpdateActionBusy || displayedAboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
-    if (aboutUpdatePreviewActive) {
-      if (aboutUpdateControl.primaryAction === 'check') {
-        const transitionId = aboutPreviewTransitionRef.current + 1;
-        aboutPreviewTransitionRef.current = transitionId;
-        const nextState = aboutUpdatePreviewState === 'error' ? 'error' : 'not-available';
-        setAboutUpdatePreviewState('checking');
-        window.setTimeout(() => {
-          setAboutUpdatePreviewState((current) =>
-            aboutPreviewTransitionRef.current === transitionId && current === 'checking'
-              ? nextState
-              : current,
-          );
-        }, 500);
-      } else if (aboutUpdateControl.primaryAction === 'download') {
-        setAboutUpdatePreviewState('downloading');
-      } else {
-        setAboutUpdatePreviewState('installing');
-      }
-      return;
-    }
+    if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
     setAboutUpdateActionBusy(true);
     try {
       const options = { payload: { source: 'settings-about' } };
@@ -1736,17 +1547,10 @@ export function SettingsDialog({
   }, [
     aboutUpdateActionBusy,
     aboutUpdateControl.primaryAction,
-    aboutUpdatePreviewActive,
-    aboutUpdatePreviewState,
-    displayedAboutUpdaterModel.busy,
+    aboutUpdaterModel.busy,
     applyAboutUpdaterResult,
     t,
   ]);
-
-  const handleAboutUpdatePreviewChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    aboutPreviewTransitionRef.current += 1;
-    setAboutUpdatePreviewState(event.currentTarget.value as AboutUpdatePreviewState);
-  }, []);
 
   const handleOpenReleaseNotes = useCallback(() => {
     void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
@@ -5023,21 +4827,6 @@ export function SettingsDialog({
                           {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
                         </dd>
                       </div>
-                      {canPreviewAboutUpdateStates ? (
-                        <label className="settings-about-update-preview">
-                          <span>{t('settings.updatePreviewLabel')}</span>
-                          <select
-                            value={aboutUpdatePreviewState}
-                            onChange={handleAboutUpdatePreviewChange}
-                          >
-                            {ABOUT_UPDATE_PREVIEW_STATES.map((state) => (
-                              <option key={state} value={state}>
-                                {t(ABOUT_UPDATE_PREVIEW_LABEL_KEYS[state])}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : null}
                     </div>
                     <div className="settings-about-update-actions">
                       {aboutUpdateControl.primaryLabelKey ? (
@@ -5051,7 +4840,7 @@ export function SettingsDialog({
                           }`}
                           disabled={
                             aboutUpdateActionBusy
-                            || displayedAboutUpdaterModel.busy
+                            || aboutUpdaterModel.busy
                             || aboutUpdateControl.primaryAction == null
                           }
                           onClick={handleAboutUpdateAction}

@@ -424,17 +424,6 @@ export interface Dict {
   'settings.updateViewReleases': string;
   'settings.updateActionFailed': string;
   'settings.updateQuitFailed': string;
-  'settings.updatePreviewLabel': string;
-  'settings.updatePreviewActual': string;
-  'settings.updatePreviewIdle': string;
-  'settings.updatePreviewChecking': string;
-  'settings.updatePreviewUpToDate': string;
-  'settings.updatePreviewAvailable': string;
-  'settings.updatePreviewDownloading': string;
-  'settings.updatePreviewDownloaded': string;
-  'settings.updatePreviewInstalling': string;
-  'settings.updatePreviewError': string;
-  'settings.updatePreviewUnsupported': string;
   'settings.updateStatusNotChecked': string;
   'settings.updateStatusDevelopment': string;
   'settings.updateStatusUnsupported': string;

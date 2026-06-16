@@ -4184,57 +4184,10 @@ describe('SettingsDialog about interactions', () => {
 
     expect(screen.getByText(en['settings.updateStatusDevelopment'])).toBeTruthy();
     expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
-    expect(screen.getByLabelText(en['settings.updatePreviewLabel'])).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: en['settings.updateViewReleases'] }));
 
     expect(openExternalUrlMock).toHaveBeenCalledWith('https://github.com/nexu-io/open-design/releases');
-  });
-
-  it('lets development builds preview update states and action transitions', () => {
-    renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex' },
-      {
-        initialSection: 'about',
-        appVersionInfo: {
-          version: '0.4.1',
-          channel: 'beta',
-          packaged: false,
-          platform: 'darwin',
-          arch: 'arm64',
-        },
-      },
-    );
-
-    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
-      target: { value: 'available' },
-    });
-
-    expect(screen.getByText('New version 0.4.2 found. Preparing download.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: en['settings.updateNow'] })).toBeNull();
-    expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
-
-    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
-      target: { value: 'downloading' },
-    });
-
-    expect(screen.getByText('Downloading update 42%.')).toBeTruthy();
-    expect(
-      (screen.getByRole('button', { name: en['updater.downloading'] }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-
-    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
-      target: { value: 'downloaded' },
-    });
-
-    expect(screen.getByText('Version 0.4.2 is ready to install.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: en['settings.updateNow'] })).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText(en['settings.updatePreviewLabel']), {
-      target: { value: 'not-available' },
-    });
-
-    expect(screen.getByText(en['settings.updateStatusUpToDate'])).toBeTruthy();
-    expect(screen.getByRole('button', { name: en['settings.updateRecheck'] })).toBeTruthy();
   });
 });

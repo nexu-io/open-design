@@ -348,29 +348,6 @@
   border-color: color-mix(in srgb, var(--red) 32%, transparent);
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
-.settings-about-update-preview {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  max-width: 100%;
-  gap: 8px;
-  margin-top: 2px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-.settings-about-update-preview select {
-  width: min(100%, 240px);
-  min-width: min(100%, 180px);
-  max-width: 100%;
-  height: 26px;
-  padding: 2px 26px 2px 8px;
-  color: var(--text);
-  font: inherit;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-}
 .settings-about-update-actions {
   display: flex;
   flex-shrink: 0;

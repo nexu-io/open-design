@@ -217,27 +217,6 @@ describe('SettingsDialog about update control', () => {
       statusKey: 'settings.updateStatusUnsupported',
     });
   });
-
-  it('can expose updater states for development-only preview validation', () => {
-    const control = deriveAboutUpdateControl(
-      deriveUpdaterModel(
-        updateStatus({
-          availableVersion: '1.2.3-beta.4',
-          state: 'available',
-        }),
-        { hostAvailable: true },
-      ),
-      { ...packagedVersion, packaged: false },
-      { showUpdaterStateInDevelopment: true },
-    );
-
-    expect(control).toMatchObject({
-      primaryAction: null,
-      primaryLabelKey: null,
-      statusKey: 'settings.updateStatusAvailable',
-      statusVars: { version: '1.2.3-beta.4' },
-    });
-  });
 });
 
 describe('SettingsDialog API protocol switching', () => {
