@@ -269,12 +269,14 @@ const jsonLd = [
         <h2>{pcopy.scenariosHead}</h2>
         <p class="block-lead">{pcopy.scenariosLead}</p>
         <div class="scenario-hero">
-          <SystemPreview system={systemRecord} scenario="web" caption={pcopy.scenarioLabels.web} />
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="web" caption={pcopy.scenarioLabels.web} />
         </div>
-        <div class="scenario-grid">
-          <SystemPreview system={systemRecord} scenario="app" caption={pcopy.scenarioLabels.app} />
-          <SystemPreview system={systemRecord} scenario="slides" caption={pcopy.scenarioLabels.slides} />
-          <SystemPreview system={systemRecord} scenario="poster" caption={pcopy.scenarioLabels.poster} />
+        <div class="scenario-wide">
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="slides" caption={pcopy.scenarioLabels.slides} />
+        </div>
+        <div class="scenario-pair">
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="app" caption={pcopy.scenarioLabels.app} />
+          <SystemPreview system={systemRecord} theme={systemTokens?.theme} scenario="poster" caption={pcopy.scenarioLabels.poster} />
         </div>
       </section>
     )}
@@ -610,15 +612,26 @@ const jsonLd = [
     border: 1px solid var(--line);
     background: #000;
   }
-  /* Scenario showcase — system tokens applied across artifact kinds. */
-  .scenario-hero {
+  /* Scenario showcase — system tokens applied across artifact kinds, each at
+     its true form factor: website + slide are landscape (full width), the
+     phone app + poster are portrait (paired). */
+  .scenario-hero,
+  .scenario-wide {
     margin-bottom: 18px;
   }
-  .scenario-grid {
+  .scenario-pair {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 18px;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
     align-items: start;
+  }
+  .scenario-pair :global(.pv-app) {
+    width: 100%;
+  }
+  @media (max-width: 560px) {
+    .scenario-pair {
+      grid-template-columns: 1fr;
+    }
   }
   /* In-page anchor nav (design-system detail). Quiet horizontal mono row. */
   .detail-toc {

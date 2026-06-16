@@ -60,12 +60,32 @@ export interface SystemTokenGroup {
   tokens: ReadonlyArray<SystemToken>;
 }
 
+/**
+ * The handful of identity tokens a themed mock preview needs. Pulled from the
+ * real `design-tokens.json` (not heuristically guessed from a palette), so a
+ * system renders with its actual canvas / ink / accent / fonts / radius.
+ */
+export interface PreviewTheme {
+  bg: string;
+  surface: string;
+  fg: string;
+  muted: string;
+  border: string;
+  accent: string;
+  accentOn: string;
+  fontDisplay: string;
+  fontBody: string;
+  radius: string;
+}
+
 export interface SystemTokens {
   /** Total declared tokens (== summary.totalTokens when present). */
   total: number;
   /** Contract grade from the summary block, e.g. "excellent" — data, not copy. */
   grade: string | null;
   groups: ReadonlyArray<SystemTokenGroup>;
+  /** Identity tokens for the themed mock previews (null if core ones absent). */
+  theme: PreviewTheme | null;
 }
 
 const DESIGN_SYSTEMS_ROOT_CANDIDATES = [
@@ -139,6 +159,7 @@ export function getSystemTokens(slug: string): SystemTokens | null {
   if (!Array.isArray(data.tokens)) return null;
 
   const buckets = new Map<TokenGroupId, SystemToken[]>();
+  const byName = new Map<string, string>();
   for (const raw of data.tokens) {
     if (!raw || typeof raw !== 'object') continue;
     const t = raw as Record<string, unknown>;
@@ -147,6 +168,7 @@ export function getSystemTokens(slug: string): SystemTokens | null {
     const type = t.type;
     if (typeof name !== 'string' || typeof value !== 'string') continue;
     if (typeof type !== 'string' || !VALID_TYPES.has(type)) continue;
+    byName.set(name, value);
     const token: SystemToken = {
       name,
       value,
@@ -174,5 +196,27 @@ export function getSystemTokens(slug: string): SystemTokens | null {
       : groups.reduce((sum, g) => sum + g.tokens.length, 0);
   const grade = typeof data.summary?.grade === 'string' ? data.summary.grade : null;
 
-  return { total, grade, groups };
+  // Identity tokens for the themed mock previews. Require the core trio
+  // (bg / fg / accent); the rest fall back to sensible neutrals so a
+  // partially-specified system still themes cleanly.
+  const bg = byName.get('--bg');
+  const fg = byName.get('--fg');
+  const accent = byName.get('--accent');
+  const theme: PreviewTheme | null =
+    bg && fg && accent
+      ? {
+          bg,
+          surface: byName.get('--surface') ?? bg,
+          fg,
+          muted: byName.get('--muted') ?? fg,
+          border: byName.get('--border') ?? 'rgba(0,0,0,0.12)',
+          accent,
+          accentOn: byName.get('--accent-on') ?? '#ffffff',
+          fontDisplay: byName.get('--font-display') ?? 'system-ui, sans-serif',
+          fontBody: byName.get('--font-body') ?? 'system-ui, sans-serif',
+          radius: byName.get('--radius-md') ?? '10px',
+        }
+      : null;
+
+  return { total, grade, groups, theme };
 }

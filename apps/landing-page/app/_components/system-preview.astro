@@ -2,17 +2,20 @@
 /*
  * Design-example "live preview" for a design-system detail page.
  *
- * Renders an ORIGINAL mock product UI (browser chrome → nav → hero →
- * feature cards → CTA) themed entirely from the system's palette tokens
- * (the same colors documented in its DESIGN.md). It is not a screenshot
- * of any real brand site — it's a generic mock re-skinned per system, so
- * a visitor instantly sees what the design language looks like applied.
+ * Renders ORIGINAL mock artifacts (a website, a phone app, a slide, a poster)
+ * themed entirely from a system's design tokens — so a visitor instantly sees
+ * what the design language looks like applied. Not screenshots of any real
+ * brand; generic mocks re-skinned per system.
  *
- * Colours are derived heuristically from `system.palette`: the darkest
- * swatch → ink, the lightest → surface, the most saturated mid-tone →
- * accent, with safe fallbacks when a palette is thin or skewed.
+ * Theming source, in order of fidelity:
+ *  1. `theme` (real tokens from design-tokens.json: --bg / --surface / --fg /
+ *     --accent / fonts / radius). Used on the detail-page scenario showcase.
+ *  2. Heuristic fallback from `system.palette` (darkest → ink, lightest →
+ *     surface, most-saturated mid-tone → accent). Used by the compact card
+ *     thumbnails, which don't load the token file.
  */
 import type { SystemRecord } from '../_lib/catalog';
+import type { PreviewTheme } from '../_lib/system-tokens';
 
 type Scenario = 'web' | 'app' | 'slides' | 'poster';
 
@@ -22,17 +25,15 @@ interface Props {
   caption?: string;
   /** Compact card-thumbnail variant (lean markup, no caption). */
   compact?: boolean;
-  /**
-   * Which themed mock to render. 'web' is the original landing-page mock
-   * (and the only one used by the compact card thumbnail); 'app' / 'slides'
-   * / 'poster' show the same design tokens applied to other artifact kinds.
-   */
+  /** Which themed mock to render. Compact cards always use 'web'. */
   scenario?: Scenario;
+  /** Real identity tokens — preferred over the palette heuristic when present. */
+  theme?: PreviewTheme | null;
 }
 
-const { system, caption, compact = false, scenario = 'web' } = Astro.props as Props;
+const { system, caption, compact = false, scenario = 'web', theme = null } =
+  Astro.props as Props;
 
-const HEX = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
 const toRgb = (h: string): [number, number, number] => {
   let s = h.replace('#', '');
   if (s.length === 3) s = s.split('').map((c) => c + c).join('');
@@ -46,44 +47,84 @@ const sat = (rgb: [number, number, number]): number => {
   const mn = Math.min(...rgb);
   return mx === 0 ? 0 : (mx - mn) / mx;
 };
+const HEX = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const softOf = (hex: string, a = 0.12): string => {
+  if (!HEX.test(hex)) return `rgba(0,0,0,${a})`;
+  const [r, g, b] = toRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+};
 
-const swatches = (system.palette ?? [])
-  .filter((h) => HEX.test(h))
-  .map((h) => ({ h, rgb: toRgb(h) }));
+const FALLBACK_FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-const byLum = [...swatches].sort((a, b) => lum(a.rgb) - lum(b.rgb));
-const darkest = byLum[0];
-const lightest = byLum[byLum.length - 1];
-const accentCand = [...swatches]
-  .filter((x) => sat(x.rgb) > 0.25 && lum(x.rgb) > 40 && lum(x.rgb) < 225)
-  .sort((a, b) => sat(b.rgb) - sat(a.rgb))[0];
+let bg: string;
+let surface: string;
+let ink: string;
+let muted: string;
+let line: string;
+let accent: string;
+let accentInk: string;
+let fontDisplay: string;
+let fontBody: string;
+let radius: string;
 
-const ink = darkest && lum(darkest.rgb) < 115 ? darkest.h : '#14110b';
-const bg = lightest && lum(lightest.rgb) > 205 ? lightest.h : '#ffffff';
-const accent = (accentCand ?? darkest)?.h ?? '#533afd';
+if (theme) {
+  // Real tokens — accurate to the system's DESIGN.md.
+  bg = theme.bg;
+  surface = theme.surface;
+  ink = theme.fg;
+  muted = theme.muted;
+  line = theme.border;
+  accent = theme.accent;
+  accentInk = theme.accentOn;
+  fontDisplay = theme.fontDisplay;
+  fontBody = theme.fontBody;
+  radius = theme.radius;
+} else {
+  // Heuristic fallback from the palette.
+  const swatches = (system.palette ?? [])
+    .filter((h) => HEX.test(h))
+    .map((h) => ({ h, rgb: toRgb(h) }));
+  const byLum = [...swatches].sort((a, b) => lum(a.rgb) - lum(b.rgb));
+  const darkest = byLum[0];
+  const lightest = byLum[byLum.length - 1];
+  const accentCand = [...swatches]
+    .filter((x) => sat(x.rgb) > 0.25 && lum(x.rgb) > 40 && lum(x.rgb) < 225)
+    .sort((a, b) => sat(b.rgb) - sat(a.rgb))[0];
+  ink = darkest && lum(darkest.rgb) < 115 ? darkest.h : '#14110b';
+  bg = lightest && lum(lightest.rgb) > 205 ? lightest.h : '#ffffff';
+  accent = (accentCand ?? darkest)?.h ?? '#533afd';
+  surface = bg;
+  const inkRgb = toRgb(ink);
+  muted = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.55)`;
+  line = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.12)`;
+  accentInk = lum(toRgb(accent)) > 150 ? '#14110b' : '#ffffff';
+  fontDisplay = FALLBACK_FONT;
+  fontBody = FALLBACK_FONT;
+  radius = '10px';
+}
 
-const inkRgb = toRgb(ink);
-const accentRgb = toRgb(accent);
-const muted = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.55)`;
-const line = `rgba(${inkRgb[0]}, ${inkRgb[1]}, ${inkRgb[2]}, 0.12)`;
-const accentSoft = `rgba(${accentRgb[0]}, ${accentRgb[1]}, ${accentRgb[2]}, 0.14)`;
-const accentInk = lum(accentRgb) > 150 ? '#14110b' : '#ffffff';
+const accentSoft = softOf(accent, 0.12);
 
 const vars = [
   `--pv-bg:${bg}`,
+  `--pv-surface:${surface}`,
   `--pv-ink:${ink}`,
+  `--pv-muted:${muted}`,
+  `--pv-line:${line}`,
   `--pv-accent:${accent}`,
   `--pv-accent-ink:${accentInk}`,
   `--pv-accent-soft:${accentSoft}`,
-  `--pv-muted:${muted}`,
-  `--pv-line:${line}`,
+  `--pv-font-display:${fontDisplay}`,
+  `--pv-font-body:${fontBody}`,
+  `--pv-radius:${radius}`,
 ].join(';');
 
 const domain = `${system.slug}.com`;
 ---
 
 {compact ? (
-  <div class="pv pv-compact" style={vars} role="img" aria-label={`${system.name} design system preview`}>
+  <div class="pv pv-compact pv-web" style={vars} role="img" aria-label={`${system.name} design system preview`}>
     <div class="pv-chrome">
       <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
     </div>
@@ -122,7 +163,7 @@ const domain = `${system.slug}.com`;
           <div class="pv-hero">
             <span class="pv-badge">NEW · LIVE PREVIEW</span>
             <div class="pv-h1">Build something people love.</div>
-            <div class="pv-sub">A mock UI rendered with the {system.name} design tokens — colors pulled straight from its DESIGN.md.</div>
+            <div class="pv-sub">A mock UI rendered with the {system.name} design tokens — straight from its DESIGN.md.</div>
             <div class="pv-cta-row">
               <span class="pv-btn pv-btn-solid">Get started</span>
               <span class="pv-btn pv-btn-ghost">Learn more</span>
@@ -138,86 +179,86 @@ const domain = `${system.slug}.com`;
               </div>
             ))}
           </div>
-          <div class="pv-foot">
-            <span class="pv-input">you@email.com</span>
-            <span class="pv-btn pv-btn-solid">Subscribe</span>
-            <span class="pv-tag pv-tag-accent">Active</span>
-            <span class="pv-tag">Draft</span>
-          </div>
         </div>
       </Fragment>
     )}
 
     {scenario === 'app' && (
-      <Fragment>
-        <div class="pv-chrome">
-          <span class="pv-dot"></span><span class="pv-dot"></span><span class="pv-dot"></span>
+      <div class="pv-phone-screen">
+        <div class="pv-statusbar">
+          <span class="pv-clock">9:41</span>
+          <span class="pv-statusdots"><span></span><span></span><span></span></span>
         </div>
-        <div class="pv-app-body">
-          <aside class="pv-side">
-            <span class="pv-brand pv-side-brand"><span class="pv-logo"></span>{system.name}</span>
-            <span class="pv-nav-item pv-nav-item-active"><span class="pv-nav-ic"></span>Overview</span>
-            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Projects</span>
-            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Reports</span>
-            <span class="pv-nav-item"><span class="pv-nav-ic"></span>Settings</span>
-          </aside>
-          <div class="pv-app-main">
-            <div class="pv-app-top">
-              <div class="pv-h2">Dashboard</div>
-              <span class="pv-btn pv-btn-solid">New</span>
-            </div>
-            <div class="pv-stats">
-              {['Revenue', 'Users', 'Churn'].map((t) => (
-                <div class="pv-stat">
-                  <div class="pv-stat-label">{t}</div>
-                  <div class="pv-stat-num"></div>
-                  <div class="pv-stat-bar"><span></span></div>
-                </div>
-              ))}
-            </div>
-            <div class="pv-rows">
-              {['', '', ''].map(() => (
-                <div class="pv-row">
-                  <span class="pv-row-dot"></span>
-                  <div class="pv-card-line"></div>
-                  <span class="pv-tag pv-tag-accent">Active</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div class="pv-app-head">
+          <span class="pv-app-title">{system.name}</span>
+          <span class="pv-app-avatar"></span>
         </div>
-      </Fragment>
+        <div class="pv-app-feature">
+          <span class="pv-app-feature-tag">Today</span>
+          <div class="pv-app-feature-h">Make it yours.</div>
+        </div>
+        <div class="pv-app-list">
+          {['', '', ''].map(() => (
+            <div class="pv-app-item">
+              <span class="pv-app-thumb"></span>
+              <div class="pv-app-item-text">
+                <div class="pv-card-line"></div>
+                <div class="pv-card-line short"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div class="pv-tabbar">
+          <span class="pv-tab pv-tab-active"></span>
+          <span class="pv-tab"></span>
+          <span class="pv-tab"></span>
+          <span class="pv-tab"></span>
+        </div>
+      </div>
     )}
 
     {scenario === 'slides' && (
       <div class="pv-slide-face">
-        <span class="pv-badge">{system.name}</span>
-        <div class="pv-slide-title">Design that ships itself.</div>
-        <div class="pv-slide-sub">One DESIGN.md, every surface on-brand.</div>
-        <div class="pv-slide-bullets">
-          <span class="pv-bullet"><span class="pv-bullet-dot"></span><span class="pv-card-line"></span></span>
-          <span class="pv-bullet"><span class="pv-bullet-dot"></span><span class="pv-card-line short"></span></span>
+        <div class="pv-slide-head">
+          <span class="pv-brand"><span class="pv-logo"></span>{system.name}</span>
+          <span class="pv-slide-page">01 / 12</span>
         </div>
-        <div class="pv-slide-foot"><span class="pv-logo"></span><span class="pv-slide-page">01 / 12</span></div>
+        <div class="pv-slide-body">
+          <span class="pv-badge">KEYNOTE</span>
+          <div class="pv-slide-title">Design that<br />ships itself.</div>
+          <div class="pv-slide-sub">One DESIGN.md — every surface on-brand.</div>
+        </div>
+        <div class="pv-slide-foot">
+          <span class="pv-bar"><span></span></span>
+          <span class="pv-bar"><span class="short"></span></span>
+          <span class="pv-bar"><span class="shorter"></span></span>
+        </div>
       </div>
     )}
 
     {scenario === 'poster' && (
       <div class="pv-poster-face">
-        <span class="pv-poster-kicker">{system.name}</span>
-        <div class="pv-poster-h1">MAKE<br />IT<br />REAL</div>
-        <span class="pv-poster-rule"></span>
-        <span class="pv-poster-foot">Open Design · DESIGN.md</span>
+        <div class="pv-poster-top">
+          <span class="pv-poster-kicker"><span class="pv-poster-tick"></span>{system.name}</span>
+          <span class="pv-poster-meta">2026</span>
+        </div>
+        <div class="pv-poster-mid">
+          <div class="pv-poster-h1">Make<br />it<br /><span class="pv-poster-accent">real.</span></div>
+        </div>
+        <div class="pv-poster-foot">
+          <span>Open Design</span>
+          <span>DESIGN.md</span>
+        </div>
       </div>
     )}
   </div>
-  <figcaption>{caption}</figcaption>
+  {caption && <figcaption>{caption}</figcaption>}
 </figure>
 )}
 
 <style>
   .sys-preview {
-    margin: 0 0 8px;
+    margin: 0;
   }
   .sys-preview figcaption {
     margin-top: 10px;
@@ -231,8 +272,10 @@ const domain = `${system.slug}.com`;
     background: var(--pv-bg);
     color: var(--pv-ink);
     box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.28);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--pv-font-body);
   }
+
+  /* ── Shared atoms ──────────────────────────────────────────────── */
   .pv-chrome {
     display: flex;
     align-items: center;
@@ -254,33 +297,20 @@ const domain = `${system.slug}.com`;
     color: var(--pv-muted);
     font-size: 12px;
   }
-  .pv-screen {
-    padding: 26px 30px 30px;
-  }
-  .pv-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 38px;
-  }
   .pv-brand {
     display: flex;
     align-items: center;
     gap: 9px;
     font-weight: 700;
     font-size: 16px;
+    font-family: var(--pv-font-display);
   }
   .pv-logo {
     width: 22px;
     height: 22px;
     border-radius: 7px;
     background: var(--pv-accent);
-  }
-  .pv-links {
-    display: flex;
-    gap: 22px;
-    font-size: 13px;
-    color: var(--pv-muted);
+    flex: none;
   }
   .pv-btn {
     display: inline-flex;
@@ -288,20 +318,11 @@ const domain = `${system.slug}.com`;
     font-size: 13px;
     font-weight: 600;
     padding: 8px 16px;
-    border-radius: 8px;
+    border-radius: calc(var(--pv-radius) * 0.7);
     white-space: nowrap;
   }
-  .pv-btn-solid {
-    background: var(--pv-accent);
-    color: var(--pv-accent-ink);
-  }
-  .pv-btn-ghost {
-    border: 1px solid var(--pv-line);
-    color: var(--pv-ink);
-  }
-  .pv-hero {
-    margin-bottom: 34px;
-  }
+  .pv-btn-solid { background: var(--pv-accent); color: var(--pv-accent-ink); }
+  .pv-btn-ghost { border: 1px solid var(--pv-line); color: var(--pv-ink); }
   .pv-badge {
     display: inline-block;
     font-size: 11px;
@@ -311,9 +332,28 @@ const domain = `${system.slug}.com`;
     border-radius: 999px;
     background: var(--pv-accent-soft);
     color: var(--pv-accent);
-    margin-bottom: 16px;
   }
+  .pv-card-line {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--pv-line);
+    margin-bottom: 6px;
+  }
+  .pv-card-line.short { width: 65%; }
+
+  /* ── Scenario: web (landscape) ─────────────────────────────────── */
+  .pv-screen { padding: 26px 30px 30px; }
+  .pv-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 34px;
+  }
+  .pv-links { display: flex; gap: 22px; font-size: 13px; color: var(--pv-muted); }
+  .pv-hero { margin-bottom: 30px; }
+  .pv-badge + .pv-h1, .pv-hero .pv-badge { margin-bottom: 16px; }
   .pv-h1 {
+    font-family: var(--pv-font-display);
     font-size: 40px;
     font-weight: 800;
     letter-spacing: -0.02em;
@@ -327,344 +367,197 @@ const domain = `${system.slug}.com`;
     color: var(--pv-muted);
     margin-bottom: 22px;
   }
-  .pv-cta-row {
-    display: flex;
-    gap: 12px;
-  }
+  .pv-cta-row { display: flex; gap: 12px; }
   .pv-cards {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    margin-bottom: 26px;
   }
   .pv-card {
     border: 1px solid var(--pv-line);
-    border-radius: 10px;
+    border-radius: var(--pv-radius);
+    background: var(--pv-surface);
     padding: 16px;
   }
   .pv-card-icon {
     display: block;
     width: 26px;
     height: 26px;
-    border-radius: 7px;
+    border-radius: calc(var(--pv-radius) * 0.6);
     background: var(--pv-accent);
     margin-bottom: 14px;
   }
   .pv-card-title {
+    font-family: var(--pv-font-display);
     font-size: 14px;
     font-weight: 700;
     margin-bottom: 9px;
   }
-  .pv-card-line {
-    height: 7px;
-    border-radius: 4px;
-    background: var(--pv-line);
-    margin-bottom: 6px;
-  }
-  .pv-card-line.short {
-    width: 65%;
-  }
-  .pv-foot {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .pv-input {
-    flex: 1;
-    min-width: 180px;
-    padding: 9px 14px;
-    border: 1px solid var(--pv-line);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--pv-muted);
-  }
-  .pv-tag {
-    font-size: 12px;
-    font-weight: 600;
-    padding: 5px 11px;
-    border-radius: 999px;
-    border: 1px solid var(--pv-line);
-    color: var(--pv-muted);
-  }
-  .pv-tag-accent {
-    background: var(--pv-accent);
-    color: var(--pv-accent-ink);
-    border-color: transparent;
-  }
 
-  /* ── Scenario: app / dashboard ─────────────────────────────────── */
-  .pv-h2 {
-    font-size: 20px;
-    font-weight: 800;
-    letter-spacing: -0.01em;
+  /* ── Scenario: app (phone, portrait) ───────────────────────────── */
+  .pv-app {
+    max-width: 280px;
+    margin: 0 auto;
+    border-radius: 30px;
+    border: 8px solid #111;
+    background: var(--pv-bg);
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.4);
   }
-  .pv-app-body {
-    display: grid;
-    grid-template-columns: 150px 1fr;
-    min-height: 300px;
-  }
-  .pv-side {
+  .pv-phone-screen {
+    aspect-ratio: 9 / 19;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 18px 14px;
-    border-right: 1px solid var(--pv-line);
+    padding: 0 16px 12px;
   }
-  .pv-side-brand {
-    font-size: 13px;
-    margin-bottom: 12px;
-  }
-  .pv-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-size: 12.5px;
-    color: var(--pv-muted);
-    padding: 7px 9px;
-    border-radius: 7px;
-  }
-  .pv-nav-item-active {
-    background: var(--pv-accent-soft);
-    color: var(--pv-accent);
-    font-weight: 600;
-  }
-  .pv-nav-ic {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    background: currentColor;
-    opacity: 0.55;
-  }
-  .pv-app-main {
-    padding: 20px 22px;
-  }
-  .pv-app-top {
+  .pv-statusbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
-  }
-  .pv-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 20px;
-  }
-  .pv-stat {
-    border: 1px solid var(--pv-line);
-    border-radius: 10px;
-    padding: 14px;
-  }
-  .pv-stat-label {
+    padding: 12px 4px 14px;
     font-size: 12px;
-    color: var(--pv-muted);
-    margin-bottom: 10px;
+    font-weight: 600;
   }
-  .pv-stat-num {
-    width: 56%;
-    height: 16px;
-    border-radius: 5px;
-    background: var(--pv-ink);
-    opacity: 0.85;
-    margin-bottom: 12px;
-  }
-  .pv-stat-bar {
-    height: 6px;
-    border-radius: 4px;
-    background: var(--pv-line);
-    overflow: hidden;
-  }
-  .pv-stat-bar span {
-    display: block;
-    width: 60%;
-    height: 100%;
-    background: var(--pv-accent);
-  }
-  .pv-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .pv-row {
+  .pv-statusdots { display: flex; gap: 4px; }
+  .pv-statusdots span { width: 6px; height: 6px; border-radius: 50%; background: var(--pv-ink); opacity: 0.5; }
+  .pv-app-head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    border: 1px solid var(--pv-line);
-    border-radius: 8px;
-    padding: 12px 14px;
+    justify-content: space-between;
+    margin-bottom: 14px;
   }
-  .pv-row .pv-card-line {
-    flex: 1;
-    margin: 0;
-  }
-  .pv-row-dot {
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
+  .pv-app-title { font-family: var(--pv-font-display); font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+  .pv-app-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--pv-accent-soft); border: 1px solid var(--pv-line); }
+  .pv-app-feature {
     background: var(--pv-accent);
-    flex: none;
+    color: var(--pv-accent-ink);
+    border-radius: var(--pv-radius);
+    padding: 16px;
+    margin-bottom: 14px;
   }
+  .pv-app-feature-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.85; }
+  .pv-app-feature-h { font-family: var(--pv-font-display); font-size: 22px; font-weight: 800; margin-top: 8px; }
+  .pv-app-list { display: flex; flex-direction: column; gap: 10px; }
+  .pv-app-item {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--pv-line);
+    border-radius: var(--pv-radius);
+    background: var(--pv-surface);
+    padding: 10px;
+  }
+  .pv-app-thumb { width: 40px; height: 40px; border-radius: calc(var(--pv-radius) * 0.7); background: var(--pv-accent-soft); flex: none; }
+  .pv-app-item-text { flex: 1; }
+  .pv-app-item-text .pv-card-line { margin-bottom: 7px; }
+  .pv-tabbar {
+    margin-top: auto;
+    display: flex;
+    justify-content: space-around;
+    padding-top: 14px;
+    border-top: 1px solid var(--pv-line);
+  }
+  .pv-tab { width: 22px; height: 22px; border-radius: 7px; background: var(--pv-line); }
+  .pv-tab-active { background: var(--pv-accent); }
 
-  /* ── Scenario: slides ──────────────────────────────────────────── */
-  .pv-slide,
-  .pv-poster {
-    box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.28);
-  }
+  /* ── Scenario: slides (16:9 landscape) ─────────────────────────── */
   .pv-slide-face {
     aspect-ratio: 16 / 9;
-    padding: 36px 40px;
+    background: var(--pv-surface);
+    padding: 30px 38px;
     display: flex;
     flex-direction: column;
   }
-  .pv-slide-title {
-    font-size: 34px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.05;
-    margin: 14px 0 10px;
-  }
-  .pv-slide-sub {
-    font-size: 15px;
-    color: var(--pv-muted);
-  }
-  .pv-slide-bullets {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 22px;
-  }
-  .pv-bullet {
+  .pv-slide-head {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
   }
-  .pv-bullet-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--pv-accent);
-    flex: none;
+  .pv-slide-page { font-size: 12px; color: var(--pv-muted); letter-spacing: 0.08em; }
+  .pv-slide-body { margin-top: auto; }
+  .pv-slide-body .pv-badge { margin-bottom: 14px; }
+  .pv-slide-title {
+    font-family: var(--pv-font-display);
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.02;
+    margin-bottom: 12px;
   }
-  .pv-bullet .pv-card-line {
-    flex: 1;
-    margin: 0;
-    height: 9px;
-  }
+  .pv-slide-sub { font-size: 15px; color: var(--pv-muted); }
   .pv-slide-foot {
     margin-top: auto;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 22px;
   }
-  .pv-slide-page {
-    font-size: 12px;
-    color: var(--pv-muted);
-    letter-spacing: 0.08em;
-  }
+  .pv-bar { display: block; height: 8px; border-radius: 4px; background: transparent; }
+  .pv-bar > span { display: block; height: 100%; width: 70%; border-radius: 4px; background: var(--pv-accent); }
+  .pv-bar > span.short { width: 48%; background: var(--pv-line); }
+  .pv-bar > span.shorter { width: 30%; background: var(--pv-line); }
 
-  /* ── Scenario: poster ──────────────────────────────────────────── */
+  /* ── Scenario: poster (portrait, accent used as highlight) ─────── */
   .pv-poster-face {
     aspect-ratio: 3 / 4;
-    padding: 30px 28px;
+    background: var(--pv-surface);
+    color: var(--pv-ink);
+    padding: 26px 24px;
     display: flex;
     flex-direction: column;
-    background: var(--pv-accent);
-    color: var(--pv-accent-ink);
   }
-  .pv-poster-kicker {
-    font-size: 13px;
+  .pv-poster-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    opacity: 0.85;
   }
+  .pv-poster-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--pv-accent); }
+  .pv-poster-tick { width: 14px; height: 14px; border-radius: 4px; background: var(--pv-accent); }
+  .pv-poster-meta { color: var(--pv-muted); }
+  .pv-poster-mid { margin-top: auto; }
   .pv-poster-h1 {
-    margin-top: auto;
+    font-family: var(--pv-font-display);
     font-size: 58px;
     font-weight: 900;
     line-height: 0.92;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
   }
-  .pv-poster-rule {
-    height: 6px;
-    width: 64px;
-    background: var(--pv-accent-ink);
-    margin: 18px 0;
-    opacity: 0.9;
-  }
+  .pv-poster-accent { color: var(--pv-accent); }
   .pv-poster-foot {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--pv-line);
+    display: flex;
+    justify-content: space-between;
     font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    opacity: 0.85;
+    color: var(--pv-muted);
   }
 
-  /* Compact card-thumbnail variant */
-  .pv-compact {
-    border-radius: 10px;
-    box-shadow: none;
-  }
-  .pv-compact .pv-chrome {
-    padding: 7px 10px;
-    gap: 5px;
-  }
-  .pv-compact .pv-dot {
-    width: 7px;
-    height: 7px;
-  }
-  .pv-compact .pv-screen {
-    padding: 14px 16px 16px;
-  }
-  .pv-compact .pv-nav {
-    margin-bottom: 14px;
-  }
-  .pv-compact .pv-brand {
-    font-size: 12px;
-    gap: 6px;
-  }
-  .pv-compact .pv-logo {
-    width: 16px;
-    height: 16px;
-    border-radius: 5px;
-  }
-  .pv-compact .pv-btn {
-    font-size: 10px;
-    padding: 5px 10px;
-    border-radius: 6px;
-  }
-  .pv-compact .pv-h1 {
-    font-size: 19px;
-    margin-bottom: 12px;
-  }
-  .pv-compact .pv-cta-row {
-    margin-bottom: 14px;
-  }
-  .pv-compact .pv-cards {
-    gap: 8px;
-    margin-bottom: 0;
-  }
-  .pv-compact .pv-card {
-    padding: 10px;
-  }
-  .pv-compact .pv-card-icon {
-    width: 16px;
-    height: 16px;
-    margin-bottom: 0;
-  }
+  /* ── Compact card-thumbnail variant (web only) ─────────────────── */
+  .pv-compact { border-radius: 10px; box-shadow: none; }
+  .pv-compact .pv-chrome { padding: 7px 10px; gap: 5px; }
+  .pv-compact .pv-dot { width: 7px; height: 7px; }
+  .pv-compact .pv-screen { padding: 14px 16px 16px; }
+  .pv-compact .pv-nav { margin-bottom: 14px; }
+  .pv-compact .pv-brand { font-size: 12px; gap: 6px; }
+  .pv-compact .pv-logo { width: 16px; height: 16px; border-radius: 5px; }
+  .pv-compact .pv-btn { font-size: 10px; padding: 5px 10px; border-radius: 6px; }
+  .pv-compact .pv-h1 { font-size: 19px; margin-bottom: 12px; }
+  .pv-compact .pv-cta-row { margin-bottom: 14px; }
+  .pv-compact .pv-cards { gap: 8px; }
+  .pv-compact .pv-card { padding: 10px; }
+  .pv-compact .pv-card-icon { width: 16px; height: 16px; margin-bottom: 0; }
 
   @media (max-width: 640px) {
-    .pv-screen {
-      padding: 20px;
-    }
-    .pv-links {
-      display: none;
-    }
-    .pv-h1 {
-      font-size: 30px;
-    }
-    .pv-cards {
-      grid-template-columns: 1fr;
-    }
+    .pv-screen { padding: 20px; }
+    .pv-links { display: none; }
+    .pv-h1 { font-size: 30px; }
+    .pv-cards { grid-template-columns: 1fr; }
+    .pv-slide-title { font-size: 28px; }
+    .pv-poster-h1 { font-size: 46px; }
   }
 </style>
