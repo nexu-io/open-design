@@ -28,6 +28,7 @@
  * either URL shape.
  */
 import type { LandingLocaleCode } from '../i18n';
+import { pluginDetailL10n } from './plugin-detail-l10n';
 const DEFAULT_LOCALE: LandingLocaleCode = 'en';
 
 export interface PluginCategoryCopy {
@@ -564,9 +565,6 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     systemsAboutBody:
       '设计系统是一套可复用的品牌基础——色板、字体、间距、动效与文风——让每个界面保持一致。在 Open Design 中，每个设计系统都是一个插件：把项目绑到某个系统，你的 coding agent 会自动继承它的色板、字体、动效与文风，产出始终贴合品牌。',
     detailSystemLabel: '设计系统',
-    detailSystemTitleSuffix: '为你的 agent 准备的色板、字体与设计 token · Open Design',
-    detailSystemKeywords: (name) =>
-      `${name} 设计系统, ${name} DESIGN.md, ${name} 设计 token, 设计系统示例, 开源设计系统`,
     searchPlaceholder: '按名称或关键词搜索…',
     searchNoResults: '没有匹配项，换个关键词试试。',
     systemPreviewCaption: (name) =>
@@ -692,9 +690,6 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     systemsAboutHead: '什麼是設計系統？',
     systemsAboutBody: '設計系統是一套可重用的品牌基礎——色票、字體、間距、動效與語氣——讓每個介面保持一致。在 Open Design 中，每個設計系統都是一個外掛：綁定專案到某個系統，你的 coding agent 會自動繼承它的色票、字體、動效與語氣，產出始終貼合品牌。',
     detailSystemLabel: '設計系統',
-    detailSystemTitleSuffix: '為你的 agent 準備的色票、字體與設計 token · Open Design',
-    detailSystemKeywords: (name) =>
-      `${name} 設計系統, ${name} DESIGN.md, ${name} 設計 token, 設計系統範例, 開源設計系統`,
     searchPlaceholder: '依名稱或關鍵字搜尋…',
     searchNoResults: '沒有相符項目，換個關鍵字試試。',
     systemPreviewCaption: (name) =>
@@ -3074,8 +3069,12 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
  */
 export function getPluginsCopy(locale: LandingLocaleCode): PluginsCopy {
   if (locale === DEFAULT_LOCALE) return en;
-  const partial = overrides[locale];
-  if (!partial) return en;
+  const base = overrides[locale];
+  const detail = pluginDetailL10n[locale];
+  if (!base && !detail) return en;
+  // Detail-page chrome (plugin-detail-l10n) wins over the original overrides
+  // when both define a key; English (en) fills anything neither provides.
+  const partial = { ...(base ?? {}), ...(detail ?? {}) };
   return {
     ...en,
     ...partial,
