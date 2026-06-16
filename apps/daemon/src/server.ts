@@ -10344,7 +10344,12 @@ export async function startServer({
           // ignore — best-effort
         }
       }
-      if (child && !child.killed) child.kill('SIGTERM');
+      // Route through signalChild (not a bare child.kill) so the halt escalates
+      // to the whole process group when one exists, matching abortForRoleMarker,
+      // cancel, and the inactivity watchdog. A bare child.kill leaves Bash/build
+      // grandchildren alive to keep mutating the workspace until the forced
+      // shutdown fires — exactly the loop class this guard is meant to stop.
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
       scheduleForcedChildShutdown();
     }
 
