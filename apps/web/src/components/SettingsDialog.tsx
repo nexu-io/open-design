@@ -3613,7 +3613,10 @@ export function SettingsDialog({
       setCfg((c) => {
         const prev = c.agentModels?.[selected.id] ?? {};
         const merged = { ...prev, ...next };
-        if (next.serviceTier === undefined) {
+        if (
+          Object.prototype.hasOwnProperty.call(next, 'serviceTier') &&
+          next.serviceTier === undefined
+        ) {
           delete merged.serviceTier;
         }
         return {

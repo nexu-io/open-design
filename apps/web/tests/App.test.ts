@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildPersistedConfig,
   isAutosaveDraftOnlyChange,
+  mergeAgentModelChoice,
   persistComposioConfigChange,
   resolveSettingsCloseConfig,
   shouldSyncMediaProvidersOnSave,
@@ -20,6 +21,34 @@ const baseConfig: AppConfig = {
   skillId: null,
   designSystemId: null,
 };
+
+describe('mergeAgentModelChoice', () => {
+  it('preserves serviceTier when an unrelated update omits the key', () => {
+    expect(
+      mergeAgentModelChoice(
+        { model: 'gpt-5.5', reasoning: 'default', serviceTier: 'priority' },
+        { reasoning: 'high' },
+      ),
+    ).toEqual({
+      model: 'gpt-5.5',
+      reasoning: 'high',
+      serviceTier: 'priority',
+    });
+  });
+
+  it('removes serviceTier only when the update explicitly clears it', () => {
+    const merged = mergeAgentModelChoice(
+      { model: 'gpt-5.5', reasoning: 'default', serviceTier: 'priority' },
+      { serviceTier: undefined },
+    );
+
+    expect(merged).toEqual({
+      model: 'gpt-5.5',
+      reasoning: 'default',
+    });
+    expect(Object.prototype.hasOwnProperty.call(merged, 'serviceTier')).toBe(false);
+  });
+});
 
 describe('persistComposioConfigChange', () => {
   it('does not update local saved state when the daemon save fails', async () => {

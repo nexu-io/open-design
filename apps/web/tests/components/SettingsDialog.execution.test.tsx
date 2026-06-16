@@ -2589,6 +2589,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         agents: [
           {
             ...availableAgents[0]!,
+            reasoningOptions: [
+              { id: 'default', label: 'Default' },
+              { id: 'high', label: 'High' },
+            ],
             modelsSource: 'live',
             models: [
               { id: 'default', label: 'Default' },
@@ -2646,13 +2650,32 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       }));
     });
 
+    const reasoningPicker = screen.getByRole('combobox', {
+      name: en['settings.reasoningPicker'],
+    }) as HTMLSelectElement;
+    fireEvent.change(reasoningPicker, { target: { value: 'high' } });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        agentModels: {
+          codex: {
+            model: 'gpt-5.5',
+            reasoning: 'high',
+            serviceTier: 'priority',
+          },
+        },
+      }),
+      {},
+    );
+
     fireEvent.change(serviceTierPicker, { target: { value: 'default' } });
 
     await waitFor(() => {
       const clearedPersist = onPersist.mock.calls.find(([config]) => {
         const choice = (config as AppConfig).agentModels?.codex;
         return choice?.model === 'gpt-5.5'
-          && choice.reasoning === 'default'
+          && choice.reasoning === 'high'
           && !Object.prototype.hasOwnProperty.call(choice, 'serviceTier');
       });
       expect(clearedPersist).toBeDefined();
