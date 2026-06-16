@@ -24,7 +24,7 @@
     "en": "Waitlist Page"
   },
   "version": "0.1.0",
-  "description": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer.\nReads DESIGN.md for colors, typography, and layout rules.\nBest for: product launches, beta signups, early access programs, indie projects.",
+  "description": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer. Reads DESIGN.md for colors, typography, and layout rules. Best for: product launches, beta signups, early access programs, indie projects.",
   "description_i18n": {
     "zh-CN": "简约的预发布落地页，支持邮箱收集、品牌logo和可选装饰层。从 DESIGN.md 读取颜色、排版和布局规则。适用于产品发布、Beta 测试注册、抢先体验计划和独立项目。",
     "zh-TW": "簡約的預發布著陸頁，支援電子郵件收集、品牌標誌和可選裝飾層。從 DESIGN.md 讀取顏色、排版和佈局規則。適用於產品發布、Beta 測試註冊、搶先體驗計畫和獨立專案。",
@@ -43,7 +43,7 @@
     "ar": "صفحة هبوط بسيطة قبل الإطلاق مع التقاط البريد الإلكتروني وشعار العلامة التجارية وطبقة زخرفية اختيارية. تقرأ الألوان والطباعة وقواعد التخطيط من DESIGN.md. مثالية لإطلاق المنتجات وتسجيلات البيتا وبرامج الوصول المبكر والمشاريع المستقلة.",
     "tr": "E-posta toplama, marka logosu ve isteğe bağlı dekoratif katman içeren minimalist ön lansman açılış sayfası. DESIGN.md'den renkleri, tipoğrafiyi ve düzen kurallarını okur. Ürün lansmanları, beta kayıtları, erken erişim programları ve bağımsız projeler için idealdir.",
     "uk": "Мінімалістична передзапускова цільова сторінка із захопленням електронної пошти, логотипом бренду та опціональним декоративним шаром. Зчитує кольори, типографіку та правила компонування з DESIGN.md. Підходить для запуску продуктів, реєстрації на бета-тестування, програм раннього доступу та інді-проектів.",
-    "en": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer.\nReads DESIGN.md for colors, typography, and layout rules.\nBest for: product launches, beta signups, early access programs, indie projects."
+    "en": "Minimal pre-launch landing with email capture, brand logo, and optional decorative layer. Reads DESIGN.md for colors, typography, and layout rules. Best for: product launches, beta signups, early access programs, indie projects."
   },
   "license": "MIT",
   "author": {

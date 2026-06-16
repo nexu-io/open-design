@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RAW GRID — Neobrutalist Presentation Template</title>
+<title>Open Design — RAW GRID Neobrutalist Deck</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 /* =============================================
    RAW GRID — Neobrutalist Presentation Template
    ============================================= */
@@ -12,19 +13,22 @@
 /* --- RESET & BASE --- */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --black: #0a0a0a;
-  --white: #ffffff;
+  --black: #0e0d0b;
+  --white: #f7f4ec;
   --pink: #f2d4cf;
   --green: #e5edd6;
-  --gray: #f5f5f5;
-  --darkgray: #333333;
+  --gray: #ece8db;
+  --darkgray: #3a382f;
+  --red: #c8371e;
   --border: 3px solid var(--black);
   --shadow: 6px 6px 0 var(--black);
   --shadow-sm: 4px 4px 0 var(--black);
+  --font-sans: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
 }
 html, body {
   width: 100%; height: 100%;
-  font-family: 'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   background: var(--white);
   color: var(--black);
   overflow: hidden;
@@ -48,6 +52,29 @@ html, body {
 .slide-content {
   width: 100%; height: 100%;
   overflow: hidden;
+}
+.slide.active .slide-content {
+  animation: slide-in 0.5s cubic-bezier(.16,1,.3,1) both;
+}
+/* opacity-only child stagger: keeps the shared 3px grid borders aligned while panels land in sequence */
+.slide.active .slide-content > * {
+  animation: fade-in 0.45s cubic-bezier(.16,1,.3,1) both;
+}
+.slide.active .slide-content > *:nth-child(2) { animation-delay: 0.08s; }
+.slide.active .slide-content > *:nth-child(3) { animation-delay: 0.16s; }
+.slide.active .slide-content > *:nth-child(4) { animation-delay: 0.24s; }
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide.active .slide-content,
+  .slide.active .slide-content > * { animation: none; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
 /* --- TYPOGRAPHY --- */
@@ -80,13 +107,15 @@ html, body {
   letter-spacing: 0.04em;
 }
 .t-body {
-  font-size: clamp(16px, 1.3vw, 20px);
+  font-size: clamp(15px, 1.25vw, 19px);
   font-weight: 500;
-  line-height: 1.6;
+  line-height: 1.55;
+  max-width: 60ch;
 }
 .t-caption {
+  font-family: var(--font-mono);
   font-size: clamp(11px, 1vw, 13px);
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -105,6 +134,7 @@ html, body {
 .b-r { border-right: var(--border); }
 .bg-pink { background: var(--pink); }
 .bg-green { background: var(--green); }
+.bg-red { background: var(--red); }
 .bg-black { background: var(--black); }
 .bg-gray { background: var(--gray); }
 .bg-white { background: var(--white); }
@@ -133,15 +163,16 @@ html, body {
   background: var(--black);
   color: var(--white);
   padding: 6px 14px;
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .line {
   width: 60px;
   height: 4px;
-  background: var(--black);
+  background: var(--red);
 }
 .line-w { width: 100%; }
 .line-v {
@@ -179,7 +210,9 @@ html, body {
   justify-content: center;
   font-size: 18px;
   font-weight: 900;
-  background: var(--white);
+  background: var(--red);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
 }
 .s1-brand-text {
   font-size: 20px;
@@ -280,8 +313,9 @@ html, body {
   margin-bottom: 20px;
 }
 .s3-bar-label {
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
@@ -298,13 +332,14 @@ html, body {
   display: flex;
   align-items: center;
   padding-left: 10px;
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 800;
-  transition: width 0.8s ease;
+  font-weight: 700;
+  background: var(--black);
+  color: var(--white);
+  transition: width 0.8s cubic-bezier(.16,1,.3,1);
 }
-.s3-bar-fill.pink { background: var(--pink); }
-.s3-bar-fill.green { background: var(--green); }
-.s3-bar-fill.black { background: var(--black); color: var(--white); }
+.s3-bar-fill.hot { background: var(--red); }
 .s3-insights {
   padding: clamp(24px, 3vw, 48px);
   display: flex;
@@ -316,6 +351,7 @@ html, body {
   border: var(--border);
   padding: clamp(16px, 2vw, 28px);
   background: var(--white);
+  box-shadow: var(--shadow-sm);
 }
 .s3-stat-number {
   font-size: clamp(36px, 4vw, 56px);
@@ -324,8 +360,9 @@ html, body {
   margin-bottom: 8px;
 }
 .s3-stat-label {
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -367,10 +404,13 @@ html, body {
   justify-content: space-between;
 }
 .s4-num {
+  font-family: var(--font-mono);
   font-size: clamp(40px, 5vw, 72px);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
-  opacity: 0.35;
+  color: var(--black);
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
 }
 .s4-icon {
   width: 48px; height: 48px;
@@ -402,16 +442,17 @@ html, body {
 .s5-image-placeholder {
   width: 80%;
   height: 70%;
-  border: 4px solid var(--white);
+  border: 3px dashed var(--white);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--white);
-  font-size: 14px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  opacity: 0.6;
+  opacity: 0.75;
 }
 .s5-text-area {
   display: flex;
@@ -440,31 +481,35 @@ html, body {
 .s6-body {
   flex: 1;
   display: flex;
-  padding: 0 clamp(32px, 4vw, 64px);
+  /* full-bleed columns: the colored panels run edge to edge like every other slide */
+  padding: 0;
 }
 .s6-step {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: clamp(24px, 3vw, 48px) clamp(16px, 2vw, 28px);
+  justify-content: center;
+  padding: clamp(24px, 3vw, 48px) clamp(24px, 3vw, 48px);
   position: relative;
 }
 .s6-step + .s6-step { border-left: var(--border); }
 .s6-step-num {
+  font-family: var(--font-mono);
   font-size: clamp(48px, 6vw, 80px);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   margin-bottom: clamp(16px, 2vw, 28px);
-  opacity: 0.2;
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
 }
 .s6-step-title { margin-bottom: 12px; }
 .s6-connector {
   position: absolute;
-  top: clamp(40px, 5vw, 64px);
+  top: calc(50% - 16px);
   right: -18px;
   width: 32px; height: 32px;
   border: var(--border);
-  background: var(--black);
+  background: var(--red);
   color: var(--white);
   display: flex;
   align-items: center;
@@ -473,8 +518,6 @@ html, body {
   font-weight: 900;
   z-index: 10;
 }
-.s6-step:nth-child(1) .s6-step-num { color: var(--black); }
-.s6-step:nth-child(2) .s6-step-num { color: var(--black); }
 .s6-step:nth-child(3) { background: var(--green); }
 .s6-step:nth-child(4) { background: var(--pink); }
 
@@ -512,8 +555,9 @@ html, body {
   line-height: 1;
 }
 .s7-donut-label {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 4px;
@@ -528,9 +572,11 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .s7-legend-swatch {
   width: 16px; height: 16px;
@@ -575,17 +621,13 @@ html, body {
   position: relative;
 }
 .s8-quote-mark {
-  position: absolute;
-  top: clamp(20px, 3vw, 40px);
-  left: clamp(32px, 4vw, 64px);
-  font-size: clamp(80px, 12vw, 160px);
+  font-size: clamp(56px, 7vw, 96px);
   font-weight: 900;
-  line-height: 1;
-  opacity: 0.15;
+  line-height: 0.6;
+  color: var(--red);
+  margin-bottom: clamp(16px, 2vw, 28px);
 }
 .s8-statement {
-  position: relative;
-  z-index: 2;
   max-width: 900px;
 }
 .s8-bottom {
@@ -629,6 +671,9 @@ html, body {
 }
 .s9-table-wrap {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: clamp(24px, 3vw, 48px) clamp(32px, 4vw, 64px);
   overflow: auto;
 }
@@ -639,14 +684,16 @@ html, body {
 .s9-table th {
   border: var(--border);
   padding: clamp(12px, 1.5vw, 20px);
-  font-size: clamp(12px, 1.1vw, 14px);
-  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.1vw, 13px);
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   text-align: left;
   background: var(--black);
   color: var(--white);
 }
+.s9-table td:nth-child(3) { font-weight: 800; color: var(--red); }
 .s9-table td {
   border: var(--border);
   padding: clamp(12px, 1.5vw, 20px);
@@ -671,6 +718,11 @@ html, body {
   padding: clamp(32px, 4vw, 64px);
   background: var(--pink);
   border-right: var(--border);
+}
+.s10-left .label {
+  background: var(--red);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
 }
 .s10-right {
   display: flex;
@@ -719,24 +771,24 @@ html, body {
   <div class="slide-content">
     <div class="s1-left">
       <div class="s1-brand">
-        <div class="s1-logo-box">RG</div>
-        <span class="s1-brand-text">RAW GRID</span>
+        <div class="s1-logo-box">OD</div>
+        <span class="s1-brand-text">OPEN DESIGN</span>
       </div>
       <div class="s1-headline">
-        <div class="t-display">Cities.<br>Startups.</div>
+        <div class="t-display">Open.<br>Design.</div>
       </div>
       <div class="s1-cta">
-        <span class="label arrow">Discover All Startups</span>
+        <span class="label arrow">Apache-2.0 &middot; Runs Locally &middot; BYOK</span>
       </div>
     </div>
     <div class="s1-right">
-      <div class="s1-list-item">San Francisco</div>
-      <div class="s1-list-item">New York</div>
-      <div class="s1-list-item bg-green">Cupertino</div>
-      <div class="s1-list-item">Menlo Park</div>
-      <div class="s1-list-item">Santa Clara</div>
-      <div class="s1-list-item">Mountain View</div>
-      <div class="s1-list-item">Sunnyvale</div>
+      <div class="s1-list-item">Why Open</div>
+      <div class="s1-list-item">By The Numbers</div>
+      <div class="s1-list-item">Core Capabilities</div>
+      <div class="s1-list-item">HyperFrames</div>
+      <div class="s1-list-item">Workflow</div>
+      <div class="s1-list-item">Open vs Closed</div>
+      <div class="s1-list-item">Get Started</div>
     </div>
   </div>
 </div>
@@ -747,21 +799,21 @@ html, body {
     <div class="s2-left">
       <div class="s2-meta">
         <div class="line"></div>
-        <span class="t-caption">About The Platform</span>
+        <span class="t-caption">Why Open Design</span>
       </div>
-      <div class="t-headline" style="margin-bottom: 24px;">Connecting Founders With Opportunity</div>
-      <p class="t-body" style="max-width: 420px;">A centralized ecosystem designed to bridge the gap between emerging ventures and the resources they need to scale effectively across global markets.</p>
+      <div class="t-headline" style="margin-bottom: 24px;">Frontier AI Design, Set Free</div>
+      <p class="t-body" style="max-width: 420px;">In April 2026, Claude Design proved an LLM can truly design — yet it is closed-source, paid, and cloud-only. Open Design brings the full product-design workflow to your own machine: open, local, and agent-driven.</p>
     </div>
     <div class="s2-right">
       <div class="s2-block">
-        <span class="t-number">250+</span>
-        <span class="t-subtitle" style="margin-top: 8px;">Active Startups</span>
-        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Ventures currently enrolled and scaling through our network.</p>
+        <span class="t-number">60K+</span>
+        <span class="t-subtitle" style="margin-top: 8px;">GitHub Stars</span>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Open source under Apache-2.0 — fork, self-host, and use commercially.</p>
       </div>
       <div class="s2-block bg-green">
-        <span class="t-number">14</span>
-        <span class="t-subtitle" style="margin-top: 8px;">Cities Covered</span>
-        <p class="t-body" style="margin-top: 12px; opacity: 0.7;">Metropolitan tech hubs across North America and Europe.</p>
+        <span class="t-number">21</span>
+        <span class="t-subtitle" style="margin-top: 8px;">Coding Agents</span>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Claude Code, Codex, Cursor and more — auto-detected from PATH, zero config.</p>
       </div>
     </div>
   </div>
@@ -771,41 +823,41 @@ html, body {
 <div class="slide s3">
   <div class="slide-content">
     <div class="s3-header">
-      <span class="t-title">Quarterly Growth Metrics</span>
-      <span class="label">Fiscal Year 2026</span>
+      <span class="t-title">By The Numbers</span>
+      <span class="label">Apache-2.0 Open Source</span>
     </div>
     <div class="s3-body">
       <div class="s3-chart-area">
-        <div class="t-subtitle s3-chart-title">Revenue by Quarter ($M)</div>
+        <div class="t-subtitle s3-chart-title">GitHub Stars by Quarter (K &middot; Demo Data)</div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q1</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 45%;">$4.5M</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 20%;">12K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q2</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill green" style="width: 62%;">$6.2M</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 42%;">25K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q3</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill black" style="width: 78%;">$7.8M</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 70%;">42K</div></div>
         </div>
         <div class="s3-bar-group">
           <div class="s3-bar-label">Q4</div>
-          <div class="s3-bar-track"><div class="s3-bar-fill pink" style="width: 91%;">$9.1M</div></div>
+          <div class="s3-bar-track"><div class="s3-bar-fill hot" style="width: 91%;">60K+</div></div>
         </div>
       </div>
       <div class="s3-insights">
         <div class="s3-stat-box">
-          <div class="s3-stat-number">+47%</div>
-          <div class="s3-stat-label">Year over Year Growth</div>
+          <div class="s3-stat-number">300+</div>
+          <div class="s3-stat-label">Contributors</div>
         </div>
         <div class="s3-stat-box bg-green">
-          <div class="s3-stat-number">$27.6M</div>
-          <div class="s3-stat-label">Total Annual Revenue</div>
+          <div class="s3-stat-number">217+</div>
+          <div class="s3-stat-label">Plugins in the Ecosystem</div>
         </div>
         <div class="s3-stat-box bg-pink">
-          <div class="s3-stat-number">12.4K</div>
-          <div class="s3-stat-label">New User Signups</div>
+          <div class="s3-stat-number">129</div>
+          <div class="s3-stat-label">Design Systems</div>
         </div>
       </div>
     </div>
@@ -816,8 +868,8 @@ html, body {
 <div class="slide s4">
   <div class="slide-content">
     <div class="s4-header">
-      <span class="t-title">Core Services</span>
-      <span class="t-caption">What We Provide</span>
+      <span class="t-title">Core Capabilities</span>
+      <span class="t-caption">What Open Design Provides</span>
     </div>
     <div class="s4-grid">
       <div class="s4-card">
@@ -826,8 +878,8 @@ html, body {
           <div class="s4-icon">I</div>
         </div>
         <div>
-          <div class="t-subtitle" style="margin-bottom: 10px;">Venture Funding</div>
-          <p class="t-body">Direct access to seed and series funding through our curated investor network.</p>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Desktop-Native</div>
+          <p class="t-body">Design happens on the desktop. Local files, Figma exports, and code repos are directly readable.</p>
         </div>
       </div>
       <div class="s4-card">
@@ -836,8 +888,8 @@ html, body {
           <div class="s4-icon">II</div>
         </div>
         <div>
-          <div class="t-subtitle" style="margin-bottom: 10px;">Mentorship</div>
-          <p class="t-body">One-on-one guidance from industry veterans who have built and exited companies.</p>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Plug In Agents</div>
+          <p class="t-body">Claude Code, Codex, and Cursor are already powerful. Open Design wires them into a full design workflow.</p>
         </div>
       </div>
       <div class="s4-card">
@@ -846,8 +898,8 @@ html, body {
           <div class="s4-icon">III</div>
         </div>
         <div>
-          <div class="t-subtitle" style="margin-bottom: 10px;">Workspace</div>
-          <p class="t-body">Flexible office arrangements in prime locations across all partner cities.</p>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Design Memory</div>
+          <p class="t-body">Every choice becomes design systems, preferences, and memory — the next generation lands closer to what you want.</p>
         </div>
       </div>
       <div class="s4-card">
@@ -856,8 +908,8 @@ html, body {
           <div class="s4-icon">IV</div>
         </div>
         <div>
-          <div class="t-subtitle" style="margin-bottom: 10px;">Community</div>
-          <p class="t-body">A tight-knit network of founders sharing resources, referrals, and support.</p>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Full-Stack BYOK</div>
+          <p class="t-body">Bring your own keys for Anthropic, OpenAI, Azure, and Google, plus 14 media providers.</p>
         </div>
       </div>
     </div>
@@ -872,9 +924,9 @@ html, body {
     </div>
     <div class="s5-text-area">
       <div class="label s5-badge">Featured</div>
-      <div class="t-headline" style="margin-bottom: 20px;">The Founders Lab</div>
-      <p class="t-body" style="margin-bottom: 20px;">An intensive twelve-week program designed to take early-stage concepts and transform them into market-ready products with validated traction.</p>
-      <p class="t-body" style="opacity: 0.7; margin-bottom: 32px;">Cohots launch every quarter with dedicated workspace, engineering support, and direct pipeline to investor demo days.</p>
+      <div class="t-headline" style="margin-bottom: 20px;">HyperFrames</div>
+      <p class="t-body" style="margin-bottom: 20px;">Turn any design artifact into video. HyperFrames renders HTML compositions straight to MP4 — marketing shorts, product demos, and cinematic generative footage.</p>
+      <p class="t-body" style="color: var(--darkgray); margin-bottom: 32px;">The same artifact flows from sandbox preview to finished video — programmatic, repeatable, and entirely on your own machine.</p>
       <div class="line"></div>
     </div>
   </div>
@@ -884,31 +936,31 @@ html, body {
 <div class="slide s6">
   <div class="slide-content">
     <div class="s6-header">
-      <div class="t-title">Application Process</div>
+      <div class="t-title">From Idea to Delivery</div>
     </div>
     <div class="s6-body">
       <div class="s6-step">
         <span class="s6-step-num">01</span>
         <div class="s6-connector">&rarr;</div>
-        <div class="t-subtitle s6-step-title">Submit</div>
-        <p class="t-body">Complete the online application with your pitch deck and team overview.</p>
+        <div class="t-subtitle s6-step-title">Start</div>
+        <p class="t-body">Describe your goal in one sentence, or pick a starting point from a template or plugin.</p>
       </div>
       <div class="s6-step">
         <span class="s6-step-num">02</span>
         <div class="s6-connector">&rarr;</div>
-        <div class="t-subtitle s6-step-title">Review</div>
-        <p class="t-body">Our committee evaluates fit, market potential, and team capability.</p>
+        <div class="t-subtitle s6-step-title">Direct</div>
+        <p class="t-body">Set the visual direction — palette, type, and spacing flow into generation automatically.</p>
       </div>
       <div class="s6-step">
         <span class="s6-step-num">03</span>
         <div class="s6-connector">&rarr;</div>
-        <div class="t-subtitle s6-step-title">Interview</div>
-        <p class="t-body">Shortlisted teams present to our panel of partners and alumni founders.</p>
+        <div class="t-subtitle s6-step-title">Generate</div>
+        <p class="t-body">The agent reads full context and produces real runnable files, previewed in a sandbox.</p>
       </div>
       <div class="s6-step">
         <span class="s6-step-num">04</span>
-        <div class="t-subtitle s6-step-title">Onboard</div>
-        <p class="t-body">Accepted ventures join the next cohort with full access to all resources.</p>
+        <div class="t-subtitle s6-step-title">Ship</div>
+        <p class="t-body">Hand off to engineering or film it with HyperFrames. Every choice becomes context for the next run.</p>
       </div>
     </div>
   </div>
@@ -920,49 +972,50 @@ html, body {
     <div class="s7-left">
       <div class="s7-donut-container">
         <svg viewBox="0 0 200 200" width="100%" height="100%">
-          <circle cx="100" cy="100" r="80" fill="none" stroke="#0a0a0a" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#c8371e" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
           <circle cx="100" cy="100" r="80" fill="none" stroke="#f2d4cf" stroke-width="24" stroke-dasharray="126 502" stroke-dashoffset="-314" transform="rotate(-90 100 100)"/>
           <circle cx="100" cy="100" r="80" fill="none" stroke="#e5edd6" stroke-width="24" stroke-dasharray="50 502" stroke-dashoffset="-440" transform="rotate(-90 100 100)"/>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="#0a0a0a" stroke-width="1.5" opacity="0.1"/>
+          <circle cx="100" cy="100" r="92" fill="none" stroke="#0e0d0b" stroke-width="2"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#0e0d0b" stroke-width="2"/>
         </svg>
         <div class="s7-donut-center">
-          <div class="s7-donut-value">63%</div>
-          <div class="s7-donut-label">Market Share</div>
+          <div class="s7-donut-value">217+</div>
+          <div class="s7-donut-label">Plugins</div>
         </div>
       </div>
       <div class="s7-legend">
-        <div class="s7-legend-item"><div class="s7-legend-swatch bg-black"></div>Enterprise</div>
-        <div class="s7-legend-item"><div class="s7-legend-swatch bg-pink"></div>Consumer</div>
-        <div class="s7-legend-item"><div class="s7-legend-swatch bg-green"></div>Non-Profit</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-red"></div>Slides &amp; Decks</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-pink"></div>Prototypes</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-green"></div>Video &amp; More</div>
       </div>
     </div>
     <div class="s7-right">
       <div class="s7-metric-row">
-        <div class="s7-metric-num">89%</div>
+        <div class="s7-metric-num">129</div>
         <div class="s7-metric-info">
-          <div class="t-subtitle s7-metric-title">Retention Rate</div>
-          <p class="t-caption">Founders who renew after year one</p>
+          <div class="t-subtitle s7-metric-title">Design Systems</div>
+          <p class="t-caption">Import from GitHub, Figma, or local files</p>
         </div>
       </div>
       <div class="s7-metric-row bg-green">
-        <div class="s7-metric-num">3.2x</div>
+        <div class="s7-metric-num">21</div>
         <div class="s7-metric-info">
-          <div class="t-subtitle s7-metric-title">Average ROI</div>
-          <p class="t-caption">Return on capital invested</p>
+          <div class="t-subtitle s7-metric-title">Coding Agents</div>
+          <p class="t-caption">Auto-detected from PATH, zero config</p>
         </div>
       </div>
       <div class="s7-metric-row">
-        <div class="s7-metric-num">156</div>
+        <div class="s7-metric-num">300+</div>
         <div class="s7-metric-info">
-          <div class="t-subtitle s7-metric-title">Jobs Created</div>
-          <p class="t-caption">Net new positions this quarter</p>
+          <div class="t-subtitle s7-metric-title">Contributors</div>
+          <p class="t-caption">Builders behind the open-source project</p>
         </div>
       </div>
       <div class="s7-metric-row bg-pink">
-        <div class="s7-metric-num">$42M</div>
+        <div class="s7-metric-num">-80%</div>
         <div class="s7-metric-info">
-          <div class="t-subtitle s7-metric-title">Capital Deployed</div>
-          <p class="t-caption">Total funding distributed to date</p>
+          <div class="t-subtitle s7-metric-title">Monthly Cost</div>
+          <p class="t-caption">From $500 to ~$73 vs. Claude Design</p>
         </div>
       </div>
     </div>
@@ -975,26 +1028,26 @@ html, body {
     <div class="s8-top">
       <div class="s8-quote-mark">"</div>
       <div class="s8-statement">
-        <div class="t-headline" style="margin-bottom: 24px;">We don't incubate ideas. We accelerate the people bold enough to build them.</div>
+        <div class="t-headline" style="margin-bottom: 24px;">File-system semantics plus git-diffable artifacts — design is finally under version control.</div>
         <div class="line"></div>
       </div>
     </div>
     <div class="s8-bottom">
       <div class="s8-stat">
-        <span class="s8-stat-num">98%</span>
-        <span class="t-caption">Satisfaction</span>
+        <span class="s8-stat-num">60K+</span>
+        <span class="t-caption">GitHub Stars</span>
       </div>
       <div class="s8-stat">
-        <span class="s8-stat-num">4.9</span>
-        <span class="t-caption">Avg Rating</span>
+        <span class="s8-stat-num">300+</span>
+        <span class="t-caption">Contributors</span>
       </div>
       <div class="s8-stat">
-        <span class="s8-stat-num">500+</span>
-        <span class="t-caption">Alumni</span>
+        <span class="s8-stat-num">217+</span>
+        <span class="t-caption">Plugins</span>
       </div>
       <div class="s8-stat">
-        <span class="s8-stat-num">$1B+</span>
-        <span class="t-caption">Valuation</span>
+        <span class="s8-stat-num">21</span>
+        <span class="t-caption">Coding Agents</span>
       </div>
     </div>
   </div>
@@ -1004,55 +1057,55 @@ html, body {
 <div class="slide s9">
   <div class="slide-content">
     <div class="s9-header">
-      <span class="t-title">Plan Comparison</span>
-      <span class="label">Pricing Tiers</span>
+      <span class="t-title">Open vs Closed</span>
+      <span class="label">Why Open Design</span>
     </div>
     <div class="s9-table-wrap">
       <table class="s9-table">
         <thead>
           <tr>
-            <th>Feature</th>
-            <th>Starter</th>
-            <th>Professional</th>
-            <th>Enterprise</th>
+            <th>Capability</th>
+            <th>Claude Design</th>
+            <th>Open Design</th>
+            <th>Why It Matters</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>Workspace Access</td>
-            <td>Shared Desk</td>
-            <td>Dedicated Desk</td>
-            <td>Private Office</td>
+            <td>Source</td>
+            <td>Closed</td>
+            <td>Apache-2.0 Open</td>
+            <td>Fork, self-host, commercial use</td>
           </tr>
           <tr>
-            <td>Mentor Hours</td>
-            <td>2 / Month</td>
-            <td>8 / Month</td>
-            <td>Unlimited</td>
+            <td>Where It Runs</td>
+            <td>Cloud Only</td>
+            <td>Your Own Machine</td>
+            <td>Local files &amp; repos readable</td>
           </tr>
           <tr>
-            <td>Investor Introductions</td>
-            <td>Quarterly</td>
-            <td>Monthly</td>
-            <td>Weekly</td>
+            <td>Model Choice</td>
+            <td>Locked to One</td>
+            <td>Full-Stack BYOK</td>
+            <td>Anthropic, OpenAI, Azure, Google</td>
           </tr>
           <tr>
-            <td>Legal &amp; Accounting</td>
-            <td>Basic Templates</td>
-            <td>Guided Support</td>
-            <td>Full Service</td>
+            <td>Agents</td>
+            <td>Built-In Only</td>
+            <td>21 Coding Agents</td>
+            <td>Auto-detected, zero config</td>
           </tr>
           <tr>
-            <td>Event Access</td>
-            <td>Online Only</td>
-            <td>In-Person</td>
-            <td>VIP &amp; Speaker</td>
+            <td>Monthly Cost</td>
+            <td>~$500</td>
+            <td>~$73</td>
+            <td>Over 80% less</td>
           </tr>
           <tr>
-            <td>Support Response</td>
-            <td>48 Hours</td>
-            <td>24 Hours</td>
-            <td>4 Hours</td>
+            <td>Sign-Up</td>
+            <td>Required</td>
+            <td>None</td>
+            <td>Your keys never leave your machine</td>
           </tr>
         </tbody>
       </table>
@@ -1064,21 +1117,21 @@ html, body {
 <div class="slide s10">
   <div class="slide-content">
     <div class="s10-left">
-      <div class="t-display" style="margin-bottom: 24px;">Let's<br>Build.</div>
-      <p class="t-body" style="margin-bottom: 32px; max-width: 380px;">Ready to take your venture to the next level? Join the Raw Grid community and start scaling today.</p>
-      <span class="label arrow">Get Started Now</span>
+      <div class="t-display" style="margin-bottom: 24px;">Open.<br>Local.</div>
+      <p class="t-body" style="margin-bottom: 32px; max-width: 380px;">Frontier AI design, back on every creator's desk. Download Open Design and run the full workflow on your own machine.</p>
+      <a class="label arrow" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;">Download Open Design</a>
     </div>
     <div class="s10-right">
       <div class="s10-r-top">
-        <div class="t-title" style="margin-bottom: 20px;">Get In Touch</div>
-        <p class="t-body" style="margin-bottom: 8px;"><strong>Email:</strong> hello@rawgrid.studio</p>
-        <p class="t-body" style="margin-bottom: 8px;"><strong>Phone:</strong> +1 (555) 000-0000</p>
-        <p class="t-body" style="margin-bottom: 8px;"><strong>Location:</strong> 123 Innovation Drive, San Francisco</p>
-        <p class="t-body"><strong>Hours:</strong> Monday — Friday, 9:00 — 18:00</p>
+        <div class="t-title" style="margin-bottom: 20px;">Get Connected</div>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>GitHub:</strong> github.com/nexu-io/open-design</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Discord:</strong> discord.gg/qhbcCH8Am4</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>X:</strong> x.com/nexudotio</p>
+        <p class="t-body"><strong>License:</strong> Apache-2.0 — free forever</p>
       </div>
       <div class="s10-r-bottom">
-        <div class="s10-rb-block">Instagram</div>
-        <div class="s10-rb-block">LinkedIn</div>
+        <a class="s10-rb-block" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">macOS / Windows</a>
+        <a class="s10-rb-block" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Star on GitHub</a>
       </div>
     </div>
   </div>

@@ -15,7 +15,9 @@ import {
   forgetVelaLogin,
   mergeVelaEnv,
   mirrorAmrEntryAnalytics,
+  mirrorAmrOnboardingProfileAnalytics,
   parseAmrEntryAnalyticsPayload,
+  parseAmrOnboardingProfileAnalyticsPayload,
   parseVelaLoginAttribution,
   readVelaCredentialRevision,
   readVelaLoginStatus,
@@ -209,12 +211,41 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const analyticsContext = readAnalyticsContext(req);
       const attribution = parseVelaLoginAttribution(req.body);
-      const spawned = await spawnVelaLogin({
-        configuredEnv,
-        attribution,
-        defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
-      });
+      let loginAttribution = attribution;
+      if (attribution) {
+        if (analyticsContext && appConfig.telemetry?.metrics === true) {
+          loginAttribution = { ...attribution, odDeviceId: analyticsContext.deviceId };
+        } else {
+          const withoutDeviceId = { ...attribution };
+          delete withoutDeviceId.odDeviceId;
+          loginAttribution = withoutDeviceId;
+        }
+      }
+      // Start device authorization over a direct connection first. The
+      // daemon-local IPv4 proxy (added in #4210 for hosts whose direct
+      // amr-api.open-design.ai edge path is broken, #3726) re-originates the
+      // request through the daemon. Behind a corporate transparent proxy that
+      // hijacks amr-api.open-design.ai onto an internal gateway (e.g.
+      // 飞连/CorpLink → 30.x), that extra hop makes the upstream lose the
+      // client IP and reject device authorization with
+      // "502: Invalid IP address: undefined", even though the direct path
+      // resolves fine. So only fall back to the proxy when the direct attempt
+      // fails to start — never when a login is already in flight.
+      let spawned;
+      try {
+        spawned = await spawnVelaLogin({ configuredEnv, attribution: loginAttribution });
+      } catch (directErr) {
+        const directMessage =
+          directErr instanceof Error ? directErr.message : String(directErr);
+        if (/already running/i.test(directMessage)) throw directErr;
+        spawned = await spawnVelaLogin({
+          configuredEnv,
+          attribution: loginAttribution,
+          defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
+        });
+      }
       res.status(202).json(spawned);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -248,6 +279,30 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       return;
     }
     const result = await mirrorAmrEntryAnalytics(payload, {
+      analyticsContext,
+      env,
+    });
+    res.status(202).json(result);
+  });
+
+  app.post('/api/integrations/vela/analytics-profile', async (req, res) => {
+    const payload = parseAmrOnboardingProfileAnalyticsPayload(req.body);
+    if (!payload) {
+      res.status(400).json({ error: 'invalid_amr_profile_analytics' });
+      return;
+    }
+    const analyticsContext = readAnalyticsContext(req);
+    if (!analyticsContext) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+    if (appConfig.telemetry?.metrics !== true) {
+      res.status(202).json({ mirrored: false });
+      return;
+    }
+    const canonicalPayload = { ...payload, odDeviceId: analyticsContext.deviceId };
+    const result = await mirrorAmrOnboardingProfileAnalytics(canonicalPayload, {
       analyticsContext,
       env,
     });

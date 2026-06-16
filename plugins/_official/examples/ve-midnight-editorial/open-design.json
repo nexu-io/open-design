@@ -1,0 +1,148 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-ve-midnight-editorial",
+  "title": "Midnight Editorial",
+  "title_i18n": {
+    "en": "Midnight Editorial",
+    "zh-CN": "午夜金辉"
+  },
+  "version": "1.0.0",
+  "description": "Cinematic editorial dark deck theme: deep navy #0f1729 pages with warm gold #d4a73a accents, Instrument Serif 120px dramatic display dropping straight to 14px JetBrains Mono labels, a gold radial accent glow per slide, gold SVG corner marks and ghost section numerals, staggered cinematic reveal transitions, and a locked cream/gold light mode toggled by the SlideEngine (T key). Pure CSS/SVG diagrams and charts, keyboard-first single-file HTML, zero external JS. Based on https://github.com/nicobailon/visual-explainer midnight-editorial (templates/slide-deck.html), locked as a single-aesthetic deck plugin. Use for engineering reviews, product keynotes and editorial launches that should feel like a midnight issue of a serious journal.",
+  "description_i18n": {
+    "en": "Cinematic editorial dark deck theme: deep navy #0f1729 pages with warm gold #d4a73a accents, Instrument Serif 120px dramatic display dropping straight to 14px JetBrains Mono labels, a gold radial accent glow per slide, gold SVG corner marks and ghost section numerals, staggered cinematic reveal transitions, and a locked cream/gold light mode toggled by the SlideEngine (T key). Pure CSS/SVG diagrams and charts, keyboard-first single-file HTML, zero external JS. Based on https://github.com/nicobailon/visual-explainer midnight-editorial (templates/slide-deck.html), locked as a single-aesthetic deck plugin. Use for engineering reviews, product keynotes and editorial launches that should feel like a midnight issue of a serious journal.",
+    "zh-CN": "电影级编辑刊暗调幻灯片主题：深 navy #0f1729 页面 + 暖金 #d4a73a 点缀，Instrument Serif 120px 戏剧 display 直落 14px JetBrains Mono 标签，每页一处金色径向光晕，金色 SVG 角标与幽灵章节数字，交错 cinematic 转场，并自带 SlideEngine 锁定的奶油/金浅色模式（T 键切换）。纯 CSS/SVG 图解与图表、键盘优先的单文件 HTML、零外部 JS。基于 nicobailon/visual-explainer 的 midnight-editorial 预设（templates/slide-deck.html）锁定为单美学 deck 插件，适合想要「严肃杂志午夜刊」气质的工程评审、产品发布与编辑刊式演示。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "nicobailon",
+    "url": "https://github.com/nicobailon"
+  },
+  "homepage": "https://github.com/nicobailon/visual-explainer",
+  "plugin": {
+    "repo": "https://github.com/nicobailon/visual-explainer"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "editorial",
+    "cinematic",
+    "dark",
+    "serif",
+    "gold",
+    "dual-theme",
+    "visual-explainer"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "scroll"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Midnight Editorial system (the midnight-editorial slide-deck preset from nicobailon/visual-explainer, locked as the only aesthetic). Start from the seed example.html and keep its design system exactly as-is, replacing slide content only — never rewrite the styles or the SlideEngine script, and never introduce a color or font outside the locked token sheets. Visual contract, dark default: deep navy --bg:#0f1729 with surfaces #162040/#1d2b52/#243362, parchment text #e8e4d8 / dim #9a9484, warm gold --accent:#d4a73a with --accent-dim:rgba(212,167,58,.1), gold-tinted hairline borders rgba(200,180,140,.08/.16), code block #0a0f1e, semantic green #4ade80 / red #f87171 / blue #60a5fa for status only. Locked light theme on html[data-theme=\"light\"]: cream #faf8f2 page, white/#f5f0e6/#fffdf5 surfaces, ink #1a1814 text, dark gold #b8860b accent, #16a34a/#dc2626/#2563eb semantics — every slide must read correctly in BOTH themes; SlideEngine defaults to the OS scheme and toggles via the T key and the fixed ◐ chrome button. Typography (the signature drop): Instrument Serif (400 + italic, Georgia fallback) for display clamp(48px,10vw,120px) at -2px tracking and 0.95 line-height, headings clamp(28px,5vw,48px), body and serif KPI numerals — falling directly to uppercase JetBrains Mono labels clamp(10px,1.2vw,13px) at 1.5px letter-spacing for labels, subtitles, counters, axis/edge labels and code; both via Google Fonts @import, the only external references; no third font, no bold serif — drama comes from size, not weight. Decorative devices: exactly one gold radial-gradient(ellipse at varying anchor, var(--accent-dim), transparent ~40%) accent glow per content slide; 2px gold corner-mark SVGs at opacity .15 on the title slide; ghost gold clamp(100px,22vw,260px) numerals at opacity .06 on dividers; ghost “ quote mark on quote slides; inline-SVG-only asides. Motion: slides enter with fade + translateY(40px) + scale(.98) on cubic-bezier(.16,1,.3,1); .reveal children stagger at .1s steps (max 6 per slide); prefers-reduced-motion disables everything. Structure: a single self-contained HTML file; <div class=\"deck\"> of <section class=\"slide\"> pages, vertical scroll-snap, one 100dvh viewport per slide with no internal scrolling; SlideEngine builds the gold 3px progress bar, right dot rail, mono counter, fading hints and theme button at runtime; ←/→/Space/PageUp/PageDown/Home/End keys, touch swipe and #/N hash routing. Compose pages from the locked masters: slide--title (gold display cover with corner marks), slide--toc (gold mono numbers + serif items + mono hints), slide--divider (ghost numeral), slide--content (3fr/2fr bullets + SVG aside), slide--split (before/after surface panels), slide--diagram (pure CSS pipeline: 2px accent-bordered nodes in gold/blue/green families, mono edge labels, arrow connectors, legend — never mermaid, zero external JS), slide--dashboard (serif big-number KPI cards with mono trend lines), slide--chart (pure CSS gradient-gold bars with dashed ghost baseline bars), slide--table (mono headers, zebra rows, gold hover), slide--code (gold filename tab, .hl/.cm spans), slide--quote (italic serif + mono cite), slide--bleed (fixed dark gradient + scrim closing, intentionally dark in both themes). Open with slide--title, close with slide--bleed or slide--quote, 8-15 pages. Write real content with real numbers (no lorem ipsum) and replace all fictional Nocturne demo content.",
+        "zh-CN": "用「午夜金辉」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}（页数 {{slideCount}}）：基于 nicobailon/visual-explainer 的 midnight-editorial 幻灯片预设、锁定为唯一美学。从种子 example.html 出发，只替换幻灯片内容，绝不重写样式与 SlideEngine 脚本，也不引入 token 表之外的颜色和字体：深 navy #0f1729 页面 + 暖金 #d4a73a 点缀与 rgba(212,167,58,.1) 金晕，羊皮纸文字 #e8e4d8，并自带锁定的奶油 #faf8f2 / 暗金 #b8860b 浅色主题（html[data-theme=\"light\"]，T 键 / ◐ 按钮切换，默认跟随系统，每一页必须双主题都成立）；Instrument Serif 120px 戏剧 display（-2px 字距、0.95 行高）直落 14px 大写 JetBrains Mono 标签，无第三字体、无粗衬线（仅 Google Fonts @import 外链）。装饰装置：每页内容页恰好一处金色径向光晕（锚点逐页变化）、封面 2px 金色角标 SVG（透明度 .15）、分隔页幽灵金色巨号数字（透明度 .06）、引用页幽灵引号；转场为 fade + translateY(40px) + scale(.98) 配 .reveal 子元素 0.1s 交错（每页最多 6 个）。单文件 HTML、纵向 scroll-snap、一屏一页不滚动；SlideEngine 运行时生成金色进度条、圆点导航、计数器、提示与主题按钮，键盘翻页 + 触摸滑动 + #/N 哈希路由。版式从锁定母版选取：封面/目录/分隔页/不对称内容页/前后对比分屏/纯 CSS pipeline 图解页（金/蓝/绿三族节点，禁 mermaid、零外部 JS）/衬线大数字 KPI 页/纯 CSS 金色柱状图（虚线幽灵基线柱）/表格/代码/引用/全出血结尾。封面开场、bleed 或 quote 收尾，8-15 页；真实内容真实数字、不用 lorem ipsum，替换全部虚构的 Nocturne 演示内容。完整规格以英文 query 为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Midnight Editorial · Nocturne Editorial Engine Keynote",
+          "title_i18n": {
+            "en": "Midnight Editorial · Nocturne Editorial Engine Keynote",
+            "zh-CN": "午夜金辉 · Nocturne 编辑引擎发布演示"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product keynote",
+          "engineering review",
+          "pitch deck",
+          "editorial launch deck",
+          "quarterly report"
+        ],
+        "default": "product keynote"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "What the deck is about",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Execs, engineers, editors, conference crowd…",
+        "default": "a general audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8-11 pages",
+          "10-15 pages"
+        ],
+        "default": "8-11 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

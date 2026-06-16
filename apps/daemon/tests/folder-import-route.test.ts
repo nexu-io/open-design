@@ -759,6 +759,11 @@ if (process.argv.includes('--')) {
 }
 const port = Number(process.env.PORT || 0);
 const server = http.createServer((req, res) => {
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 500;
+    res.end('upstream options should not be reached');
+    return;
+  }
   if (req.url === '/styles.css') {
     res.setHeader('content-type', 'text/css');
     res.end("@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')}body{font-family:Inter}");
@@ -864,6 +869,20 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     const postHtml = await postResp.text();
     expect(postHtml).toContain('Content-Type application/x-www-form-urlencoded');
     expect(postHtml).toContain('Body query=Search&intent=preview');
+
+    const preflight = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'null',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type, x-preview-token',
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('*');
+    expect(preflight.headers.get('access-control-allow-methods')).toBe('POST');
+    expect(preflight.headers.get('access-control-allow-headers')).toBe('content-type, x-preview-token');
+    expect(preflight.headers.get('cache-control')).toBe('no-store');
 
     const font = await fetch(`${baseUrl}${previewBody.baseUrl!}/fonts/Inter.woff2`, {
       headers: { Origin: 'null' },

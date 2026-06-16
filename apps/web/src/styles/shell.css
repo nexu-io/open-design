@@ -104,9 +104,14 @@
   background: var(--bg-panel);
   box-shadow: -8px 0 10px -9px color-mix(in srgb, var(--text) 30%, transparent);
 }
-.workspace-tabs-new-btn:hover {
+.workspace-tabs-new-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
   color: var(--text-muted);
+}
+.workspace-tabs-new-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
 }
 .workspace-tabs-icon-btn {
   width: 28px;

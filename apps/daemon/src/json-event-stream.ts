@@ -682,7 +682,7 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   if (obj.type === 'turn.started') {
     state.codexPreviousEventWasAgentMessage = false;
     state.codexLastAgentMessageEndedWithNewline = false;
-    onEvent({ type: 'status', label: 'running' });
+    onEvent({ type: 'status', label: 'thinking' });
     return true;
   }
 
@@ -780,6 +780,9 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
     const usage: Usage = {};
     if (typeof obj.usage.input_tokens === 'number') usage.input_tokens = obj.usage.input_tokens;
     if (typeof obj.usage.output_tokens === 'number') usage.output_tokens = obj.usage.output_tokens;
+    if (typeof obj.usage.reasoning_output_tokens === 'number') {
+      usage.thought_tokens = obj.usage.reasoning_output_tokens;
+    }
     if (typeof obj.usage.cached_input_tokens === 'number') {
       usage.cached_read_tokens = obj.usage.cached_input_tokens;
     }

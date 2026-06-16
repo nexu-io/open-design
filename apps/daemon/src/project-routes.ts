@@ -800,6 +800,10 @@ async function proxyProjectUiPreviewRequest(
   target: { baseUrl: string; proxyBasePath: string },
   suffix: string,
 ): Promise<void> {
+  if (isNullOriginPreviewProxyPreflight(req)) {
+    sendPreviewProxyPreflightResponse(req, res);
+    return;
+  }
   const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const upstreamUrl = `${target.baseUrl}${proxySuffixPath(suffix)}${query}`;
   const requestBody = await proxyRequestBody(req);
@@ -836,6 +840,39 @@ async function proxyProjectUiPreviewRequest(
   const bytes = Buffer.from(await upstream.arrayBuffer());
   res.setHeader('Content-Length', String(bytes.byteLength));
   res.send(bytes);
+}
+
+function isNullOriginPreviewProxyPreflight(req: Request): boolean {
+  return (
+    req.method === 'OPTIONS' &&
+    req.headers.origin === 'null' &&
+    typeof previewProxyHeaderValue(req.headers['access-control-request-method']) === 'string'
+  );
+}
+
+function sendPreviewProxyPreflightResponse(req: Request, res: Response): void {
+  const requestedMethod = previewProxyHeaderValue(req.headers['access-control-request-method']);
+  const requestedHeaders = previewProxyHeaderValue(req.headers['access-control-request-headers']);
+  res.status(204);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', requestedMethod ?? 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
+  if (requestedHeaders) res.setHeader('Access-Control-Allow-Headers', requestedHeaders);
+  res.setHeader('Access-Control-Max-Age', '600');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader(
+    'Vary',
+    requestedHeaders
+      ? 'Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
+      : 'Origin, Access-Control-Request-Method',
+  );
+  res.end();
+}
+
+function previewProxyHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value.filter(Boolean).join(', ') || null;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function proxyRequestHeaders(req: Request): Headers {

@@ -24,7 +24,7 @@
     "en": "Team Okrs"
   },
   "version": "0.1.0",
-  "description": "OKR tracker page — quarter banner, three objectives with their key\nresults as progress bars, owner avatars, status pills, and a \"this\nquarter at a glance\" sidebar. Use when the brief mentions \"OKRs\",\n\"key results\", \"objectives\", or \"目标\".",
+  "description": "OKR tracker page — quarter banner, three objectives with their key results as progress bars, owner avatars, status pills, and a \"this quarter at a glance\" sidebar. Use when the brief mentions \"OKRs\", \"key results\", \"objectives\", or \"目标\".",
   "description_i18n": {
     "zh-CN": "OKR 跟踪页面——季度横幅，三个目标及其关键结果进度条、负责人头像、状态标签，以及「本季度概览」侧边栏。当需求提及 OKR、关键结果、目标时使用。",
     "zh-TW": "OKR 追蹤頁面——季度橫幅，三個目標及其關鍵結果進度條、負責人頭像、狀態標籤，以及「本季度概覽」側邊欄。當需求提及 OKR、關鍵結果、目標時使用。",
@@ -43,7 +43,7 @@
     "ar": "صفحة تتبع OKR مع شعار الربع السنوي، ثلاثة أهداف مع نتائجها الرئيسية كأشرطة تقدم، صور رمزية للمالكين، حبوب الحالة، وشريط جانبي 'نظرة عامة على هذا الربع'. استخدم عند ذكر OKR أو النتائج الرئيسية أو الأهداف أو 目标.",
     "tr": "OKR takip sayfası; çeyrek banner'ı, ilerleme çubukları olarak temel sonuçlarıyla birlikte üç hedef, sahip avatarları, durum pill'leri ve 'bu çeyreğe bir bakış' kenar çubuğu. OKR, temel sonuçlar, hedefler veya 目标 bahsedildiğinde kullanın.",
     "uk": "Сторінка відстеження OKR з банером кварталу, трьома цілями з ключовими результатами у вигляді прогрес-барів, аватарами власників, статусними мітками та бічною панеллю 'огляд кварталу'. Використовуйте при згадці OKR, ключових результатів, цілей або 目标.",
-    "en": "OKR tracker page — quarter banner, three objectives with their key\nresults as progress bars, owner avatars, status pills, and a \"this\nquarter at a glance\" sidebar. Use when the brief mentions \"OKRs\",\n\"key results\", \"objectives\", or \"目标\"."
+    "en": "OKR tracker page — quarter banner, three objectives with their key results as progress bars, owner avatars, status pills, and a \"this quarter at a glance\" sidebar. Use when the brief mentions \"OKRs\", \"key results\", \"objectives\", or \"目标\"."
   },
   "license": "MIT",
   "author": {

@@ -3,22 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Presentation Template</title>
+  <title>Open Design — The Open-Source, Local, Agent-Driven Design Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
     :root {
       --bg: #fdfae7;
-      --primary: #1e2bfa;
-      --text: #111111;
-      --text-muted: #6b6b6b;
-      --text-light: #9a9a9a;
-      --accent-light: rgba(30, 43, 250, 0.08);
-      --accent-medium: rgba(30, 43, 250, 0.15);
-      --border: rgba(30, 43, 250, 0.2);
-      --card-bg: rgba(30, 43, 250, 0.04);
+      --primary: #002fa7;
+      --text: #181610;
+      --text-muted: #54513f;
+      --text-light: #6e6a59;
+      --accent-light: rgba(0, 47, 167, 0.06);
+      --accent-medium: rgba(0, 47, 167, 0.14);
+      --border: rgba(0, 47, 167, 0.28);
+      --hairline: rgba(24, 22, 16, 0.16);
+      --font-display: 'Archivo', 'Helvetica Neue', sans-serif;
+      --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
     }
 
     * {
@@ -31,9 +33,10 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: 'Inter', sans-serif;
+      font-family: var(--font-display);
       background: var(--bg);
       color: var(--text);
+      -webkit-font-smoothing: antialiased;
     }
 
     /* Slide container */
@@ -59,7 +62,7 @@
       opacity: 0;
       pointer-events: none;
       transform: translateX(40px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
+      transition: opacity 0.5s cubic-bezier(.16,1,.3,1), transform 0.5s cubic-bezier(.16,1,.3,1);
       overflow: hidden;
     }
 
@@ -76,33 +79,39 @@
 
     /* Typography */
     h1, h2, h3, h4 {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-weight: 600;
       line-height: 1.1;
       letter-spacing: -0.02em;
     }
 
     h1 {
-      font-size: clamp(2.8rem, 5vw, 4.2rem);
-      font-weight: 700;
+      font-size: clamp(2.8rem, 5.2vw, 4.4rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 0.98;
     }
 
     h2 {
       font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
       margin-bottom: 1.5rem;
+      max-width: 30ch;
     }
 
     h3 {
       font-size: clamp(1.1rem, 1.8vw, 1.5rem);
-      font-weight: 500;
+      font-weight: 600;
       line-height: 1.3;
     }
 
     h4 {
-      font-size: clamp(0.85rem, 1.2vw, 1rem);
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: clamp(0.72rem, 1vw, 0.82rem);
+      font-weight: 500;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.14em;
       color: var(--primary);
     }
 
@@ -126,13 +135,15 @@
     }
 
     .slide-header .tag {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
       font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
       color: var(--primary);
-      background: var(--accent-light);
-      padding: 0.35rem 0.9rem;
-      border-radius: 100px;
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.8rem;
+      border-radius: 0;
     }
 
     /* Slide content area */
@@ -157,15 +168,15 @@
     .nav-btn {
       width: 44px;
       height: 44px;
-      border-radius: 50%;
-      border: 1.5px solid var(--border);
+      border-radius: 0;
+      border: 1px solid var(--border);
       background: var(--bg);
       color: var(--primary);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s ease;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1), color 0.2s cubic-bezier(.16,1,.3,1), border-color 0.2s cubic-bezier(.16,1,.3,1);
       font-size: 1.1rem;
     }
 
@@ -181,8 +192,8 @@
     }
 
     .slide-counter {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
       font-weight: 500;
       color: var(--text-muted);
       letter-spacing: 0.05em;
@@ -204,10 +215,9 @@
 
     /* Decorative elements */
     .accent-line {
-      width: 60px;
-      height: 4px;
+      width: 56px;
+      height: 3px;
       background: var(--primary);
-      border-radius: 2px;
       margin-bottom: 1.5rem;
     }
 
@@ -215,7 +225,6 @@
       width: 8px;
       height: 8px;
       background: var(--primary);
-      border-radius: 50%;
       display: inline-block;
     }
 
@@ -243,37 +252,31 @@
     }
 
     .layout-cover .meta {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.8rem;
-      color: var(--text-light);
-      letter-spacing: 0.05em;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .layout-cover .cover-decoration {
       position: absolute;
       top: 0;
       right: 0;
-      width: 35vw;
+      width: 30vw;
       height: 100vh;
-      background: var(--accent-light);
-      clip-path: polygon(30% 0, 100% 0, 100% 100%, 0% 100%);
-    }
-
-    .layout-cover .cover-dots {
-      position: absolute;
-      bottom: 12vh;
-      right: 8vw;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      opacity: 0.25;
-    }
-
-    .layout-cover .cover-dots .dot {
-      width: 6px;
-      height: 6px;
       background: var(--primary);
-      border-radius: 50%;
+      clip-path: polygon(42% 0, 100% 0, 100% 100%, 0% 100%);
+    }
+
+    .layout-cover .cover-mark {
+      position: absolute;
+      top: 8vh;
+      right: 5vw;
+      z-index: 2;
+      width: 44px;
+      height: 3px;
+      background: var(--bg);
     }
 
     /* ============================================================
@@ -293,23 +296,23 @@
       display: flex;
       gap: 1.2rem;
       align-items: center;
-      padding: 1rem 1.2rem;
-      border-radius: 12px;
-      transition: background 0.2s ease;
-      border-bottom: 1px solid var(--border);
+      padding: 1rem 0.4rem;
+      transition: background 0.2s cubic-bezier(.16,1,.3,1);
+      border-bottom: 1px solid var(--hairline);
     }
 
     .agenda-item:hover {
-      background: var(--card-bg);
+      background: var(--accent-light);
     }
 
     .agenda-num {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1.8rem;
-      font-weight: 700;
+      font-family: var(--font-mono);
+      font-size: 1.45rem;
+      font-weight: 500;
       color: var(--primary);
       line-height: 1;
-      min-width: 36px;
+      min-width: 44px;
+      font-variant-numeric: tabular-nums;
     }
 
     .agenda-item h3 {
@@ -343,18 +346,22 @@
       display: flex;
       flex-direction: column;
       gap: 0.7rem;
-      padding: 1.5rem 1.6rem;
-      border-radius: 14px;
-      border: 1.5px solid var(--border);
-      background: var(--card-bg);
+      padding: 1.5rem 1.6rem 1.5rem 0;
+      border-top: 2px solid var(--text);
+    }
+
+    .metric-card:first-child {
+      border-top-color: var(--primary);
     }
 
     .metric-card .metric-value {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(2.2rem, 3.4vw, 3rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.03em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .metric-card .metric-label {
@@ -377,7 +384,7 @@
       gap: 0.45rem;
       margin: 0.2rem 0 0;
       padding: 0.7rem 0 0;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     .metric-card .metric-supports li {
@@ -389,24 +396,27 @@
     }
 
     .metric-card .metric-supports li::before {
-      content: '—';
+      content: '';
       position: absolute;
       left: 0;
-      color: var(--text-light);
+      top: 0.65em;
+      width: 10px;
+      height: 1px;
+      background: var(--primary);
     }
 
     .metric-card .metric-change {
       display: inline-flex;
       align-items: center;
       gap: 0.3rem;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       margin-top: 0.3rem;
     }
 
-    .metric-change.positive { color: #059669; }
-    .metric-change.negative { color: #dc2626; }
+    .metric-change.positive { color: var(--primary); }
+    .metric-change.negative { color: var(--primary); }
 
     /* ============================================================
        LAYOUT 4: Data Dashboard (6 stat grid)
@@ -430,10 +440,8 @@
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-      padding: 1.4rem 1.5rem;
-      border-radius: 12px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1.4rem 1.5rem 1.4rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .stat-cell .stat-top {
@@ -443,11 +451,13 @@
     }
 
     .stat-cell .stat-num {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.4vw, 2.1rem);
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.025em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-cell .stat-unit {
@@ -468,7 +478,7 @@
       color: var(--text-light);
       line-height: 1.4;
       padding-top: 0.4rem;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
     }
 
     /* ============================================================
@@ -496,7 +506,7 @@
 
     .split-right {
       padding-left: 2.5rem;
-      border-left: 2px solid var(--border);
+      border-left: 1px solid var(--hairline);
     }
 
     .insight-list {
@@ -522,24 +532,23 @@
       position: absolute;
       left: 0;
       top: 0;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 500;
       color: var(--primary);
       letter-spacing: 0.05em;
-      line-height: 1.7;
+      line-height: 1.85;
     }
 
     .split-highlight {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.15rem, 1.55vw, 1.5rem);
       font-weight: 500;
       color: var(--text);
       line-height: 1.4;
       padding: 1.3rem 1.5rem;
       background: var(--accent-light);
-      border-radius: 12px;
-      border-left: 4px solid var(--primary);
+      border-left: 3px solid var(--primary);
     }
 
     .split-highlight cite {
@@ -561,18 +570,18 @@
     }
 
     .mini-stat {
-      padding: 0.9rem 1rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 0.9rem 1rem 0.9rem 0;
+      border-top: 1px solid var(--text);
     }
 
     .mini-stat .mini-val {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.5rem;
-      font-weight: 700;
+      font-weight: 800;
+      letter-spacing: -0.02em;
       color: var(--primary);
       line-height: 1;
+      font-variant-numeric: tabular-nums;
     }
 
     .mini-stat .mini-label {
@@ -610,9 +619,8 @@
     }
 
     .bar-track {
-      height: 28px;
+      height: 26px;
       background: var(--accent-light);
-      border-radius: 6px;
       overflow: hidden;
       position: relative;
     }
@@ -620,17 +628,17 @@
     .bar-fill {
       height: 100%;
       background: var(--primary);
-      border-radius: 6px;
-      transition: width 0.8s ease;
+      transition: width 0.8s cubic-bezier(.16,1,.3,1);
     }
 
     .bar-pct {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.95rem;
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
       font-weight: 600;
       color: var(--primary);
       min-width: 45px;
       text-align: right;
+      font-variant-numeric: tabular-nums;
     }
 
     .bar-note {
@@ -649,17 +657,16 @@
     }
 
     .layout-quote .quote-mark {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 8rem;
+      font-family: var(--font-display);
+      font-size: 3.4rem;
       font-weight: 700;
       color: var(--primary);
-      opacity: 0.15;
-      line-height: 0.5;
-      margin-bottom: 1rem;
+      line-height: 0.6;
+      margin-bottom: 1.6rem;
     }
 
     .layout-quote blockquote {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(1.6rem, 2.8vw, 2.4rem);
       font-weight: 500;
       line-height: 1.35;
@@ -678,24 +685,12 @@
       font-weight: 600;
     }
 
-    .layout-quote .quote-decoration {
-      position: absolute;
-      top: 10vh;
-      left: 5vw;
-      width: 80px;
-      height: 80px;
-      border: 2px solid var(--border);
-      border-radius: 50%;
-    }
-
-    .layout-quote .quote-decoration-2 {
-      position: absolute;
-      bottom: 12vh;
-      right: 6vw;
-      width: 60px;
-      height: 60px;
-      background: var(--accent-light);
-      border-radius: 50%;
+    /* Quote slide chrome: a single hairline rule above the attribution,
+       in place of the former floating decoration squares. */
+    .layout-quote .quote-source {
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--hairline);
+      min-width: 280px;
     }
 
     /* ============================================================
@@ -705,9 +700,10 @@
       display: flex;
       gap: 1.5rem;
       flex: 1;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       margin-top: 0.5rem;
+      padding-top: 8vh;
     }
 
     .timeline-step {
@@ -725,32 +721,33 @@
       top: 28px;
       right: -0.75rem;
       width: 1.5rem;
-      height: 2px;
-      background: var(--border);
+      height: 1px;
+      background: var(--text);
     }
 
     .step-circle {
       width: 56px;
       height: 56px;
-      border-radius: 50%;
       background: var(--primary);
       color: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 1.3rem;
       font-weight: 700;
       margin-bottom: 1.2rem;
       flex-shrink: 0;
     }
 
-    .timeline-step:nth-child(2) .step-circle { opacity: 0.85; }
-    .timeline-step:nth-child(3) .step-circle { opacity: 0.7; }
-    .timeline-step:nth-child(4) .step-circle { opacity: 0.55; }
+    .timeline-step:nth-child(n+2) .step-circle {
+      background: var(--bg);
+      color: var(--primary);
+      border: 1px solid var(--primary);
+    }
 
     .step-title {
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: clamp(0.95rem, 1.4vw, 1.15rem);
       font-weight: 600;
       color: var(--text);
@@ -783,10 +780,8 @@
     }
 
     .detail-block {
-      padding: 1rem 1.2rem;
-      border-radius: 10px;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+      padding: 1rem 1.2rem 1rem 1.1rem;
+      border-left: 2px solid var(--primary);
     }
 
     .detail-block h3 {
@@ -813,10 +808,9 @@
       content: '';
       position: absolute;
       left: 0;
-      top: 0.55rem;
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
+      top: 0.65rem;
+      width: 8px;
+      height: 1px;
       background: var(--primary);
     }
 
@@ -846,21 +840,20 @@
 
     .layout-closing .cta-btn {
       display: inline-block;
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--font-display);
       font-size: 0.95rem;
       font-weight: 600;
       color: var(--bg);
       background: var(--primary);
       padding: 0.9rem 2.2rem;
-      border-radius: 100px;
       text-decoration: none;
       letter-spacing: 0.02em;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.2s cubic-bezier(.16,1,.3,1), opacity 0.2s cubic-bezier(.16,1,.3,1);
     }
 
     .layout-closing .cta-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(30, 43, 250, 0.25);
+      opacity: 0.9;
     }
 
     .layout-closing .closing-contact {
@@ -869,29 +862,16 @@
       color: var(--text-light);
     }
 
+    /* Closing slide mirrors the cover: same cobalt diagonal panel,
+       anchored to the left edge, instead of concentric rotated squares. */
     .layout-closing .closing-decoration {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 500px;
-      height: 500px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.4;
-      pointer-events: none;
-    }
-
-    .layout-closing .closing-decoration-2 {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 360px;
-      height: 360px;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      opacity: 0.3;
+      top: 0;
+      left: 0;
+      width: 18vw;
+      height: 62vh;
+      background: var(--primary);
+      clip-path: polygon(0 0, 100% 0, 0 100%);
       pointer-events: none;
     }
 
@@ -907,15 +887,29 @@
       opacity: 0.6;
     }
 
+    /* Reduced motion: keep slide swaps instant, no translate */
+    @media (prefers-reduced-motion: reduce) {
+      .slide,
+      .bar-fill,
+      .nav-btn,
+      .agenda-item,
+      .layout-closing .cta-btn,
+      .progress-bar {
+        transition: none !important;
+      }
+      .slide { transform: none; }
+      .slide.prev { transform: none; }
+    }
+
     /* Responsive adjustments for very small heights */
     @media (max-height: 700px) {
       .slide { padding: 2.5vh 3vw; }
       .layout-agenda .agenda-grid { gap: 0.8rem 2rem; }
-      .agenda-item { padding: 0.8rem; }
-      .metric-card { padding: 1rem; }
+      .agenda-item { padding: 0.8rem 0.4rem; }
+      .metric-card { padding: 1rem 1rem 1rem 0; }
       .layout-bars .bars-container { gap: 0.5rem; }
       .bar-item { padding: 0.4rem 0; }
-      .detail-block { padding: 0.8rem 1rem; }
+      .detail-block { padding: 0.8rem 1rem 0.8rem 1.1rem; }
     }
   </style>
 </head>
@@ -926,15 +920,11 @@
     <!-- SLIDE 1: Cover -->
     <div class="slide layout-cover active">
       <div class="cover-decoration"></div>
-      <div class="cover-dots">
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-      </div>
+      <div class="cover-mark"></div>
       <div class="accent-line"></div>
-      <h1>Market Outlook &amp;<br>Strategic Priorities</h1>
-      <p class="subtitle">An analytical overview of emerging trends, shifting investor sentiment, and the key decisions shaping the next growth cycle.</p>
-      <p class="meta">Q2 2026 &nbsp;&middot;&nbsp; Confidential</p>
+      <h1>Open Design</h1>
+      <p class="subtitle">The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video &mdash; the full product-design workflow, on your own machine.</p>
+      <p class="meta">Apache-2.0 &nbsp;&middot;&nbsp; Runs Locally &nbsp;&middot;&nbsp; BYOK &nbsp;&middot;&nbsp; No Sign-up</p>
     </div>
 
     <!-- SLIDE 2: Agenda -->
@@ -949,43 +939,43 @@
           <div class="agenda-item">
             <span class="agenda-num">01</span>
             <div>
-              <h3>Executive Summary</h3>
-              <p>High-level findings and key takeaways from the latest quarterly assessment.</p>
+              <h3>At a Glance</h3>
+              <p>The headline numbers behind the project: stars, plugins, and the cost story.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">02</span>
             <div>
-              <h3>Macroeconomic Sentiment</h3>
-              <p>Investor perspectives on growth, inflation, and risk factors in the current environment.</p>
+              <h3>By the Numbers</h3>
+              <p>Community, ecosystem, and integration stats across every dimension of the project.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">03</span>
             <div>
-              <h3>Capital Allocation Trends</h3>
-              <p>How portfolios are shifting in response to policy changes and volatility signals.</p>
+              <h3>Why Open Design</h3>
+              <p>What closed, cloud-only AI design tools leave behind, and how Open Design answers.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">04</span>
             <div>
-              <h3>Strategic Recommendations</h3>
-              <p>Actionable priorities for leadership teams navigating an uncertain landscape.</p>
+              <h3>Plugin Ecosystem</h3>
+              <p>What the community builds: prototypes, slides, posters, dashboards, and video.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">05</span>
             <div>
-              <h3>Risk &amp; Opportunity Matrix</h3>
-              <p>Evaluating the trade-offs between defensive positioning and offensive growth bets.</p>
+              <h3>The Workflow</h3>
+              <p>From idea to delivery in five steps, with memory that compounds across runs.</p>
             </div>
           </div>
           <div class="agenda-item">
             <span class="agenda-num">06</span>
             <div>
-              <h3>Conclusion &amp; Next Steps</h3>
-              <p>Summary of implications and recommended follow-up actions for stakeholders.</p>
+              <h3>Core Capabilities &amp; Next Steps</h3>
+              <p>What is under the hood, and how to download, star, and get involved.</p>
             </div>
           </div>
         </div>
@@ -995,49 +985,49 @@
     <!-- SLIDE 3: Key Metrics -->
     <div class="slide layout-metrics">
       <div class="slide-header">
-        <h4>Executive Summary</h4>
-        <span class="tag">Key Findings</span>
+        <h4>At a Glance</h4>
+        <span class="tag">Key Numbers</span>
       </div>
       <div class="slide-content">
-        <h2>Sentiment has shifted measurably from the prior quarter</h2>
+        <h2>An open alternative to closed, cloud-only AI design</h2>
         <div class="metrics-row">
           <div class="metric-card">
-            <div class="metric-value">73%</div>
-            <div class="metric-label">Bullish on three-year outlook</div>
-            <div class="metric-desc">An all-time series high, reflecting renewed confidence in medium-term fundamentals despite near-term uncertainty.</div>
+            <div class="metric-value">60K+</div>
+            <div class="metric-label">GitHub Stars</div>
+            <div class="metric-desc">Open source under Apache-2.0, built in the open by a global community of contributors.</div>
             <ul class="metric-supports">
-              <li>Highest reading since the survey began in 2018</li>
-              <li>Cross-sector consensus, led by tech and industrials</li>
-              <li>Driven by clarity on rate trajectory and AI capex</li>
+              <li>Fork, self-host, and commercial use all allowed</li>
+              <li>300+ contributors shipping features and plugins</li>
+              <li>No sign-up required &mdash; clone and run locally</li>
             </ul>
             <div class="metric-change positive">
-              <span>&uarr;</span> +11 pts vs. prior quarter
+              <span>&uarr;</span> 300+ contributors and counting
             </div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">55%</div>
-            <div class="metric-label">Expect recession before year-end</div>
-            <div class="metric-desc">Down significantly from the prior reading, indicating easing fears of a severe or prolonged contraction.</div>
+            <div class="metric-value">217+</div>
+            <div class="metric-label">Community plugins</div>
+            <div class="metric-desc">A growing catalog covering the full span of design output, from prototypes to programmatic video.</div>
             <ul class="metric-supports">
-              <li>Soft-landing scenario now the modal expectation</li>
-              <li>Median timeline pushed from Q2 to Q4</li>
-              <li>Severity expectations also moderated meaningfully</li>
+              <li>Prototypes, slides, posters, dashboards, and more</li>
+              <li>129 design systems importable from GitHub, Figma, or local</li>
+              <li>Community-maintained and openly distributed</li>
             </ul>
             <div class="metric-change positive">
-              <span>&darr;</span> -36 pts vs. prior quarter
+              <span>&uarr;</span> 129 design systems available
             </div>
           </div>
           <div class="metric-card">
-            <div class="metric-value">4.5%</div>
-            <div class="metric-label">Median inflation expectation</div>
-            <div class="metric-desc">Investors expect price pressures to remain elevated through the end of the current calendar year.</div>
+            <div class="metric-value">-80%</div>
+            <div class="metric-label">Monthly cost vs. Claude Design</div>
+            <div class="metric-desc">Bring your own keys and pay providers directly &mdash; the same frontier capability at a fraction of the price.</div>
             <ul class="metric-supports">
-              <li>Wage and services inflation remain the stickiest</li>
-              <li>Energy disinflation slower than originally modeled</li>
-              <li>Long-run anchor steady at 3% for the next decade</li>
+              <li>Full-stack BYOK: Anthropic, OpenAI, Azure, Google</li>
+              <li>Plus 14 media providers for image and video</li>
+              <li>No subscription &mdash; API keys stay on your machine</li>
             </ul>
-            <div class="metric-change negative">
-              <span>&uarr;</span> +0.3 pts vs. prior quarter
+            <div class="metric-change positive">
+              <span>&darr;</span> $500 &rarr; ~$73 per month
             </div>
           </div>
         </div>
@@ -1047,59 +1037,59 @@
     <!-- SLIDE 4: Dashboard -->
     <div class="slide layout-dashboard">
       <div class="slide-header">
-        <h4>Macroeconomic Sentiment</h4>
-        <span class="tag">Data Overview</span>
+        <h4>By the Numbers</h4>
+        <span class="tag">Project Stats</span>
       </div>
       <div class="slide-content">
-        <h2>Current perspectives on the economy and markets</h2>
+        <h2>An open project growing across every dimension</h2>
         <div class="stats-grid">
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">22%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">60K+</span>
+              <span class="stat-unit">and counting</span>
             </div>
-            <div class="stat-name">Bullish for the current calendar year</div>
-            <div class="stat-context">Steady from prior quarter, anchored by tariff and policy uncertainty.</div>
+            <div class="stat-name">GitHub Stars</div>
+            <div class="stat-context">Open source under Apache-2.0 &mdash; fork, self-host, and use commercially.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">51%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">300+</span>
+              <span class="stat-unit">worldwide</span>
             </div>
-            <div class="stat-name">Bullish for the next calendar year</div>
-            <div class="stat-context">Up from 38% last quarter as the rate path firms up.</div>
+            <div class="stat-name">Contributors</div>
+            <div class="stat-context">A global community shipping features, plugins, and design systems.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">60%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">217+</span>
+              <span class="stat-unit">in the catalog</span>
             </div>
-            <div class="stat-name">More bullish on the economy than three months ago</div>
-            <div class="stat-context">A 22-point improvement, the largest sentiment swing in two years.</div>
+            <div class="stat-name">Plugins</div>
+            <div class="stat-context">Prototypes, slides, posters, dashboards, weekly reports, OKRs, and more.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">53%</span>
-              <span class="stat-unit">of respondents</span>
+              <span class="stat-num">129</span>
+              <span class="stat-unit">ready to use</span>
             </div>
-            <div class="stat-name">More bullish on equities than three months ago</div>
-            <div class="stat-context">Tech and financials led the upgrade; energy and utilities lag.</div>
+            <div class="stat-name">Design Systems</div>
+            <div class="stat-context">Import from GitHub, Figma, or local files to keep every artifact on brand.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">3.6%</span>
-              <span class="stat-unit">median</span>
+              <span class="stat-num">21</span>
+              <span class="stat-unit">zero config</span>
             </div>
-            <div class="stat-name">Expected inflation rate for the next two years</div>
-            <div class="stat-context">Down 0.4 pts; long-run expectations remain anchored at 3.0%.</div>
+            <div class="stat-name">Coding Agents</div>
+            <div class="stat-context">Auto-detected from PATH &mdash; Claude Code, Codex, Cursor, and more.</div>
           </div>
           <div class="stat-cell">
             <div class="stat-top">
-              <span class="stat-num">2.7%</span>
-              <span class="stat-unit">median</span>
+              <span class="stat-num">-80%</span>
+              <span class="stat-unit">vs. Claude Design</span>
             </div>
-            <div class="stat-name">Expected real GDP growth for the next two years</div>
-            <div class="stat-context">A modest upgrade reflecting easing recession fears.</div>
+            <div class="stat-name">Monthly cost with BYOK</div>
+            <div class="stat-context">From $500 down to ~$73 by bringing your own provider keys.</div>
           </div>
         </div>
       </div>
@@ -1108,42 +1098,42 @@
     <!-- SLIDE 5: Two Column -->
     <div class="slide layout-split">
       <div class="slide-header">
-        <h4>Investor Priorities</h4>
-        <span class="tag">Analysis</span>
+        <h4>Why Open Design</h4>
+        <span class="tag">Positioning</span>
       </div>
       <div class="slide-content">
-        <h2>What investors want companies to focus on right now</h2>
+        <h2>Open, local, and agent-native by design</h2>
         <div class="split-body">
           <div class="split-left">
             <ul class="insight-list">
-              <li>Growth and protecting the top line remain the leading priority, cited by a clear majority as essential in the current cycle.</li>
-              <li>Cash flow resilience has risen sharply in importance as liquidity conditions tightened across credit markets through Q3.</li>
-              <li>Supply chain stability ranks consistently high, reflecting the lasting operational scars of recent global disruptions.</li>
-              <li>Margin preservation and cost discipline have moved from defensive levers to first-line strategy in investor conversations.</li>
-              <li>AI capex remains the most-discussed structural theme, but with rising attention to monetization timelines.</li>
+              <li>In April 2026, Claude Design proved for the first time that an LLM can truly design &mdash; producing real design artifacts, not writing about design.</li>
+              <li>Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, and no BYOK.</li>
+              <li>Open Design is desktop-native: local files, Figma exports, and code repos are directly readable, and agents get full terminal power.</li>
+              <li>It plugs in the agents already on your machine &mdash; Claude Code, Codex, Cursor &mdash; instead of rebuilding them.</li>
+              <li>It learns your taste: every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</li>
             </ul>
           </div>
           <div class="split-right">
             <div class="split-highlight">
-              "The shift from growth-at-all-costs to profitable, sustainable expansion is the defining theme of this cycle."
-              <cite>Senior PM, multi-strategy fund</cite>
+              "Frontier AI design, back on every creator's desk."
+              <cite>The Open Design mission</cite>
             </div>
             <div class="mini-stat-row">
               <div class="mini-stat">
-                <div class="mini-val">63%</div>
-                <div class="mini-label">Prioritize top-line growth</div>
+                <div class="mini-val">21</div>
+                <div class="mini-label">Coding agents, zero config</div>
               </div>
               <div class="mini-stat">
-                <div class="mini-val">55%</div>
-                <div class="mini-label">Prioritize cash flow resilience</div>
+                <div class="mini-val">129</div>
+                <div class="mini-label">Design systems to import</div>
               </div>
               <div class="mini-stat">
-                <div class="mini-val">33%</div>
-                <div class="mini-label">Prioritize supply chain stability</div>
+                <div class="mini-val">217+</div>
+                <div class="mini-label">Community plugins</div>
               </div>
             </div>
             <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.55; margin: 0;">
-              Notably absent from the top of the list: ESG-led capital allocation, which has dropped 24 points year-over-year as investors recalibrate toward returns-first mandates.
+              Everything runs on your own machine: artifacts and memory live in a local store, API keys never leave your device, and the whole platform is Apache-2.0 with no sign-up required.
             </p>
           </div>
         </div>
@@ -1153,60 +1143,60 @@
     <!-- SLIDE 6: Bar Chart -->
     <div class="slide layout-bars">
       <div class="slide-header">
-        <h4>Risk Factors</h4>
-        <span class="tag">Ranking</span>
+        <h4>Plugin Ecosystem</h4>
+        <span class="tag">217+ Plugins</span>
       </div>
       <div class="slide-content">
-        <h2>Most important macroeconomic concerns among investors</h2>
+        <h2>What the community builds &mdash; plugin catalog by artifact type (demo split)</h2>
         <div class="bars-container">
           <div class="bar-item">
-            <div class="bar-label">Consumer price inflation</div>
+            <div class="bar-label">Prototypes &mdash; mobile &amp; web</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 79%"></div>
+              <div class="bar-fill" style="width: 100%"></div>
             </div>
-            <div class="bar-pct">79%</div>
+            <div class="bar-pct">62</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Interest rates &amp; central bank policy</div>
+            <div class="bar-label">Slides &mdash; creative decks &amp; reports</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 69%"></div>
+              <div class="bar-fill" style="width: 77%"></div>
             </div>
-            <div class="bar-pct">69%</div>
+            <div class="bar-pct">48</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Geopolitical risks</div>
+            <div class="bar-label">Images &mdash; posters, illustrations, mockups</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 39%"></div>
+              <div class="bar-fill" style="width: 56%"></div>
             </div>
-            <div class="bar-pct">39%</div>
+            <div class="bar-pct">35</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Liquidity tightening in capital markets</div>
+            <div class="bar-label">Live artifacts &mdash; dashboards &amp; briefs</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 37%"></div>
+              <div class="bar-fill" style="width: 45%"></div>
             </div>
-            <div class="bar-pct">37%</div>
+            <div class="bar-pct">28</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Asset price volatility</div>
+            <div class="bar-label">HyperFrames &mdash; HTML-to-MP4 video</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 25%"></div>
+              <div class="bar-fill" style="width: 35%"></div>
             </div>
-            <div class="bar-pct">25%</div>
+            <div class="bar-pct">22</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Public-sector debt &amp; spending</div>
+            <div class="bar-label">Video &mdash; cinematic generative footage</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 22%"></div>
+              <div class="bar-fill" style="width: 23%"></div>
             </div>
-            <div class="bar-pct">22%</div>
+            <div class="bar-pct">14</div>
           </div>
           <div class="bar-item">
-            <div class="bar-label">Climate &amp; ESG-related risks</div>
+            <div class="bar-label">Other utilities &mdash; weekly reports, OKRs</div>
             <div class="bar-track">
-              <div class="bar-fill" style="width: 18%"></div>
+              <div class="bar-fill" style="width: 13%"></div>
             </div>
-            <div class="bar-pct">18%</div>
+            <div class="bar-pct">8</div>
           </div>
         </div>
       </div>
@@ -1214,43 +1204,41 @@
 
     <!-- SLIDE 7: Quote -->
     <div class="slide layout-quote">
-      <div class="quote-decoration"></div>
-      <div class="quote-decoration-2"></div>
       <div class="quote-mark">&ldquo;</div>
       <blockquote>
-        In this environment, the companies that will win are those that can balance operational discipline with strategic flexibility.
+        File-system semantics plus git-diffable design artifacts &mdash; design is finally under version control.
       </blockquote>
-      <p class="quote-source"><strong>Senior Partner, Strategy Practice</strong> &mdash; Global Investment Forum 2026</p>
+      <p class="quote-source"><strong>Indie developer</strong> &mdash; Open Design community</p>
     </div>
 
     <!-- SLIDE 8: Timeline -->
     <div class="slide layout-timeline">
       <div class="slide-header">
-        <h4>Strategic Roadmap</h4>
+        <h4>The Workflow</h4>
         <span class="tag">Process</span>
       </div>
       <div class="slide-content">
-        <h2>Recommended approach to navigating the current cycle</h2>
+        <h2>From idea to delivery, with memory that compounds</h2>
         <div class="timeline-track">
           <div class="timeline-step">
             <div class="step-circle">1</div>
-            <div class="step-title">Assess Resilience</div>
-            <div class="step-desc">Evaluate balance sheet strength and operational buffers under stress scenarios.</div>
+            <div class="step-title">Pick a Starting Point</div>
+            <div class="step-desc">Describe your goal in one sentence, or start from a template or plugin.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">2</div>
-            <div class="step-title">Protect Core Revenue</div>
-            <div class="step-desc">Defend market position and pricing power in segments with durable demand.</div>
+            <div class="step-title">Set the Visual Direction</div>
+            <div class="step-desc">Palette, type, and spacing flow into generation automatically.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">3</div>
-            <div class="step-title">Optimize Costs</div>
-            <div class="step-desc">Streamline overhead while preserving capacity for high-return investments.</div>
+            <div class="step-title">Generate the Artifact</div>
+            <div class="step-desc">The agent reads full context and produces real runnable files, previewed and edited in a sandbox.</div>
           </div>
           <div class="timeline-step">
             <div class="step-circle">4</div>
-            <div class="step-title">Selective Growth</div>
-            <div class="step-desc">Deploy capital toward opportunities with clear path to profitability.</div>
+            <div class="step-title">Ship It, or Film It</div>
+            <div class="step-desc">Hand off to engineering or turn it into video with HyperFrames &mdash; every choice becomes context for the next run.</div>
           </div>
         </div>
       </div>
@@ -1259,61 +1247,61 @@
     <!-- SLIDE 9: Detail -->
     <div class="slide layout-detail">
       <div class="slide-header">
-        <h4>Deep Dive</h4>
-        <span class="tag">Detailed Analysis</span>
+        <h4>Core Capabilities</h4>
+        <span class="tag">Feature Overview</span>
       </div>
       <div class="slide-content">
-        <h2>Changes in investment practices and valuation frameworks</h2>
+        <h2>Everything a complete design platform needs, built in</h2>
         <div class="detail-body">
           <div class="detail-col">
             <div class="detail-block">
-              <h3>Assuming higher cost of capital</h3>
+              <h3>Desktop-first by default</h3>
               <ul>
-                <li>Using elevated discount rates to reflect tighter monetary conditions</li>
-                <li>Shifting hurdle rates for internal capital allocation decisions</li>
-                <li>Emphasizing shorter payback periods for new projects</li>
+                <li>Local files, Figma exports, and code repos readable in place</li>
+                <li>Agents get full terminal execution power</li>
+                <li>Artifacts and memory stay on your own machine</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>More conservative valuation approach</h3>
+              <h3>21 coding agents, zero config</h3>
               <ul>
-                <li>Greater weight assigned to downside and bear-case scenarios</li>
-                <li>Reduced reliance on long-dated terminal value assumptions</li>
-                <li>Increased sensitivity analysis around key drivers</li>
+                <li>Auto-detected from PATH with no setup required</li>
+                <li>Claude Code, Codex CLI, Cursor Agent, Gemini CLI, and more</li>
+                <li>Any OpenAI / Azure / Google-compatible endpoint via BYOK</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Value over growth momentum</h3>
+              <h3>HTML video pipeline</h3>
               <ul>
-                <li>Pivoting toward earnings-supported valuations</li>
-                <li>Favoring demonstrable unit economics over scale narratives</li>
-                <li>Reassessing premium multiples for unprofitable segments</li>
+                <li>Programmatic video via HyperFrames</li>
+                <li>HTML-to-MP4 marketing shorts and product demos</li>
+                <li>Cinematic generative footage for richer storytelling</li>
               </ul>
             </div>
           </div>
           <div class="detail-col">
             <div class="detail-block">
-              <h3>Cash flow &amp; balance sheet focus</h3>
+              <h3>129 design systems</h3>
               <ul>
-                <li>Prioritizing free cash flow generation as a key screening metric</li>
-                <li>Analyzing working capital needs under inflationary input costs</li>
-                <li>Reviewing leverage ratios and refinancing schedules</li>
+                <li>Import from GitHub, Figma, or local files</li>
+                <li>Markdown design systems stop token drift</li>
+                <li>Brand consistency enforced across every generation</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Bottom-up stock selection</h3>
+              <h3>Full-stack BYOK</h3>
               <ul>
-                <li>Reducing macro-driven top-down factor exposures</li>
-                <li>Intensifying fundamental research at the security level</li>
-                <li>Building conviction through differentiated data sources</li>
+                <li>Anthropic, OpenAI, Azure, and Google supported</li>
+                <li>Plus 14 media providers for image and video generation</li>
+                <li>API keys never leave your machine</li>
               </ul>
             </div>
             <div class="detail-block">
-              <h3>Shorter-term orientation</h3>
+              <h3>Self-evolving memory, openly licensed</h3>
               <ul>
-                <li>Narrowing forecasting windows for revenue and margin</li>
-                <li>More frequent reassessment of position sizing</li>
-                <li>Active hedging around event-driven volatility</li>
+                <li>Remembers preferences and color lineage over time</li>
+                <li>Every choice becomes context for the next run</li>
+                <li>Apache-2.0 &mdash; fork, self-host, commercial use all allowed</li>
               </ul>
             </div>
           </div>
@@ -1324,12 +1312,11 @@
     <!-- SLIDE 10: Closing -->
     <div class="slide layout-closing">
       <div class="closing-decoration"></div>
-      <div class="closing-decoration-2"></div>
       <div class="accent-line" style="margin: 0 auto 1.5rem;"></div>
-      <h1>Thank You</h1>
-      <p class="closing-sub">For questions or a deeper discussion of these findings, please reach out to the research team.</p>
-      <a href="#" class="cta-btn">Download Full Report</a>
-      <p class="closing-contact">research@company.com &nbsp;&middot;&nbsp; www.company.com</p>
+      <h1>Open &middot; Local &middot; Agent-native</h1>
+      <p class="closing-sub">Frontier AI design, back on every creator's desk. Download Open Design for macOS / Windows, or star the project on GitHub.</p>
+      <a href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" class="cta-btn">Download Open Design</a>
+      <p class="closing-contact">github.com/nexu-io/open-design &nbsp;&middot;&nbsp; discord.gg/qhbcCH8Am4 &nbsp;&middot;&nbsp; x.com/nexudotio</p>
     </div>
 
   </div>

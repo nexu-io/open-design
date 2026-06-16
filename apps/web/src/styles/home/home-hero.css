@@ -2152,6 +2152,32 @@
   transform: scale(0.172);
 }
 
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport, so the
+   default scaled preview would letterbox them with a dark --stage-bg band.
+   Keep deck tiles on the SAME 150px preview row as every other preset tile
+   (don't switch to an `auto` 16:9 row — that makes the deck card shorter than
+   its siblings, and the flex rail then stretches it back up by leaking the
+   slack into the title row, leaving deck titles ~6px taller than the rest).
+   Instead render the stage at a native 16:9 and center it in the standard
+   cell, so the slide has no dark band and deck cards keep an identical card
+   height + title-row height to prototype/HyperFrames/image tiles. */
+.home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview {
+  aspect-ratio: auto;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-iframe {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  transform: none;
+}
+
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
    would otherwise object-fit:cover-crop the hero out of the middle. Anchor to
    the top so the hero headline stays in frame. Scoped to the preset cards. */

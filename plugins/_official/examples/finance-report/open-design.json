@@ -24,7 +24,7 @@
     "en": "Finance Report"
   },
   "version": "0.1.0",
-  "description": "Quarterly / monthly financial report — masthead with KPIs, revenue and\nburn charts, P&L summary table, top-line highlights, and an outlook\nparagraph. Use when the brief mentions \"financial report\", \"Q3 report\",\n\"MRR review\", \"P&L\", or \"财报\".",
+  "description": "Quarterly / monthly financial report — masthead with KPIs, revenue and burn charts, P&L summary table, top-line highlights, and an outlook paragraph. Use when the brief mentions \"financial report\", \"Q3 report\", \"MRR review\", \"P&L\", or \"财报\".",
   "description_i18n": {
     "zh-CN": "季度/月度财务报告——包含关键指标的报头、收入与消耗图表、损益汇总表、重点摘要和展望段落。当需求提到'财务报告'、'Q3报告'、'MRR审查'、'P&L'或'财报'时使用。",
     "zh-TW": "季度/月度財務報告——包含關鍵指標的報頭、收入與消耗圖表、損益彙總表、重點摘要和展望段落。當需求提到『財務報告』、『Q3報告』、『MRR審查』、『P&L』或『財報』時使用。",
@@ -43,7 +43,7 @@
     "ar": "تقرير مالي ربع سنوي/شهري مع رأس صفحة KPI، مخططات الإيرادات والمصروفات، جدول ملخص P&L، أبرز النقاط، وفقرة التوقعات. استخدمه عند ذكر 'تقرير مالي'، 'تقرير Q3'، 'مراجعة MRR'، 'P&L' أو '财报'.",
     "tr": "Üç aylık/aylık finansal rapor — KPI'lı başlık, gelir ve harcama grafikleri, P&L özet tablosu, öne çıkanlar ve görünüm paragrafı içerir. 'Finansal rapor', 'Q3 raporu', 'MRR incelemesi', 'P&L' veya '财报' gibi talepler için kullanın.",
     "uk": "Квартальний/місячний фінансовий звіт із заголовком KPI, графіками доходів і витрат, зведеною таблицею P&L, ключовими моментами та параграфом перспектив. Використовуйте при згадці 'фінансовий звіт', 'звіт Q3', 'огляд MRR', 'P&L' або '财报'.",
-    "en": "Quarterly / monthly financial report — masthead with KPIs, revenue and\nburn charts, P&L summary table, top-line highlights, and an outlook\nparagraph. Use when the brief mentions \"financial report\", \"Q3 report\",\n\"MRR review\", \"P&L\", or \"财报\"."
+    "en": "Quarterly / monthly financial report — masthead with KPIs, revenue and burn charts, P&L summary table, top-line highlights, and an outlook paragraph. Use when the brief mentions \"financial report\", \"Q3 report\", \"MRR review\", \"P&L\", or \"财报\"."
   },
   "license": "MIT",
   "author": {

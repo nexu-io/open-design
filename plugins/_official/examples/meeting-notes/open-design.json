@@ -24,7 +24,7 @@
     "en": "Meeting Notes"
   },
   "version": "0.1.0",
-  "description": "Meeting notes page — title bar with attendees, agenda checklist, decisions\nblock, action items table with owners + dates, and a \"next meeting\" footer.\nUse when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\",\n\"all-hands recap\", or \"会议纪要\".",
+  "description": "Meeting notes page — title bar with attendees, agenda checklist, decisions block, action items table with owners + dates, and a \"next meeting\" footer. Use when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\", \"all-hands recap\", or \"会议纪要\".",
   "description_i18n": {
     "zh-CN": "会议记录页面——包含与会者标题栏、议程清单、决策事项区块、带负责人和日期的行动项表格，以及'下次会议'页脚。适用于需要'会议纪要'、'会议记录'、'1:1 笔记'、'全员会议总结'或'minutes'的场景。",
     "zh-TW": "會議記錄頁面——包含與會者標題列、議程清單、決策事項區塊、帶負責人和日期的行動項表格，以及'下次會議'頁尾。適用於需要'會議紀要'、'會議記錄'、'1:1 筆記'、'全員會議總結'或'minutes'的場景。",
@@ -43,7 +43,7 @@
     "ar": "صفحة محضر الاجتماع — شريط العنوان مع الحاضرين، قائمة تحقق جدول الأعمال، كتلة القرارات، جدول بنود العمل مع المسؤولين والتواريخ، وتذييل للاجتماع التالي. يُستخدم عند ذكر 'محضر الاجتماع' أو 'minutes' أو 'ملاحظات 1:1' أو 'ملخص الاجتماع العام' أو '会议纪要'.",
     "tr": "Toplantı notları sayfası — katılımcıların olduğu başlık çubuğu, gündem kontrol listesi, kararlar bloğu, sahipleri ve tarihleri olan eylem öğeleri tablosu ve 'sonraki toplantı' alt bilgisi. 'Toplantı notları', 'tutanak', '1:1 notları', 'genel toplantı özeti' veya '会议纪要' ifadeleri geçtiğinde kullanın.",
     "uk": "Сторінка протоколу зустрічі — заголовок з учасниками, чек-ліст порядку денного, блок рішень, таблиця завдань з відповідальними та датами, футер для наступної зустрічі. Використовується для запитів 'протокол зустрічі', 'minutes', 'нотатки 1:1', 'підсумки загальної зустрічі' або '会议纪要'.",
-    "en": "Meeting notes page — title bar with attendees, agenda checklist, decisions\nblock, action items table with owners + dates, and a \"next meeting\" footer.\nUse when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\",\n\"all-hands recap\", or \"会议纪要\"."
+    "en": "Meeting notes page — title bar with attendees, agenda checklist, decisions block, action items table with owners + dates, and a \"next meeting\" footer. Use when the brief mentions \"meeting notes\", \"minutes\", \"1:1 notes\", \"all-hands recap\", or \"会议纪要\"."
   },
   "license": "MIT",
   "author": {

@@ -8,9 +8,12 @@ import {
 } from '../providers/daemon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  amrHandoffDeviceId,
+  attributedAmrUrl,
   recordAmrEntry,
   type TrackingAmrEntrySource,
 } from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
@@ -34,6 +37,8 @@ interface AmrLoginPillProps {
   skipInitialRefresh?: boolean;
   signInLabel?: string;
   amrEntrySourceDetail?: TrackingAmrEntrySource;
+  metricsConsent?: boolean;
+  installationId?: string | null;
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
@@ -70,6 +75,7 @@ export interface AmrAccountControlProps {
   onSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
   onSignOut?: (event: MouseEvent<HTMLButtonElement>) => void;
   onCancelSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onConsoleClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   signInDisabled?: boolean;
   signOutDisabled?: boolean;
   cancelSignInDisabled?: boolean;
@@ -110,6 +116,7 @@ export function AmrAccountControl({
   onSignIn,
   onSignOut,
   onCancelSignIn,
+  onConsoleClick,
   signInDisabled = false,
   signOutDisabled = false,
   cancelSignInDisabled = false,
@@ -162,6 +169,7 @@ export function AmrAccountControl({
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t('settings.amrConsole')}
+          onClick={onConsoleClick}
         >
           {t('settings.amrConsole')}
         </a>
@@ -219,6 +227,8 @@ export function AmrLoginPill({
   skipInitialRefresh = false,
   signInLabel,
   amrEntrySourceDetail,
+  metricsConsent = false,
+  installationId,
   revealPendingCancelAction = false,
   showConsoleAction = false,
   onStatusChange,
@@ -402,11 +412,17 @@ export function AmrLoginPill({
       setPending('login');
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
+            metricsConsent,
             reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
           })
         : null;
       beginAmrAuthTracking(attribution, startedAt);
-      const result = await startVelaLogin(attribution);
+      const odDeviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      const result = await startVelaLogin(attribution, odDeviceId);
       if (!result.ok && !result.alreadyRunning) {
         resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         loginStartedAtRef.current = null;
@@ -418,7 +434,14 @@ export function AmrLoginPill({
       notifyAmrLoginStatusChanged('login-started');
       startPolling(startedAt);
     },
-    [amrEntrySourceDetail, analytics.track, startPolling, t],
+    [
+      amrEntrySourceDetail,
+      analytics.track,
+      installationId,
+      metricsConsent,
+      startPolling,
+      t,
+    ],
   );
 
   const handleCancelLogin = useCallback(
@@ -474,6 +497,26 @@ export function AmrLoginPill({
     [refresh, t],
   );
 
+  const handleConsoleClick = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      event.stopPropagation();
+      const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
+        metricsConsent,
+      });
+      const deviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      event.currentTarget.href = attributedAmrUrl(
+        amrConsoleUrlForProfile(status?.profile),
+        attribution,
+        deviceId,
+      );
+    },
+    [analytics.track, installationId, metricsConsent, status?.profile],
+  );
+
   const loggedIn = status?.loggedIn === true;
   const userEmail = status?.user?.email ?? '';
   const loginInFlight =
@@ -514,6 +557,7 @@ export function AmrLoginPill({
         onSignIn={handleLogin}
         onSignOut={handleLogout}
         onCancelSignIn={handleCancelLogin}
+        onConsoleClick={showConsoleAction ? handleConsoleClick : undefined}
         className={loggedIn ? 'amr-login-pill-status' : undefined}
       />
     </div>

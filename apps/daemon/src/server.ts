@@ -260,7 +260,8 @@ import {
 import { summarizeRunDiagnosticsForAnalytics } from './run-diagnostics.js';
 import {
   countDesignSystemPreviewModules,
-  countNewHtmlArtifacts,
+  countNewArtifacts,
+  deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from './run-artifacts.js';
@@ -2329,7 +2330,7 @@ function scanRunEventsForRetrySideEffects(events) {
     }
   }
   if (
-    countNewHtmlArtifacts(events) > 0 ||
+    countNewArtifacts(events) > 0 ||
     didRunCreateDesignSystemFile(events) ||
     countDesignSystemPreviewModules(events) > 0
   ) {
@@ -4907,10 +4908,13 @@ export async function startServer({
     return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
-  // Routes that serve content to sandboxed iframes (Origin: null) for
-  // read-only purposes.  All other /api routes reject Origin: null.
+  // Routes that serve content to sandboxed iframes (Origin: null). All other
+  // /api routes reject Origin: null, except the imported-preview proxy's CORS
+  // preflight, which is answered by the route without reaching user code.
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/(?:(?:raw|preview)\/|ui-preview\/proxy\/)|^\/codex-pets\/[^/]+\/spritesheet$/;
+  const _NULL_ORIGIN_UI_PREVIEW_PROXY_RE =
+    /^\/projects\/[^/]+\/ui-preview\/proxy\//;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -4926,11 +4930,15 @@ export async function startServer({
     if (origin == null || origin === '') return next();
 
     // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
-    // routes that set their own CORS headers for canvas drawing.
+    // routes that set their own CORS headers, plus preview proxy preflights.
     if (origin === 'null') {
       const isSafeReadOnly =
         req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
-      if (!isSafeReadOnly) {
+      const isPreviewProxyPreflight =
+        req.method === 'OPTIONS' &&
+        _NULL_ORIGIN_UI_PREVIEW_PROXY_RE.test(req.path) &&
+        typeof req.headers['access-control-request-method'] === 'string';
+      if (!isSafeReadOnly && !isPreviewProxyPreflight) {
         return res.status(403).json({ error: 'Origin: null not allowed for this route' });
       }
       return next();
@@ -11748,6 +11756,26 @@ export async function startServer({
       const hintProjectKind = typeof analyticsHints.projectKind === 'string'
         ? analyticsHints.projectKind
         : null;
+      // Session-dimension hints (client-computed, behavior-irrelevant): the
+      // 0-based run turn index within the browser analytics session, whether
+      // it's the session's first run, and whether the project already had a
+      // generated artifact (run is an edit, not a first creation).
+      const hintTurnIndex = typeof analyticsHints.turnIndex === 'number'
+        ? analyticsHints.turnIndex
+        : undefined;
+      const hintIsFirstRun = typeof analyticsHints.isFirstRun === 'boolean'
+        ? analyticsHints.isFirstRun
+        : undefined;
+      const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
+        ? analyticsHints.hasExistingArtifact
+        : undefined;
+      const sessionDimensionProps = {
+        ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
+        ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
+        ...(hintHasExistingArtifact !== undefined
+          ? { has_existing_artifact: hintHasExistingArtifact }
+          : {}),
+      };
       const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
       const runProject = requestProjectId ? getProject(db, requestProjectId) : null;
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -11815,6 +11843,7 @@ export async function startServer({
         run_id: run.id,
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
+        ...sessionDimensionProps,
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -11959,9 +11988,25 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewHtmlArtifacts(run.events);
+        const artifactCount = countNewArtifacts(run.events);
         const designSystemCreated = didRunCreateDesignSystemFile(run.events);
         const previewModuleCount = countDesignSystemPreviewModules(run.events);
+        // First-touch activation milestones (first-artifact / first-design-
+        // system observed since this stamp shipped — NOT first-ever; see
+        // `deriveActivationMilestones`) written to the PostHog person record
+        // via `$set_once` below. Derived from this same run-outcome snapshot so
+        // the milestone lands at the exact success moment without a second
+        // event; `$set_once` keeps it pinned to the first qualifying run.
+        const activationMilestones = deriveActivationMilestones({
+          result,
+          artifactCount,
+          designSystemCreated,
+          // Gate the DS milestone on the same `isDesignSystemRun` condition the
+          // `run_finished.design_system_created` field uses below, so a plain
+          // chat run that writes a `DESIGN.md` doesn't overstate DS activation.
+          isDesignSystemRun,
+          capturedAtIso: new Date(analyticsCapturedAt).toISOString(),
+        });
         const diagnosticsAnalytics = summarizeRunDiagnosticsForAnalytics({
           events: run.events,
           exitCode: status.exitCode ?? null,
@@ -11993,6 +12038,13 @@ export async function startServer({
             // `design_system_generation` to match the run_created shape.
             area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
+            // PostHog person-property milestones. `$set_once` only writes a
+            // key that doesn't already exist, so the timestamp pins to the
+            // user's FIRST qualifying run observed since rollout (true
+            // first-ever only for users who onboard after rollout; the
+            // installed base gets their next qualifying run — see
+            // `deriveActivationMilestones`). Omitted when no milestone crossed.
+            ...(activationMilestones ? { $set_once: activationMilestones } : {}),
             // `model_id` upgrades the request-side value with the
             // agent-reported model on terminal state; see
             // `finishedModelId` derivation above.

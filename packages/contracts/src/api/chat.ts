@@ -85,7 +85,20 @@ export type ChatAnalyticsEntryFrom =
   // A turn started by the "Continue the run" affordance on a resumable failed
   // run. Lets run_created / run_finished isolate resume-continuations so the
   // recovery mechanism's usage and success rate are measurable.
-  | 'resume_continue';
+  | 'resume_continue'
+  // A turn started from a preview annotation: `comment` is the comment/board
+  // pin flow (chat-new-line tool), `mark` is the Mark draw-overlay flow
+  // (mark-pen tool). Both edit an existing artifact, so isolating them lets the
+  // dashboard separate annotation-driven runs from plain composer sends.
+  | 'comment'
+  | 'mark'
+  // A turn whose composer was seeded by a guided Next-step action (the
+  // next-step card prefills a skill/prompt; the run fires on the following
+  // Send). Best-effort: the pending tag is consumed by the next send.
+  | 'next_step'
+  // A turn that submits answers to an inline `<question-form>` clarification
+  // (the question still being clarified, not a fresh create/edit intent).
+  | 'question_answer';
 
 export type ChatAnalyticsLengthBucket =
   | '0'
@@ -131,6 +144,16 @@ export interface ChatAnalyticsHints {
     | 'design_system'
     | 'other';
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
+  // Session-dimension run context, computed client-side and stamped onto
+  // run_created / run_finished so a session's run sequence is analysable
+  // ("did this session reach an artifact, and on which turn?").
+  // `turnIndex` is 0-based within the browser analytics session;
+  // `isFirstRun` === (turnIndex === 0). `hasExistingArtifact` is true when the
+  // project already had a generated artifact when this run was started
+  // (project-scoped) — the run is an edit rather than a first creation.
+  turnIndex?: number;
+  isFirstRun?: boolean;
+  hasExistingArtifact?: boolean;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
