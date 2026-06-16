@@ -189,7 +189,7 @@ function buildUiCopy(t: UiText): DeepPartial<LandingUiCopy> {
     },
     tutorials: {
       title: `Open Design ${t.guides}`,
-      seoTitle: `Open Design ${t.guides} — Open Design`,
+      seoTitle: `Open Design ${t.guides}`,
       description: `Open Design ${t.guides}: ${t.skills} / ${t.systems} / ${t.community}.`,
       categoriesLabel: `${t.guides} · ${t.category}`,
       categories: {
