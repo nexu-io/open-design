@@ -226,6 +226,35 @@ describe('AMR attribution helper', () => {
     });
   });
 
+  it.each([
+    'settings_amr_console',
+    'avatar_amr_console',
+    'handoff_amr_website',
+  ] as const)(
+    'ignores %s attribution when About you is submitted later',
+    (sourceDetail) => {
+      const track = vi.fn();
+      const entryTime = new Date('2026-06-03T12:00:00.000Z');
+      const profileTime = new Date('2026-06-03T12:03:00.000Z');
+      const attribution = recordAmrEntry(track, sourceDetail, entryTime);
+      fetchMock.mockClear();
+
+      const updated = syncAmrAttributionWithOnboardingProfile(
+        {
+          role: 'pm',
+          orgSize: 'startup',
+          useCase: ['product', 'design-system'],
+          source: 'github',
+        },
+        { odDeviceId: 'od-install-abc', now: profileTime },
+      );
+
+      expect(updated).toBeNull();
+      expect(readAmrAttribution(profileTime)).toEqual(attribution);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('expires stored attribution after seven days', () => {
     const track = vi.fn();
     const attribution = recordAmrEntry(

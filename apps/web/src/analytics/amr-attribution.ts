@@ -45,6 +45,11 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   generation_preview_switch_retry_card: 'file_manager',
 };
 
+const ONBOARDING_PROFILE_SYNC_SOURCES: readonly TrackingAmrEntrySource[] = [
+  'onboarding_amr_card',
+  'onboarding_amr_sign_in_continue',
+];
+
 export type { AmrEntryAttribution, TrackingAmrEntrySource };
 
 // Where an amr_entry source surfaces in the product. amr-auth.ts reuses
@@ -116,6 +121,9 @@ export function syncAmrAttributionWithOnboardingProfile(
   const now = options.now ?? new Date();
   const existing = readAmrAttribution(now);
   if (!existing) return null;
+  if (!ONBOARDING_PROFILE_SYNC_SOURCES.includes(existing.sourceDetail)) {
+    return null;
+  }
   const fields = amrProfileFields(profile);
   if (!fields) return null;
   const next: AmrEntryAttribution = {
