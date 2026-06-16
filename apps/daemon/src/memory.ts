@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Filesystem-backed markdown memory store.
 //
 // Layout (under <dataDir>/memory/):
@@ -67,6 +66,69 @@ function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
   memoryEvents.emit('change', { ...event, at: Date.now() });
 }
 
+type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+
+interface ExtractionConfig {
+  provider: string;
+  model?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  apiVersion?: string;
+}
+
+interface MemoryConfig {
+  enabled: boolean;
+  chatExtractionEnabled: boolean;
+  extraction: ExtractionConfig | null;
+}
+
+interface MemoryConfigPatchInput {
+  enabled?: boolean;
+  chatExtractionEnabled?: boolean;
+  extraction?: unknown;
+}
+
+interface MemorySummary {
+  id: string;
+  name: string;
+  description: string;
+  type: MemoryType;
+  updatedAt: number;
+}
+
+interface MemoryEntry extends MemorySummary {
+  body: string;
+}
+
+interface UpsertMemoryInput {
+  id?: string;
+  name: string;
+  description?: string;
+  type: MemoryType;
+  body?: string;
+}
+
+interface UpsertOptions {
+  silent?: boolean;
+  source?: 'heuristic' | 'llm' | 'manual';
+}
+
+interface MemoryTreeNode {
+  id: string;
+  parentId: string | null;
+  path: string;
+  name: string;
+  description: string;
+  kind: 'folder' | 'entry';
+  type: MemoryType;
+  scope: 'project' | 'global';
+  sourcePacketIds: string[];
+  proposalIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  childrenCount: number;
+}
+
 const INDEX_FILE = 'MEMORY.md';
 const CONFIG_FILE = '.config.json';
 
@@ -81,15 +143,15 @@ back if you change your mind.
 
 `;
 
-export function memoryDir(dataDir) {
+export function memoryDir(dataDir: string): string {
   return path.join(dataDir, 'memory');
 }
 
-async function ensureDir(dir) {
+async function ensureDir(dir: string): Promise<void> {
   await fsp.mkdir(dir, { recursive: true });
 }
 
-function isValidType(t) {
+function isValidType(t: unknown): t is MemoryType {
   return typeof t === 'string' && VALID_TYPES.has(t);
 }
 
@@ -99,7 +161,7 @@ function isValidType(t) {
 // non-ASCII (CJK / emoji) the cleaned slug ends up empty; in that case
 // we hash the raw name so two distinct Chinese memories don't collide
 // on the `<type>_note` fallback.
-export function deriveMemoryId(type, name) {
+export function deriveMemoryId(type: string, name: string): string {
   const safeType = isValidType(type) ? type : 'user';
   const raw = String(name || '');
   const cleaned = raw
@@ -120,7 +182,7 @@ export function deriveMemoryId(type, name) {
   return `${safeType}_n${h.toString(36)}`;
 }
 
-function entryPath(dataDir, id) {
+function entryPath(dataDir: string, id: string): string {
   // Defence in depth: the id arrives from the network. Reject anything
   // that could escape the memory dir or break the .md convention.
   if (typeof id !== 'string' || !/^[a-z0-9_]+$/.test(id) || id.length > 96) {
@@ -129,11 +191,11 @@ function entryPath(dataDir, id) {
   return path.join(memoryDir(dataDir), `${id}.md`);
 }
 
-function indexPath(dataDir) {
+function indexPath(dataDir: string): string {
   return path.join(memoryDir(dataDir), INDEX_FILE);
 }
 
-function configPath(dataDir) {
+function configPath(dataDir: string): string {
   return path.join(memoryDir(dataDir), CONFIG_FILE);
 }
 
@@ -149,27 +211,30 @@ const VALID_EXTRACTION_PROVIDERS = new Set([
   'ollama',
 ]);
 
-function normalizeExtractionPatch(input) {
+function normalizeExtractionPatch(input: unknown): ExtractionConfig | null {
   if (!input || typeof input !== 'object') return null;
-  const provider = input.provider;
-  if (!VALID_EXTRACTION_PROVIDERS.has(provider)) return null;
-  const out = { provider };
-  if (typeof input.model === 'string' && input.model.trim()) {
-    out.model = input.model.trim();
+  const record = input as Record<string, unknown>;
+  const provider = record.provider;
+  if (typeof provider !== 'string' || !VALID_EXTRACTION_PROVIDERS.has(provider)) {
+    return null;
   }
-  if (typeof input.baseUrl === 'string' && input.baseUrl.trim()) {
-    out.baseUrl = input.baseUrl.trim();
+  const out: ExtractionConfig = { provider };
+  if (typeof record.model === 'string' && record.model.trim()) {
+    out.model = record.model.trim();
   }
-  if (typeof input.apiKey === 'string' && input.apiKey.trim()) {
-    out.apiKey = input.apiKey.trim();
+  if (typeof record.baseUrl === 'string' && record.baseUrl.trim()) {
+    out.baseUrl = record.baseUrl.trim();
   }
-  if (typeof input.apiVersion === 'string' && input.apiVersion.trim()) {
-    out.apiVersion = input.apiVersion.trim();
+  if (typeof record.apiKey === 'string' && record.apiKey.trim()) {
+    out.apiKey = record.apiKey.trim();
+  }
+  if (typeof record.apiVersion === 'string' && record.apiVersion.trim()) {
+    out.apiVersion = record.apiVersion.trim();
   }
   return out;
 }
 
-export async function readMemoryConfig(dataDir) {
+export async function readMemoryConfig(dataDir: string): Promise<MemoryConfig> {
   try {
     const raw = await fsp.readFile(configPath(dataDir), 'utf8');
     const parsed = JSON.parse(raw);
@@ -191,9 +256,12 @@ export async function readMemoryConfig(dataDir) {
 // `extraction: null` clears the override (reverting to auto-pick); an
 // object replaces it whole; an absent key leaves the existing override
 // untouched.
-export async function writeMemoryConfig(dataDir, patch) {
+export async function writeMemoryConfig(
+  dataDir: string,
+  patch: MemoryConfigPatchInput,
+): Promise<MemoryConfig> {
   const current = await readMemoryConfig(dataDir);
-  const next = {
+  const next: MemoryConfig = {
     enabled:
       typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled,
     chatExtractionEnabled:
@@ -229,7 +297,7 @@ export async function writeMemoryConfig(dataDir, patch) {
 // Public — returns the masked shape consumed by GET /api/memory.
 // Keeps the secret out of the DOM but lets the UI render "configured" /
 // "•••• abcd" affordances without round-tripping through writeConfig.
-export function maskMemoryExtractionConfig(extraction) {
+export function maskMemoryExtractionConfig(extraction: ExtractionConfig | null) {
   if (!extraction) return null;
   const apiKey = typeof extraction.apiKey === 'string' ? extraction.apiKey : '';
   return {
@@ -243,7 +311,7 @@ export function maskMemoryExtractionConfig(extraction) {
   };
 }
 
-export async function readMemoryIndex(dataDir) {
+export async function readMemoryIndex(dataDir: string): Promise<string> {
   try {
     return await fsp.readFile(indexPath(dataDir), 'utf8');
   } catch {
@@ -251,13 +319,17 @@ export async function readMemoryIndex(dataDir) {
   }
 }
 
-export async function writeMemoryIndex(dataDir, body, options) {
+export async function writeMemoryIndex(
+  dataDir: string,
+  body: string,
+  options?: { silent?: boolean },
+): Promise<void> {
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(indexPath(dataDir), String(body ?? ''));
   if (!options?.silent) emitChange({ kind: 'index' });
 }
 
-function summarize(id, raw, mtime) {
+function summarize(id: string, raw: string, mtime: number) {
   const { data, body } = parseFrontmatter(raw);
   const type = isValidType(data?.type) ? data.type : 'user';
   return {
@@ -272,15 +344,15 @@ function summarize(id, raw, mtime) {
   };
 }
 
-export async function listMemoryEntries(dataDir) {
+export async function listMemoryEntries(dataDir: string): Promise<MemorySummary[]> {
   const dir = memoryDir(dataDir);
-  let names = [];
+  let names: string[] = [];
   try {
     names = await fsp.readdir(dir);
   } catch {
     return [];
   }
-  const out = [];
+  const out: MemorySummary[] = [];
   for (const name of names) {
     if (!name.endsWith('.md')) continue;
     if (name === INDEX_FILE) continue;
@@ -304,22 +376,22 @@ export async function listMemoryEntries(dataDir) {
   return out;
 }
 
-const MEMORY_TREE_TYPES = ['user', 'feedback', 'project', 'reference'];
+const MEMORY_TREE_TYPES: MemoryType[] = ['user', 'feedback', 'project', 'reference'];
 
-function memoryTreeFolderId(type) {
+function memoryTreeFolderId(type: MemoryType): string {
   return `folder:${type}`;
 }
 
-function memoryTreeScopeForType(type) {
+function memoryTreeScopeForType(type: MemoryType): 'project' | 'global' {
   return type === 'project' ? 'project' : 'global';
 }
 
-function toIsoTime(ms) {
+function toIsoTime(ms: number): string {
   return new Date(Number.isFinite(ms) ? ms : 0).toISOString();
 }
 
-function extractAutomationRefs(body, label) {
-  const refs = new Set();
+function extractAutomationRefs(body: string, label: string): string[] {
+  const refs = new Set<string>();
   const re = new RegExp(`^${label}:\\s*([A-Za-z0-9_-]+)\\s*$`, 'gim');
   let match;
   while ((match = re.exec(String(body || ''))) !== null) {
@@ -328,9 +400,9 @@ function extractAutomationRefs(body, label) {
   return Array.from(refs);
 }
 
-export async function buildMemoryTree(dataDir) {
+export async function buildMemoryTree(dataDir: string): Promise<MemoryTreeNode[]> {
   const entries = await listMemoryEntries(dataDir);
-  const byType = new Map();
+  const byType = new Map<MemoryType, MemorySummary[]>();
   for (const type of MEMORY_TREE_TYPES) byType.set(type, []);
   for (const entry of entries) {
     const list = byType.get(entry.type) ?? [];
@@ -338,7 +410,7 @@ export async function buildMemoryTree(dataDir) {
     byType.set(entry.type, list);
   }
 
-  const nodes = [];
+  const nodes: MemoryTreeNode[] = [];
   for (const type of MEMORY_TREE_TYPES) {
     const children = byType.get(type) ?? [];
     const folderUpdatedAt = children.reduce(
@@ -384,9 +456,12 @@ export async function buildMemoryTree(dataDir) {
   return nodes;
 }
 
-export async function readMemoryEntry(dataDir, id) {
-  let raw;
-  let stat;
+export async function readMemoryEntry(
+  dataDir: string,
+  id: string,
+): Promise<MemoryEntry | null> {
+  let raw: string;
+  let stat: Awaited<ReturnType<typeof fsp.stat>>;
   try {
     const filePath = entryPath(dataDir, id);
     [raw, stat] = await Promise.all([
@@ -400,7 +475,12 @@ export async function readMemoryEntry(dataDir, id) {
   return { ...summary, body };
 }
 
-function renderEntryFile(name, description, type, body) {
+function renderEntryFile(
+  name: string,
+  description: string | undefined,
+  type: string,
+  body: string | undefined,
+): string {
   const safeName = String(name || 'Untitled').replace(/\r?\n/g, ' ').trim();
   const safeDesc = String(description || '').replace(/\r?\n/g, ' ').trim();
   const safeType = isValidType(type) ? type : 'user';
@@ -408,7 +488,11 @@ function renderEntryFile(name, description, type, body) {
   return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
 }
 
-export async function updateMemoryTreeNode(dataDir, id, patch) {
+export async function updateMemoryTreeNode(
+  dataDir: string,
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<MemoryEntry> {
   if (typeof id !== 'string' || id.startsWith('folder:')) {
     throw new Error('memory tree folders are derived and cannot be edited');
   }
@@ -430,8 +514,12 @@ export async function updateMemoryTreeNode(dataDir, id, patch) {
   });
 }
 
-export async function upsertMemoryEntry(dataDir, input, options) {
-  const { name, description, type, body } = input || {};
+export async function upsertMemoryEntry(
+  dataDir: string,
+  input: UpsertMemoryInput,
+  options?: UpsertOptions,
+): Promise<MemoryEntry> {
+  const { name, description, type, body } = input;
   if (!name || !isValidType(type)) {
     throw new Error('memory entry requires `name` and a valid `type`');
   }
@@ -459,7 +547,7 @@ export async function upsertMemoryEntry(dataDir, input, options) {
   return entry;
 }
 
-export async function deleteMemoryEntry(dataDir, id) {
+export async function deleteMemoryEntry(dataDir: string, id: string): Promise<void> {
   try {
     await fsp.unlink(entryPath(dataDir, id));
   } catch {
@@ -494,7 +582,12 @@ function parseIndexLinkIds(indexBody: string): Set<string> {
   return ids;
 }
 
-async function ensureIndexHasEntry(dataDir, id, name, description) {
+async function ensureIndexHasEntry(
+  dataDir: string,
+  id: string,
+  name: string,
+  description: string | undefined,
+): Promise<void> {
   const current = await readMemoryIndex(dataDir);
   const lines = current.split(/\r?\n/);
   const link = `${id}.md`;
@@ -520,7 +613,7 @@ async function ensureIndexHasEntry(dataDir, id, name, description) {
   await writeMemoryIndex(dataDir, lines.join('\n'), { silent: true });
 }
 
-async function removeIndexLine(dataDir, id) {
+async function removeIndexLine(dataDir: string, id: string): Promise<void> {
   const current = await readMemoryIndex(dataDir);
   const link = `${id}.md`;
   const lines = current.split(/\r?\n/).filter((line) => {
@@ -543,7 +636,7 @@ async function removeIndexLine(dataDir, id) {
 // disk (paste the line back in the settings panel to re-enable it).
 // Without this filter, deleted index lines had no effect — the daemon
 // kept reading every entry file and the index editor was cosmetic only.
-export async function composeMemoryBody(dataDir) {
+export async function composeMemoryBody(dataDir: string): Promise<string> {
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) return '';
   const allEntries = await listMemoryEntries(dataDir);
@@ -552,15 +645,14 @@ export async function composeMemoryBody(dataDir) {
   const linkedIds = parseIndexLinkIds(indexBody);
   const entries = allEntries.filter((e) => linkedIds.has(e.id));
   if (entries.length === 0) return '';
-  const grouped = new Map();
+  const grouped = new Map<MemoryType, MemorySummary[]>();
   for (const e of entries) {
     const list = grouped.get(e.type) ?? [];
     list.push(e);
     grouped.set(e.type, list);
   }
-  const ordered = ['user', 'feedback', 'project', 'reference']
-    .filter((t) => grouped.has(t));
-  const parts = [];
+  const ordered = MEMORY_TREE_TYPES.filter((t) => grouped.has(t));
+  const parts: string[] = [];
   for (const type of ordered) {
     parts.push(`### ${capitalize(type)}`);
     for (const e of grouped.get(type) ?? []) {
@@ -579,13 +671,13 @@ export async function composeMemoryBody(dataDir) {
   return parts.join('\n').trim();
 }
 
-async function readEntryBodyById(dataDir, id) {
+async function readEntryBodyById(dataDir: string, id: string): Promise<string> {
   const entry = await readMemoryEntry(dataDir, id);
   return entry?.body ?? '';
 }
 
-function capitalize(s) {
-  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // ----- Heuristic auto-extraction -----------------------------------------
@@ -757,11 +849,14 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   },
 ];
 
-function applyTemplate(template, captured) {
+function applyTemplate(template: string, captured: string): string {
   return String(template || '').replace(/\$1/g, String(captured));
 }
 
-export async function extractFromMessage(dataDir, userMessage) {
+export async function extractFromMessage(
+  dataDir: string,
+  userMessage: unknown,
+): Promise<MemorySummary[]> {
   // Mirror the LLM extractor's skip surface so the settings panel shows
   // both extractors for the same turn — even when there's nothing to
   // record. Without this, a turn with memory disabled or an empty
@@ -779,8 +874,8 @@ export async function extractFromMessage(dataDir, userMessage) {
   if (!cfg.chatExtractionEnabled) {
     return [];
   }
-  const seen = new Set();
-  const changed = [];
+  const seen = new Set<string>();
+  const changed: MemorySummary[] = [];
   for (const pattern of REMEMBER_PATTERNS) {
     const m = pattern.re.exec(userMessage);
     if (!m) continue;
@@ -851,7 +946,7 @@ export async function extractFromMessage(dataDir, userMessage) {
   return changed;
 }
 
-function truncate(s, max) {
+function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return `${s.slice(0, max - 1).trim()}…`;
 }

@@ -181,7 +181,9 @@ async function applyMemoryProposal(dataDir: string, proposal: AutomationEvolutio
       : typeof json.markdown === 'string'
         ? json.markdown
         : proposal.patch.after ?? before?.body ?? '';
-  const payload: Record<string, unknown> = {
+  const id = typeof json.id === 'string' ? json.id : proposal.targetRef;
+  const payload = {
+    ...(id ? { id } : {}),
     name:
       typeof json.name === 'string' && json.name.trim()
         ? json.name
@@ -193,8 +195,6 @@ async function applyMemoryProposal(dataDir: string, proposal: AutomationEvolutio
     type,
     body: withMemoryProvenance(body, proposal),
   };
-  const id = typeof json.id === 'string' ? json.id : proposal.targetRef;
-  if (id) payload.id = id;
   const entry = await upsertMemoryEntry(dataDir, payload, {});
   return { memoryId: entry.id, action: proposal.action };
 }
