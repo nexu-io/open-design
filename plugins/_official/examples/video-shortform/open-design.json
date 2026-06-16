@@ -24,7 +24,7 @@
     "en": "Video Shortform"
   },
   "version": "0.1.0",
-  "description": "Short-form video generation skill — 3-10 second clips for product\nreveals, motion teasers, ambient loops. Defaults to Seedance 2 but\nworks the same with Kling 3 / 4, Veo 3 or Sora 2. Output is one MP4\nsaved to the project folder. When the workspace also ships an\ninteractive-video / hyperframes skill, prefer composing several short\nshots into a single timeline rather than one long monolithic clip.",
+  "description": "Short-form video generation skill — 3-10 second clips for product reveals, motion teasers, ambient loops. Defaults to Seedance 2 but works the same with Kling 3 / 4, Veo 3 or Sora 2. Output is one MP4 saved to the project folder. When the workspace also ships an interactive-video / hyperframes skill, prefer composing several short shots into a single timeline rather than one long monolithic clip.",
   "description_i18n": {
     "zh-CN": "短视频生成技能 — 3-10 秒产品展示、动态预告和环境循环片段。默认使用 Seedance 2，也兼容 Kling 3 / 4、Veo 3 或 Sora 2。输出单个 MP4 文件至项目文件夹。当工作区同时提供交互视频/超帧技能时，建议将多个短镜头组合成单一时间线，而非一个冗长片段。",
     "zh-TW": "短影音生成技能 — 3-10 秒產品展示、動態預告和環境循環片段。預設使用 Seedance 2，也相容 Kling 3 / 4、Veo 3 或 Sora 2。輸出單一 MP4 檔案至專案資料夾。當工作區同時提供互動影片/超幀技能時，建議將多個短鏡頭組合成單一時間軸，而非一個冗長片段。",
@@ -43,7 +43,7 @@
     "ar": "مهارة إنشاء فيديوهات قصيرة — مقاطع 3-10 ثواني لعرض المنتجات والإعلانات الترويجية والحلقات المحيطة. افتراضياً Seedance 2 لكن يعمل أيضاً مع Kling 3 / 4 و Veo 3 أو Sora 2. الناتج ملف MP4 واحد يُحفظ في مجلد المشروع. عندما يوفر مساحة العمل أيضاً مهارة فيديو تفاعلي/إطارات فائقة، يُفضل تجميع عدة لقطات قصيرة في مخطط زمني واحد بدلاً من مقطع طويل واحد.",
     "tr": "Kısa video oluşturma becerisi — ürün tanıtımları, hareket teaserları ve ortam döngüleri için 3-10 saniyelik klipler. Varsayılan olarak Seedance 2 kullanır ancak Kling 3 / 4, Veo 3 veya Sora 2 ile de aynı şekilde çalışır. Çıktı, proje klasörüne kaydedilen tek bir MP4 dosyasıdır. Çalışma alanı aynı zamanda interaktif video/hyperframes becerisi sunduğunda, tek bir uzun monolitik klip yerine birkaç kısa çekimi tek bir zaman çizelgesinde birleştirmeyi tercih edin.",
     "uk": "Генерація коротких відео — кліпи 3-10 секунд для презентації продуктів, анонсів та амбієнтних циклів. За замовчуванням Seedance 2, але працює також з Kling 3 / 4, Veo 3 або Sora 2. Вихідний файл — один MP4 у папці проекту. Якщо робочий простір також має навичку інтерактивного відео/гіперфреймів, краще компонувати кілька коротких кадрів в один таймлайн замість одного довгого монолітного кліпу.",
-    "en": "Short-form video generation skill — 3-10 second clips for product\nreveals, motion teasers, ambient loops. Defaults to Seedance 2 but\nworks the same with Kling 3 / 4, Veo 3 or Sora 2. Output is one MP4\nsaved to the project folder. When the workspace also ships an\ninteractive-video / hyperframes skill, prefer composing several short\nshots into a single timeline rather than one long monolithic clip."
+    "en": "Short-form video generation skill — 3-10 second clips for product reveals, motion teasers, ambient loops. Defaults to Seedance 2 but works the same with Kling 3 / 4, Veo 3 or Sora 2. Output is one MP4 saved to the project folder. When the workspace also ships an interactive-video / hyperframes skill, prefer composing several short shots into a single timeline rather than one long monolithic clip."
   },
   "license": "MIT",
   "author": {

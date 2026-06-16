@@ -24,7 +24,7 @@
     "en": "Tweaks"
   },
   "version": "0.1.0",
-  "description": "Wrap any HTML artifact with a side panel of live, parameterized\ncontrols — accent color, type scale, density, motion, theme — that\nrewrite CSS custom properties in real time and persist to\nlocalStorage. Lets the user explore variants of a design without\nre-prompting the agent. Use when the brief asks for \"variants\",\n\"side-by-side options\", \"tweak this\", \"let me adjust\", \"live\nknobs\", or \"实时调参\".",
+  "description": "Wrap any HTML artifact with a side panel of live, parameterized controls — accent color, type scale, density, motion, theme — that rewrite CSS custom properties in real time and persist to localStorage. Lets the user explore variants of a design without re-prompting the agent. Use when the brief asks for \"variants\", \"side-by-side options\", \"tweak this\", \"let me adjust\", \"live knobs\", or \"实时调参\".",
   "description_i18n": {
     "zh-CN": "为任何 HTML 组件添加侧面板实时控制器，可调整主题色、字体比例、密度、动效等参数，修改实时同步到 CSS 自定义属性并保存到 localStorage，让用户无需重新提示即可探索设计变体。",
     "zh-TW": "為任何 HTML 元件添加側面板即時控制器，可調整主題色、字體比例、密度、動效等參數，修改即時同步到 CSS 自訂屬性並儲存到 localStorage，讓使用者無需重新提示即可探索設計變體。",
@@ -43,7 +43,7 @@
     "ar": "يضيف لوحة تحكم مباشرة لأي عنصر HTML لضبط اللون المميز ومقياس الطباعة والكثافة والحركة والسمة. يتم تطبيق التغييرات فوراً على خصائص CSS المخصصة وحفظها في localStorage.",
     "tr": "Herhangi bir HTML öğesine vurgu rengi, tipografi ölçeği, yoğunluk, hareket ve tema ayarlamak için canlı kontrol paneli ekler. Değişiklikler anında CSS özel özelliklerine uygulanır ve localStorage'a kaydedilir.",
     "uk": "Додає панель живого керування до будь-якого HTML-елемента для налаштування акцентного кольору, типографічної шкали, щільності, руху та теми. Зміни миттєво застосовуються до користувацьких властивостей CSS і зберігаються в localStorage.",
-    "en": "Wrap any HTML artifact with a side panel of live, parameterized\ncontrols — accent color, type scale, density, motion, theme — that\nrewrite CSS custom properties in real time and persist to\nlocalStorage. Lets the user explore variants of a design without\nre-prompting the agent. Use when the brief asks for \"variants\",\n\"side-by-side options\", \"tweak this\", \"let me adjust\", \"live\nknobs\", or \"实时调参\"."
+    "en": "Wrap any HTML artifact with a side panel of live, parameterized controls — accent color, type scale, density, motion, theme — that rewrite CSS custom properties in real time and persist to localStorage. Lets the user explore variants of a design without re-prompting the agent. Use when the brief asks for \"variants\", \"side-by-side options\", \"tweak this\", \"let me adjust\", \"live knobs\", or \"实时调参\"."
   },
   "license": "MIT",
   "author": {

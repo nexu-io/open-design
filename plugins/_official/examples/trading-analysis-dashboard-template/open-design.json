@@ -24,7 +24,7 @@
     "en": "Trading Analysis Dashboard Template"
   },
   "version": "0.1.0",
-  "description": "Professional trading analysis dashboard template (single-file HTML) with\nlight/dark theme switch, dense market panels, chart interactions, demo/live\nplayback, and command palette behavior.\nUse when users ask for a Wall-Street-style analytics terminal, trading cockpit,\nor high-tech financial dashboard template with realistic data layout.",
+  "description": "Professional trading analysis dashboard template (single-file HTML) with light/dark theme switch, dense market panels, chart interactions, demo/live playback, and command palette behavior. Use when users ask for a Wall-Street-style analytics terminal, trading cockpit, or high-tech financial dashboard template with realistic data layout.",
   "description_i18n": {
     "zh-CN": "专业交易分析仪表板模板（单文件 HTML），包含明暗主题切换、密集市场面板、图表交互、演示/实时回放和命令面板功能。适用于华尔街风格分析终端、交易驾驶舱或高科技金融仪表板模板需求。",
     "zh-TW": "專業交易分析儀表板範本（單檔案 HTML），包含明暗主題切換、密集市場面板、圖表互動、示範/即時回放和命令面板功能。適用於華爾街風格分析終端、交易駕駛艙或高科技金融儀表板範本需求。",
@@ -43,7 +43,7 @@
     "ar": "قالب احترافي للوحة تحليل التداول (HTML ملف واحد) مع تبديل السمة الفاتحة/الداكنة، لوحات سوق كثيفة، تفاعلات الرسوم البيانية، تشغيل تجريبي/مباشر، ولوحة الأوامر. لمحطات التحليل بأسلوب وول ستريت، قمرة القيادة التجارية أو لوحات المعلومات المالية التقنية.",
     "tr": "Profesyonel ticaret analizi pano şablonu (tek dosya HTML) açık/koyu tema değiştirme, yoğun piyasa panelleri, grafik etkileşimleri, demo/canlı oynatma ve komut paleti ile. Wall Street tarzı analitik terminal, ticaret kokpiti veya yüksek teknoloji finansal pano şablonları için.",
     "uk": "Професійний шаблон панелі торгового аналізу (однофайловий HTML) зі зміною світлої/темної теми, щільними ринковими панелями, інтерактивними графіками, демо/реальним відтворенням та командною палітрою. Для аналітичних терміналів у стилі Волл-стріт, торгових кокпітів або високотехнологічних фінансових панелей.",
-    "en": "Professional trading analysis dashboard template (single-file HTML) with\nlight/dark theme switch, dense market panels, chart interactions, demo/live\nplayback, and command palette behavior.\nUse when users ask for a Wall-Street-style analytics terminal, trading cockpit,\nor high-tech financial dashboard template with realistic data layout."
+    "en": "Professional trading analysis dashboard template (single-file HTML) with light/dark theme switch, dense market panels, chart interactions, demo/live playback, and command palette behavior. Use when users ask for a Wall-Street-style analytics terminal, trading cockpit, or high-tech financial dashboard template with realistic data layout."
   },
   "license": "MIT",
   "author": {

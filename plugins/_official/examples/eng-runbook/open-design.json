@@ -24,7 +24,7 @@
     "en": "Eng Runbook"
   },
   "version": "0.1.0",
-  "description": "An engineering runbook — service overview, alerts table, dashboards\nlinks, common procedures with copy-pasteable commands, on-call rotation,\nand an incident-response checklist. Use when the brief mentions\n\"runbook\", \"ops doc\", \"on-call guide\", \"SRE doc\", or \"运维手册\".",
+  "description": "An engineering runbook — service overview, alerts table, dashboards links, common procedures with copy-pasteable commands, on-call rotation, and an incident-response checklist. Use when the brief mentions \"runbook\", \"ops doc\", \"on-call guide\", \"SRE doc\", or \"运维手册\".",
   "description_i18n": {
     "zh-CN": "工程运维手册 — 包含服务概览、告警表、仪表盘链接、常用命令操作步骤、值班轮换和事故响应清单。适用于需要运维文档、值班指南、SRE 文档或运维手册的场景。",
     "zh-TW": "工程運維手冊 — 包含服務概覽、告警表、儀表板連結、常用指令操作步驟、值班輪換和事故回應清單。適用於需要運維文件、值班指南、SRE 文件或運維手冊的場景。",
@@ -43,7 +43,7 @@
     "ar": "دليل عمليات هندسي — نظرة عامة على الخدمة، جدول التنبيهات، روابط لوحات المعلومات، إجراءات شائعة مع أوامر قابلة للنسخ، جدول المناوبات، وقائمة التحقق من الاستجابة للحوادث. استخدمه للـ runbook أو مستندات ops أو دليل المناوبة أو مستندات SRE أو 运维手册.",
     "tr": "Bir mühendislik runbook'u — hizmet genel bakışı, alarm tablosu, dashboard bağlantıları, kopyalanabilir komutlarla yaygın prosedürler, nöbet rotasyonu ve olay müdahale kontrol listesi. Runbook, ops dokümanı, nöbet rehberi, SRE dokümanı veya 运维手册 için kullanın.",
     "uk": "Інженерний runbook — огляд сервісу, таблиця алертів, посилання на дашборди, типові процедури з командами для копіювання, графік чергувань і чек-лист реагування на інциденти. Використовуйте для runbook, ops-документації, on-call посібників, SRE-документації або 运维手册.",
-    "en": "An engineering runbook — service overview, alerts table, dashboards\nlinks, common procedures with copy-pasteable commands, on-call rotation,\nand an incident-response checklist. Use when the brief mentions\n\"runbook\", \"ops doc\", \"on-call guide\", \"SRE doc\", or \"运维手册\"."
+    "en": "An engineering runbook — service overview, alerts table, dashboards links, common procedures with copy-pasteable commands, on-call rotation, and an incident-response checklist. Use when the brief mentions \"runbook\", \"ops doc\", \"on-call guide\", \"SRE doc\", or \"运维手册\"."
   },
   "license": "MIT",
   "author": {

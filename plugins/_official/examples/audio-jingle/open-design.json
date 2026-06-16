@@ -24,7 +24,7 @@
     "en": "Audio Jingle"
   },
   "version": "0.1.0",
-  "description": "Audio generation skill — jingles, beds, voiceover, and sound effects.\nRoutes music requests to Suno V5 / Udio / Lyria, speech to MiniMax\nTTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or\nAudioCraft. Output is one MP3/WAV file saved to the project folder.",
+  "description": "Audio generation skill — jingles, beds, voiceover, and sound effects. Routes music requests to Suno V5 / Udio / Lyria, speech to MiniMax TTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or AudioCraft. Output is one MP3/WAV file saved to the project folder.",
   "description_i18n": {
     "zh-CN": "音频生成技能——铃声、背景音、旁白和音效。将音乐请求路由到 Suno V5 / Udio / Lyria，语音转 MiniMax TTS / FishAudio / ElevenLabs V3，音效转 ElevenLabs SFX 或 AudioCraft。输出为保存到项目文件夹的单个 MP3/WAV 文件。",
     "zh-TW": "音訊生成技能——鈴聲、背景音、旁白和音效。將音樂請求路由到 Suno V5 / Udio / Lyria，語音轉 MiniMax TTS / FishAudio / ElevenLabs V3，音效轉 ElevenLabs SFX 或 AudioCraft。輸出為儲存到專案資料夾的單個 MP3/WAV 檔案。",
@@ -43,7 +43,7 @@
     "ar": "مهارة توليد صوتي — جينجلز، خلفيات موسيقية، تعليق صوتي، ومؤثرات صوتية. يوجه طلبات الموسيقى إلى Suno V5 / Udio / Lyria، والكلام إلى MiniMax TTS / FishAudio / ElevenLabs V3، والمؤثرات الصوتية إلى ElevenLabs SFX أو AudioCraft. الناتج هو ملف MP3/WAV واحد يُحفظ في مجلد المشروع.",
     "tr": "Ses üretim becerisi — jingle'lar, müzik yatakları, seslendirme ve ses efektleri. Müzik isteklerini Suno V5 / Udio / Lyria'ya, konuşmayı MiniMax TTS / FishAudio / ElevenLabs V3'e ve SFX'i ElevenLabs SFX veya AudioCraft'a yönlendirir. Çıktı, proje klasörüne kaydedilen tek bir MP3/WAV dosyasıdır.",
     "uk": "Функція генерації аудіо — джингли, підкладки, озвучування та звукові ефекти. Направляє музичні запити до Suno V5 / Udio / Lyria, мовлення до MiniMax TTS / FishAudio / ElevenLabs V3, а SFX до ElevenLabs SFX або AudioCraft. Результат — один файл MP3/WAV, збережений у папку проєкту.",
-    "en": "Audio generation skill — jingles, beds, voiceover, and sound effects.\nRoutes music requests to Suno V5 / Udio / Lyria, speech to MiniMax\nTTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or\nAudioCraft. Output is one MP3/WAV file saved to the project folder."
+    "en": "Audio generation skill — jingles, beds, voiceover, and sound effects. Routes music requests to Suno V5 / Udio / Lyria, speech to MiniMax TTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or AudioCraft. Output is one MP3/WAV file saved to the project folder."
   },
   "license": "MIT",
   "author": {

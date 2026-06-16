@@ -24,7 +24,7 @@
     "en": "Orbit Gmail"
   },
   "version": "0.1.0",
-  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when\nGmail is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to Gmail. Pulls the past 24\nhours of inbox activity (replies awaited, mentions, cc, auto-\ncategorized bulk) from the user's authenticated Gmail connection\nand renders the digest as the Orbit Daily Digest email opened\ninside Gmail's reading view. This skill should not be triggered\nmanually — it is invoked by Orbit's daily-digest scheduler against\nlive Gmail data.",
+  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when Gmail is the user's only connected connector, or when the user explicitly scopes their daily digest to Gmail. Pulls the past 24 hours of inbox activity (replies awaited, mentions, cc, auto- categorized bulk) from the user's authenticated Gmail connection and renders the digest as the Orbit Daily Digest email opened inside Gmail's reading view. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live Gmail data.",
   "description_i18n": {
     "zh-CN": "当 Gmail 是用户唯一连接的服务或用户明确指定时，自动提取过去 24 小时的收件箱活动并生成每日摘要。由 Orbit 调度器自动触发，不应手动调用。",
     "zh-TW": "當 Gmail 是使用者唯一連接的服務或使用者明確指定時，自動提取過去 24 小時的收件匣活動並產生每日摘要。由 Orbit 排程器自動觸發，不應手動呼叫。",
@@ -43,7 +43,7 @@
     "ar": "يستخرج نشاط صندوق الوارد خلال الـ 24 ساعة الماضية وينشئ ملخصاً يومياً عندما يكون Gmail هو الخدمة الوحيدة المتصلة أو محددة صراحةً. يتم تشغيله تلقائياً بواسطة مجدول Orbit ولا ينبغي تشغيله يدوياً.",
     "tr": "Gmail tek bağlı hizmet olduğunda veya açıkça seçildiğinde son 24 saatteki gelen kutusu etkinliğini çıkarır ve günlük özet oluşturur. Orbit zamanlayıcı tarafından otomatik olarak tetiklenir, manuel çalıştırılmamalıdır.",
     "uk": "Витягує активність поштової скриньки за останні 24 години та створює щоденний дайджест, коли Gmail є єдиним підключеним сервісом або явно обраний користувачем. Автоматично запускається планувальником Orbit, не потребує ручного запуску.",
-    "en": "Open Orbit briefing skill — selected by the Orbit pipeline when\nGmail is the user's only connected connector, or when the user\nexplicitly scopes their daily digest to Gmail. Pulls the past 24\nhours of inbox activity (replies awaited, mentions, cc, auto-\ncategorized bulk) from the user's authenticated Gmail connection\nand renders the digest as the Orbit Daily Digest email opened\ninside Gmail's reading view. This skill should not be triggered\nmanually — it is invoked by Orbit's daily-digest scheduler against\nlive Gmail data."
+    "en": "Open Orbit briefing skill — selected by the Orbit pipeline when Gmail is the user's only connected connector, or when the user explicitly scopes their daily digest to Gmail. Pulls the past 24 hours of inbox activity (replies awaited, mentions, cc, auto- categorized bulk) from the user's authenticated Gmail connection and renders the digest as the Orbit Daily Digest email opened inside Gmail's reading view. This skill should not be triggered manually — it is invoked by Orbit's daily-digest scheduler against live Gmail data."
   },
   "license": "MIT",
   "author": {

@@ -24,7 +24,7 @@
     "en": "Last30days"
   },
   "version": "0.1.0",
-  "description": "Recent community and social trend research over the last 30 days. Use when\nthe brief asks what people are saying now, recent sentiment, community\nreactions, social proof, launch reaction, trend scan, or last-30-days context.",
+  "description": "Recent community and social trend research over the last 30 days. Use when the brief asks what people are saying now, recent sentiment, community reactions, social proof, launch reaction, trend scan, or last-30-days context.",
   "description_i18n": {
     "zh-CN": "最近30天的社区和社交趋势研究。适用于了解当前舆论、近期情绪、社区反应、社交证明、发布反馈、趋势扫描或最近30天的背景信息。",
     "zh-TW": "最近30天的社群和社交趨勢研究。適用於了解當前輿論、近期情緒、社群反應、社交證明、發布反饋、趨勢掃描或最近30天的背景資訊。",
@@ -43,7 +43,7 @@
     "ar": "بحث اتجاهات المجتمع ووسائل التواصل الاجتماعي خلال الـ 30 يومًا الماضية. استخدمه لمعرفة ما يقوله الناس الآن، والمشاعر الحديثة، وردود فعل المجتمع، والدليل الاجتماعي، وردود الفعل على الإطلاق، ومسح الاتجاهات، أو سياق الـ 30 يومًا الماضية.",
     "tr": "Son 30 günün topluluk ve sosyal trend araştırması. İnsanların şu anda ne söylediğini, son duyguları, topluluk tepkilerini, sosyal kanıtı, lansman tepkisini, trend taramasını veya son 30 günün bağlamını öğrenmek için kullanın.",
     "uk": "Дослідження трендів спільноти та соцмереж за останні 30 днів. Використовуйте для аналізу поточної думки, нещодавніх настроїв, реакцій спільноти, соціальних доказів, відгуків на запуск, сканування трендів або контексту останніх 30 днів.",
-    "en": "Recent community and social trend research over the last 30 days. Use when\nthe brief asks what people are saying now, recent sentiment, community\nreactions, social proof, launch reaction, trend scan, or last-30-days context."
+    "en": "Recent community and social trend research over the last 30 days. Use when the brief asks what people are saying now, recent sentiment, community reactions, social proof, launch reaction, trend scan, or last-30-days context."
   },
   "license": "MIT",
   "author": {

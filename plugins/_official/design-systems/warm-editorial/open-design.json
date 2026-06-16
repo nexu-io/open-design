@@ -24,7 +24,7 @@
     "en": "Warm Editorial"
   },
   "version": "0.1.0",
-  "description": "A serif-led magazine aesthetic. Terracotta accent on warm off-white paper —\ngood for long-form, editorial, and brand-led marketing pages.",
+  "description": "A serif-led magazine aesthetic. Terracotta accent on warm off-white paper — good for long-form, editorial, and brand-led marketing pages.",
   "description_i18n": {
     "zh-CN": "衬线字体主导的杂志美学。温暖米白纸张上的陶土色点缀——适合长篇内容、社论和品牌营销页面。",
     "zh-TW": "襯線字體主導的雜誌美學。溫暖米白紙張上的陶土色點綴——適合長篇內容、社論和品牌行銷頁面。",
@@ -43,7 +43,7 @@
     "ar": "جمالية مجلة بخطوط serif. لمسة تيراكوتا على ورق أبيض دافئ — مناسب للمحتوى الطويل والصفحات التحريرية والتسويقية للعلامات التجارية.",
     "tr": "Serif ağırlıklı dergi estetiği. Sıcak kırık beyaz kağıt üzerinde terracotta vurgu — uzun form içerik, editoryal ve marka odaklı pazarlama sayfaları için idealdir.",
     "uk": "Журнальна естетика на основі шрифтів з засічками. Теракотовий акцент на теплому папері кольору слонової кістки — підходить для довгих текстів, редакційних та брендових маркетингових сторінок.",
-    "en": "A serif-led magazine aesthetic. Terracotta accent on warm off-white paper —\ngood for long-form, editorial, and brand-led marketing pages."
+    "en": "A serif-led magazine aesthetic. Terracotta accent on warm off-white paper — good for long-form, editorial, and brand-led marketing pages."
   },
   "license": "MIT",
   "tags": [

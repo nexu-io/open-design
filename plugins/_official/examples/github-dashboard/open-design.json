@@ -24,7 +24,7 @@
     "en": "Github Dashboard"
   },
   "version": "0.1.0",
-  "description": "GitHub repository analytics dashboard — stars, forks, contributors,\nissues, pull requests, recent activity, and top contributors. Use when\nthe brief asks for a GitHub repo dashboard, open-source growth report,\nrepository health page, or GitHub analytics view.",
+  "description": "GitHub repository analytics dashboard — stars, forks, contributors, issues, pull requests, recent activity, and top contributors. Use when the brief asks for a GitHub repo dashboard, open-source growth report, repository health page, or GitHub analytics view.",
   "description_i18n": {
     "zh-CN": "GitHub 仓库分析仪表板 — 星标、分支、贡献者、议题、拉取请求、近期活动和主要贡献者。适用于 GitHub 仓库仪表板、开源增长报告、仓库健康页面或 GitHub 分析视图。",
     "zh-TW": "GitHub 儲存庫分析儀表板 — 星標、分支、貢獻者、議題、拉取請求、近期活動和主要貢獻者。適用於 GitHub 儲存庫儀表板、開源成長報告、儲存庫健康頁面或 GitHub 分析檢視。",
@@ -43,7 +43,7 @@
     "ar": "لوحة معلومات تحليلات مستودع GitHub — النجوم، الفروع، المساهمون، المشكلات، طلبات السحب، النشاط الأخير، وأبرز المساهمين. استخدمها للوحة معلومات مستودع GitHub، تقرير نمو المصادر المفتوحة، صفحة صحة المستودع، أو عرض تحليلات GitHub.",
     "tr": "GitHub depo analitik panosu — yıldızlar, fork'lar, katkıda bulunanlar, sorunlar, pull request'ler, son aktiviteler ve en çok katkıda bulunanlar. GitHub depo panosu, açık kaynak büyüme raporu, depo sağlık sayfası veya GitHub analitik görünümü için kullanın.",
     "uk": "Панель аналітики репозиторію GitHub — зірки, форки, учасники, завдання, пул-реквести, остання активність та топ-учасники. Використовуйте для панелі репозиторію GitHub, звіту про зростання open-source, сторінки стану репозиторію або аналітичного перегляду GitHub.",
-    "en": "GitHub repository analytics dashboard — stars, forks, contributors,\nissues, pull requests, recent activity, and top contributors. Use when\nthe brief asks for a GitHub repo dashboard, open-source growth report,\nrepository health page, or GitHub analytics view."
+    "en": "GitHub repository analytics dashboard — stars, forks, contributors, issues, pull requests, recent activity, and top contributors. Use when the brief asks for a GitHub repo dashboard, open-source growth report, repository health page, or GitHub analytics view."
   },
   "license": "MIT",
   "author": {

@@ -24,7 +24,7 @@
     "en": "Dating Web"
   },
   "version": "0.1.0",
-  "description": "A consumer-feeling dating / matchmaking dashboard — left rail navigation,\nticker bar of community signals, headline KPIs, a 30-day mutual-matches\nbar chart, and a match-rate trend block. Editorial typography, restrained\naccent. Use when the brief asks for a \"dating site\", \"matchmaking\",\n\"community dashboard\", \"social network dashboard\", or any consumer\nproduct where the data is the story.",
+  "description": "A consumer-feeling dating / matchmaking dashboard — left rail navigation, ticker bar of community signals, headline KPIs, a 30-day mutual-matches bar chart, and a match-rate trend block. Editorial typography, restrained accent. Use when the brief asks for a \"dating site\", \"matchmaking\", \"community dashboard\", \"social network dashboard\", or any consumer product where the data is the story.",
   "description_i18n": {
     "zh-CN": "消费级约会/配对仪表板，包含左侧导航栏、社区动态滚动条、核心KPI指标、30天互相匹配柱状图和匹配率趋势模块。编辑风格排版，克制的强调色。适用于约会网站、配对服务、社区仪表板或社交网络等消费类产品界面。",
     "zh-TW": "消費級約會/配對儀表板，包含左側導航欄、社群動態跑馬燈、核心KPI指標、30天互相配對長條圖和配對率趨勢模組。編輯風格排版，克制的強調色。適用於約會網站、配對服務、社群儀表板或社交網路等消費類產品介面。",
@@ -43,7 +43,7 @@
     "ar": "لوحة تحكم للمواعدة/التوفيق الاستهلاكية تتضمن شريط تنقل أيسر، شريط إشارات المجتمع، مؤشرات KPI رئيسية، رسم بياني شريطي للتطابقات المتبادلة لـ30 يومًا، وكتلة اتجاه معدل التطابق. طباعة تحريرية بلمسات مقيدة. مثالية لمواقع المواعدة ولوحات المجتمع والشبكات الاجتماعية.",
     "tr": "Tüketici odaklı flört/eşleştirme kontrol paneli; sol yan navigasyon, topluluk sinyalleri ticker barı, ana KPI'lar, 30 günlük karşılıklı eşleşme çubuk grafiği ve eşleşme oranı trend bloğu içerir. Editoryal tipografi, sade vurgu. Flört siteleri, eşleştirme, topluluk panoları veya sosyal ağ dashboardları için idealdir.",
     "uk": "Споживча панель знайомств/сватання з лівою навігацією, бігучим рядком сигналів спільноти, ключовими KPI, стовпчиковою діаграмою взаємних збігів за 30 днів та блоком тренду коефіцієнта збігів. Редакційна типографіка, стримані акценти. Підходить для сайтів знайомств, сватання, панелей спільнот або соціальних мереж.",
-    "en": "A consumer-feeling dating / matchmaking dashboard — left rail navigation,\nticker bar of community signals, headline KPIs, a 30-day mutual-matches\nbar chart, and a match-rate trend block. Editorial typography, restrained\naccent. Use when the brief asks for a \"dating site\", \"matchmaking\",\n\"community dashboard\", \"social network dashboard\", or any consumer\nproduct where the data is the story."
+    "en": "A consumer-feeling dating / matchmaking dashboard — left rail navigation, ticker bar of community signals, headline KPIs, a 30-day mutual-matches bar chart, and a match-rate trend block. Editorial typography, restrained accent. Use when the brief asks for a \"dating site\", \"matchmaking\", \"community dashboard\", \"social network dashboard\", or any consumer product where the data is the story."
   },
   "license": "MIT",
   "author": {

@@ -24,7 +24,7 @@
     "en": "Image Poster"
   },
   "version": "0.1.0",
-  "description": "Single-image generation skill for posters, key art, and editorial\nillustrations. Defaults to gpt-image-2 but is provider-agnostic — the\nsame workflow drives Flux, Imagen, or Midjourney via the active\nupstream tooling. Output is one or more PNG/JPEG files saved to the\nproject folder.",
+  "description": "Single-image generation skill for posters, key art, and editorial illustrations. Defaults to gpt-image-2 but is provider-agnostic — the same workflow drives Flux, Imagen, or Midjourney via the active upstream tooling. Output is one or more PNG/JPEG files saved to the project folder.",
   "description_i18n": {
     "zh-CN": "用于海报、主视觉和编辑插图的单图生成工具。默认使用 gpt-image-2，但支持通过上游工具切换至 Flux、Imagen 或 Midjourney。输出为保存到项目文件夹的 PNG/JPEG 文件。",
     "zh-TW": "用於海報、主視覺和編輯插圖的單圖生成工具。預設使用 gpt-image-2，但支援透過上游工具切換至 Flux、Imagen 或 Midjourney。輸出為儲存到專案資料夾的 PNG/JPEG 檔案。",
@@ -43,7 +43,7 @@
     "ar": "أداة إنشاء صورة واحدة للملصقات والرسوم الرئيسية والرسوم التوضيحية التحريرية. الافتراضي gpt-image-2 لكنه يدعم Flux أو Imagen أو Midjourney عبر الأدوات النشطة. الإخراج بصيغة PNG/JPEG يُحفظ في مجلد المشروع.",
     "tr": "Posterler, ana görseller ve editoryal illüstrasyonlar için tek görsel oluşturma aracı. Varsayılan gpt-image-2 olmakla birlikte Flux, Imagen veya Midjourney'i aktif upstream araçlar üzerinden destekler. Çıktı, proje klasörüne kaydedilen PNG/JPEG dosyalarıdır.",
     "uk": "Генератор одиночних зображень для постерів, ключової графіки та редакційних ілюстрацій. За замовчуванням gpt-image-2, але підтримує Flux, Imagen або Midjourney через активні upstream-інструменти. Вивід у форматі PNG/JPEG у папку проєкту.",
-    "en": "Single-image generation skill for posters, key art, and editorial\nillustrations. Defaults to gpt-image-2 but is provider-agnostic — the\nsame workflow drives Flux, Imagen, or Midjourney via the active\nupstream tooling. Output is one or more PNG/JPEG files saved to the\nproject folder."
+    "en": "Single-image generation skill for posters, key art, and editorial illustrations. Defaults to gpt-image-2 but is provider-agnostic — the same workflow drives Flux, Imagen, or Midjourney via the active upstream tooling. Output is one or more PNG/JPEG files saved to the project folder."
   },
   "license": "MIT",
   "author": {

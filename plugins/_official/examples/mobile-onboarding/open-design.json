@@ -24,7 +24,7 @@
     "en": "Mobile Onboarding"
   },
   "version": "0.1.0",
-  "description": "A multi-screen mobile onboarding flow rendered as three phone frames\nside by side — splash, value-prop, sign-in. Status bar, swipe dots,\nprimary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS\nonboarding\", \"phone signup\", or \"移动端引导\".",
+  "description": "A multi-screen mobile onboarding flow rendered as three phone frames side by side — splash, value-prop, sign-in. Status bar, swipe dots, primary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS onboarding\", \"phone signup\", or \"移动端引导\".",
   "description_i18n": {
     "zh-CN": "多屏幕移动引导流程，呈现为三个并排的手机框架——启动页、价值主张、登录页。包含状态栏、滑动指示点和主要CTA按钮。适用于需要'移动端引导'、'iOS引导'、'手机注册'或'移动端引导'的场景。",
     "zh-TW": "多螢幕行動引導流程，呈現為三個並排的手機框架——啟動頁、價值主張、登入頁。包含狀態列、滑動指示點和主要CTA按鈕。適用於需要『行動端引導』、『iOS引導』、『手機註冊』或『移动端引导』的場景。",
@@ -43,7 +43,7 @@
     "ar": "تدفق إعداد جوال متعدد الشاشات يُعرض كثلاثة إطارات هاتف جنبًا إلى جنب — شاشة البداية، عرض القيمة، تسجيل الدخول. شريط الحالة، نقاط التمرير، CTA رئيسي. يُستخدم عند ذكر 'إعداد الجوال'، 'إعداد iOS'، 'تسجيل الهاتف' أو '移动端引导'.",
     "tr": "Yan yana üç telefon çerçevesi olarak gösterilen çok ekranlı mobil onboarding akışı — splash, değer önerisi, giriş. Durum çubuğu, kaydırma noktaları, birincil CTA. Özette 'mobil onboarding', 'iOS onboarding', 'telefon kaydı' veya '移动端引导' geçtiğinde kullanın.",
     "uk": "Багатоекранний потік мобільного онбордінгу у вигляді трьох телефонних фреймів поруч — заставка, ціннісна пропозиція, вхід. Статус-бар, індикатори свайпу, основний CTA. Використовуйте при згадці 'мобільний онбордінг', 'iOS онбордінг', 'реєстрація на телефоні' або '移动端引导'.",
-    "en": "A multi-screen mobile onboarding flow rendered as three phone frames\nside by side — splash, value-prop, sign-in. Status bar, swipe dots,\nprimary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS\nonboarding\", \"phone signup\", or \"移动端引导\"."
+    "en": "A multi-screen mobile onboarding flow rendered as three phone frames side by side — splash, value-prop, sign-in. Status bar, swipe dots, primary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS onboarding\", \"phone signup\", or \"移动端引导\"."
   },
   "license": "MIT",
   "author": {

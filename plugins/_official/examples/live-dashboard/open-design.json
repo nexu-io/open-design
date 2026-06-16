@@ -24,7 +24,7 @@
     "en": "Live Dashboard"
   },
   "version": "0.1.0",
-  "description": "Notion-style team dashboard rendered as a Live Artifact. A single-page,\nself-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time\nactivity feed and a linked-database task table — wired to Notion via the\nComposio connector catalog. Refreshes on demand and when the artifact\nis opened. Falls back to seeded mock data when no connector is bound,\nso it works offline / in screenshots / in the picker preview.",
+  "description": "Notion-style team dashboard rendered as a Live Artifact. A single-page, self-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time activity feed and a linked-database task table — wired to Notion via the Composio connector catalog. Refreshes on demand and when the artifact is opened. Falls back to seeded mock data when no connector is bound, so it works offline / in screenshots / in the picker preview.",
   "description_i18n": {
     "zh-CN": "Notion 风格的团队仪表板，以 Live Artifact 形式呈现。单页自包含 HTML 仪表板，包含 KPI、7 天趋势图、实时活动流和关联数据库任务表，通过 Composio 连接器目录连接到 Notion。支持按需刷新和打开时自动刷新，未绑定连接器时使用模拟数据，可离线使用。",
     "zh-TW": "Notion 風格的團隊儀表板，以 Live Artifact 形式呈現。單頁自包含 HTML 儀表板，包含 KPI、7 天趨勢圖、即時活動串流和關聯資料庫任務表，透過 Composio 連接器目錄連接到 Notion。支援按需重新整理和開啟時自動重新整理，未綁定連接器時使用模擬資料，可離線使用。",
@@ -43,7 +43,7 @@
     "ar": "لوحة معلومات الفريق بنمط Notion معروضة كـ Live Artifact. لوحة معلومات HTML مستقلة من صفحة واحدة مع KPI ومخطط sparkline لمدة 7 أيام وموجز نشاط فوري وجدول مهام مرتبط بقاعدة البيانات، متصلة بـ Notion عبر كتالوج موصلات Composio. تُحدّث عند الطلب وعند الفتح، تعمل ببيانات تجريبية بدون موصل.",
     "tr": "Notion tarzı ekip gösterge paneli Live Artifact olarak sunulur. KPI'lar, 7 günlük sparkline, gerçek zamanlı etkinlik akışı ve bağlantılı veritabanı görev tablosu içeren tek sayfalık, bağımsız HTML gösterge paneli, Composio bağlayıcı kataloğu üzerinden Notion'a bağlanır. İstek üzerine ve açılışta yenilenir, bağlayıcı olmadan sahte verilerle çalışır.",
     "uk": "Командна панель у стилі Notion як Live Artifact. Одностороннкова автономна HTML-панель з KPI, 7-денним графіком sparkline, стрічкою активності в реальному часі та таблицею завдань із пов'язаної бази даних, підключена до Notion через каталог з'єднувачів Composio. Оновлюється на запит і при відкритті, працює з тестовими даними без з'єднувача.",
-    "en": "Notion-style team dashboard rendered as a Live Artifact. A single-page,\nself-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time\nactivity feed and a linked-database task table — wired to Notion via the\nComposio connector catalog. Refreshes on demand and when the artifact\nis opened. Falls back to seeded mock data when no connector is bound,\nso it works offline / in screenshots / in the picker preview."
+    "en": "Notion-style team dashboard rendered as a Live Artifact. A single-page, self-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time activity feed and a linked-database task table — wired to Notion via the Composio connector catalog. Refreshes on demand and when the artifact is opened. Falls back to seeded mock data when no connector is bound, so it works offline / in screenshots / in the picker preview."
   },
   "license": "MIT",
   "author": {

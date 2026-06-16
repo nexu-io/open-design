@@ -24,7 +24,7 @@
     "en": "Web Prototype"
   },
   "version": "0.1.1",
-  "description": "General-purpose desktop web prototype. Single self-contained HTML file built\nby copying the seed `assets/template.html` and pasting section layouts from\n`references/layouts.md`. Default for any landing / marketing / docs / SaaS\npage when no more specific skill matches.",
+  "description": "General-purpose desktop web prototype. Single self-contained HTML file built by copying the seed `assets/template.html` and pasting section layouts from `references/layouts.md`. Default for any landing / marketing / docs / SaaS page when no more specific skill matches.",
   "description_i18n": {
     "zh-CN": "通用桌面网页原型。通过复制种子文件 `assets/template.html` 并粘贴 `references/layouts.md` 中的布局生成单个独立 HTML 文件。适用于落地页、营销页、文档或 SaaS 页面的默认选项。",
     "zh-TW": "通用桌面網頁原型。透過複製種子檔案 `assets/template.html` 並貼上 `references/layouts.md` 中的版面配置生成單一獨立 HTML 檔案。適用於著陸頁、行銷頁、文件或 SaaS 頁面的預設選項。",
@@ -43,7 +43,7 @@
     "ar": "نموذج أولي لموقع ويب سطح المكتب متعدد الأغراض. ملف HTML مستقل يتم إنشاؤه بنسخ `assets/template.html` ولصق التخطيطات من `references/layouts.md`. الخيار الافتراضي للصفحات المقصودة والتسويقية والتوثيقية أو SaaS.",
     "tr": "Genel amaçlı masaüstü web prototipi. `assets/template.html` kopyalanıp `references/layouts.md` içindeki düzenler yapıştırılarak oluşturulan bağımsız HTML dosyası. Açılış, pazarlama, dokümantasyon veya SaaS sayfaları için varsayılan.",
     "uk": "Універсальний веб-прототип для десктопа. Автономний HTML-файл створюється копіюванням `assets/template.html` та вставкою макетів з `references/layouts.md`. За замовчуванням для посадкових, маркетингових, документаційних або SaaS-сторінок.",
-    "en": "General-purpose desktop web prototype. Single self-contained HTML file built\nby copying the seed `assets/template.html` and pasting section layouts from\n`references/layouts.md`. Default for any landing / marketing / docs / SaaS\npage when no more specific skill matches."
+    "en": "General-purpose desktop web prototype. Single self-contained HTML file built by copying the seed `assets/template.html` and pasting section layouts from `references/layouts.md`. Default for any landing / marketing / docs / SaaS page when no more specific skill matches."
   },
   "license": "MIT",
   "author": {

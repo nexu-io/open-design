@@ -24,7 +24,7 @@
     "en": "Dashboard"
   },
   "version": "0.1.0",
-  "description": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar,\ntop bar with user/search, main grid of KPI cards and one or two charts.\nUse when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or\n\"control panel\" screen.",
+  "description": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar, top bar with user/search, main grid of KPI cards and one or two charts. Use when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or \"control panel\" screen.",
   "description_i18n": {
     "zh-CN": "单文件 HTML 管理/分析仪表盘。固定左侧边栏，顶部用户/搜索栏，主区域显示 KPI 卡片网格和图表。适用于需要'仪表盘'、'管理后台'、'数据分析'或'控制面板'界面的场景。",
     "zh-TW": "單檔 HTML 管理/分析儀表板。固定左側邊欄，頂部使用者/搜尋列，主區域顯示 KPI 卡片網格和圖表。適用於需要『儀表板』、『管理後台』、『數據分析』或『控制面板』畫面的場景。",
@@ -43,7 +43,7 @@
     "ar": "لوحة تحكم إدارية وتحليلية في ملف HTML واحد. شريط جانبي أيسر ثابت، شريط علوي للمستخدم/البحث، شبكة رئيسية لبطاقات KPI والرسوم البيانية. استخدمها لشاشات 'لوحة التحكم' أو 'الإدارة' أو 'التحليلات' أو 'لوحة التحكم'.",
     "tr": "Tek HTML dosyasında yönetici/analitik gösterge paneli. Sabit sol kenar çubuğu, kullanıcı/arama içeren üst çubuk, ana KPI kart ızgarası ve grafikler. 'Gösterge paneli', 'yönetici', 'analitik' veya 'kontrol paneli' ekranları için kullanın.",
     "uk": "Адміністративна та аналітична панель в одному HTML-файлі. Фіксована ліва бічна панель, верхня панель з користувачем/пошуком, основна сітка KPI-карток і графіків. Використовуйте для екранів 'панелі керування', 'адміністрування', 'аналітики' або 'контрольної панелі'.",
-    "en": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar,\ntop bar with user/search, main grid of KPI cards and one or two charts.\nUse when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or\n\"control panel\" screen."
+    "en": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar, top bar with user/search, main grid of KPI cards and one or two charts. Use when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or \"control panel\" screen."
   },
   "license": "MIT",
   "author": {

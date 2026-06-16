@@ -24,7 +24,7 @@
     "en": "Clinical Case Report"
   },
   "version": "0.1.0",
-  "description": "Structured medical case presentation for clinical rounds, conferences,\nand documentation. Generates SOAP-format or narrative case reports\nwith physiologically accurate vitals, labs, and evidence-based plans.\nUse when the brief mentions \"case report\", \"case presentation\", \"SOAP note\",\n\"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\".",
+  "description": "Structured medical case presentation for clinical rounds, conferences, and documentation. Generates SOAP-format or narrative case reports with physiologically accurate vitals, labs, and evidence-based plans. Use when the brief mentions \"case report\", \"case presentation\", \"SOAP note\", \"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\".",
   "description_i18n": {
     "zh-CN": "为临床查房、病例讨论会和医疗文档生成结构化病例报告。支持生成SOAP格式或叙述性病例报告，包含生理准确的生命体征、实验室数据和循证医疗方案。",
     "zh-TW": "為臨床查房、病例討論會和醫療文件生成結構化病例報告。支援生成SOAP格式或敘述性病例報告，包含生理準確的生命徵象、實驗室數據和實證醫療計畫。",
@@ -43,7 +43,7 @@
     "ar": "عرض منظم للحالات الطبية للجولات السريرية والمؤتمرات والتوثيق. ينشئ تقارير بتنسيق SOAP أو سردي مع علامات حيوية دقيقة فسيولوجياً وتحاليل مخبرية وخطط علاجية قائمة على الأدلة.",
     "tr": "Klinik vizitler, konferanslar ve dokümantasyon için yapılandırılmış tıbbi vaka sunumu. Fizyolojik olarak doğru vital bulgular, laboratuvar değerleri ve kanıta dayalı tedavi planları içeren SOAP formatında veya anlatı tarzında raporlar oluşturur.",
     "uk": "Структурована презентація медичного випадку для обходів, конференцій та документації. Генерує звіти у форматі SOAP або описовому форматі з фізіологічно точними показниками, аналізами та планами на основі доказової медицини.",
-    "en": "Structured medical case presentation for clinical rounds, conferences,\nand documentation. Generates SOAP-format or narrative case reports\nwith physiologically accurate vitals, labs, and evidence-based plans.\nUse when the brief mentions \"case report\", \"case presentation\", \"SOAP note\",\n\"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\"."
+    "en": "Structured medical case presentation for clinical rounds, conferences, and documentation. Generates SOAP-format or narrative case reports with physiologically accurate vitals, labs, and evidence-based plans. Use when the brief mentions \"case report\", \"case presentation\", \"SOAP note\", \"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\"."
   },
   "license": "MIT",
   "author": {

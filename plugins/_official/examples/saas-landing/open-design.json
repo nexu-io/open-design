@@ -24,7 +24,7 @@
     "en": "Saas Landing"
   },
   "version": "0.1.0",
-  "description": "Single-page SaaS landing with hero, features, social proof, pricing, and CTA.\nRespects the active DESIGN.md color/typography/layout tokens.\nTrigger keywords: \"saas landing\", \"marketing page\", \"product landing\".",
+  "description": "Single-page SaaS landing with hero, features, social proof, pricing, and CTA. Respects the active DESIGN.md color/typography/layout tokens. Trigger keywords: \"saas landing\", \"marketing page\", \"product landing\".",
   "description_i18n": {
     "zh-CN": "单页 SaaS 落地页，包含主视觉、功能特性、社会证明、价格方案和行动号召。遵循当前 DESIGN.md 的颜色/排版/布局规范。触发关键词：\"saas landing\"、\"marketing page\"、\"product landing\"。",
     "zh-TW": "單頁 SaaS 著陸頁面，包含主視覺區、功能特色、社會證明、定價方案與行動呼籲。遵循當前 DESIGN.md 的顏色/排版/版面配置規範。觸發關鍵字：\"saas landing\"、\"marketing page\"、\"product landing\"。",
@@ -43,7 +43,7 @@
     "ar": "صفحة هبوط SaaS من صفحة واحدة تحتوي على hero وميزات وإثبات اجتماعي وأسعار وCTA. تحترم رموز اللون/الطباعة/التخطيط النشطة من DESIGN.md. الكلمات المفتاحية: \"saas landing\"، \"marketing page\"، \"product landing\".",
     "tr": "Hero, özellikler, sosyal kanıt, fiyatlandırma ve CTA içeren tek sayfalık SaaS açılış sayfası. Aktif DESIGN.md renk/tipografi/layout token'larına uygundur. Tetikleyici anahtar kelimeler: \"saas landing\", \"marketing page\", \"product landing\".",
     "uk": "Односторінковий лендінг SaaS з hero-секцією, можливостями, соціальними доказами, цінами та CTA. Відповідає активним токенам кольору/типографіки/макета з DESIGN.md. Ключові слова: \"saas landing\", \"marketing page\", \"product landing\".",
-    "en": "Single-page SaaS landing with hero, features, social proof, pricing, and CTA.\nRespects the active DESIGN.md color/typography/layout tokens.\nTrigger keywords: \"saas landing\", \"marketing page\", \"product landing\"."
+    "en": "Single-page SaaS landing with hero, features, social proof, pricing, and CTA. Respects the active DESIGN.md color/typography/layout tokens. Trigger keywords: \"saas landing\", \"marketing page\", \"product landing\"."
   },
   "license": "MIT",
   "author": {

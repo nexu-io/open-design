@@ -24,7 +24,7 @@
     "en": "Live Artifact"
   },
   "version": "0.1.0",
-  "description": "Create refreshable, auditable Open Design artifacts backed by connector or local data.\nTrigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
+  "description": "Create refreshable, auditable Open Design artifacts backed by connector or local data. Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
   "description_i18n": {
     "zh-CN": "创建可刷新、可审计的 Open Design 工件，支持连接器或本地数据。适用于实时仪表板、可刷新报表、同步视图或可复用的数据驱动工件。",
     "zh-TW": "建立可重新整理、可稽核的 Open Design 工件，支援連接器或本機資料。適用於即時儀表板、可重新整理報表、同步檢視或可重複使用的資料驅動工件。",
@@ -43,7 +43,7 @@
     "ar": "أنشئ قطع Open Design قابلة للتحديث والمراجعة مدعومة بموصل أو بيانات محلية. مناسبة للوحات المعلومات الحية والتقارير القابلة للتحديث والطرق المتزامنة أو القطع القابلة لإعادة الاستخدام المستندة إلى البيانات.",
     "tr": "Bağlayıcı veya yerel verilerle desteklenen yenilenebilir ve denetlenebilir Open Design yapı taşları oluşturun. Canlı panolar, yenilenebilir raporlar, senkronize görünümler veya yeniden kullanılabilir veri destekli yapı taşları için idealdir.",
     "uk": "Створюйте оновлювані та аудитовані артефакти Open Design на основі коннекторів або локальних даних. Підходить для живих дашбордів, оновлюваних звітів, синхронізованих представлень або багаторазових артефактів на основі даних.",
-    "en": "Create refreshable, auditable Open Design artifacts backed by connector or local data.\nTrigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts."
+    "en": "Create refreshable, auditable Open Design artifacts backed by connector or local data. Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts."
   },
   "license": "MIT",
   "author": {
