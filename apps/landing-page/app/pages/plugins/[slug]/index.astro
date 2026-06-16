@@ -215,6 +215,19 @@ const jsonLd = [
   localeCanonicalOnly={!isDesignSystem}
 >
   <article class:list={['detail', isDesignSystem && 'detail-ds']}>
+    {isDesignSystem && detailToc.length > 1 && (
+      <aside class="detail-rail">
+        <nav aria-label={pcopy.detailTocLabel}>
+          <span class="detail-rail-label">{pcopy.detailTocLabel}</span>
+          <ul>
+            {detailToc.map((t) => (
+              <li><a href={`#${t.id}`}>{t.label}</a></li>
+            ))}
+          </ul>
+        </nav>
+      </aside>
+    )}
+    <div class="detail-main">
     <header class="detail-head">
       <nav class="label detail-crumb" aria-label={pcopy.breadcrumbLabel}>
         <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
@@ -254,17 +267,6 @@ const jsonLd = [
     </header>
 
     <PluginContribute />
-
-    {detailToc.length > 1 && (
-      <nav class="detail-toc" aria-label={pcopy.detailTocLabel}>
-        <span class="detail-toc-label">{pcopy.detailTocLabel}</span>
-        <ul>
-          {detailToc.map((t) => (
-            <li><a href={`#${t.id}`}>{t.label}</a></li>
-          ))}
-        </ul>
-      </nav>
-    )}
 
     {hasPreview && systemRecord && (
       <section class="detail-block scenario-showcase" id="preview">
@@ -547,6 +549,7 @@ const jsonLd = [
         </div>
       </section>
     )}
+    </div>
   </article>
 </Layout>
 
@@ -633,58 +636,97 @@ const jsonLd = [
       grid-template-columns: 1fr;
     }
   }
-  /* In-page anchor nav (design-system detail) — a sticky section bar that
-     reflects the page's structure (schema) and stays reachable on scroll. */
-  .detail-toc {
-    position: sticky;
-    top: 0;
-    z-index: 6;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px 18px;
-    margin: 0 0 32px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--paper, #fafafa) 88%, transparent);
-    backdrop-filter: saturate(1.1) blur(8px);
-    -webkit-backdrop-filter: saturate(1.1) blur(8px);
+  /* Two-column layout for the dense design-system detail page: a wider track
+     than the default 880px reading column so a right-hand section-nav rail can
+     sit beside the content without squeezing it. */
+  .detail-ds {
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 196px;
+    column-gap: 56px;
+    align-items: start;
   }
-  .detail-toc-label {
+  .detail-main {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+  /* Right-hand section nav — reflects the page's schema (its sections) and
+     sticks alongside the content as you scroll. */
+  .detail-rail {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 96px;
+    align-self: start;
+  }
+  .detail-rail-label {
+    display: block;
     font-family: var(--mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--ink-mute, #595959);
+    margin-bottom: 12px;
   }
-  .detail-toc ul {
+  .detail-rail ul {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px 18px;
+    flex-direction: column;
+    gap: 2px;
+    border-left: 1px solid var(--line);
   }
-  .detail-toc li { margin: 0; }
-  .detail-toc a {
-    font-family: var(--mono);
-    font-size: 0.78rem;
+  .detail-rail li { margin: 0; }
+  .detail-rail a {
+    display: block;
+    padding: 6px 0 6px 14px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    font-size: 0.82rem;
     color: var(--ink-soft, #434343);
     text-decoration: none;
-    border-bottom: 1px solid transparent;
   }
-  .detail-toc a:hover {
+  .detail-rail a:hover {
     color: var(--coral);
-    border-bottom-color: var(--coral);
+    border-left-color: var(--coral);
   }
-  /* Tighten section rhythm on the dense design-system detail page so it
-     doesn't read as empty between blocks. Scoped to design-system pages via
-     the article class; other plugin detail pages keep their spacing. */
+  /* Tighten section rhythm so the dense page doesn't read as empty. */
   .detail-ds .detail-block {
     margin-bottom: 32px;
   }
   .detail-ds .detail-meta {
     margin-bottom: 28px;
+  }
+  /* Related systems: the narrower content column squeezed the 3-up catalog
+     grid, so design-system detail pages show comfier 2-up cards. */
+  .detail-ds .related-systems :global(.systems-grid ul) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 980px) {
+    .detail-ds {
+      grid-template-columns: 1fr;
+    }
+    .detail-rail {
+      position: static;
+      margin-bottom: 24px;
+    }
+    .detail-rail ul {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      border-left: 0;
+    }
+    .detail-rail a {
+      padding: 4px 0;
+      margin-left: 0;
+      border-left: 0;
+      border-bottom: 1px solid transparent;
+    }
+    .detail-rail a:hover {
+      border-bottom-color: var(--coral);
+    }
   }
   /* Structured design-token spec sheet (design-tokens.json). Multi-column so
      groups of uneven height pack tightly (no big grid-row gaps); each row =
