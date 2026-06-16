@@ -987,6 +987,32 @@ describe('POST /api/integrations/vela/analytics-entry', () => {
     expect(body).toEqual({ error: 'invalid_amr_profile_analytics' });
   });
 
+  it('rejects non-onboarding sources for AMR onboarding profile analytics', async () => {
+    const payload = {
+      pageName: 'open_design',
+      sourcePageName: 'onboarding',
+      area: 'onboarding',
+      element: 'about_you_submit',
+      action: 'submit_profile',
+      entryId: 'od-amr-entry-profile',
+      sourceProduct: 'open_design',
+      sourceDetail: 'settings_amr_console',
+      entryOccurredAt: '2026-06-03T12:00:00.000Z',
+      profileOccurredAt: '2026-06-03T12:03:00.000Z',
+      odRole: 'pm',
+    };
+
+    expect(parseAmrOnboardingProfileAnalyticsPayload({ payload })).toBeNull();
+
+    const { status, body } = await postJson<{ error: string }>(
+      `${baseUrl}/api/integrations/vela/analytics-profile`,
+      { payload },
+    );
+
+    expect(status).toBe(400);
+    expect(body).toEqual({ error: 'invalid_amr_profile_analytics' });
+  });
+
   it('rejects malformed AMR entry analytics payloads', async () => {
     const { status, body } = await postJson<{ error: string }>(
       `${baseUrl}/api/integrations/vela/analytics-entry`,

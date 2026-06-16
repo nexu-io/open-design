@@ -35,6 +35,11 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'generation_preview_switch_retry_card',
 ]);
 
+const AMR_ONBOARDING_PROFILE_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
+  'onboarding_amr_card',
+  'onboarding_amr_sign_in_continue',
+]);
+
 type AmrEntrySourcePageName = Extract<
   TrackingPageName,
   'onboarding' | 'chat_panel' | 'settings' | 'file_manager' | 'artifact'
@@ -590,6 +595,7 @@ export function parseAmrOnboardingProfileAnalyticsPayload(
     || sourceProduct !== 'open_design'
     || typeof sourceDetail !== 'string'
     || !AMR_ENTRY_SOURCES.has(sourceDetail as TrackingAmrEntrySource)
+    || !AMR_ONBOARDING_PROFILE_SOURCES.has(sourceDetail as TrackingAmrEntrySource)
     || typeof entryOccurredAt !== 'string'
     || !Number.isFinite(Date.parse(entryOccurredAt))
     || typeof profileOccurredAt !== 'string'
