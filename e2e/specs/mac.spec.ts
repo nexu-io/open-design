@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -76,6 +76,35 @@ const clickUpdaterRailExpression = `
     if (button.getAttribute('aria-disabled') === 'true') return { clicked: false, reason: 'updater-rail-disabled' };
     button.click();
     return { clicked: true };
+  })()
+`;
+const packagedOnboardingExpression = `
+  (() => {
+    const onboardingShell = document.querySelector('.entry-shell--onboarding');
+    const onboardingModal = document.querySelector('.entry-onboarding-modal');
+    const amrCard = document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__card');
+    const alternativeCards = Array.from(document.querySelectorAll('.onboarding-view__alternatives .onboarding-view__card'));
+    const localCard = alternativeCards[0] ?? null;
+    const byokCard = alternativeCards[1] ?? null;
+    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
+    const selectedCard = document.querySelector('.onboarding-view__card.is-selected');
+
+    return {
+      amrCardVisible: amrCard instanceof HTMLElement,
+      amrModelPickerVisible: Boolean(document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')),
+      amrSelected: amrCard?.getAttribute('aria-pressed') === 'true',
+      byokCardVisible: byokCard instanceof HTMLElement,
+      byokSelected: byokCard?.getAttribute('aria-pressed') === 'true',
+      href: location.href,
+      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
+      localCardVisible: localCard instanceof HTMLElement,
+      localSelected: localCard?.getAttribute('aria-pressed') === 'true',
+      onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
+      selectedText: selectedCard?.textContent?.trim() ?? null,
+      setupPanelVisible: setupPanel instanceof HTMLElement,
+      text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
+      title: document.title,
+    };
   })()
 `;
 
@@ -206,8 +235,30 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
+type OnboardingRuntime = 'amr' | 'local' | 'byok';
+
+type PackagedOnboardingEvalValue = {
+  amrCardVisible: boolean;
+  amrModelPickerVisible: boolean;
+  amrSelected: boolean;
+  byokCardVisible: boolean;
+  byokSelected: boolean;
+  href: string;
+  inputCount: number;
+  localCardVisible: boolean;
+  localSelected: boolean;
+  onboardingVisible: boolean;
+  selectedText: string | null;
+  setupPanelVisible: boolean;
+  text: string | null;
+  title: string;
+};
+
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
+const shouldRunPackagedMacOnboardingSmoke =
+  shouldRunPackagedMacSmoke && process.env.OD_PACKAGED_E2E_MAC_ONBOARDING_SMOKE === '1';
+const macOnboardingDescribe = shouldRunPackagedMacOnboardingSmoke ? describe : describe.skip;
 const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
 const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
@@ -407,6 +458,127 @@ macDescribe('packaged mac runtime smoke', () => {
         started = false;
         installedAppPath = null;
       }
+    }
+  }, 180_000);
+});
+
+macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
+  let installedAppPath: string | null = null;
+  let started = false;
+
+  test('[P0] @electron-smoke starts a fresh packaged app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+    const report = await createPackagedSmokeReport('mac');
+    let passed = false;
+    try {
+      await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+        console.error('failed to uninstall stale packaged mac app before onboarding smoke', error);
+      });
+      await resetPackagedMacRuntimeData();
+
+      const install = await runToolsPackJson<MacInstallResult>('install');
+      installedAppPath = install.installedAppPath;
+      expect(install.namespace).toBe(namespace);
+      expect(install.detached).toBe(true);
+
+      const start = await runToolsPackJson<MacStartResult>('start');
+      started = true;
+      expect(start.namespace).toBe(namespace);
+      expect(start.source).toBe('installed');
+      expect(start.appPath).toBe(install.installedAppPath);
+
+      const inspect = await waitForHealthyDesktop();
+      const health = assertHealthEvalValue(inspect.eval?.value);
+      expect(health.status).toBe(200);
+      expect(health.health.ok).toBe(true);
+
+      const initial = await waitForPackagedOnboarding((snapshot) =>
+        snapshot.onboardingVisible &&
+        snapshot.amrCardVisible &&
+        snapshot.localCardVisible &&
+        snapshot.byokCardVisible,
+        'fresh packaged onboarding runtime choices',
+      );
+      expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
+      expect(initial.amrCardVisible).toBe(true);
+      expect(initial.localCardVisible).toBe(true);
+      expect(initial.byokCardVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('byok');
+      const byok = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.byokSelected && snapshot.setupPanelVisible && snapshot.inputCount > 0,
+        'packaged onboarding BYOK setup panel',
+      );
+      expect(byok.byokSelected).toBe(true);
+      expect(byok.setupPanelVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('local');
+      const local = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.localSelected && snapshot.setupPanelVisible,
+        'packaged onboarding Local CLI setup panel',
+      );
+      expect(local.localSelected).toBe(true);
+      expect(local.setupPanelVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('amr');
+      const amr = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.amrSelected && !snapshot.setupPanelVisible,
+        'packaged onboarding AMR selection',
+      );
+      expect(amr.amrSelected).toBe(true);
+
+      const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
+      await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
+      const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', onboardingScreenshotPath]);
+      expect(screenshot.screenshot?.path).toBe(onboardingScreenshotPath);
+      expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
+      await report.report.save('screenshots/open-design-mac-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
+      await report.report.json('onboarding-summary.json', {
+        amr,
+        byok,
+        health,
+        initial,
+        local,
+        namespace,
+        screenshot: 'screenshots/open-design-mac-onboarding-smoke.png',
+        start: {
+          appPath: start.appPath,
+          executablePath: start.executablePath,
+          logPath: start.logPath,
+          pid: start.pid,
+          source: start.source,
+          status: start.status,
+        },
+      });
+
+      const stop = await runToolsPackJson<MacStopResult>('stop');
+      started = false;
+      expect(stop.namespace).toBe(namespace);
+      expect(stop.status).not.toBe('partial');
+
+      const uninstall = await runToolsPackJson<MacUninstallResult>('uninstall');
+      installedAppPath = null;
+      expect(uninstall.namespace).toBe(namespace);
+      expect(uninstall.installedAppPath).toBe(install.installedAppPath);
+      expect(uninstall.removed).toBe(true);
+      await resetPackagedMacRuntimeData();
+      passed = true;
+    } finally {
+      if (!passed) {
+        await printPackagedLogs().catch((error: unknown) => {
+          console.error('failed to read packaged mac onboarding logs after failure', error);
+        });
+      }
+
+      if (started || installedAppPath != null) {
+        await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+          console.error('failed to uninstall packaged mac onboarding app during cleanup', error);
+        });
+        started = false;
+        installedAppPath = null;
+      }
+      await resetPackagedMacRuntimeData().catch((error: unknown) => {
+        console.error('failed to reset packaged mac onboarding runtime data during cleanup', error);
+      });
     }
   }, 180_000);
 });
@@ -1770,6 +1942,39 @@ async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid
   throw new Error(`packaged mac runtime did not relaunch healthy on ${expectedVersion}: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForPackagedOnboarding(
+  predicate: (value: PackagedOnboardingEvalValue) => boolean,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<PackagedOnboardingEvalValue> {
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', packagedOnboardingExpression]);
+      lastResult = inspect;
+      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+        const value = asPackagedOnboardingEvalValue(inspect.eval.value);
+        if (value != null && predicate(value)) return value;
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`${label}: packaged onboarding timed out: ${formatUnknown(lastResult)}`);
+}
+
+async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
+  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
+  const value = inspect.eval?.value;
+  if (!isRecord(value) || value.clicked !== true) {
+    throw new Error(`failed to click packaged onboarding ${runtime} runtime: ${formatUnknown(value)}`);
+  }
+}
+
 async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
@@ -1905,11 +2110,48 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
   return normalized;
 }
 
+function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
+  const selector =
+    runtime === 'amr'
+      ? '.onboarding-view__amr-cloud-card .onboarding-view__card'
+      : `.onboarding-view__alternatives .onboarding-view__card:nth-child(${runtime === 'local' ? 1 : 2})`;
+  return `
+    (async () => {
+      const target = document.querySelector(${JSON.stringify(selector)});
+      if (!(target instanceof HTMLElement)) {
+        return { clicked: false, reason: 'missing-runtime-card', runtime: ${JSON.stringify(runtime)} };
+      }
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
+    })()
+  `;
+}
+
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
   if (!isRecord(value.health)) return null;
   return value as HealthEvalValue;
+}
+
+function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.amrCardVisible !== 'boolean') return null;
+  if (typeof value.amrModelPickerVisible !== 'boolean') return null;
+  if (typeof value.amrSelected !== 'boolean') return null;
+  if (typeof value.byokCardVisible !== 'boolean') return null;
+  if (typeof value.byokSelected !== 'boolean') return null;
+  if (typeof value.href !== 'string') return null;
+  if (typeof value.inputCount !== 'number') return null;
+  if (typeof value.localCardVisible !== 'boolean') return null;
+  if (typeof value.localSelected !== 'boolean') return null;
+  if (typeof value.onboardingVisible !== 'boolean') return null;
+  if (value.selectedText != null && typeof value.selectedText !== 'string') return null;
+  if (typeof value.setupPanelVisible !== 'boolean') return null;
+  if (value.text != null && typeof value.text !== 'string') return null;
+  if (typeof value.title !== 'string') return null;
+  return value as PackagedOnboardingEvalValue;
 }
 
 function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
@@ -1954,6 +2196,10 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+async function resetPackagedMacRuntimeData(): Promise<void> {
+  await rm(runtimeNamespaceRoot, { force: true, recursive: true });
 }
 
 function resolveFromWorkspace(filePath: string): string {

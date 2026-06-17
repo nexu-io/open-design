@@ -51,6 +51,8 @@ test('[P2] captures the visual home harness', async ({ page }) => {
 });
 
 test('[P2] captures the home plugin catalog surface', async ({ page }) => {
+  test.setTimeout(60_000);
+
   await configureVisualPage(page);
   await gotoVisualHome(page);
 

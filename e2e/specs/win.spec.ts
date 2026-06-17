@@ -65,16 +65,7 @@ const clickUpdaterInstallExpression = `
 const clickUpdaterRailExpression = `
   (async () => {
     const onboarding = document.querySelector('.entry-shell--onboarding, .entry-onboarding-modal');
-    const onboardingSkip = document.querySelector('.onboarding-view__secondary');
-    if (onboarding instanceof HTMLElement && onboardingSkip instanceof HTMLButtonElement && !onboardingSkip.disabled) {
-      onboardingSkip.click();
-      return {
-        clicked: false,
-        reason: 'onboarding-visible',
-        skippedOnboarding: true,
-        text: onboardingSkip.textContent?.trim() ?? '',
-      };
-    }
+    if (onboarding instanceof HTMLElement) return { clicked: false, reason: 'onboarding-visible' };
     const host = window.__od__;
     let hostStatus = null;
     if (host?.updater?.status instanceof Function) {
@@ -102,11 +93,6 @@ const clickUpdaterRailExpression = `
 const ensureMainAppShellExpression = `
   (() => {
     const onboarding = document.querySelector('.entry-shell--onboarding, .entry-onboarding-modal');
-    const skip = document.querySelector('.onboarding-view__secondary');
-    if (onboarding instanceof HTMLElement && skip instanceof HTMLButtonElement && !skip.disabled) {
-      skip.click();
-      return { homeVisible: false, onboardingVisible: true, skipped: true, text: skip.textContent?.trim() ?? '' };
-    }
     const home = document.querySelector('[data-testid="entry-nav-home"]');
     const homeVisible = home instanceof HTMLElement && home.getClientRects().length > 0;
     if (homeVisible) {
@@ -118,6 +104,35 @@ const ensureMainAppShellExpression = `
       skipped: false,
       title: document.title,
       text: document.body?.textContent?.trim().slice(0, 300) ?? '',
+    };
+  })()
+`;
+const packagedOnboardingExpression = `
+  (() => {
+    const onboardingShell = document.querySelector('.entry-shell--onboarding');
+    const onboardingModal = document.querySelector('.entry-onboarding-modal');
+    const amrCard = document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__card');
+    const alternativeCards = Array.from(document.querySelectorAll('.onboarding-view__alternatives .onboarding-view__card'));
+    const localCard = alternativeCards[0] ?? null;
+    const byokCard = alternativeCards[1] ?? null;
+    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
+    const selectedCard = document.querySelector('.onboarding-view__card.is-selected');
+
+    return {
+      amrCardVisible: amrCard instanceof HTMLElement,
+      amrModelPickerVisible: Boolean(document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')),
+      amrSelected: amrCard?.getAttribute('aria-pressed') === 'true',
+      byokCardVisible: byokCard instanceof HTMLElement,
+      byokSelected: byokCard?.getAttribute('aria-pressed') === 'true',
+      href: location.href,
+      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
+      localCardVisible: localCard instanceof HTMLElement,
+      localSelected: localCard?.getAttribute('aria-pressed') === 'true',
+      onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
+      selectedText: selectedCard?.textContent?.trim() ?? null,
+      setupPanelVisible: setupPanel instanceof HTMLElement,
+      text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
+      title: document.title,
     };
   })()
 `;
@@ -285,6 +300,25 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
+type OnboardingRuntime = 'amr' | 'local' | 'byok';
+
+type PackagedOnboardingEvalValue = {
+  amrCardVisible: boolean;
+  amrModelPickerVisible: boolean;
+  amrSelected: boolean;
+  byokCardVisible: boolean;
+  byokSelected: boolean;
+  href: string;
+  inputCount: number;
+  localCardVisible: boolean;
+  localSelected: boolean;
+  onboardingVisible: boolean;
+  selectedText: string | null;
+  setupPanelVisible: boolean;
+  text: string | null;
+  title: string;
+};
+
 type SmokeTiming = {
   durationMs: number;
   step: string;
@@ -297,6 +331,9 @@ type DirectInstallerResult = {
 
 const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
 const winDescribe = shouldRunPackagedWinSmoke ? describe : describe.skip;
+const shouldRunPackagedWinOnboardingSmoke =
+  shouldRunPackagedWinSmoke && process.env.OD_PACKAGED_E2E_WIN_ONBOARDING_SMOKE === '1';
+const winOnboardingDescribe = shouldRunPackagedWinOnboardingSmoke ? describe : describe.skip;
 
 winDescribe('packaged windows runtime smoke', () => {
   let installed = false;
@@ -538,6 +575,144 @@ winDescribe('packaged windows runtime smoke', () => {
         installed = false;
       }
 
+      printSmokeTimings(timings);
+    }
+  }, 720_000);
+});
+
+winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
+  let installed = false;
+  let started = false;
+
+  test('[P0] @electron-smoke starts a fresh packaged Windows app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+    const report = await createPackagedSmokeReport('win');
+    const timings: SmokeTiming[] = [];
+    let install: WinInstallResult | null = null;
+    let installedNamespaceRoot: string | null = null;
+    let passed = false;
+    try {
+      await measureSmokeStep(timings, 'pre-clean uninstall', async () => {
+        await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
+      });
+
+      install = await measureSmokeStep(timings, 'install', async () => runToolsPackJson<WinInstallResult>('install'));
+      installed = true;
+      expect(install.namespace).toBe(namespace);
+      expectPathInside(install.installDir, join(runtimeNamespaceRoot, 'install'));
+      installedNamespaceRoot = runtimeNamespaceRoot;
+      await resetPackagedRuntimeDataRoot();
+
+      const start = await measureSmokeStep(timings, 'start fresh onboarding', async () => runToolsPackJson<WinStartResult>('start'));
+      started = true;
+      expect(start.namespace).toBe(namespace);
+      expect(start.source).toBe('installed');
+      expectPathInside(start.executablePath, install.installDir);
+
+      const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
+      expect(inspect.status?.state).toBe('running');
+      expect(inspect.status?.url).toBe('od://app/');
+      const health = assertHealthEvalValue(inspect.eval?.value);
+      expect(health.href).toBe('od://app/');
+      expect(health.status).toBe(200);
+      expect(health.health.ok).toBe(true);
+
+      const initial = await waitForPackagedOnboarding((snapshot) =>
+        snapshot.onboardingVisible &&
+        snapshot.amrCardVisible &&
+        snapshot.localCardVisible &&
+        snapshot.byokCardVisible,
+        'fresh packaged Windows onboarding runtime choices',
+      );
+      expect(initial.href).toBe('od://app/');
+      expect(initial.amrCardVisible).toBe(true);
+      expect(initial.localCardVisible).toBe(true);
+      expect(initial.byokCardVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('byok');
+      const byok = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.byokSelected && snapshot.setupPanelVisible && snapshot.inputCount > 0,
+        'packaged Windows onboarding BYOK setup panel',
+      );
+      expect(byok.byokSelected).toBe(true);
+      expect(byok.setupPanelVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('local');
+      const local = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.localSelected && snapshot.setupPanelVisible,
+        'packaged Windows onboarding Local CLI setup panel',
+      );
+      expect(local.localSelected).toBe(true);
+      expect(local.setupPanelVisible).toBe(true);
+
+      await clickPackagedOnboardingRuntime('amr');
+      const amr = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.amrSelected && !snapshot.setupPanelVisible,
+        'packaged Windows onboarding AMR selection',
+      );
+      expect(amr.amrSelected).toBe(true);
+
+      const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
+      await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
+      const screenshot = await runToolsPackJson<WinInspectResult>('inspect', ['--path', onboardingScreenshotPath]);
+      expect(screenshot.screenshot?.path).toBe(onboardingScreenshotPath);
+      expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
+      await report.report.save('screenshots/open-design-win-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
+      await report.report.json('onboarding-summary.json', {
+        amr,
+        byok,
+        health,
+        initial,
+        local,
+        namespace,
+        screenshot: 'screenshots/open-design-win-onboarding-smoke.png',
+        start: {
+          executablePath: start.executablePath,
+          logPath: start.logPath,
+          pid: start.pid,
+          source: start.source,
+          status: start.status,
+        },
+        timings,
+      });
+
+      const stop = await measureSmokeStep(timings, 'stop', async () => runToolsPackJson<WinStopResult>('stop'));
+      started = false;
+      expect(stop.namespace).toBe(namespace);
+      expect(stop.status).not.toBe('partial');
+
+      const uninstall = await measureSmokeStep(timings, 'uninstall remove data', async () =>
+        runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']),
+      );
+      installed = false;
+      expect(uninstall.namespace).toBe(namespace);
+      expect(uninstall.residueObservation?.productNamespaceRootExists).toBe(false);
+      passed = true;
+    } finally {
+      if (!passed) {
+        await printPackagedLogs().catch((error: unknown) => {
+          console.error('failed to read packaged windows onboarding logs after failure', error);
+        });
+      }
+
+      if (started) {
+        await runToolsPackJson<WinStopResult>('stop').catch((error: unknown) => {
+          console.error('failed to stop packaged windows onboarding app during cleanup', error);
+        });
+        started = false;
+      }
+
+      if (installed) {
+        await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch((error: unknown) => {
+          console.error('failed to uninstall packaged windows onboarding app during cleanup', error);
+        });
+        installed = false;
+      }
+
+      if (installedNamespaceRoot != null) {
+        await resetPackagedRuntimeNamespaceRoot(installedNamespaceRoot).catch((error: unknown) => {
+          console.error('failed to reset packaged windows onboarding runtime data during cleanup', error);
+        });
+      }
       printSmokeTimings(timings);
     }
   }, 720_000);
@@ -892,6 +1067,39 @@ async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid
   throw new Error(`packaged windows runtime did not relaunch healthy on ${expectedVersion}: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForPackagedOnboarding(
+  predicate: (value: PackagedOnboardingEvalValue) => boolean,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<PackagedOnboardingEvalValue> {
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', packagedOnboardingExpression]);
+      lastResult = inspect;
+      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+        const value = asPackagedOnboardingEvalValue(inspect.eval.value);
+        if (value != null && predicate(value)) return value;
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`${label}: packaged Windows onboarding timed out: ${formatUnknown(lastResult)}`);
+}
+
+async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
+  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
+  const value = inspect.eval?.value;
+  if (!isRecord(value) || value.clicked !== true) {
+    throw new Error(`failed to click packaged Windows onboarding ${runtime} runtime: ${formatUnknown(value)}`);
+  }
+}
+
 async function waitForTerminalUpdateState(expectedVersion: string): Promise<WinInspectResult> {
   const timeoutMs = 60_000;
   const startedAt = Date.now();
@@ -1053,6 +1261,43 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   return value as HealthEvalValue;
 }
 
+function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
+  const selector =
+    runtime === 'amr'
+      ? '.onboarding-view__amr-cloud-card .onboarding-view__card'
+      : `.onboarding-view__alternatives .onboarding-view__card:nth-child(${runtime === 'local' ? 1 : 2})`;
+  return `
+    (async () => {
+      const target = document.querySelector(${JSON.stringify(selector)});
+      if (!(target instanceof HTMLElement)) {
+        return { clicked: false, reason: 'missing-runtime-card', runtime: ${JSON.stringify(runtime)} };
+      }
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
+    })()
+  `;
+}
+
+function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.amrCardVisible !== 'boolean') return null;
+  if (typeof value.amrModelPickerVisible !== 'boolean') return null;
+  if (typeof value.amrSelected !== 'boolean') return null;
+  if (typeof value.byokCardVisible !== 'boolean') return null;
+  if (typeof value.byokSelected !== 'boolean') return null;
+  if (typeof value.href !== 'string') return null;
+  if (typeof value.inputCount !== 'number') return null;
+  if (typeof value.localCardVisible !== 'boolean') return null;
+  if (typeof value.localSelected !== 'boolean') return null;
+  if (typeof value.onboardingVisible !== 'boolean') return null;
+  if (value.selectedText != null && typeof value.selectedText !== 'string') return null;
+  if (typeof value.setupPanelVisible !== 'boolean') return null;
+  if (value.text != null && typeof value.text !== 'string') return null;
+  if (typeof value.title !== 'string') return null;
+  return value as PackagedOnboardingEvalValue;
+}
+
 function expectPathInside(filePath: string, expectedRoot: string): void {
   const normalizedPath = resolve(filePath);
   const normalizedRoot = resolve(expectedRoot);
@@ -1090,6 +1335,14 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
   const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): Promise<void> {
+  await rm(namespaceRoot, { force: true, recursive: true });
+}
+
+async function resetPackagedRuntimeDataRoot(): Promise<void> {
+  await rm(join(runtimeNamespaceRoot, 'data'), { force: true, recursive: true });
 }
 
 function resolveFromWorkspace(filePath: string): string {

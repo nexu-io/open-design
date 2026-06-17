@@ -36,6 +36,22 @@ describe('AMR account failure classification', () => {
     });
   });
 
+  it('classifies common AMR billing text variants as rechargeable balance errors', () => {
+    for (const text of [
+      'not enough credits to run this model',
+      'not enough balance for the selected model',
+      'insufficient funds in AMR wallet',
+      'balance too low for this request',
+      'billing balance is below the minimum required amount',
+    ]) {
+      expect(classifyAmrAccountFailure(text)).toMatchObject({
+        code: 'AMR_INSUFFICIENT_BALANCE',
+        action: 'recharge',
+        actionUrl: DEFAULT_AMR_RECHARGE_URL,
+      });
+    }
+  });
+
   it('does not classify non-billing throttling as AMR balance errors', () => {
     expect(classifyAmrAccountFailure('HTTP 429 rate limit reached')).toBeNull();
     expect(classifyAmrAccountFailure('quota exceeded')).toBeNull();
@@ -48,6 +64,10 @@ describe('AMR account failure classification', () => {
       'invalid session for AMR profile',
       'login missing for runtime account',
       'authentication required',
+      'auth_required: please reconnect AMR Cloud',
+      'signin required before calling session/prompt',
+      'not logged in to Vela runtime',
+      'unauthenticated request to link',
     ]) {
       expect(classifyAmrAccountFailure(text)).toMatchObject({
         code: 'AMR_AUTH_REQUIRED',

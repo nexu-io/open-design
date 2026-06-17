@@ -239,6 +239,44 @@ child.on('exit', (code) => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('does not retry credential failures from `vela model list --format json`', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-invalid-key-'));
+    const stateFile = path.join(tempDir, 'invalid-key-state.json');
+    const wrapperPath = path.join(tempDir, 'vela-wrapper');
+    const wrapperSource = `#!/usr/bin/env node
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const stateFile = process.env.RETRY_STATE_FILE;
+const args = process.argv.slice(2);
+if (args[0] === 'model' && args[1] === 'list') {
+  const state = stateFile && existsSync(stateFile)
+    ? JSON.parse(readFileSync(stateFile, 'utf8'))
+    : { attempts: 0 };
+  state.attempts += 1;
+  if (stateFile) writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+  process.stderr.write('Error: list Link models: API request failed with status 401: invalid_api_key\\n');
+  process.exit(1);
+}
+process.stderr.write('unexpected argv: ' + args.join(' ') + '\\n');
+process.exit(2);
+`;
+    writeFileSync(wrapperPath, wrapperSource, 'utf8');
+    chmodSync(wrapperPath, 0o755);
+    try {
+      await expect(amrAgentDef.fetchModels?.(
+        wrapperPath,
+        {
+          ...process.env,
+          RETRY_STATE_FILE: stateFile,
+        },
+      )).rejects.toThrow(/invalid_api_key/);
+      expect(existsSync(stateFile)).toBe(true);
+      const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+      expect(attempts.attempts).toBe(1);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('AMR model loading cache', () => {
@@ -306,6 +344,36 @@ describe('AMR model loading cache', () => {
       stale: true,
       remoteError: 'remote unavailable',
       models: [{ id: 'deepseek-v3.2', label: 'deepseek-v3.2' }],
+    });
+  });
+
+  it('surfaces stale remote auth failures without dropping the last usable model list', async () => {
+    const cache = new AmrModelLoadingCache(0);
+    cache.warm('vela:prod', async () => [{ id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const stale = await cache.get('vela:prod', {
+      fetchPreset: async () => [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
+      fetchRemote: async () => {
+        throw new Error('API request failed with status 401: invalid_api_key');
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const afterFailure = await cache.get('vela:prod', {
+      fetchPreset: async () => [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }],
+      fetchRemote: async () => {
+        throw new Error('API request failed with status 401: invalid_api_key');
+      },
+    });
+
+    expect(stale.models).toEqual([
+      { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' },
+    ]);
+    expect(afterFailure).toMatchObject({
+      source: 'remote',
+      stale: true,
+      remoteError: 'API request failed with status 401: invalid_api_key',
+      models: [{ id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' }],
     });
   });
 

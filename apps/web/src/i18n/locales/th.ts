@@ -186,7 +186,6 @@ export const th: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'การตั้งค่า',
   'settings.title': 'โหมดการรัน',
   'settings.subtitle': 'เลือกระหว่าง Local CLI และ BYOK',

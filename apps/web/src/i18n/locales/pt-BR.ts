@@ -186,7 +186,6 @@ export const ptBR: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Configurações',
   'settings.title': 'Modo de execução',
   'settings.subtitle': 'Escolha entre CLI local e BYOK.',

@@ -186,7 +186,6 @@ export const it: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Impostazioni',
   'settings.title': 'Esecuzione e modello',
   'settings.subtitle': 'Scegli tra CLI locale e BYOK.',

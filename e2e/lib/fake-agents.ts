@@ -172,6 +172,7 @@ async function emitRun(promptText) {
     await emitPluginAuthoringRun();
     return;
   }
+  const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
   const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
@@ -183,18 +184,23 @@ async function emitRun(promptText) {
   }
   const isRuntime = promptText.match(/Fake runtime smoke for ([a-z0-9-]+)/i);
   const runtimeId = isRuntime ? isRuntime[1] : agentId;
-  const heading = isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
-  const identifier = isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
-  const text = isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
+  const heading = isSlowReload ? 'Slow Reload Daemon Smoke' : isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
+  const identifier = isSlowReload ? 'slow-reload-daemon-smoke' : isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
+  const text = isSlowReload ? 'Generated after a reload while the daemon run was active.' : isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
   const html = '<!doctype html><html><body><main><h1>' + heading + '</h1><p>' + text + '</p></main></body></html>';
   const artifact = '<artifact identifier="' + identifier + '" type="text/html" title="' + heading + '">' + html + '</artifact>';
-  const assistantText = isDelayed
+  const assistantText = isSlowReload
+    ? 'I stayed attached after the reload and will persist the artifact now.\\n\\n' + artifact
+    : isDelayed
     ? 'I recovered the delayed reasoning path and will persist the artifact now.\\n\\n' + artifact
     : artifact;
+  if (isSlowReload) {
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
   if (isDelayed) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
   }
-  emitSuccess(assistantText, isChunked, isDelayed);
+  emitSuccess(assistantText, isChunked, isDelayed || isSlowReload);
   process.exitCode = 0;
   exitSoon(0);
 }

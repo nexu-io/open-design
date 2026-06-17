@@ -186,7 +186,6 @@ export const ar: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'الإعدادات',
   'settings.title': 'وضع التنفيذ',
   'settings.subtitle': 'اختر بين CLI المحلي و BYOK.',

@@ -186,7 +186,6 @@ export const esES: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Ajustes',
   'settings.title': 'Modo de ejecución',
   'settings.subtitle': 'Elige entre CLI local y BYOK.',

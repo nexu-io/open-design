@@ -56,6 +56,29 @@ const shards: Record<string, Shard> = {
   },
 };
 
+for (const [name, shard] of Object.entries(shards)) {
+  if (name === 'smoke' || name.endsWith('-critical')) continue;
+  shards[`${name}-critical`] = {
+    ...shard,
+    grep: String.raw`\[P0\].*@critical`,
+  };
+}
+
+shards['pr-entry-settings-smoke'] = {
+  grep: String.raw`\[P0\].*@critical`,
+  files: combineFiles(['smoke', 'entry-onboarding', 'settings-connectors']),
+};
+
+shards['pr-project-workspace'] = {
+  grep: String.raw`\[P0\].*@critical`,
+  files: combineFiles(['project-workspace']),
+};
+
+shards['pr-runtime-restoration'] = {
+  grep: String.raw`\[P0\].*@critical`,
+  files: combineFiles(['workspace-restoration', 'runtime-recovery']),
+};
+
 const commandName = process.argv[2] ?? 'help';
 
 if (commandName === 'help') {
@@ -85,6 +108,10 @@ async function runPlaywright(shard: Shard): Promise<void> {
     child.once('exit', (code) => resolve(code));
   });
   process.exitCode = exitCode ?? 1;
+}
+
+function combineFiles(shardNames: string[]): string[] {
+  return [...new Set(shardNames.flatMap((name) => shards[name]?.files ?? []))];
 }
 
 function printUsage(): void {

@@ -45,6 +45,12 @@ const VISUAL_CONFIG = {
 const visualStableTimeoutMs = 10_000;
 const visualStableFrameCount = 3;
 
+function waitForVisualTimeout(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, visualStableTimeoutMs);
+  });
+}
+
 const MOCK_AGENT = {
   id: 'mock',
   name: 'Mock Agent',
@@ -127,6 +133,35 @@ const VISUAL_PROJECTS = [
 ] as const;
 
 type VisualProject = (typeof VISUAL_PROJECTS)[number];
+
+const VISUAL_PROJECT_FILE_HTML =
+  '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
+
+const VISUAL_PROJECT_FILES = [
+  {
+    name: 'index.html',
+    path: 'index.html',
+    type: 'file',
+    size: VISUAL_PROJECT_FILE_HTML.length,
+    mtime: 1_700_000_200_000,
+    kind: 'html',
+    mime: 'text/html; charset=utf-8',
+    artifactKind: 'html',
+    artifactManifest: {
+      version: 1,
+      kind: 'html',
+      title: 'Visual CSS Smoke',
+      entry: 'index.html',
+      renderer: 'html',
+      status: 'complete',
+      exports: ['html', 'pdf', 'zip'],
+      primary: true,
+      createdAt: '2026-06-15T00:00:00.000Z',
+      updatedAt: '2026-06-15T00:00:00.000Z',
+      metadata: { identifier: 'visual-css-smoke', artifactType: 'text/html', inferred: false },
+    },
+  },
+] as const;
 
 type VisualPageOptions = {
   projects?: readonly VisualProject[];
@@ -298,6 +333,25 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects', async (route) => {
     await fulfillGet(route, { projects });
+  });
+
+  await page.route('**/api/projects/*/files', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
+  });
+
+  await page.route('**/api/projects/*/raw/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: VISUAL_PROJECT_FILE_HTML,
+    });
   });
 
   await page.route('**/api/projects/*/upload', async (route) => {
@@ -575,17 +629,22 @@ export async function waitForVisualStable(page: Page): Promise<void> {
 }
 
 async function waitForVisualFrameAssets(page: Page): Promise<void> {
-  for (const frame of page.frames()) {
-    await frame.evaluate(async () => {
-      await document.fonts.ready;
-      await Promise.all(
-        Array.from(document.images, async (image) => {
-          if (image.complete && image.naturalWidth > 0) return;
-          await image.decode().catch(() => {});
+  await Promise.all(
+    page.frames().map((frame) =>
+      Promise.race([
+        frame.evaluate(async () => {
+          await document.fonts.ready;
+          await Promise.all(
+            Array.from(document.images, async (image) => {
+              if (image.complete && image.naturalWidth > 0) return;
+              await image.decode().catch(() => {});
+            }),
+          );
         }),
-      );
-    }).catch(() => {});
-  }
+        waitForVisualTimeout(),
+      ]).catch(() => {}),
+    ),
+  );
 }
 
 async function waitForVisualLayoutStable(page: Page): Promise<void> {

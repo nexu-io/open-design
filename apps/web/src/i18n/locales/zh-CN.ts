@@ -186,7 +186,6 @@ export const zhCN: Dict = {
   'settings.onboardingBack': '上一步',
   'settings.onboardingContinue': '继续',
   'settings.onboardingFinish': '完成',
-  'settings.onboardingSkip': '先跳过',
   'settings.kicker': '设置',
   'settings.title': '执行模式',
   'settings.subtitle': '在本机 CLI 与 BYOK 之间选择。',

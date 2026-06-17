@@ -186,7 +186,6 @@ export const hu: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Beállítások',
   'settings.title': 'Végrehajtási mód',
   'settings.subtitle': 'Válassz helyi CLI és BYOK között.',

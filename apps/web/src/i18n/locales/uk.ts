@@ -186,7 +186,6 @@ export const uk: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Налаштування',
   'settings.title': 'Режим виконання',
   'settings.subtitle': 'Виберіть локальний CLI або BYOK.',

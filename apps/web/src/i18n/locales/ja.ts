@@ -186,7 +186,6 @@ export const ja: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': '設定',
   'settings.title': '実行モード',
   'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。',

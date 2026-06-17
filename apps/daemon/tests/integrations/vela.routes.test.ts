@@ -317,6 +317,47 @@ describe('GET /api/integrations/vela/status', () => {
     }
   });
 
+  it('keeps Settings-configured AMR env, profile, status, and model catalog in sync', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    process.env.OPEN_DESIGN_AMR_PROFILE = 'prod';
+    await writeAppConfig(dataDir, {
+      ...previous,
+      agentCliEnv: {
+        ...(previous.agentCliEnv ?? {}),
+        amr: {
+          ...((previous.agentCliEnv?.amr as Record<string, string>) ?? {}),
+          VELA_BIN: FAKE_VELA,
+          OPEN_DESIGN_AMR_PROFILE: 'local',
+          VELA_RUNTIME_KEY: 'rt-settings-risk-smoke',
+          VELA_LINK_URL: 'http://localhost:18081',
+        },
+      },
+    });
+
+    try {
+      const statusResponse = await getJson<{
+        loggedIn: boolean;
+        profile: string;
+        user: { email?: string } | null;
+      }>(`${baseUrl}/api/integrations/vela/status`);
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body).toMatchObject({
+        loggedIn: true,
+        profile: 'local',
+        user: null,
+      });
+      expect(JSON.stringify(statusResponse.body)).not.toContain('rt-settings-risk-smoke');
+
+      const modelsResponse = await waitForAmrModels('remote');
+      expect(modelsResponse.status).toBe(200);
+      expect(modelsResponse.body.models.map((model) => model.id)).toContain('deepseek-v4-flash');
+      expect(modelsResponse.body.models.map((model) => model.id)).toContain('gpt-5.4');
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+
   it('reports loggedIn=true with the surfaced user fields when the active profile has a runtimeKey', async () => {
     seedLogin('local', {
       user: {

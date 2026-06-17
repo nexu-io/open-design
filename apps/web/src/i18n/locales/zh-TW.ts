@@ -186,7 +186,6 @@ export const zhTW: Dict = {
   'settings.onboardingBack': '上一步',
   'settings.onboardingContinue': '继续',
   'settings.onboardingFinish': '完成設定',
-  'settings.onboardingSkip': '先跳過',
   'settings.kicker': '設定',
   'settings.title': '執行模式',
   'settings.subtitle': '在本機 CLI 與 BYOK 之間選擇。',

@@ -186,7 +186,6 @@ export const ko: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': '설정',
   'settings.title': '실행 모드',
   'settings.subtitle': '로컬 CLI와 BYOK 중에서 선택하세요.',

@@ -186,7 +186,6 @@ export const fa: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'تنظیمات',
   'settings.title': 'حالت اجرا',
   'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید.',

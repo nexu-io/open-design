@@ -186,7 +186,6 @@ export const id: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Pengaturan',
   'settings.title': 'Mode eksekusi',
   'settings.subtitle': 'Pilih antara CLI lokal dan BYOK.',

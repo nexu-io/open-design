@@ -209,7 +209,6 @@ export interface Dict {
   'settings.onboardingBack': string;
   'settings.onboardingContinue': string;
   'settings.onboardingFinish': string;
-  'settings.onboardingSkip': string;
   'settings.kicker': string;
   'settings.title': string;
   'settings.subtitle': string;

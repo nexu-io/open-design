@@ -6,6 +6,7 @@ export type FakeVelaOptions = {
   endpoints?: VelaEndpoints;
   failAuthAtPrompt?: boolean;
   failBalanceAtPrompt?: boolean;
+  failModelListInvalidApiKey?: boolean;
   requireLoginConfig?: boolean;
 };
 
@@ -93,6 +94,7 @@ const ASSISTANT_TEXT = ${JSON.stringify(options.assistantText ?? DEFAULT_ASSISTA
 const SESSION_ID = env.FAKE_VELA_SESSION_ID || 'fake-amr-session-1';
 const AUTH_FAIL = ${options.failAuthAtPrompt === true ? 'true' : 'false'};
 const BALANCE_FAIL = ${options.failBalanceAtPrompt === true ? 'true' : 'false'};
+const MODEL_LIST_INVALID_API_KEY = ${options.failModelListInvalidApiKey === true ? 'true' : 'false'};
 const REQUIRE_LOGIN = ${options.requireLoginConfig === false ? 'false' : 'true'};
 
 function writeMessage(obj) {
@@ -154,6 +156,10 @@ if (argv[2] === 'model' && argv[3] === 'preset' && argv[4] === '--format' && arg
 }
 
 if (argv[2] === 'model' && argv[3] === 'list' && argv[4] === '--format' && argv[5] === 'json') {
+  if (MODEL_LIST_INVALID_API_KEY) {
+    stderr.write('Error: list Link models: API request failed with status 401: invalid_api_key\\n');
+    exit(1);
+  }
   stdout.write(${JSON.stringify(REMOTE_MODELS_JSON)} + '\\n');
   exit(0);
 }

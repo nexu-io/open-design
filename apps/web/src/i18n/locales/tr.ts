@@ -186,7 +186,6 @@ export const tr: Dict = {
   'settings.onboardingBack': 'Back',
   'settings.onboardingContinue': 'Continue',
   'settings.onboardingFinish': 'Finish setup',
-  'settings.onboardingSkip': 'Skip for now',
   'settings.kicker': 'Ayarlar',
   'settings.title': 'Yürütme modu',
   'settings.subtitle': 'Yerel CLI ile BYOK arasında seçim yapın.',

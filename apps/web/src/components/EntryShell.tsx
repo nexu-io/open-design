@@ -1243,9 +1243,9 @@ function OnboardingView({
   // onboarding and remains available from the app surfaces.
   //
   // We do NOT clear on unmount: route changes can remount the shell
-  // during first-run setup. Skip / Back / last-step Continue clear
-  // inline in their respective handlers below; abandoned sessions clear
-  // on sessionStorage tab close.
+  // during first-run setup. Back / last-step Continue clear inline in
+  // their respective handlers below; abandoned sessions clear on
+  // sessionStorage tab close.
   const onboardingSessionIdRef = useRef<string>('');
   if (!onboardingSessionIdRef.current) {
     onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
@@ -1282,9 +1282,8 @@ function OnboardingView({
   // result event can carry `duration_ms`; `runtime` state is the user's
   // current pick at click time so `runtime_type` rides along on every
   // click. The `_lifecycleReportedRef` guards against double-firing the
-  // completion event when the user fires both Skip and unmount in the
-  // same tick (the unmount path also clears the session id; see the
-  // PR #2453 follow-up).
+  // completion event if a submit path and unmount happen in the same tick
+  // (the unmount path also clears the session id; see the PR #2453 follow-up).
   const onboardingStartedAtRef = useRef<number>(Date.now());
   const lifecycleReportedRef = useRef(false);
   // Guards `about_you_submit` to exactly one emit per onboarding session,
@@ -2102,7 +2101,11 @@ function OnboardingView({
             <button
               type="button"
               onClick={() => setStep(index)}
-              disabled={onboardingNavigationLocked || index > maxStepReached}
+              disabled={
+                onboardingNavigationLocked ||
+                index > maxStepReached ||
+                (index > 0 && !connectStepRuntimeReady)
+              }
             >
               {label}
             </button>
