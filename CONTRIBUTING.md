@@ -235,7 +235,7 @@ We're not pedantic about formatting (Prettier on save is fine), but two rules ar
 Beyond that:
 
 - **Don't narrate.** No `// import the module`, no `// loop through items`. If the code reads obviously, the comment is noise. Save comments for non-obvious intent or constraints the code can't express.
-- **TypeScript** for `apps/web/src/`. The daemon (`apps/daemon/`) is plain ESM JavaScript with JSDoc when types matter — keep it that way.
+- **TypeScript** for `apps/web/src/` and the daemon (`apps/daemon/`). A few high-conflict daemon core files still carry `@ts-nocheck` (tracked in [`specs/current/maintainability-roadmap.md`](specs/current/maintainability-roadmap.md)); don't add new ones.
 - **No new top-level dependencies** without a paragraph in the PR description on what we get vs. what bytes we ship. The dep list in [`package.json`](package.json) is small on purpose.
 - **Run `pnpm typecheck`** before pushing. CI runs it; failing it earns a "please fix" comment.
 
