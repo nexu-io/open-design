@@ -273,17 +273,25 @@ function uniqueLengths(values: string[]): string[] {
   return [...set].sort();
 }
 
-// Shadow tokens embed a color, so they need the same color-equivalence handling
-// as the palette: `0 1px 2px #FFF` and `0 1px 2px #ffffff` must normalize equal,
-// otherwise they hash differently and produce a false-positive diff. Lowercase
-// and collapse whitespace, then expand any embedded shorthand hex to 6/8 digits.
+// Shadow tokens embed a color and may be a comma-separated list, so they need
+// the same color-equivalence handling as the palette plus list/spacing
+// canonicalization. All of these must normalize equal, otherwise they hash
+// differently and surface as false `--against` changes:
+//   `0 1px 2px #FFF`            == `0 1px 2px #ffffff`        (hex shorthand)
+//   `0 1px 2px rgba(0, 0, 0,.2)`== `0 1px 2px rgba(0,0,0,.2)` (functional-color commas)
+//   `... #000, 0 2px ...`       == `... #000,0 2px ...`       (shadow-list commas)
 export function normalizeShadow(value: string): string {
-  const collapsed = String(value ?? '')
+  let v = String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ')
+    // Canonicalize whitespace around commas: covers both the shadow-list
+    // separators and the commas inside rgb()/hsl() functional colors.
+    .replace(/\s*,\s*/g, ',');
+  // Strip internal whitespace inside functional colors, matching normalizeColor.
+  v = v.replace(/(rgb|hsl)a?\([^)]*\)/g, (m) => m.replace(/\s+/g, ''));
   // Expand #rgb / #rgba shorthand hex in place so equivalent spellings match.
-  return collapsed.replace(/#([0-9a-f]{3,8})\b/g, (_m, h: string) => {
+  return v.replace(/#([0-9a-f]{3,8})\b/g, (_m, h: string) => {
     if (h.length === 3 || h.length === 4) {
       return '#' + h.split('').map((c) => c + c).join('');
     }

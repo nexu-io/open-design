@@ -298,6 +298,23 @@ describe('diffDesignSignatures', () => {
     const b = computeDesignSignatureFromText('<style>x{box-shadow:0   1px   2px   #000}</style>');
     expect(a.fingerprint).toBe(b.fingerprint);
   });
+
+  // Regression: rgba()/hsla() spacing is spelling-only. Formatter output
+  // `rgba(0, 0, 0, 0.2)` vs minified `rgba(0,0,0,0.2)` must share a fingerprint.
+  it('normalizes functional-color (rgba/hsla) spacing in shadows', () => {
+    const a = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px rgba(0, 0, 0, 0.2)}</style>');
+    const b = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px rgba(0,0,0,0.2)}</style>');
+    expect(a.fingerprint).toBe(b.fingerprint);
+    expect(diffDesignSignatures(a, b).unchanged).toBe(true);
+  });
+
+  // Regression: multi-shadow list comma spacing is spelling-only.
+  it('normalizes shadow-list comma spacing', () => {
+    const a = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #000, 0 2px 4px #111}</style>');
+    const b = computeDesignSignatureFromText('<style>x{box-shadow:0 1px 2px #000,0 2px 4px #111}</style>');
+    expect(a.fingerprint).toBe(b.fingerprint);
+    expect(diffDesignSignatures(a, b).unchanged).toBe(true);
+  });
 });
 
 describe('renderDiffForTerminal', () => {
