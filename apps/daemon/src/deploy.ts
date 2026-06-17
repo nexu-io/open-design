@@ -823,6 +823,26 @@ export async function deployToNetlify({
     }
   }
 
+  if (deployKeyId) {
+    try {
+      const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys/${encodeURIComponent(deployKeyId)}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (deployKeyResp.ok) {
+        const deployKey = (await deployKeyResp.json()) as any;
+        if (deployKey?.public_key) {
+          publicKey = deployKey.public_key;
+        } else {
+          deployKeyId = undefined;
+        }
+      } else {
+        deployKeyId = undefined;
+      }
+    } catch {
+      deployKeyId = undefined;
+    }
+  }
+
   if (!deployKeyId) {
     // Generate a deploy key on Netlify
     const deployKeyResp = await fetch(`${NETLIFY_API}/deploy_keys`, {
@@ -1587,6 +1607,111 @@ async function pollRailwayDeploy(
     await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, nextRemaining)));
   }
   return last;
+}
+
+export async function checkNetlifyDeploymentLinks(existing: any) {
+  const metadata = existing.providerMetadata || {};
+  const { siteId, serviceUrl } = metadata;
+  const deployId = existing.deploymentId;
+  if (!deployId) {
+    const result = await checkDeploymentUrl(existing.url || serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(NETLIFY_PROVIDER_ID);
+    const resp = await fetch(`${NETLIFY_API}/deploys/${encodeURIComponent(deployId)}`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+    });
+    const json = await readNetlifyJson(resp);
+    if (!resp.ok) {
+      throw new Error(json?.message || `Netlify deploy status lookup failed (${resp.status}).`);
+    }
+    const state = typeof json?.state === 'string' ? json.state.toLowerCase() : '';
+    if (state === 'ready') {
+      const reach = await checkDeploymentUrl(existing.url || json.ssl_url || json.url || serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (state === 'error' || state === 'rejected') {
+      return {
+        status: 'failed',
+        statusMessage: json?.error_message || json?.message || 'Netlify deployment failed.',
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Netlify deployment is currently: ${state}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Netlify deployment status: ${err.message || err}`,
+    };
+  }
+}
+
+export async function checkRenderDeploymentLinks(existing: any) {
+  const metadata = existing.providerMetadata || {};
+  const { serviceId, deployId, serviceUrl } = metadata;
+  const targetServiceId = serviceId || existing.deploymentId;
+  if (!targetServiceId || !deployId) {
+    const result = await checkDeploymentUrl(existing.url || serviceUrl);
+    return {
+      status: result.reachable ? 'ready' : result.status || 'link-delayed',
+      statusMessage: result.reachable
+        ? 'Public link is ready.'
+        : result.statusMessage || 'Provider is still preparing the public link.',
+    };
+  }
+
+  try {
+    const config = await readDeployConfig(RENDER_PROVIDER_ID);
+    const resp = await fetch(`${RENDER_API}/services/${encodeURIComponent(targetServiceId)}/deploys/${encodeURIComponent(deployId)}`, {
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: 'application/json',
+      },
+    });
+    const json = await resp.json().catch(() => null) as any;
+    if (!resp.ok) {
+      throw new Error(json?.message || `Render deploy status lookup failed (${resp.status}).`);
+    }
+    const status = typeof json?.status === 'string' ? json.status.toLowerCase() : '';
+    if (status === 'live') {
+      const reach = await checkDeploymentUrl(existing.url || serviceUrl);
+      return {
+        status: reach.reachable ? 'ready' : reach.status || 'link-delayed',
+        statusMessage: reach.reachable
+          ? 'Public link is ready.'
+          : reach.statusMessage || 'Provider is still preparing the public link.',
+      };
+    } else if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
+      return {
+        status: 'failed',
+        statusMessage: `Render deployment failed with status: ${json.status || status}.`,
+      };
+    } else {
+      return {
+        status: 'link-delayed',
+        statusMessage: `Render deployment is currently: ${status}.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      status: 'link-delayed',
+      statusMessage: `Failed to query Render deployment status: ${err.message || err}`,
+    };
+  }
 }
 
 export async function checkRailwayDeploymentLinks(existing: any) {

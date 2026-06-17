@@ -35,6 +35,8 @@ import {
   buildDeployFilePlan,
   buildDeployFileSet,
   checkDeploymentUrl,
+  checkNetlifyDeploymentLinks,
+  checkRenderDeploymentLinks,
   chunkCloudflarePagesAssetUploads,
   CLOUDFLARE_PAGES_ASSET_MAX_BYTES,
   CLOUDFLARE_PAGES_PROVIDER_ID,
@@ -876,6 +878,12 @@ describe('netlify and railway deploys', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      if (url.endsWith('/deploy_keys/deploy-key-1') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url.endsWith('/sites/site-1') && method === 'GET') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'deploy-key-1' }), {
           status: 200,
@@ -1231,6 +1239,9 @@ describe('netlify and railway deploys', () => {
       if (url.endsWith('/sites/site-1') && method === 'GET') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
       }
+      if (url.endsWith('/deploy_keys/existing-key-id') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+      }
       if (url.endsWith('/deploy_keys') && method === 'POST') {
         deployKeysCreated++;
         return new Response(JSON.stringify({ id: 'deploy-key-1', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
@@ -1272,7 +1283,7 @@ describe('netlify and railway deploys', () => {
 
     expect(result.providerMetadata?.deployKeyId).toBe('existing-key-id');
     expect(deployKeysCreated).toBe(0);
-    expect(githubKeysAdded).toBe(0);
+    expect(githubKeysAdded).toBe(1);
   });
 
   it('handles non-main default branch (e.g. master) on Netlify deploys', async () => {
@@ -1306,6 +1317,9 @@ describe('netlify and railway deploys', () => {
       }
       if (url.endsWith('/sites/site-1') && method === 'GET') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      }
+      if (url.endsWith('/deploy_keys/existing-key-id') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
       }
       if (url.endsWith('/sites/site-1') && method === 'PUT') {
         updateSiteBody = JSON.parse(String(init?.body ?? '{}'));
@@ -1376,6 +1390,9 @@ describe('netlify and railway deploys', () => {
       }
       if (url.endsWith('/sites/site-1') && method === 'GET') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      }
+      if (url.endsWith('/deploy_keys/existing-key-id') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
       }
       if (url.endsWith('/sites/site-1') && method === 'PUT') {
         return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
@@ -2285,6 +2302,9 @@ describe('netlify and railway deploys', () => {
       const url = typeof input === 'string' ? input : String(input);
       if (url === 'https://api.github.com/user') return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
       if (url === 'https://api.github.com/repos/testuser/od-netlify-p1') return new Response(JSON.stringify({ id: 123, default_branch: 'main' }), { status: 200 });
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
       if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/git/trees/')) {
         return new Response(JSON.stringify({ tree: [] }), { status: 200 });
       }
@@ -2292,6 +2312,9 @@ describe('netlify and railway deploys', () => {
       if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/')) return new Response('', { status: 404 });
       if (url.includes('/sites?name=od-p1')) return new Response(JSON.stringify([{ id: 'site-1', site_id: 'site-1', name: 'od-p1', deploy_key_id: 'existing-key-id' }]), { status: 200 });
       if (url.endsWith('/sites/site-1')) return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      if (url.endsWith('/deploy_keys/existing-key-id')) {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+      }
       if (url.endsWith('/sites/site-1/builds')) return new Response(JSON.stringify({ id: 'deploy-1', deploy_id: 'deploy-1' }), { status: 200 });
       
       if (url.includes('/deploys/deploy-1')) {
@@ -5081,5 +5104,149 @@ describe('deployment link readiness', () => {
       'set-cookie': '_vercel_sso_nonce=test',
     });
     expect(isVercelProtectedResponse(new Response(null, { headers }), 'Authentication Required')).toBe(true);
+  });
+
+  describe('checkNetlifyDeploymentLinks', () => {
+    it('returns ready and checks URL reachability when netlify deploy state is ready', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            state: 'ready',
+            ssl_url: 'https://example.netlify.app',
+          }), { status: 200 });
+        }
+        if (url === 'https://example.netlify.app') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkNetlifyDeploymentLinks({
+        deploymentId: 'dep-1',
+        providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
+      });
+      expect(result).toEqual({
+        status: 'ready',
+        statusMessage: 'Public link is ready.',
+      });
+    });
+
+    it('returns failed when netlify deploy state is error or rejected', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            state: 'error',
+            error_message: 'Build failed due to syntax error',
+          }), { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkNetlifyDeploymentLinks({
+        deploymentId: 'dep-1',
+        providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
+      });
+      expect(result).toEqual({
+        status: 'failed',
+        statusMessage: 'Build failed due to syntax error',
+      });
+    });
+
+    it('returns link-delayed when netlify deploy is building or uploading', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            state: 'building',
+          }), { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkNetlifyDeploymentLinks({
+        deploymentId: 'dep-1',
+        providerMetadata: { siteId: 'site-1', serviceUrl: 'https://example.netlify.app' },
+      });
+      expect(result).toEqual({
+        status: 'link-delayed',
+        statusMessage: 'Netlify deployment is currently: building.',
+      });
+    });
+  });
+
+  describe('checkRenderDeploymentLinks', () => {
+    it('returns ready and checks URL reachability when render deploy status is live', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/services/service-1/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            status: 'live',
+          }), { status: 200 });
+        }
+        if (url === 'https://example.onrender.com') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkRenderDeploymentLinks({
+        deploymentId: 'service-1',
+        providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
+      });
+      expect(result).toEqual({
+        status: 'ready',
+        statusMessage: 'Public link is ready.',
+      });
+    });
+
+    it('returns failed when render deploy status is build_failed or canceled', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/services/service-1/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            status: 'build_failed',
+          }), { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkRenderDeploymentLinks({
+        deploymentId: 'service-1',
+        providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
+      });
+      expect(result).toEqual({
+        status: 'failed',
+        statusMessage: 'Render deployment failed with status: build_failed.',
+      });
+    });
+
+    it('returns link-delayed when render deploy is pre_build or building', async () => {
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : String(input);
+        if (url.includes('/services/service-1/deploys/dep-1')) {
+          return new Response(JSON.stringify({
+            status: 'building',
+          }), { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      stubGlobalFetch(fetchMock);
+
+      const result = await checkRenderDeploymentLinks({
+        deploymentId: 'service-1',
+        providerMetadata: { serviceId: 'service-1', deployId: 'dep-1', serviceUrl: 'https://example.onrender.com' },
+      });
+      expect(result).toEqual({
+        status: 'link-delayed',
+        statusMessage: 'Render deployment is currently: building.',
+      });
+    });
   });
 });

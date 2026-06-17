@@ -298,6 +298,10 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
     publicDeployment,
     RAILWAY_PROVIDER_ID,
     checkRailwayDeploymentLinks,
+    NETLIFY_PROVIDER_ID,
+    checkNetlifyDeploymentLinks,
+    RENDER_PROVIDER_ID,
+    checkRenderDeploymentLinks,
   } = ctx.deploy;
 
   app.post(
@@ -328,6 +332,28 @@ export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploym
         }
         if (existing.providerId === RAILWAY_PROVIDER_ID) {
           const checked = await checkRailwayDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        if (existing.providerId === NETLIFY_PROVIDER_ID) {
+          const checked = await checkNetlifyDeploymentLinks(existing);
+          const now = Date.now();
+          const body = upsertDeployment(db, {
+            ...existing,
+            ...checked,
+            reachableAt: checked.status === 'ready' ? now : existing.reachableAt,
+            updatedAt: now,
+          });
+          return res.json(publicDeployment(body));
+        }
+        if (existing.providerId === RENDER_PROVIDER_ID) {
+          const checked = await checkRenderDeploymentLinks(existing);
           const now = Date.now();
           const body = upsertDeployment(db, {
             ...existing,
