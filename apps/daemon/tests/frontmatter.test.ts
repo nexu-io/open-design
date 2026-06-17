@@ -20,28 +20,27 @@ describe('parseFrontmatter scalar coercion', () => {
     expect(data('a: ~').a).toBe(null);
   });
 
-  // Per YAML 1.2, a leading-zero decimal like `01234` is a *string*, not a
-  // number — the leading zero is significant (zip codes, zero-padded ids,
-  // phone-like values). Coercing it to 1234 silently corrupts the value.
-  it('keeps leading-zero integers as strings', () => {
-    expect(data('zip: 01234').zip).toBe('01234');
-    expect(data('id: 007').id).toBe('007');
+  // The YAML 1.2 core schema resolves base-10 numeric scalars as numbers,
+  // including leading-zero decimals (`[-+]?[0-9]+` for ints). We match the
+  // schema so existing frontmatter consumers keep getting numbers.
+  it('coerces leading-zero integers to numbers (YAML 1.2 core schema)', () => {
+    expect(data('zip: 01234').zip).toBe(1234);
+    expect(data('id: 007').id).toBe(7);
   });
 
-  it('keeps a negative leading-zero integer as a string', () => {
-    expect(data('a: -01').a).toBe('-01');
+  it('coerces a negative leading-zero integer to a number', () => {
+    expect(data('a: -01').a).toBe(-1);
   });
 
-  it('still treats a bare zero as the number 0', () => {
+  it('treats a bare zero as the number 0', () => {
     expect(data('a: 0').a).toBe(0);
   });
 
-  it('keeps leading-zero decimals as strings', () => {
-    // "00.5" has a redundant leading zero in the integer part -> string.
-    expect(data('a: 00.5').a).toBe('00.5');
+  it('coerces leading-zero decimals to numbers', () => {
+    expect(data('a: 00.5').a).toBe(0.5);
   });
 
-  it('still coerces a single zero before the decimal point', () => {
+  it('coerces a single zero before the decimal point', () => {
     expect(data('a: 0.5').a).toBe(0.5);
     expect(data('a: .5').a).toBe(0.5);
   });

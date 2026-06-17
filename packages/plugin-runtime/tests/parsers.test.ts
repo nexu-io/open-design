@@ -134,12 +134,13 @@ describe('parseFrontmatter', () => {
     expect(data['d']).toBe(null);
   });
 
-  // Per YAML 1.2, a leading-zero decimal like `01234` is a string (the zero
-  // is significant). Coercing it to 1234 would silently corrupt the value.
-  it('keeps leading-zero integers as strings', () => {
+  // The YAML 1.2 core schema resolves base-10 numeric scalars as numbers,
+  // including leading-zero forms. We match the schema so frontmatter
+  // consumers keep getting numbers.
+  it('coerces leading-zero integers to numbers (YAML 1.2 core schema)', () => {
     const { data } = parseFrontmatter('---\nzip: 01234\nid: 007\nzero: 0\n---\n');
-    expect(data['zip']).toBe('01234');
-    expect(data['id']).toBe('007');
+    expect(data['zip']).toBe(1234);
+    expect(data['id']).toBe(7);
     expect(data['zero']).toBe(0);
   });
 

@@ -158,10 +158,9 @@ function coerce(raw: string | undefined): FrontmatterValue {
   if (v === 'true') return true;
   if (v === 'false') return false;
   if (v === 'null' || v === '~') return null;
-  // Only coerce numbers without a redundant leading zero. Per YAML 1.2 a
-  // leading-zero decimal like `01234` is a string (the zero is significant —
-  // zip codes, zero-padded ids), so `\d+` would corrupt it into `1234`.
-  if (/^-?(?:0|[1-9]\d*)$/.test(v)) return Number(v);
-  if (/^-?(?:0|[1-9]\d*)?\.\d+$/.test(v)) return Number(v);
+  // Coerce base-10 numeric scalars to Number, matching the YAML 1.2 core-schema
+  // int/float resolution (including leading-zero decimals like `01234`).
+  if (/^-?\d+$/.test(v)) return Number(v);
+  if (/^-?\d*\.\d+$/.test(v)) return Number(v);
   return v;
 }
