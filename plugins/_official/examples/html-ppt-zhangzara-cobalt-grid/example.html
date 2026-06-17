@@ -2,22 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Cobalt Grid — Slide Template</title>
+<title>Open Design — Cobalt Grid Deck</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;1,400&family=Hanken+Grotesk:wght@400;600&family=DM+Mono&display=swap" rel="stylesheet" />
 <style>
   :root {
     --paper:    #F0EBDE;   /* warm cream / ivory paper canvas */
-    --paper-2:  #E6E0CE;
     --ink:      #1F2BE0;   /* electric cobalt / royal blue */
-    --ink-soft: #5560E5;   /* lighter cobalt for secondary marks */
+    --ink-dim:  #4951E0;   /* secondary text: 80% ink over paper, pre-mixed solid
+                              so glyphs stay crisp over the grid lines (AA on cream) */
     --grid:     rgba(31, 43, 224, 0.10);  /* very faint blue grid */
-    --rule:     #1F2BE0;
+    --cell-off: rgba(31, 43, 224, 0.07);  /* unfilled chart cells, quieter than grid */
+    --rule-dim: rgba(31, 43, 224, 0.18);  /* secondary hairline rules */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  /* Kill default heading/paragraph margins inside slides so the layout
+     rhythm comes from the declared gaps, not from UA defaults. Local
+     margins (e.g. .s-index .row h3) re-declare what they need. */
+  .slide h1, .slide h2, .slide h3, .slide p { margin: 0; }
   body {
     font-family: 'Hanken Grotesk', 'Helvetica Neue', sans-serif;
     color: var(--ink);
@@ -48,37 +53,42 @@
   .slide {
     position: absolute; inset: 0;
     opacity: 0; pointer-events: none;
-    transition: opacity 280ms ease;
+    transition: opacity 280ms cubic-bezier(.16,1,.3,1);
     z-index: 2;
   }
   .slide.active { opacity: 1; pointer-events: auto; }
 
-  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
-  .disp {
-    font-family: 'Newsreader', Georgia, serif;
-    font-style: italic;
-    font-weight: 400;
-    line-height: 0.92;
-    letter-spacing: -0.005em;
-    color: var(--ink);
+  /* Entrance motion: transform + opacity only, ease-out, staggered.
+     Centered blocks (stmt-wrap / qframe) keep their translateY(-50%) by
+     animating to that resting transform instead of to none. */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-  .body-tx {
-    font-family: 'Hanken Grotesk', sans-serif;
-    font-weight: 400;
-    line-height: 1.5;
-    color: var(--ink);
+  @keyframes rise-centered {
+    from { opacity: 0; transform: translateY(calc(-50% + 16px)); }
+    to   { opacity: 1; transform: translateY(-50%); }
   }
-  .micro {
-    font-family: 'Hanken Grotesk', sans-serif;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: var(--ink);
+  .slide.active .titlewrap,
+  .slide.active .frame {
+    animation: rise 600ms cubic-bezier(.16,1,.3,1) both;
   }
-  .mono {
-    font-family: 'DM Mono', ui-monospace, monospace;
-    font-weight: 400;
-    color: var(--ink);
+  .slide.active .cfooter,
+  .slide.active .col-footer {
+    animation: rise 600ms cubic-bezier(.16,1,.3,1) 90ms both;
+  }
+  .slide.active .stmt-wrap,
+  .slide.active .qframe {
+    animation: rise-centered 600ms cubic-bezier(.16,1,.3,1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .slide { transition: none; }
+    .slide.active .titlewrap,
+    .slide.active .frame,
+    .slide.active .cfooter,
+    .slide.active .col-footer,
+    .slide.active .stmt-wrap,
+    .slide.active .qframe { animation: none; }
   }
 
   /* Single page-number marker, shared across slides.
@@ -123,7 +133,7 @@
     font-size: clamp(10px, 0.75vw, 12px);
     color: var(--ink);
     letter-spacing: 0.08em;
-    opacity: 0.4;
+    opacity: 0.55;
     z-index: 12;
     pointer-events: none;
   }
@@ -242,10 +252,11 @@
   /* Footer row */
   .s-cover .cfooter {
     /* Constrained to the left half so it never runs under the right-side
-       pixel-glitch column on any viewport. */
+       pixel-glitch column on any viewport, but wide enough that each
+       column sets on a single line instead of ragged two-line wraps. */
     position: absolute;
     left: clamp(36px, 3.6vw, 80px);
-    right: clamp(680px, 40vw, 880px);
+    right: clamp(420px, 38vw, 760px);
     bottom: clamp(82px, 8vh, 120px);
     display: flex; justify-content: flex-start; align-items: end;
     z-index: 5;
@@ -255,7 +266,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.92vw, 15px);
     line-height: 1.45;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
   .s-cover .cfooter .colf .ftag {
     font-family: 'Hanken Grotesk', sans-serif;
@@ -308,9 +319,8 @@
   .s-manifesto .attr .meta-tag {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(12px, 0.82vw, 14px);
-    color: var(--ink);
+    color: var(--ink-dim);
     letter-spacing: 0.04em;
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -351,12 +361,13 @@
     grid-template-rows: 1fr 1fr 1fr;
     gap: clamp(14px, 2vh, 28px) clamp(28px, 3vw, 56px);
   }
-  .s-index .row { align-self: stretch; }
   .s-index .row {
+    align-self: stretch;
     display: grid;
     grid-template-columns: 56px 1fr;
+    align-content: start;
     gap: clamp(12px, 1.4vw, 22px);
-    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+    border-bottom: 1px solid var(--rule-dim);
     padding-bottom: clamp(12px, 1.4vh, 20px);
   }
   .s-index .row .num-tag {
@@ -380,8 +391,8 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.5;
-    color: var(--ink);
-    max-width: 92%;
+    color: var(--ink-dim);
+    max-width: 52ch;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -426,7 +437,7 @@
     font-weight: 400;
     font-size: clamp(15px, 1vw, 18px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
     max-width: 56ch;
   }
 
@@ -492,7 +503,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(15px, 1vw, 17px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
     max-width: 30ch;
     margin-top: 6px;
   }
@@ -519,7 +530,7 @@
   .s-data .chart .stack .cell {
     flex: 1 1 0;
     min-height: 6px;
-    background: rgba(31, 43, 224, 0.10);
+    background: var(--cell-off);
   }
   .s-data .chart .stack .cell.on { background: var(--ink); }
   .s-data .chart .ticks {
@@ -594,9 +605,8 @@
   .s-quote .qattr .role-meta {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(12px, 0.85vw, 14px);
-    color: var(--ink);
+    color: var(--ink-dim);
     letter-spacing: 0.04em;
-    opacity: 0.78;
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -646,7 +656,7 @@
     padding: 0;
     flex: 1 1 0;
     min-height: clamp(46px, 6vh, 80px);
-    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+    border-bottom: 1px solid var(--rule-dim);
   }
   .s-table .row.headrow {
     border-bottom: 1.5px solid var(--ink);
@@ -660,6 +670,8 @@
     font-size: clamp(11px, 0.75vw, 12px);
     color: var(--ink);
   }
+  /* Last column header sits flush with its right-aligned values below */
+  .s-table .row.headrow > div:last-child { text-align: right; }
   .s-table .num-tag {
     font-family: 'DM Mono', ui-monospace, monospace;
     font-size: clamp(13px, 0.95vw, 15px);
@@ -677,7 +689,7 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.4;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
   .s-table .mood-tag {
     font-family: 'Hanken Grotesk', sans-serif;
@@ -694,7 +706,7 @@
   }
   .s-table .delta-tag.up::before  { content: '↑ '; }
   .s-table .delta-tag.down::before { content: '↓ '; opacity: 0.6; }
-  .s-table .delta-tag.flat::before { content: '— '; opacity: 0.6; }
+  .s-table .delta-tag.flat::before { content: '· '; opacity: 0.6; }
 
   /* ──────────────────────────────────────────────────────────────
      SLIDE 8 — COLOPHON / CLOSING
@@ -766,21 +778,11 @@
     font-family: 'Hanken Grotesk', sans-serif;
     font-size: clamp(14px, 0.95vw, 15px);
     line-height: 1.5;
-    color: var(--ink);
+    color: var(--ink-dim);
   }
 </style>
 </head>
 <body>
-
-<!-- Reusable SVG that draws the staircase of vertical-scanline blocks.
-     Used on cover, chapter divider, quote, and colophon. -->
-<svg style="display:none" aria-hidden="true">
-  <defs>
-    <pattern id="vstripes" width="3" height="100" patternUnits="userSpaceOnUse">
-      <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.2" />
-    </pattern>
-  </defs>
-</svg>
 
 <div class="deck">
   <div class="stage">
@@ -788,10 +790,10 @@
     <!-- 1. COVER ──────────────────────────────────────────────── -->
     <section class="slide s-cover hairlines active">
       <div class="titlewrap">
-        <h1 class="title">Index<br/>2026</h1>
+        <h1 class="title">Open<br/>Design</h1>
         <div class="subkicker">
-          <div class="l caption">Field Office Quarterly · Volume IV</div>
-          <div class="ed">A field report on the state of things.</div>
+          <div class="l caption">Apache-2.0 · Runs Locally · BYOK · No Sign-up</div>
+          <div class="ed">The open-source, local, agent-driven design platform.</div>
         </div>
       </div>
 
@@ -816,20 +818,20 @@
 
       <!-- Vertical stack of micro-text on far right (replaces Korean) -->
       <div class="vstack">
-        <div class="v-row caption">issue.04</div>
-        <div class="v-row caption">spring 2026</div>
-        <div class="v-row caption">field-office.co</div>
+        <div class="v-row caption">apache-2.0</div>
+        <div class="v-row caption">local · byok</div>
+        <div class="v-row caption">nexu-io/open-design</div>
       </div>
 
       <!-- Footer row — two columns, sized to clear the right-side pixel-glitch -->
       <div class="cfooter">
         <div class="colf">
-          <div class="ftag caption">Edited by</div>
-          <div>Field Office Editorial · Lin Ito &amp; Anya Mehrotra</div>
+          <div class="ftag caption">Built by</div>
+          <div>The Open Design community · 300+ contributors</div>
         </div>
         <div class="colf">
-          <div class="ftag caption">Distributed</div>
-          <div>To subscribers &amp; the open web · twice a year</div>
+          <div class="ftag caption">Find it</div>
+          <div>github.com/nexu-io/open-design · Apache-2.0</div>
         </div>
       </div>
 
@@ -839,10 +841,10 @@
     <!-- 2. MANIFESTO ───────────────────────────────────────────── -->
     <section class="slide s-manifesto hairlines">
       <div class="stmt-wrap">
-        <p class="stmt">A trend is a quiet question that several rooms started asking <span class="roman">at roughly the same time.</span></p>
+        <p class="stmt">Frontier AI design, back on <span class="roman">every creator's desk.</span></p>
         <div class="attr">
-          <div class="who caption">From the editor's note</div>
-          <div class="meta-tag caption">Index 2026 · opening pages</div>
+          <div class="who caption">The Open Design manifesto</div>
+          <div class="meta-tag caption">github.com/nexu-io/open-design · Apache-2.0</div>
         </div>
       </div>
       <div class="pagenum">02 / 08</div>
@@ -852,50 +854,50 @@
     <section class="slide s-index hairlines">
       <div class="frame">
         <div class="topbar">
-          <div class="h">The index, in six entries.</div>
-          <div class="lab-tag caption">Spring 2026 · selected trends</div>
+          <div class="h">What you can make, in six.</div>
+          <div class="lab-tag caption">Open Design · artifact types</div>
         </div>
         <div class="list">
           <div class="row">
             <div class="num-tag caption">01.</div>
             <div>
-              <h3>Slow software</h3>
-              <p>Tools that opt out of the urgency contest and instead promise to be quiet, considered, and on by default.</p>
+              <h3>Prototype</h3>
+              <p>High-fidelity mobile and web prototypes — real runnable files, previewed and edited in a sandbox.</p>
             </div>
           </div>
           <div class="row">
             <div class="num-tag caption">02.</div>
             <div>
-              <h3>Domestic interfaces</h3>
-              <p>Screens designed to live in living rooms — softer typography, warmer colour, and a willingness to be ignored.</p>
+              <h3>Live Artifact</h3>
+              <p>Interactive dashboards and live briefs — interfaces that stay connected to the data they describe.</p>
             </div>
           </div>
           <div class="row">
             <div class="num-tag caption">03.</div>
             <div>
-              <h3>Hand-set print again</h3>
-              <p>A return to letterpress, risograph, and small-edition print, often paired with the most digital-feeling clients.</p>
+              <h3>Slides</h3>
+              <p>Creative decks and research reports — like this one — generated, themed, and edited as plain HTML.</p>
             </div>
           </div>
           <div class="row">
             <div class="num-tag caption">04.</div>
             <div>
-              <h3>Quietly weird type</h3>
-              <p>Display type with one slightly off detail — a tilted ear, a long tail — that keeps a reader looking twice.</p>
+              <h3>Image</h3>
+              <p>Posters, illustrations, and product mockups, with your design system's palette and type carried through.</p>
             </div>
           </div>
           <div class="row">
             <div class="num-tag caption">05.</div>
             <div>
-              <h3>Receipts and ledgers</h3>
-              <p>Information designed to be filed, not consumed. Tabular layouts, dotted leaders, the page returning the favour.</p>
+              <h3>HyperFrames</h3>
+              <p>HTML-to-MP4 marketing shorts and product demos — programmatic video, written and rendered as code.</p>
             </div>
           </div>
           <div class="row">
             <div class="num-tag caption">06.</div>
             <div>
-              <h3>Public weather</h3>
-              <p>Brand and product writing that includes the actual weather of the day, the mood of the team, the unfinished thought.</p>
+              <h3>Video</h3>
+              <p>Cinematic generative footage, produced through the same local, bring-your-own-key media pipeline.</p>
             </div>
           </div>
         </div>
@@ -924,9 +926,9 @@
       </div>
 
       <div class="frame">
-        <div class="nm-tag caption">Chapter one — the case for slow software</div>
-        <h2 class="ttl">Software is a room, and rooms are designed to be lived in slowly.</h2>
-        <p class="lede">In its first chapter the Index follows the studios, products, and quiet middleware projects that are walking back the urgency the last decade trained us into. Less push. More return. The tools that do not page you, on principle, are the ones we have chosen to read first.</p>
+        <div class="nm-tag caption">Chapter one — why Open Design exists</div>
+        <h2 class="ttl">The tools that design should be open, local, and yours.</h2>
+        <p class="lede">In April 2026, Claude Design proved for the first time that an LLM can truly design — not write about design, but produce real design artifacts. Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK. Open Design sets that capability free.</p>
       </div>
 
       <div class="pagenum">04 / 08</div>
@@ -936,20 +938,20 @@
     <section class="slide s-data hairlines">
       <div class="frame">
         <div class="topbar">
-          <div class="h">Reader response, by quarter.</div>
-          <div class="lab-tag caption">Newsletter opens · 2024 Q1 — 2026 Q1</div>
+          <div class="h">The community, by quarter.</div>
+          <div class="lab-tag caption">GitHub star growth · demo data</div>
         </div>
         <div class="body">
           <div class="col-a">
             <div class="stat">
-              <div class="vbig">82%</div>
-              <div class="lab2 caption">Open rate · Q1 2026</div>
-              <div class="desc">A 2.1× lift on the inaugural issue, driven mostly by long-form chapters being read on Sunday mornings.</div>
+              <div class="vbig">60K+</div>
+              <div class="lab2 caption">GitHub Stars</div>
+              <div class="desc">Open source under Apache-2.0; quarterly star growth shown alongside as demo data.</div>
             </div>
             <div class="stat">
-              <div class="vbig" style="font-size: clamp(72px, min(7vw, 11vh), 150px);">11k</div>
-              <div class="lab2 caption">Active subscribers</div>
-              <div class="desc">Quiet, mostly-not-on-social, paying readers; we do not run a referral programme.</div>
+              <div class="vbig" style="font-size: clamp(72px, min(7vw, 11vh), 150px);">300+</div>
+              <div class="lab2 caption">Contributors</div>
+              <div class="desc">Built in the open by contributors, plugin authors, and design-system maintainers.</div>
             </div>
           </div>
           <div class="chart">
@@ -1025,11 +1027,11 @@
         </svg>
       </div>
       <div class="qframe">
-        <div class="qkicker caption">A note from the studio</div>
-        <p class="qbody">"We started the bulletin because the loudest readings of design were eating the ones we found ourselves rereading."</p>
+        <div class="qkicker caption">A note from the community</div>
+        <p class="qbody">"File-system semantics plus git-diffable artifacts — design is finally under version control."</p>
         <div class="qattr">
-          <div class="who-tag caption">Lin Ito</div>
-          <div class="role-meta caption">Editor · Field Office Quarterly · letter to subscribers, March 2025</div>
+          <div class="who-tag caption">Indie developer</div>
+          <div class="role-meta caption">Open Design community · on versioning design work</div>
         </div>
       </div>
       <div class="pagenum">06 / 08</div>
@@ -1039,72 +1041,72 @@
     <section class="slide s-table hairlines">
       <div class="frame">
         <div class="topbar">
-          <div class="h">Trend ledger, in long.</div>
-          <div class="lab-tag caption">All ten · with our reading on each</div>
+          <div class="h">Capability ledger, in long.</div>
+          <div class="lab-tag caption">All eight · with our reading on each</div>
         </div>
         <div class="ledger">
           <div class="row headrow">
             <div class="caption">No.</div>
-            <div class="caption">Trend</div>
+            <div class="caption">Capability</div>
             <div class="caption">Reading</div>
             <div class="caption">Mood</div>
-            <div class="caption">YoY</div>
+            <div class="caption">Scale</div>
           </div>
           <div class="row">
             <div class="num-tag caption">01.</div>
-            <div class="nm">Slow software</div>
-            <div class="desc">Tools that opt out of urgency by default.</div>
-            <div class="mood-tag">Quiet · welcomed</div>
-            <div class="delta-tag up caption">14 pts</div>
+            <div class="nm">Desktop-first</div>
+            <div class="desc">Local files, Figma, and code repos readable in place.</div>
+            <div class="mood-tag">Native · local</div>
+            <div class="delta-tag flat caption">core</div>
           </div>
           <div class="row">
             <div class="num-tag caption">02.</div>
-            <div class="nm">Domestic interfaces</div>
-            <div class="desc">Screens designed to live in living rooms.</div>
-            <div class="mood-tag">Warm · ambient</div>
-            <div class="delta-tag up caption">9 pts</div>
+            <div class="nm">Coding agents</div>
+            <div class="desc">Auto-detected from PATH — zero config to plug in.</div>
+            <div class="mood-tag">Open · pluggable</div>
+            <div class="delta-tag up caption">21</div>
           </div>
           <div class="row">
             <div class="num-tag caption">03.</div>
-            <div class="nm">Hand-set print</div>
-            <div class="desc">Letterpress and risograph paired with digital briefs.</div>
-            <div class="mood-tag">Tactile · careful</div>
-            <div class="delta-tag up caption">7 pts</div>
+            <div class="nm">HTML video</div>
+            <div class="desc">Programmatic video via the HyperFrames pipeline.</div>
+            <div class="mood-tag">Motion · coded</div>
+            <div class="delta-tag flat caption">built-in</div>
           </div>
           <div class="row">
             <div class="num-tag caption">04.</div>
-            <div class="nm">Quietly weird type</div>
-            <div class="desc">Display faces with one slightly off detail.</div>
-            <div class="mood-tag">Curious · alert</div>
-            <div class="delta-tag flat caption">flat</div>
+            <div class="nm">Design systems</div>
+            <div class="desc">Import from GitHub, Figma, or local Markdown.</div>
+            <div class="mood-tag">Branded · yours</div>
+            <div class="delta-tag up caption">129</div>
           </div>
           <div class="row">
             <div class="num-tag caption">05.</div>
-            <div class="nm">Receipts &amp; ledgers</div>
-            <div class="desc">Information designed to be filed, not consumed.</div>
-            <div class="mood-tag">Plain · honest</div>
-            <div class="delta-tag up caption">5 pts</div>
+            <div class="nm">Plugin ecosystem</div>
+            <div class="desc">Prototypes, slides, posters, dashboards, reports.</div>
+            <div class="mood-tag">Growing · open</div>
+            <div class="delta-tag up caption">217+</div>
           </div>
           <div class="row">
             <div class="num-tag caption">06.</div>
-            <div class="nm">Public weather</div>
-            <div class="desc">Brand voice that admits the day's actual mood.</div>
-            <div class="mood-tag">Open · tender</div>
-            <div class="delta-tag up caption">11 pts</div>
+            <div class="nm">Full-stack BYOK</div>
+            <div class="desc">Anthropic, OpenAI, Azure, Google, plus media providers.</div>
+            <div class="mood-tag">Keyed · private</div>
+            <div class="delta-tag flat caption">yours</div>
           </div>
           <div class="row">
             <div class="num-tag caption">07.</div>
-            <div class="nm">Long-form receipts</div>
-            <div class="desc">Newsletters that read like printed pamphlets.</div>
-            <div class="mood-tag">Slow · sourced</div>
-            <div class="delta-tag up caption">3 pts</div>
+            <div class="nm">Design memory</div>
+            <div class="desc">Remembers preferences, palettes, and past choices.</div>
+            <div class="mood-tag">Self-evolving</div>
+            <div class="delta-tag flat caption">learns</div>
           </div>
           <div class="row">
             <div class="num-tag caption">08.</div>
-            <div class="nm">Pre-loved objects</div>
-            <div class="desc">Resale and repair as the front of the brand.</div>
-            <div class="mood-tag">Worn · cared</div>
-            <div class="delta-tag down caption">2 pts</div>
+            <div class="nm">Apache-2.0</div>
+            <div class="desc">Fork, self-host, and commercial use all allowed.</div>
+            <div class="mood-tag">Free · forever</div>
+            <div class="delta-tag flat caption">open</div>
           </div>
         </div>
       </div>
@@ -1143,26 +1145,26 @@
       </div>
 
       <div class="titlewrap">
-        <div class="ktag caption">Colophon · Index 2026</div>
-        <h2 class="ttl">See you in the<br/>autumn issue.</h2>
+        <div class="ktag caption">Open · Local · Agent-native</div>
+        <h2 class="ttl">Back on every<br/>creator's desk.</h2>
       </div>
 
       <div class="col-footer">
         <div>
-          <div class="ftag caption">Editors</div>
-          <div class="ftxt">Lin Ito &amp; Anya Mehrotra<br/>with the field-office collective</div>
+          <a class="ftag caption" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;color:inherit;">Download</a>
+          <div class="ftxt">Open Design for macOS<br/>&amp; Windows · free, Apache-2.0</div>
         </div>
         <div>
-          <div class="ftag caption">Designed</div>
-          <div class="ftxt">In Newsreader, Hanken Grotesk<br/>&amp; DM Mono · cobalt on cream</div>
+          <div class="ftag caption">Star</div>
+          <div class="ftxt">github.com/nexu-io/open-design<br/>open source · 300+ contributors</div>
         </div>
         <div>
-          <div class="ftag caption">Subscribed</div>
-          <div class="ftxt">field-office.co · twice a year<br/>quiet, paid, and read slowly</div>
+          <div class="ftag caption">Community</div>
+          <div class="ftxt">discord.gg/qhbcCH8Am4<br/>x.com/nexudotio</div>
         </div>
         <div>
-          <div class="ftag caption">Until autumn</div>
-          <div class="ftxt">The next issue ships October 2026. Look for the cobalt envelope on a Monday morning.</div>
+          <div class="ftag caption">Bring your keys</div>
+          <div class="ftxt">BYOK across Anthropic, OpenAI, Azure &amp; Google — your API keys never leave your machine.</div>
         </div>
       </div>
 

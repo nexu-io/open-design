@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   resolveLocalizedText,
@@ -618,17 +619,14 @@ function PluginShareConfirmModal({
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 
   return (
-    <div
-      className="plugin-details-modal-backdrop plugin-share-confirm"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${actionTitle} for ${sourceRecord.title}`}
-      onClick={(event) => {
-        if (!pending && event.target === event.currentTarget) onClose();
-      }}
+    <Dialog
+      backdropClassName="plugin-details-modal-backdrop plugin-share-confirm"
+      className="plugin-details-modal plugin-share-confirm__panel"
+      includeChromeClassName={false}
+      ariaLabel={`${actionTitle} for ${sourceRecord.title}`}
+      onClose={pending ? undefined : onClose}
       data-testid="plugin-share-confirm-modal"
     >
-      <div className="plugin-details-modal plugin-share-confirm__panel">
         <header className="plugin-details-modal__head">
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
@@ -734,8 +732,7 @@ function PluginShareConfirmModal({
             {pending ? 'Starting…' : details.confirmLabel}
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 

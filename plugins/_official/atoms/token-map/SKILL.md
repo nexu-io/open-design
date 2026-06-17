@@ -18,7 +18,7 @@ mapping". This atom produces that mapping.
 - `figma/tokens.json` from `figma-extract` (figma-migration), OR
 - `code/tokens.json` from `design-extract` (code-migration).
 - The active design system DESIGN.md (already injected into the
-  prompt; the atom reads from `.od-skills/design-system/DESIGN.md`).
+  prompt; the atom reads from the staged design-system context).
 
 ## Output
 

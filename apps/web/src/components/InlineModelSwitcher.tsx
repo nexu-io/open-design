@@ -24,7 +24,12 @@ import {
   modelIdForTracking,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
-import { recordAmrEntry, type AmrEntryAttribution } from '../analytics/amr-attribution';
+import {
+  amrHandoffDeviceId,
+  recordAmrEntry,
+  type AmrEntryAttribution,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import { trackExecutionSettingsPopoverClick } from '../analytics/events';
 import {
   beginAmrAuthTracking,
@@ -232,7 +237,12 @@ export function InlineModelSwitcher({
     setAmrLoginError(null);
     setAmrLoginPending(true);
     beginAmrAuthTracking(attribution, startedAt);
-    const result = await startVelaLogin(attribution);
+    const odDeviceId = amrHandoffDeviceId({
+      metricsConsent: config.telemetry?.metrics === true,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: config.installationId,
+    });
+    const result = await startVelaLogin(attribution, odDeviceId);
     if (!result.ok && !result.alreadyRunning) {
       resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
       amrLoginStartedAtRef.current = null;
@@ -242,7 +252,13 @@ export function InlineModelSwitcher({
     }
     notifyAmrLoginStatusChanged('login-started');
     startAmrPolling(startedAt);
-  }, [analytics.track, startAmrPolling, t]);
+  }, [
+    analytics.track,
+    config.installationId,
+    config.telemetry?.metrics,
+    startAmrPolling,
+    t,
+  ]);
 
   const handleAmrCancelLogin = useCallback(async () => {
     resolveAmrAuthTracking(analytics.track, 'cancelled');
@@ -272,6 +288,8 @@ export function InlineModelSwitcher({
       const attribution = recordAmrEntry(
         analytics.track,
         'inline_model_switcher_amr_row',
+        new Date(),
+        { metricsConsent: config.telemetry?.metrics === true },
       );
       const latest = await refreshAmrStatus();
       if (latest?.loggedIn) return;

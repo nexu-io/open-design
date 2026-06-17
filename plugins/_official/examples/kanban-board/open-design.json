@@ -24,7 +24,7 @@
     "en": "Kanban Board"
   },
   "version": "0.1.0",
-  "description": "Kanban / task board with columns (To do / In progress / In review / Done),\ndraggable-looking cards, assignee avatars, swimlanes, and a top filter\nbar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\",\n\"trello\", \"看板\".",
+  "description": "Kanban / task board with columns (To do / In progress / In review / Done), draggable-looking cards, assignee avatars, swimlanes, and a top filter bar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\", \"trello\", \"看板\".",
   "description_i18n": {
     "zh-CN": "看板/任务面板，包含多个列（待办/进行中/审核中/已完成）、可拖动样式的卡片、成员头像、泳道和顶部筛选栏。当需求中提到'kanban'、'task board'、'sprint board'、'trello'、'看板'时使用。",
     "zh-TW": "看板/任務面板，包含多個欄位（待辦/進行中/審核中/已完成）、可拖曳樣式的卡片、成員頭像、泳道和頂部篩選列。當需求中提到'kanban'、'task board'、'sprint board'、'trello'、'看板'時使用。",
@@ -43,7 +43,7 @@
     "ar": "لوحة كانبان / المهام مع أعمدة (To do / In progress / In review / Done)، وبطاقات قابلة للسحب، وصور رمزية للمكلفين، وممرات سباحة، وشريط تصفية علوي. استخدمها عندما يذكر الموجز 'kanban' أو 'task board' أو 'sprint board' أو 'trello' أو '看板'.",
     "tr": "Sütunlu (To do / In progress / In review / Done) kanban / görev panosu, sürüklenebilir kartlar, atanan kişi avatarları, swimlane'ler ve üst filtre çubuğu içerir. Brief'te 'kanban', 'task board', 'sprint board', 'trello' veya '看板' geçtiğinde kullanın.",
     "uk": "Канбан-дошка / дошка завдань зі стовпцями (To do / In progress / In review / Done), картками, що перетягуються, аватарами виконавців, swimlanes та верхньою панеллю фільтрів. Використовуйте, коли в брифі згадуються 'kanban', 'task board', 'sprint board', 'trello' або '看板'.",
-    "en": "Kanban / task board with columns (To do / In progress / In review / Done),\ndraggable-looking cards, assignee avatars, swimlanes, and a top filter\nbar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\",\n\"trello\", \"看板\"."
+    "en": "Kanban / task board with columns (To do / In progress / In review / Done), draggable-looking cards, assignee avatars, swimlanes, and a top filter bar. Use when the brief mentions \"kanban\", \"task board\", \"sprint board\", \"trello\", \"看板\"."
   },
   "license": "MIT",
   "author": {

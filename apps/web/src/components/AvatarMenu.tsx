@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { getResolvedDeviceId } from '../analytics/client';
+import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import { useAnalytics } from '../analytics/provider';
 import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { RemixIcon } from './RemixIcon';
@@ -57,6 +60,7 @@ export function AvatarMenu({
   onOpen,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [open, setOpen] = useState(false);
   // Toggle that reports the closed→open transition (for analytics) without
   // firing on close.
@@ -161,6 +165,22 @@ export function AvatarMenu({
     config.mode === 'daemon' && currentAgent?.id === 'amr' && amrAvailable;
   const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
   const amrConsoleUrl = amrConsoleUrlForProfile(amrProfile);
+  const handleAmrConsoleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    const attribution = recordAmrEntry(analytics.track, 'avatar_amr_console', new Date(), {
+      metricsConsent: config.telemetry?.metrics === true,
+    });
+    const deviceId = amrHandoffDeviceId({
+      metricsConsent: config.telemetry?.metrics === true,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: config.installationId,
+    });
+    event.currentTarget.href = attributedAmrUrl(
+      amrConsoleUrl,
+      attribution,
+      deviceId,
+    );
+    setOpen(false);
+  };
 
   // Resolve the user's model + reasoning pick for the active agent. Falls
   // back to the agent's first declared option (`'default'`) when the user
@@ -287,7 +307,7 @@ export function AvatarMenu({
               href={amrConsoleUrl}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => setOpen(false)}
+              onClick={handleAmrConsoleClick}
             >
               <span className="avatar-amr-account-link__icon" aria-hidden>
                 <RemixIcon name="wallet-3-line" size={15} />

@@ -1813,6 +1813,7 @@
 }
 
 .ds-project-panel {
+  container-type: inline-size;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1908,6 +1909,85 @@
 .ds-project-main {
   width: min(940px, 100%);
   margin: 0 auto;
+}
+.ds-project-review-layout {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.ds-project-review-layout .ds-project-main--review {
+  width: 100%;
+  margin: 0;
+}
+.ds-project-toc {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 88px);
+  overflow: auto;
+  padding: 12px 10px 12px 0;
+  border-right: 1px solid var(--border);
+}
+.ds-project-toc__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ds-project-toc__group {
+  display: grid;
+  gap: 2px;
+  margin-top: 14px;
+}
+.ds-project-toc__group:first-of-type {
+  margin-top: 0;
+}
+.ds-project-toc__group > strong {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ds-project-toc__group > a {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-decoration: none;
+}
+.ds-project-toc__group > a:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.ds-project-toc__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+.ds-project-toc__dot.is-approved {
+  background: var(--green);
+}
+.ds-project-toc__dot.is-work,
+.ds-project-toc__dot.is-missing {
+  background: var(--red);
+}
+.ds-project-toc__dot.is-running,
+.ds-project-toc__dot.is-planned {
+  background: var(--accent);
 }
 .ds-project-head {
   display: flex;
@@ -2234,7 +2314,7 @@
 .ds-project-sections {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 38px;
 }
 .ds-project-section-head {
   position: relative;
@@ -2354,8 +2434,18 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
   font-size: 12px;
   white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.ds-project-review-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--text-strong);
 }
 .ds-project-review-actions button.active.success {
   border-color: color-mix(in srgb, var(--green) 42%, var(--border));
@@ -2593,7 +2683,7 @@
   color: var(--red);
 }
 .ds-project-main--review {
-  width: min(940px, 100%);
+  width: min(1180px, 100%);
 }
 .ds-project-head--review {
   display: flex;
@@ -2629,12 +2719,12 @@
 }
 .ds-project-section-group {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
 }
 .ds-project-section-group h2 {
   grid-column: 1 / -1;
-  margin: 0 0 2px 6px;
+  margin: 0 0 2px 2px;
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
@@ -2701,7 +2791,7 @@
   border-top: 1px solid var(--border);
 }
 .ds-project-review-item .ds-project-inline-preview {
-  height: clamp(170px, 20vw, 260px);
+  height: clamp(300px, 36vw, 520px);
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -2711,11 +2801,11 @@
   grid-column: 1 / -1;
 }
 .ds-project-review-item--ui-kit .ds-project-inline-preview {
-  height: clamp(420px, 56vw, 760px);
+  height: clamp(560px, 64vw, 920px);
   background: #d8d8d8;
 }
 .ds-project-review-item--asset .ds-project-inline-preview {
-  height: clamp(220px, 28vw, 360px);
+  height: clamp(260px, 30vw, 420px);
 }
 .ds-project-review-item .ds-project-review-notice,
 .ds-project-review-item .ds-project-last-feedback,
@@ -2738,6 +2828,42 @@
   border: 0;
   border-radius: 0;
   background: var(--bg-subtle);
+}
+@container (max-width: 1040px) {
+  .ds-project-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ds-project-toc {
+    z-index: 5;
+    top: 0;
+    max-height: none;
+    padding: 10px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .ds-project-toc__title {
+    margin-bottom: 8px;
+  }
+
+  .ds-project-toc__group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    overflow-x: auto;
+  }
+
+  .ds-project-toc__group > strong {
+    flex: none;
+    margin: 0 4px 0 0;
+  }
+
+  .ds-project-toc__group > a {
+    flex: none;
+  }
 }
 @media (max-width: 760px) {
   .ds-project-panel {

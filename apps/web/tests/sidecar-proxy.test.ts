@@ -13,6 +13,7 @@ import {
   resolveNextBundlerOptions,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
+  startWebSidecar,
 } from '../sidecar/server';
 
 describe('resolveDaemonProxyTarget', () => {
@@ -137,6 +138,130 @@ describe('standalone backend binding', () => {
     expect(env.PORT).toBe('5876');
     expect(env.NODE_ENV).toBe('production');
     expect(env.OD_STANDALONE_PARENT_PID).toBe('1234');
+  });
+
+  it('accepts a listening standalone backend before the app root responds to HTTP', async () => {
+    const previousOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+    const previousStandaloneRoot = process.env.OD_WEB_STANDALONE_ROOT;
+    const previousStartupTimeout = process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+    const standaloneRoot = await mkdtemp(join(tmpdir(), 'open-design-web-slow-http-'));
+    const runtimeRoot = await mkdtemp(join(tmpdir(), 'open-design-web-runtime-'));
+    const fakeWebRoot = join(standaloneRoot, 'apps', 'web');
+
+    try {
+      await mkdir(fakeWebRoot, { recursive: true });
+      await writeFile(
+        join(fakeWebRoot, 'server.js'),
+        `
+import { createServer } from 'node:net';
+
+const server = createServer(() => {
+  // Keep accepted sockets open. A TCP readiness probe should pass, but an
+  // HTTP HEAD/GET probe against "/" will hang until its client timeout.
+});
+
+server.listen(Number(process.env.PORT), process.env.HOSTNAME || '127.0.0.1');
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`,
+        'utf8',
+      );
+
+      process.env.OD_WEB_OUTPUT_MODE = 'standalone';
+      process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
+      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '500';
+
+      const handle = await startWebSidecar({
+        app: 'web',
+        base: runtimeRoot,
+        ipc: join(runtimeRoot, 'web.sock'),
+        mode: 'runtime',
+        namespace: 'slow-http',
+        source: 'tools-pack',
+      });
+
+      try {
+        await expect(handle.status()).resolves.toMatchObject({ state: 'running' });
+      } finally {
+        await handle.stop();
+      }
+    } finally {
+      if (previousOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
+      else process.env.OD_WEB_OUTPUT_MODE = previousOutputMode;
+      if (previousStandaloneRoot == null) delete process.env.OD_WEB_STANDALONE_ROOT;
+      else process.env.OD_WEB_STANDALONE_ROOT = previousStandaloneRoot;
+      if (previousStartupTimeout == null) delete process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+      else process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
+      await rm(standaloneRoot, { force: true, recursive: true });
+      await rm(runtimeRoot, { force: true, recursive: true });
+    }
+  });
+
+  it('does not treat a hijacked backend port as standalone readiness', async () => {
+    const previousOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+    const previousStandaloneRoot = process.env.OD_WEB_STANDALONE_ROOT;
+    const previousStartupTimeout = process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+    const standaloneRoot = await mkdtemp(join(tmpdir(), 'open-design-web-hijacked-port-'));
+    const runtimeRoot = await mkdtemp(join(tmpdir(), 'open-design-web-hijacked-runtime-'));
+    const fakeWebRoot = join(standaloneRoot, 'apps', 'web');
+    let handle: Awaited<ReturnType<typeof startWebSidecar>> | undefined;
+
+    try {
+      await mkdir(fakeWebRoot, { recursive: true });
+      await writeFile(
+        join(fakeWebRoot, 'server.js'),
+        `
+import { createServer } from 'node:net';
+
+const host = process.env.HOSTNAME || '127.0.0.1';
+const port = Number(process.env.PORT);
+let sawProbe = false;
+const dummyServer = createServer((socket) => {
+  socket.end();
+  if (!sawProbe) {
+    sawProbe = true;
+    setTimeout(() => process.exit(70), 100);
+  }
+});
+
+dummyServer.listen(port, host, () => {
+  const intendedServer = createServer();
+  intendedServer.once('error', () => {
+    // Keep the dummy listener alive until the readiness probe connects, then
+    // surface the failed intended bind like a port-race crash.
+  });
+  intendedServer.listen(port, host);
+});
+
+process.on('SIGTERM', () => dummyServer.close(() => process.exit(0)));
+`,
+        'utf8',
+      );
+
+      process.env.OD_WEB_OUTPUT_MODE = 'standalone';
+      process.env.OD_WEB_STANDALONE_ROOT = standaloneRoot;
+      process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = '1000';
+
+      await expect((async () => {
+        handle = await startWebSidecar({
+          app: 'web',
+          base: runtimeRoot,
+          ipc: join(runtimeRoot, 'web.sock'),
+          mode: 'runtime',
+          namespace: 'hijacked-port',
+          source: 'tools-pack',
+        });
+      })()).rejects.toThrow(/standalone Next\.js server exited before readiness/);
+    } finally {
+      await handle?.stop();
+      if (previousOutputMode == null) delete process.env.OD_WEB_OUTPUT_MODE;
+      else process.env.OD_WEB_OUTPUT_MODE = previousOutputMode;
+      if (previousStandaloneRoot == null) delete process.env.OD_WEB_STANDALONE_ROOT;
+      else process.env.OD_WEB_STANDALONE_ROOT = previousStandaloneRoot;
+      if (previousStartupTimeout == null) delete process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS;
+      else process.env.OD_STANDALONE_STARTUP_TIMEOUT_MS = previousStartupTimeout;
+      await rm(standaloneRoot, { force: true, recursive: true });
+      await rm(runtimeRoot, { force: true, recursive: true });
+    }
   });
 });
 

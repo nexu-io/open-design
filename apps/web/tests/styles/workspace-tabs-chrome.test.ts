@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const shellCss = readFileSync(new URL('../../src/styles/shell.css', import.meta.url), 'utf8');
 const routinesCss = readFileSync(new URL('../../src/styles/viewer/routines.css', import.meta.url), 'utf8');
+const composioCss = readFileSync(new URL('../../src/styles/viewer/composio.css', import.meta.url), 'utf8');
 const entryLayoutCss = readFileSync(new URL('../../src/styles/home/entry-layout.css', import.meta.url), 'utf8');
 
 function cssDeclarations(css: string, selector: string): string {
@@ -79,7 +80,9 @@ describe('workspace tabs chrome styles', () => {
     const activeProjectTab = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab.is-active');
     const tabSeparator = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab + .workspace-tab::before');
     const main = cssDeclarations(routinesCss, '.workspace-shell .workspace-tab__main');
+    const popover = cssDeclarations(shellCss, '.workspace-tabs-popover');
     const preview = cssDeclarations(shellCss, '.workspace-tab-preview');
+    const presentOverlay = cssDeclarations(composioCss, '.present-overlay');
     const projectChrome = cssDeclarations(
       routinesCss,
       '.workspace-shell .workspace-tabs-chrome.app-chrome-header',
@@ -105,6 +108,9 @@ describe('workspace tabs chrome styles', () => {
     expect(ruleValue(sharedStrip, 'overflow-y')).toBe('hidden');
     expect(ruleValue(tabSeparator, 'display')).toBe('none');
     expect(ruleValue(main, 'z-index')).toBe('2');
+    expect(Number(ruleValue(popover, 'z-index'))).toBeGreaterThan(
+      Number(ruleValue(presentOverlay, 'z-index')),
+    );
     expect(ruleValue(preview, 'box-sizing')).toBe('border-box');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::before');
     expect(routinesCss).not.toContain('.workspace-shell .workspace-tab.is-active::after');

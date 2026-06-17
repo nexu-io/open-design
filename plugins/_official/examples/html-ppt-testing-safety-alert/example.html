@@ -1,19 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Testing Safety Alert</title>
-<style>/* html-ppt :: shared webfonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@200;300;400;500;600;700;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap');
-
+<title>Open Design · Local Data Safety Brief</title>
+<style>/* html-ppt :: shared webfonts (only families actually used by this deck) */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 </style>
 <style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
 /* Default tokens. Themes in assets/themes/*.css override the :root block. */
@@ -27,22 +20,22 @@
   --text-1: #111216;
   --text-2: #55596a;
   --text-3: #8a8f9e;
-  --accent: #3b6cff;
-  --accent-2: #7a5cff;
-  --accent-3: #ff5c8a;
-  --good: #1aaf6c;
-  --warn: #f5a524;
-  --bad:  #e0445a;
-  --grad: linear-gradient(135deg,#3b6cff,#7a5cff 55%,#ff5c8a);
-  --grad-soft: linear-gradient(135deg,#eef2ff,#f5ecff 55%,#ffeef5);
-  --radius: 18px;
-  --radius-sm: 12px;
-  --radius-lg: 26px;
-  --shadow: 0 10px 30px rgba(18,24,40,.08), 0 2px 6px rgba(18,24,40,.04);
-  --shadow-lg: 0 24px 60px rgba(18,24,40,.14), 0 6px 16px rgba(18,24,40,.06);
-  --font-sans: 'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-  --font-serif: 'Playfair Display','Noto Serif SC',Georgia,serif;
-  --font-mono: 'JetBrains Mono','IBM Plex Mono',SFMono-Regular,Menlo,monospace;
+  --accent: #c11f33;
+  --accent-2: #c11f33;
+  --accent-3: #b45309;
+  --good: #1a7a4d;
+  --warn: #b45309;
+  --bad:  #c11f33;
+  --grad: none;
+  --grad-soft: none;
+  --radius: 4px;
+  --radius-sm: 3px;
+  --radius-lg: 6px;
+  --shadow: none;
+  --shadow-lg: none;
+  --font-sans: 'Archivo',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: Georgia,serif;
+  --font-mono: 'IBM Plex Mono',SFMono-Regular,Menlo,monospace;
   --font-display: var(--font-sans);
   --letter-tight: -.03em;
   --letter-normal: -.01em;
@@ -167,69 +160,84 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 }
 
 </style>
-<style>/* testing-safety-alert — 红/琥珀 警示风 · 白底高对比 */
+<style>/* testing-safety-alert — industrial warning-sign style · hazard stripes + red/amber/green signal system
+   polish pass: Archivo replaces Inter; removed glow shadows / gradient-fill cards; radii tightened to 3-6px;
+   checklist switched to hairline groups; mono for chrome/labels; contrast raised above AA */
 .tpl-testing-safety-alert{
-  --ts-bg:#fffaf7;
-  --ts-ink:#14141a;
-  --ts-ink2:#4a4955;
-  --ts-muted:#8a8892;
-  --ts-line:rgba(20,20,26,.08);
-  --ts-red:#e0314a;
-  --ts-red-soft:#ffecee;
-  --ts-amber:#d97706;
-  --ts-amber-soft:#fff5e6;
-  --ts-green:#067647;
-  --ts-green-soft:#e8f8ee;
+  --ts-bg:#f7f5f0;
+  --ts-ink:#15151a;
+  --ts-ink2:#43434d;
+  --ts-muted:#73737d;
+  --ts-line:rgba(21,21,26,.14);
+  --ts-line-strong:rgba(21,21,26,.32);
+  --ts-red:#c11f33;
+  --ts-red-soft:#f8e9ea;
+  --ts-amber:#a85408;
+  --ts-amber-soft:#f7eedd;
+  --ts-green:#1a6b45;
+  --ts-green-soft:#e7f1e9;
   background:var(--ts-bg);
   color:var(--ts-ink);
-  font-family:'Inter','Noto Sans SC','PingFang SC',-apple-system,sans-serif;
+  font-family:'Archivo',-apple-system,sans-serif;
 }
 .tpl-testing-safety-alert .slide{background:var(--ts-bg);color:var(--ts-ink);padding:64px 84px}
-.tpl-testing-safety-alert .ts-stripe{position:absolute;top:0;left:0;right:0;height:14px;background:repeating-linear-gradient(45deg,var(--ts-red) 0 18px,#111318 18px 36px)}
-.tpl-testing-safety-alert .ts-stripe-b{position:absolute;bottom:0;left:0;right:0;height:6px;background:repeating-linear-gradient(45deg,var(--ts-red) 0 10px,#111318 10px 20px);opacity:.6}
+.tpl-testing-safety-alert .ts-stripe{position:absolute;top:0;left:0;right:0;height:14px;background:repeating-linear-gradient(45deg,var(--ts-red) 0 18px,#15151a 18px 36px)}
+.tpl-testing-safety-alert .ts-stripe-b{position:absolute;bottom:0;left:0;right:0;height:5px;background:repeating-linear-gradient(45deg,var(--ts-red) 0 10px,#15151a 10px 20px);opacity:.55}
 .tpl-testing-safety-alert .ts-chrome{display:flex;justify-content:space-between;align-items:center;margin:22px 0 16px}
-.tpl-testing-safety-alert .ts-alert-tag{display:inline-flex;align-items:center;gap:10px;padding:8px 18px;border-radius:10px;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;background:var(--ts-red);color:#fff;box-shadow:0 6px 18px rgba(224,49,74,.28)}
-.tpl-testing-safety-alert .ts-alert-tag::before{content:'⚠';font-size:16px}
-.tpl-testing-safety-alert .ts-alert-tag.amber{background:var(--ts-amber);box-shadow:0 6px 18px rgba(217,119,6,.25)}
-.tpl-testing-safety-alert .ts-alert-tag.green{background:var(--ts-green);box-shadow:0 6px 18px rgba(6,118,71,.22)}
+.tpl-testing-safety-alert .ts-alert-tag{display:inline-flex;align-items:center;gap:10px;padding:7px 16px;border-radius:3px;font-size:12.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;background:var(--ts-red);color:#fff}
+.tpl-testing-safety-alert .ts-alert-tag::before{content:'⚠\FE0E';font-size:15px}
+.tpl-testing-safety-alert .ts-alert-tag.amber{background:var(--ts-amber)}
+.tpl-testing-safety-alert .ts-alert-tag.green{background:var(--ts-green)}
 .tpl-testing-safety-alert .ts-alert-tag.green::before{content:'✓'}
-.tpl-testing-safety-alert .ts-page{font-size:13px;color:var(--ts-muted);letter-spacing:.15em;font-weight:700}
-.tpl-testing-safety-alert .ts-kicker{font-size:15px;font-weight:700;color:var(--ts-red);letter-spacing:.06em;margin-bottom:10px;text-transform:uppercase}
-.tpl-testing-safety-alert .ts-h1{font-size:88px;font-weight:900;line-height:1.04;letter-spacing:-2px;margin:10px 0 16px;color:var(--ts-ink)}
+.tpl-testing-safety-alert .ts-page{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ts-muted);letter-spacing:.15em;font-weight:500}
+.tpl-testing-safety-alert .ts-kicker{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--ts-red);letter-spacing:.1em;margin-bottom:10px;text-transform:uppercase}
+.tpl-testing-safety-alert .ts-h1{font-size:clamp(56px,9.5vh,72px);font-weight:800;line-height:1.08;letter-spacing:-.028em;margin:8px 0 14px;color:var(--ts-ink)}
 .tpl-testing-safety-alert .ts-h1 .red{color:var(--ts-red)}
 .tpl-testing-safety-alert .ts-h1 .strike{position:relative;display:inline-block}
-.tpl-testing-safety-alert .ts-h1 .strike::after{content:'';position:absolute;left:-4%;right:-4%;top:50%;height:10px;background:var(--ts-red);transform:skewX(-12deg);opacity:.85}
-.tpl-testing-safety-alert .ts-h2{font-size:54px;font-weight:900;line-height:1.1;letter-spacing:-1px;margin:0 0 14px}
-.tpl-testing-safety-alert .ts-sub{font-size:22px;line-height:1.5;color:var(--ts-ink2);max-width:880px;margin-top:10px}
-.tpl-testing-safety-alert .ts-highlight-red{display:inline-block;padding:4px 14px;background:var(--ts-red);color:#fff;border-radius:8px;font-weight:800}
-.tpl-testing-safety-alert .ts-highlight-amber{display:inline-block;padding:4px 14px;background:var(--ts-amber-soft);color:var(--ts-amber);border-radius:8px;font-weight:800;border:1px solid rgba(217,119,6,.2)}
-.tpl-testing-safety-alert .ts-highlight-green{display:inline-block;padding:4px 14px;background:var(--ts-green-soft);color:var(--ts-green);border-radius:8px;font-weight:800;border:1px solid rgba(6,118,71,.2)}
-.tpl-testing-safety-alert .ts-alert-box{border:2px solid var(--ts-red);border-radius:18px;padding:26px 30px;background:linear-gradient(180deg,#fff 0%,var(--ts-red-soft) 100%);box-shadow:0 14px 36px rgba(224,49,74,.14);margin-top:24px;position:relative}
-.tpl-testing-safety-alert .ts-alert-box::before{content:'';position:absolute;top:-11px;left:24px;width:22px;height:22px;background:var(--ts-red);border-radius:50%;box-shadow:0 0 0 6px rgba(224,49,74,.2)}
-.tpl-testing-safety-alert .ts-alert-box.amber{border-color:var(--ts-amber);background:linear-gradient(180deg,#fff 0%,var(--ts-amber-soft) 100%);box-shadow:0 14px 36px rgba(217,119,6,.14)}
-.tpl-testing-safety-alert .ts-alert-box.amber::before{background:var(--ts-amber);box-shadow:0 0 0 6px rgba(217,119,6,.2)}
-.tpl-testing-safety-alert .ts-alert-box.green{border-color:var(--ts-green);background:linear-gradient(180deg,#fff 0%,var(--ts-green-soft) 100%);box-shadow:0 14px 36px rgba(6,118,71,.14)}
-.tpl-testing-safety-alert .ts-alert-box.green::before{background:var(--ts-green);box-shadow:0 0 0 6px rgba(6,118,71,.2)}
-.tpl-testing-safety-alert .ts-alert-box h3{font-size:34px;font-weight:900;margin:0 0 10px}
-.tpl-testing-safety-alert .ts-alert-box p{font-size:17px;line-height:1.6;color:var(--ts-ink2);margin:0}
+.tpl-testing-safety-alert .ts-h1 .strike::after{content:'';position:absolute;left:-3%;right:-3%;top:52%;height:9px;background:var(--ts-red);transform:skewX(-12deg)}
+.tpl-testing-safety-alert .ts-h2{font-size:52px;font-weight:800;line-height:1.06;letter-spacing:-.024em;margin:0 0 14px}
+.tpl-testing-safety-alert .ts-sub{font-size:19px;line-height:1.55;color:var(--ts-ink2);max-width:62ch;margin-top:8px}
+.tpl-testing-safety-alert .ts-highlight-red{display:inline-block;padding:3px 13px;background:var(--ts-red);color:#fff;border-radius:3px;font-weight:800}
+.tpl-testing-safety-alert .ts-highlight-amber{display:inline-block;padding:3px 13px;background:var(--ts-amber-soft);color:var(--ts-amber);border-radius:3px;font-weight:800;border:1px solid var(--ts-amber)}
+.tpl-testing-safety-alert .ts-highlight-green{display:inline-block;padding:3px 13px;background:var(--ts-green-soft);color:var(--ts-green);border-radius:3px;font-weight:800;border:1px solid var(--ts-green)}
+.tpl-testing-safety-alert .ts-alert-box{border:1.5px solid var(--ts-red);border-left-width:8px;border-radius:4px;padding:20px 26px;background:var(--ts-red-soft);margin-top:22px;position:relative}
+.tpl-testing-safety-alert .ts-alert-box.amber{border-color:var(--ts-amber);background:var(--ts-amber-soft)}
+.tpl-testing-safety-alert .ts-alert-box.green{border-color:var(--ts-green);background:var(--ts-green-soft)}
+.tpl-testing-safety-alert .ts-alert-box h3{font-size:27px;font-weight:800;letter-spacing:-.015em;margin:0 0 8px}
+.tpl-testing-safety-alert .ts-alert-box p{font-size:16px;line-height:1.55;color:var(--ts-ink2);margin:0;max-width:65ch}
 .tpl-testing-safety-alert .ts-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
 .tpl-testing-safety-alert .ts-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:20px}
-.tpl-testing-safety-alert .ts-card{border:1px solid var(--ts-line);border-radius:16px;padding:22px 24px;background:#fff;box-shadow:0 6px 20px rgba(17,19,24,.04)}
-.tpl-testing-safety-alert .ts-card .lbl{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ts-muted);margin-bottom:8px}
-.tpl-testing-safety-alert .ts-card h4{font-size:26px;font-weight:900;line-height:1.2;margin-bottom:8px}
+.tpl-testing-safety-alert .ts-card{border:1px solid var(--ts-line);border-radius:4px;padding:22px 24px;background:#fdfcfa}
+.tpl-testing-safety-alert .ts-card .lbl{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ts-muted);margin-bottom:8px}
+.tpl-testing-safety-alert .ts-card h4{font-size:25px;font-weight:800;letter-spacing:-.015em;line-height:1.18;margin-bottom:8px}
 .tpl-testing-safety-alert .ts-card p{font-size:14px;color:var(--ts-ink2);line-height:1.55}
-.tpl-testing-safety-alert .ts-checklist{display:flex;flex-direction:column;gap:12px;margin-top:20px;max-width:880px}
-.tpl-testing-safety-alert .ts-check{display:flex;gap:16px;align-items:flex-start;padding:16px 20px;border:1px solid var(--ts-line);border-radius:14px;background:#fff}
-.tpl-testing-safety-alert .ts-check .box{flex:0 0 32px;height:32px;border-radius:8px;border:2px solid var(--ts-red);display:grid;place-items:center;font-weight:900;color:var(--ts-red);background:var(--ts-red-soft)}
+.tpl-testing-safety-alert .ts-checklist{display:flex;flex-direction:column;gap:0;margin-top:20px;max-width:920px;border-top:1.5px solid var(--ts-line-strong)}
+.tpl-testing-safety-alert .ts-check{display:flex;gap:16px;align-items:flex-start;padding:13px 4px;border-bottom:1px solid var(--ts-line);background:transparent}
+.tpl-testing-safety-alert .ts-check .box{flex:0 0 30px;height:30px;border-radius:3px;border:2px solid var(--ts-red);display:grid;place-items:center;font-weight:800;color:var(--ts-red);background:var(--ts-red-soft)}
 .tpl-testing-safety-alert .ts-check.ok .box{border-color:var(--ts-green);color:var(--ts-green);background:var(--ts-green-soft)}
-.tpl-testing-safety-alert .ts-check .txt{font-size:18px;line-height:1.5;font-weight:600}
-.tpl-testing-safety-alert .ts-codebox{background:#141418;color:#fff5ea;border-radius:14px;padding:22px 26px;font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.85;margin-top:20px;border-left:6px solid var(--ts-red)}
-.tpl-testing-safety-alert .ts-codebox .cm{color:#7a756d}
-.tpl-testing-safety-alert .ts-codebox .kw{color:#ffb38a}
-.tpl-testing-safety-alert .ts-codebox .st{color:#b3e6c2}
-.tpl-testing-safety-alert .ts-codebox .bad{color:#ff9aa8;font-weight:700}
-.tpl-testing-safety-alert .ts-footer{position:absolute;left:84px;right:84px;bottom:36px;display:flex;justify-content:space-between;font-size:12px;color:var(--ts-muted);letter-spacing:.1em}
+.tpl-testing-safety-alert .ts-check .txt{font-size:17.5px;line-height:1.5;font-weight:500;padding-top:2px}
+.tpl-testing-safety-alert .ts-codebox{background:#15151a;color:#f3efe6;border-radius:4px;padding:14px 22px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.5;margin-top:14px;border-left:8px solid var(--ts-red);overflow:hidden}
+.tpl-testing-safety-alert .ts-codebox+.ts-stripe-b{display:block}
+.tpl-testing-safety-alert .slide:has(.ts-codebox) .ts-h2{font-size:44px;margin-bottom:8px}
+.tpl-testing-safety-alert .slide:has(.ts-codebox) .ts-chrome{margin:18px 0 10px}
+.tpl-testing-safety-alert .ts-codebox .cm{color:#8d8a82}
+.tpl-testing-safety-alert .ts-codebox .kw{color:#f0a36e}
+.tpl-testing-safety-alert .ts-codebox .st{color:#a9d9b6}
+.tpl-testing-safety-alert .ts-codebox .bad{color:#f08a99;font-weight:700}
+.tpl-testing-safety-alert .ts-footer{position:absolute;left:84px;right:84px;bottom:34px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ts-muted);letter-spacing:.08em}
 
+/* Entrance motion: transform/opacity only, staggered delays, reduced-motion fallback */
+@keyframes ts-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.tpl-testing-safety-alert .slide>*{animation:ts-rise .6s cubic-bezier(.16,1,.3,1) both}
+.tpl-testing-safety-alert .slide>:nth-child(3){animation-delay:.06s}
+.tpl-testing-safety-alert .slide>:nth-child(4){animation-delay:.12s}
+.tpl-testing-safety-alert .slide>:nth-child(5){animation-delay:.18s}
+.tpl-testing-safety-alert .slide>:nth-child(6){animation-delay:.24s}
+.tpl-testing-safety-alert .slide>:nth-child(7){animation-delay:.3s}
+.tpl-testing-safety-alert .slide>.ts-stripe,
+.tpl-testing-safety-alert .slide>.ts-stripe-b,
+.tpl-testing-safety-alert .slide>.ts-footer{animation:none}
+@media (prefers-reduced-motion:reduce){.tpl-testing-safety-alert .slide>*{animation:none}}
 </style>
 <style>
 /* Static-preview fallback (runtime.js is absent — keep every slide visible) */
@@ -244,151 +252,138 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 1. COVER -->
   <section class="slide is-active">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">ai safety · 高优先级</span><span class="ts-page">01 / 08</span></div>
-    <div class="ts-kicker">2026 年最重要的一条判断</div>
-    <h1 class="ts-h1">别再追问<br><span class="strike">AI 会不会干活</span><br>开始问：<span class="red">它出事谁负责</span></h1>
-    <p class="ts-sub">AI 出错的代价，不再是一次 bad response 这么简单 —— 它可能一次性写 300 份工单、提 80 个 PR、发 5000 封邮件。</p>
+    <div class="ts-chrome"><span class="ts-alert-tag">data safety · local-first</span><span class="ts-page">01 / 08</span></div>
+    <div class="ts-kicker">Open Design · Local Data Safety Brief</div>
+    <h1 class="ts-h1" style="font-size:clamp(44px,7.6vh,58px)">Stop sending your designs<br><span class="strike">to someone else's server</span><br><span class="red">Keep data on your machine</span></h1>
+    <p class="ts-sub">The cost of cloud AI design tools isn't just the subscription — your prompts, design files, brand assets, and API keys all pass through someone else's servers.</p>
     <div class="ts-alert-box">
-      <h3>风险已经规模化</h3>
-      <p>「做错」成本 × N；「做对」收益 × N。<br>这就是为什么 <b>测试、验收、安全、风控</b> 会变成未来 3 年最贵的能力。</p>
+      <h3>Open Design: data never leaves your machine</h3>
+      <p>Sessions, memory, and design artifacts all live in SQLite and the filesystem under your local <b>.od/</b> directory; API keys stay local and connect straight to the provider.<br><b>Apache-2.0 open source · Runs locally · BYOK · No sign-up</b>.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>AI SAFETY BRIEF · LEWIS · 2026.04</span><span>01 / 08</span></div>
+    <div class="ts-footer"><span>OPEN DESIGN · DATA SAFETY BRIEF · 2026</span><span>01 / 08</span></div>
   </section>
 
   <!-- 2. SECTION -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">section · risk 分级</span><span class="ts-page">02 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">section · data flow</span><span class="ts-page">02 / 08</span></div>
     <div style="margin:auto 0">
       <div class="ts-kicker">Chapter One</div>
-      <h1 class="ts-h1" style="font-size:130px">先分 <span class="red">等级</span></h1>
-      <p class="ts-sub" style="font-size:28px">不是所有 AI 行为都同等危险。<br>先把「可撤销」和「不可撤销」分开，再谈流程。</p>
+      <h1 class="ts-h1" style="font-size:110px">Follow the <span class="red">data</span></h1>
+      <p class="ts-sub" style="font-size:28px">Not every AI design tool treats your data the same way.<br>First separate "data leaves the machine" from "data stays" — then pick a tool.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>section · level taxonomy</span><span>02 / 08</span></div>
+    <div class="ts-footer"><span>section · data flow taxonomy</span><span>02 / 08</span></div>
   </section>
 
   <!-- 3. CONTENT risk levels -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">风险分级 · 3 levels</span><span class="ts-page">03 / 08</span></div>
-    <h2 class="ts-h2">三档风险，三种处理</h2>
+    <div class="ts-chrome"><span class="ts-alert-tag">data flow · 3 levels</span><span class="ts-page">03 / 08</span></div>
+    <h2 class="ts-h2">Three flows, three risk profiles</h2>
     <div class="ts-grid-3">
-      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · 绿色</div><h4>可撤销</h4><p>写 draft、生成图片、起草文档。<br>错了 Ctrl+Z，零代价。<br><b style="color:var(--ts-green)">策略：放开跑</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · 琥珀</div><h4>半可撤销</h4><p>发 draft 邮件、提 PR、改 staging 数据。<br>错了要道歉 / 回滚。<br><b style="color:var(--ts-amber)">策略：人工复核</b></p></div>
-      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · 红色</div><h4>不可撤销</h4><p>发真实邮件、付款、删库、删 prod 数据。<br>错了就真错了。<br><b style="color:var(--ts-red)">策略：硬卡 + 双人审</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-green)"><div class="lbl">L1 · Green</div><h4>Local-first</h4><p>Open Design: designs, memory, and SQLite all live in your local .od/; BYOK connects straight to the provider.<br><b style="color:var(--ts-green)">Risk: you're in control</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-amber)"><div class="lbl">L2 · Amber</div><h4>Partly in the cloud</h4><p>Cloud SaaS design tools: files live with the vendor, export formats are limited, and a shutdown cuts you off.<br><b style="color:var(--ts-amber)">Risk: at the vendor's mercy</b></p></div>
+      <div class="ts-card" style="border-top:4px solid var(--ts-red)"><div class="lbl">L3 · Red</div><h4>Fully in the cloud</h4><p>Closed-source cloud AI design: prompts, artifacts, and keys all pass through a third party, model locked to one vendor.<br><b style="color:var(--ts-red)">Risk: unauditable</b></p></div>
     </div>
     <div class="ts-alert-box amber">
-      <h3>绝不要让 agent 自己升级</h3>
-      <p>L1 的任务不能自己变成 L2。授权必须是显式的、可撤销的、带过期时间的。</p>
+      <h3>Your API key never leaves your machine</h3>
+      <p>In BYOK mode, keys live only in your local .od/media-config.json, and requests go straight to the model provider — no intermediary servers.</p>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>risk · 3 levels</span><span>03 / 08</span></div>
+    <div class="ts-footer"><span>data flow · 3 levels</span><span>03 / 08</span></div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag">policy as code</span><span class="ts-page">04 / 08</span></div>
-    <div class="ts-kicker">别用文档管规则 · 用代码管规则</div>
-    <h2 class="ts-h2">三十行 YAML，<br><span class="ts-highlight-red">红线硬卡</span></h2>
-    <pre class="ts-codebox"><span class="cm"># safety-policy.yaml · compiled → runtime guard</span>
-<span class="kw">level_1_allow</span>:
-  - tools: [<span class="st">write_draft</span>, <span class="st">generate_image</span>, <span class="st">read_docs</span>]
+    <div class="ts-chrome"><span class="ts-alert-tag">privacy as architecture</span><span class="ts-page">04 / 08</span></div>
+    <div class="ts-kicker">Don't trust the privacy policy · trust the local filesystem</div>
+    <h2 class="ts-h2">Where your data lives,<br><span class="ts-highlight-red">verifiable at a glance</span></h2>
+    <pre class="ts-codebox"><span class="cm"># .od/ · Open Design local data directory · everything stays on your machine</span>
+<span class="kw">local_data</span>:
+  - <span class="st">app.sqlite</span>          <span class="cm"># sessions, memory, preferences</span>
+  - <span class="st">projects/&lt;id&gt;/</span>      <span class="cm"># agent working directories</span>
+  - <span class="st">artifacts/</span>          <span class="cm"># saved design artifacts</span>
+  - <span class="st">media-config.json</span>   <span class="cm"># API keys · local only</span>
 
-<span class="kw">level_2_require_review</span>:
-  - tools: [<span class="st">send_email_draft</span>, <span class="st">open_pr</span>, <span class="st">write_staging_db</span>]
-    reviewer: <span class="st">human</span>
+<span class="kw">byok_direct</span>:
+  - providers: [<span class="st">anthropic</span>, <span class="st">openai</span>, <span class="st">azure</span>, <span class="st">google</span>]
+    route: <span class="st">your machine → provider, no servers in between</span>
 
-<span class="kw">level_3_hard_block</span>:
-  - tools: [<span class="st">send_real_email</span>, <span class="st">transfer_money</span>, <span class="st">delete_prod</span>]
-    unless: <span class="st">two_human_sign_off AND within_24h</span>
-
-<span class="bad">forbidden_always</span>:
-  - <span class="bad">"r&#109; &#45;rf /"</span>
-  - <span class="bad">"dr&#111;p table"</span>
-  - <span class="bad">"force push &#111;rigin main"</span></pre>
+<span class="bad">never_uploaded</span>:
+  - <span class="bad">"your prompts"</span>
+  - <span class="bad">"your design files"</span>
+  - <span class="bad">"your API keys"</span></pre>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>policy · yaml-as-guard</span><span>04 / 08</span></div>
+    <div class="ts-footer"><span>privacy · filesystem-as-proof</span><span>04 / 08</span></div>
   </section>
 
   <!-- 5. CHART -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">incident report · q1</span><span class="ts-page">05 / 08</span></div>
-    <h2 class="ts-h2">我们 Q1 的 <span class="red">12 起 AI 事故</span></h2>
-    <p class="ts-sub">幸好全部捕获在 staging。但每一起都能上生产。</p>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">cost report · byok</span><span class="ts-page">05 / 08</span></div>
+    <h2 class="ts-h2">Same usage, monthly cost <span class="red">-80%</span></h2>
+    <p class="ts-sub">A Claude Design subscription runs $500/month; Open Design with end-to-end BYOK direct to providers runs ~$73/month.</p>
     <svg viewBox="0 0 1040 360" style="width:100%;max-width:1040px;margin-top:18px" xmlns="http://www.w3.org/2000/svg">
-      <g font-family="Inter,sans-serif" font-size="14" fill="#4a4955">
-        <line x1="70" y1="320" x2="1000" y2="320" stroke="#eaecf3" stroke-width="2"/>
-        <!-- month columns: Jan Feb Mar, L1/L2/L3 stacked -->
-        <g transform="translate(120,0)">
-          <rect x="0" y="220" width="60" height="100" fill="#067647"/>
-          <rect x="0" y="160" width="60" height="60" fill="#d97706"/>
-          <rect x="0" y="130" width="60" height="30" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Jan</text>
-          <text x="30" y="120" text-anchor="middle" font-weight="800" fill="#14141a">5</text>
+      <g font-family="Archivo,sans-serif" font-size="14" fill="#43434d">
+        <line x1="70" y1="320" x2="1000" y2="320" stroke="#15151a" stroke-opacity=".3" stroke-width="1.5"/>
+        <!-- monthly cost columns: Claude Design vs Open Design (BYOK) -->
+        <g transform="translate(180,0)">
+          <rect x="0" y="70" width="120" height="250" fill="#c11f33"/>
+          <text x="60" y="345" text-anchor="middle" font-weight="700">Claude Design</text>
+          <text x="60" y="58" text-anchor="middle" font-weight="800" fill="#15151a">$500 / mo</text>
         </g>
-        <g transform="translate(320,0)">
-          <rect x="0" y="240" width="60" height="80" fill="#067647"/>
-          <rect x="0" y="200" width="60" height="40" fill="#d97706"/>
-          <rect x="0" y="180" width="60" height="20" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Feb</text>
-          <text x="30" y="170" text-anchor="middle" font-weight="800" fill="#14141a">3</text>
-        </g>
-        <g transform="translate(520,0)">
-          <rect x="0" y="250" width="60" height="70" fill="#067647"/>
-          <rect x="0" y="220" width="60" height="30" fill="#d97706"/>
-          <rect x="0" y="210" width="60" height="10" fill="#e0314a"/>
-          <text x="30" y="345" text-anchor="middle" font-weight="700">Mar</text>
-          <text x="30" y="200" text-anchor="middle" font-weight="800" fill="#14141a">4</text>
+        <g transform="translate(460,0)">
+          <rect x="0" y="284" width="120" height="36" fill="#1a6b45"/>
+          <text x="60" y="345" text-anchor="middle" font-weight="700">Open Design</text>
+          <text x="60" y="272" text-anchor="middle" font-weight="800" fill="#15151a">~$73 / mo</text>
         </g>
         <!-- legend -->
         <g transform="translate(720,60)">
-          <rect x="0" y="0" width="16" height="16" fill="#e0314a"/><text x="24" y="13" font-weight="700">L3 不可撤销 (3)</text>
-          <rect x="0" y="26" width="16" height="16" fill="#d97706"/><text x="24" y="39" font-weight="700">L2 需复核 (4)</text>
-          <rect x="0" y="52" width="16" height="16" fill="#067647"/><text x="24" y="65" font-weight="700">L1 可恢复 (5)</text>
-          <text x="0" y="100" font-size="13" fill="#8a8892">全部被 safety-policy 在 runtime 拦下，</text>
-          <text x="0" y="118" font-size="13" fill="#8a8892">未进 prod。但 3 起 L3 非常惊险。</text>
+          <rect x="0" y="0" width="16" height="16" fill="#c11f33"/><text x="24" y="13" font-weight="700">Closed cloud subscription · flat fee</text>
+          <rect x="0" y="26" width="16" height="16" fill="#1a6b45"/><text x="24" y="39" font-weight="700">Open Design · BYOK pay-per-use</text>
+          <text x="0" y="74" font-size="13" fill="#73737d">The software itself is Apache-2.0, free and open source;</text>
+          <text x="0" y="92" font-size="13" fill="#73737d">you pay only the model provider for actual usage — over 80% less.</text>
         </g>
       </g>
     </svg>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>incident · q1 summary</span><span>05 / 08</span></div>
+    <div class="ts-footer"><span>cost · byok vs subscription</span><span>05 / 08</span></div>
   </section>
 
   <!-- 6. CHECKLIST -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">red-team checklist</span><span class="ts-page">06 / 08</span></div>
-    <h2 class="ts-h2">上线前 <span class="red">必过 7 道题</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">tool-audit checklist</span><span class="ts-page">06 / 08</span></div>
+    <h2 class="ts-h2">7 questions to ask <span class="red">before you choose a tool</span></h2>
     <div class="ts-checklist">
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">它能删除东西吗？有人类 review 吗？能 60 秒内回滚吗？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">它的 prompt 注入能让它越权吗？（跑过红队提示词）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">它处理 PII 吗？日志里是不是也有 PII？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">上下游失败时，它会不会开始乱改其他资源？</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">并发 100 个 agent 一起跑会不会死锁？</div></div>
-      <div class="ts-check ok"><div class="box">✓</div><div class="txt">错了能不能 <b>立刻</b> 停？（kill switch 能 2 秒内生效吗）</div></div>
-      <div class="ts-check"><div class="box">!</div><div class="txt">出事时有没有人值班？值班手册有没有 agent 专属章节？</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Where do design files live? Can you git diff them? (Open Design: local filesystem)</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Does your API key pass through third-party servers? (BYOK: stored locally, direct to provider)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: will your prompts and artifacts be used for training? Most terms won't say.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">If you go offline or the vendor shuts down, can you still open past work? (Local files: always)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: model locked to one vendor — no agent swapping, no self-hosting, no BYOK.</div></div>
+      <div class="ts-check ok"><div class="box">✓</div><div class="txt">Can you audit the code <b>line by line</b>? (Apache-2.0, fully open — fork, self-host, commercial use all allowed)</div></div>
+      <div class="ts-check"><div class="box">!</div><div class="txt">Cloud tools: can you export your preference and memory data — and truly delete it?</div></div>
     </div>
     <div class="ts-stripe-b"></div>
-    <div class="ts-footer"><span>checklist · pre-launch</span><span>06 / 08</span></div>
+    <div class="ts-footer"><span>checklist · before you choose</span><span>06 / 08</span></div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag green">今晚就能动</span><span class="ts-page">07 / 08</span></div>
-    <h2 class="ts-h2">今晚先做 <span class="ts-highlight-red">三件事</span></h2>
+    <div class="ts-chrome"><span class="ts-alert-tag green">do it tonight</span><span class="ts-page">07 / 08</span></div>
+    <h2 class="ts-h2">Three things to do <span class="ts-highlight-red">tonight</span></h2>
     <div class="ts-grid-3">
-      <div class="ts-card"><div class="lbl">1 · 分级</div><h4>给你的 agent<br>写 L1/L2/L3</h4><p>把所有工具列出来，标上等级。不标的一律按 L3。</p></div>
-      <div class="ts-card"><div class="lbl">2 · 写 policy</div><h4>policy.yaml<br>接 runtime</h4><p>不要信 prompt 里的 "be careful"，要信执行层的硬卡。</p></div>
-      <div class="ts-card"><div class="lbl">3 · kill switch</div><h4>红按钮<br>能在 2 秒内停</h4><p>CTO / on-call 都得知道怎么按。演练一次。</p></div>
+      <div class="ts-card"><div class="lbl">1 · Download</div><h4>Install<br>Open Design</h4><p>macOS / Windows, runs locally, no sign-up. Apache-2.0 open source.</p></div>
+      <div class="ts-card"><div class="lbl">2 · Connect an agent</div><h4>Zero-config<br>with the CLIs you own</h4><p>Auto-detects 21 coding agents on your PATH, including Claude Code / Codex / Cursor.</p></div>
+      <div class="ts-card"><div class="lbl">3 · BYOK</div><h4>Bring your own key<br>stored locally only</h4><p>Direct connections to Anthropic / OpenAI / Azure / Google — no servers in between.</p></div>
     </div>
     <div class="ts-alert-box green">
-      <h3>真正的安全不是 prompt，是流程</h3>
-      <p>prompt 会被注入，流程不会。—— 把保护放在不可被说服的一层。</p>
+      <h3>Real privacy isn't a promise — it's architecture</h3>
+      <p>Your data isn't uploaded because there is no upload path at all. Put the protection in a layer that can't be bypassed.</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>cta · tonight</span><span>07 / 08</span></div>
@@ -397,11 +392,11 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
   <!-- 8. THANKS -->
   <section class="slide">
     <div class="ts-stripe"></div>
-    <div class="ts-chrome"><span class="ts-alert-tag amber">please stay safe</span><span class="ts-page">08 / 08</span></div>
+    <div class="ts-chrome"><span class="ts-alert-tag amber">open · local · agent-native</span><span class="ts-page">08 / 08</span></div>
     <div style="margin:auto 0">
-      <div class="ts-kicker">end of brief</div>
-      <h1 class="ts-h1" style="font-size:140px">谢谢 <span class="red">·</span> thanks</h1>
-      <p class="ts-sub" style="font-size:24px">policy.yaml 模板、红队 prompt 清单、事故复盘模板 —— 评论区扣「安全」。</p>
+      <div class="ts-kicker">Bringing frontier AI design power back to every creator's desk</div>
+      <h1 class="ts-h1" style="font-size:140px">thank <span class="red">·</span> you</h1>
+      <p class="ts-sub" style="font-size:24px">Download Open Design (macOS / Windows) | Star on GitHub<br>github.com/nexu-io/open-design · discord.gg/qhbcCH8Am4 · x.com/nexudotio</p>
     </div>
     <div class="ts-stripe-b"></div>
     <div class="ts-footer"><span>end of brief</span><span>08 / 08</span></div>

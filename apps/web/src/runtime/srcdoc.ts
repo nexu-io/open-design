@@ -17,6 +17,7 @@
 import {
   buildManualEditBridge,
   buildManualEditBridgeStyle,
+  buildManualEditKeyboardGuard,
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
@@ -635,8 +636,14 @@ function annotateMissingOdIds(doc: string): string {
 }
 
 function injectManualEditBridge(doc: string): string {
-  const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
+  const withGuard = injectAfterHeadOpen(doc, buildManualEditKeyboardGuard());
+  const withStyle = injectBeforeHeadEnd(withGuard, buildManualEditBridgeStyle());
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
+}
+
+function injectAfterHeadOpen(doc: string, payload: string): string {
+  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+  return payload + doc;
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
@@ -1940,15 +1947,25 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var usesInlineDisplay = false;
     var usesInlineVisibility = false;
     var usesHidden = false;
+    // Many reveal-animation decks (the frontend-slides family) gate their
+    // staggered entrances on a SEPARATE \`.visible\` class — \`.slide.visible
+    // .reveal { opacity: 1 }\` — that the deck's own show() adds alongside
+    // \`.active\`. Driving navigation by flipping only the active class shows
+    // the slide chrome but leaves every .reveal child stuck at opacity:0, so
+    // the body renders blank. Mirror \`.visible\` in lock-step with the active
+    // slide (only for decks that actually use it, so it is a no-op elsewhere).
+    var usesVisibleClass = false;
     for (var j=0; j<list.length; j++) {
       usesInlineDisplay = usesInlineDisplay || list[j].style.display === 'none';
       usesInlineVisibility = usesInlineVisibility || list[j].style.visibility === 'hidden';
       usesHidden = usesHidden || list[j].hasAttribute('hidden');
+      usesVisibleClass = usesVisibleClass || (list[j].classList && list[j].classList.contains('visible'));
     }
     for (var k=0; k<list.length; k++) {
       if (list[k].classList) {
         list[k].classList.remove('active', 'is-active', 'current');
         if (k === target) list[k].classList.add(activeClass);
+        if (usesVisibleClass) list[k].classList.toggle('visible', k === target);
       }
       if (usesHidden) {
         if (k === target) list[k].removeAttribute('hidden');

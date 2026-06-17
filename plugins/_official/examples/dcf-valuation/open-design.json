@@ -24,7 +24,7 @@
     "en": "Dcf Valuation"
   },
   "version": "0.1.0",
-  "description": "Discounted cash flow valuation and intrinsic value analysis for public\ncompanies. Use when the brief asks for DCF, fair value, intrinsic value,\nprice target, undervalued or overvalued analysis, or \"what is this company\nworth?\"",
+  "description": "Discounted cash flow valuation and intrinsic value analysis for public companies. Use when the brief asks for DCF, fair value, intrinsic value, price target, undervalued or overvalued analysis, or \"what is this company worth?\"",
   "description_i18n": {
     "zh-CN": "为上市公司提供现金流折现估值和内在价值分析。适用于DCF、公允价值、内在价值、目标价、低估或高估分析等需求。",
     "zh-TW": "為上市公司提供現金流折現估值和內在價值分析。適用於DCF、公允價值、內在價值、目標價、低估或高估分析等需求。",
@@ -43,7 +43,7 @@
     "ar": "تقييم التدفقات النقدية المخصومة وتحليل القيمة الجوهرية للشركات المدرجة. للاستخدام في DCF والقيمة العادلة والقيمة الجوهرية والسعر المستهدف وتحليل التقييم المنخفض أو المرتفع.",
     "tr": "Halka açık şirketler için iskontolu nakit akışı değerlemesi ve içsel değer analizi. DCF, gerçeğe uygun değer, içsel değer, hedef fiyat ve düşük/yüksek değerlenme analizleri için.",
     "uk": "Оцінка компаній методом дисконтованих грошових потоків і аналіз внутрішньої вартості. Для DCF, справедливої вартості, цільової ціни та аналізу недо- чи переоцінки.",
-    "en": "Discounted cash flow valuation and intrinsic value analysis for public\ncompanies. Use when the brief asks for DCF, fair value, intrinsic value,\nprice target, undervalued or overvalued analysis, or \"what is this company\nworth?\""
+    "en": "Discounted cash flow valuation and intrinsic value analysis for public companies. Use when the brief asks for DCF, fair value, intrinsic value, price target, undervalued or overvalued analysis, or \"what is this company worth?\""
   },
   "license": "MIT",
   "author": {

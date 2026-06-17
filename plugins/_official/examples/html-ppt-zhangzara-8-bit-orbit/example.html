@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>8-BIT ORBIT | Pixel Art Presentation Template</title>
+  <title>Open Design | 8-Bit Orbit Pixel Deck</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&family=Tektur:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,500;1,500&family=Space+Mono:wght@400;700&family=Tektur:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
     :root {
       --neon-pink: #F0A6CA;
@@ -15,8 +15,7 @@
       --deep-navy: #0F1B3D;
       --dark-void: #0A0E27;
       --soft-lavender: #E2D5F2;
-      --pixel-size: 4px;
-      --font-display: 'Tektur', cursive;
+      --font-display: 'Tektur', sans-serif;
       --font-body: 'Chakra Petch', sans-serif;
       --font-mono: 'Space Mono', monospace;
     }
@@ -299,6 +298,10 @@
     .pixel-corners.pink-corners::before,
     .pixel-corners.pink-corners::after { border-color: var(--neon-pink); }
 
+    /* on the cyan slide the default cyan brackets vanish into the background */
+    .bg-grid-cyan .pixel-corners::before,
+    .bg-grid-cyan .pixel-corners::after { border-color: var(--deep-navy); }
+
     /* Section labels */
     .pixel-label {
       font-family: var(--font-mono);
@@ -343,6 +346,7 @@
     }
 
     /* === NAVIGATION === */
+    /* dark HUD backdrop so cyan dots stay legible on the cyan/lavender slides too */
     .nav-dots {
       position: fixed;
       right: 24px;
@@ -352,6 +356,8 @@
       flex-direction: column;
       gap: 12px;
       z-index: 100;
+      background: rgba(10, 14, 39, 0.8);
+      padding: 12px 8px;
     }
 
     .nav-dot {
@@ -361,7 +367,7 @@
       background: transparent;
       cursor: pointer;
       position: relative;
-      transition: all 0.3s;
+      transition: border-color 0.3s;
     }
 
     .nav-dot::after {
@@ -375,6 +381,7 @@
 
     .nav-dot.active::after { opacity: 1; }
     .nav-dot:hover { border-color: var(--neon-yellow); }
+    .nav-dot:hover::after { background: var(--neon-yellow); }
 
     .slide-counter {
       position: fixed;
@@ -410,7 +417,7 @@
     .hero-tagline {
       font-family: var(--font-body);
       font-size: clamp(0.9rem, 1.5vw, 1.2rem);
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.88);
       max-width: 500px;
       text-align: center;
       margin-top: 2rem;
@@ -520,13 +527,13 @@
       .feature-grid { grid-template-columns: 1fr; }
     }
 
+    /* flat game-dialog panel; no glass blur in a pixel deck */
     .feature-card {
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(8px);
+      background: #ECF3F8;
       padding: 32px 24px;
       text-align: center;
       position: relative;
-      border: 2px solid rgba(15, 27, 61, 0.2);
+      border: 2px solid rgba(15, 27, 61, 0.6);
     }
 
     .feature-card::before {
@@ -589,7 +596,7 @@
 
     .feature-icon.circle {
       border: 6px solid var(--neon-yellow);
-      border-radius: 0; /* pixel circle = square with careful shading? actually keep square for pixel aesthetic */
+      border-radius: 0; /* square ring reads as a pixel circle */
       background: transparent;
       position: relative;
     }
@@ -609,7 +616,7 @@
 
     .feature-card p {
       font-size: 0.85rem;
-      color: rgba(15, 27, 61, 0.75);
+      color: rgba(15, 27, 61, 0.82);
       line-height: 1.6;
     }
 
@@ -685,7 +692,7 @@
     .chart-bar-label {
       font-family: var(--font-mono);
       font-size: 0.7rem;
-      color: rgba(255,255,255,0.8);
+      color: rgba(255,255,255,0.88);
       text-align: center;
       letter-spacing: 0.05em;
     }
@@ -810,7 +817,7 @@
 
     .timeline-text p {
       font-size: 0.85rem;
-      color: rgba(15, 27, 61, 0.7);
+      color: rgba(15, 27, 61, 0.8);
       line-height: 1.5;
     }
 
@@ -855,7 +862,7 @@
       text-align: center;
       padding: 32px 16px;
       background: rgba(94, 220, 244, 0.08);
-      border: 2px solid rgba(94, 220, 244, 0.2);
+      border: 2px solid rgba(94, 220, 244, 0.38);
       position: relative;
     }
 
@@ -934,7 +941,7 @@
       margin-top: 2rem;
       font-family: var(--font-mono);
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.7);
+      color: rgba(15, 27, 61, 0.88);
       letter-spacing: 0.1em;
     }
 
@@ -960,21 +967,23 @@
     }
 
     .tier-card {
-      background: white;
+      background: #F2F4FB;
       padding: 36px 28px;
       position: relative;
       text-align: center;
     }
 
+    /* emphasis carried by the inverted panel + hard yellow shadow; no floating pop-out */
     .tier-card.featured {
       background: var(--deep-navy);
       color: white;
-      transform: translateY(-12px);
       box-shadow: 8px 8px 0 var(--neon-yellow);
     }
 
+    /* hard pixel shadow, no soft transparency */
     .tier-card:not(.featured) {
-      box-shadow: 6px 6px 0 rgba(15, 27, 61, 0.15);
+      box-shadow: 6px 6px 0 var(--deep-navy);
+      border: 2px solid var(--deep-navy);
     }
 
     .tier-name {
@@ -983,29 +992,32 @@
       margin-bottom: 8px;
     }
 
+    /* navy on light card; cyan only survives on the dark featured card */
     .tier-price {
       font-family: var(--font-mono);
       font-size: 2rem;
       font-weight: 700;
-      color: var(--neon-cyan);
+      color: var(--deep-navy);
       margin-bottom: 4px;
     }
 
+    .tier-card.featured .tier-price { color: var(--neon-cyan); }
+
     .tier-price span {
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.5);
+      color: rgba(15, 27, 61, 0.75);
     }
 
-    .tier-card.featured .tier-price span { color: rgba(255,255,255,0.5); }
+    .tier-card.featured .tier-price span { color: rgba(255,255,255,0.65); }
 
     .tier-desc {
       font-size: 0.8rem;
-      color: rgba(15, 27, 61, 0.6);
+      color: rgba(15, 27, 61, 0.78);
       margin-bottom: 20px;
       line-height: 1.5;
     }
 
-    .tier-card.featured .tier-desc { color: rgba(255,255,255,0.6); }
+    .tier-card.featured .tier-desc { color: rgba(255,255,255,0.82); }
 
     .tier-features {
       list-style: none;
@@ -1016,7 +1028,7 @@
     .tier-features li {
       font-size: 0.8rem;
       padding: 6px 0;
-      border-bottom: 1px dashed rgba(15, 27, 61, 0.15);
+      border-bottom: 1px dashed rgba(15, 27, 61, 0.28);
       position: relative;
       padding-left: 20px;
     }
@@ -1026,9 +1038,11 @@
       position: absolute;
       left: 0;
       font-family: var(--font-mono);
-      color: var(--neon-cyan);
+      color: var(--deep-navy);
       font-weight: 700;
     }
+
+    .tier-card.featured .tier-features li::before { color: var(--neon-cyan); }
 
     .tier-card.featured .tier-features li { border-color: rgba(255,255,255,0.1); }
 
@@ -1046,7 +1060,7 @@
     }
 
     .cta-content p {
-      color: rgba(255,255,255,0.7);
+      color: rgba(255,255,255,0.88);
       margin-bottom: 2.5rem;
       font-size: 1.1rem;
     }
@@ -1081,6 +1095,7 @@
     }
 
     /* Arrow hints */
+    /* pill background keeps the hint legible over light and dark slides alike */
     .nav-hint {
       position: fixed;
       bottom: 24px;
@@ -1088,7 +1103,8 @@
       font-family: var(--font-mono);
       font-size: 0.65rem;
       color: var(--neon-cyan);
-      opacity: 0.5;
+      background: rgba(10, 14, 39, 0.8);
+      padding: 6px 12px;
       z-index: 100;
       letter-spacing: 0.1em;
     }
@@ -1121,13 +1137,14 @@
       <div class="starfield" id="starfield1"></div>
       <div class="pixel-particles" id="particles1"></div>
       <div class="slide-content" style="z-index:10;">
-        <div class="hero-subtitle">Pixel Perfect Presentation System</div>
-        <h1 class="pixel-hero-text" style="text-align:center;">8-BIT<br>ORBIT</h1>
-        <p class="hero-tagline">A retro-futuristic deck engine for bold storytellers. Built for arcades, engineered for boardrooms.</p>
+        <div class="hero-subtitle">The Open-Source, Local, Agent-Driven Design Platform</div>
+        <h1 class="pixel-hero-text" style="text-align:center;">OPEN<br>DESIGN</h1>
+        <p class="hero-tagline">From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow, on your own machine.</p>
         <div class="hero-badges">
-          <span class="hero-badge">10 Slides</span>
-          <span class="hero-badge">CSS Native</span>
-          <span class="hero-badge">Zero Dependencies</span>
+          <span class="hero-badge">Apache-2.0</span>
+          <span class="hero-badge">Runs Locally</span>
+          <span class="hero-badge">BYOK</span>
+          <span class="hero-badge">No Sign-up</span>
         </div>
       </div>
     </section>
@@ -1145,12 +1162,12 @@
           </div>
           <div style="max-width: 460px;">
             <span class="pixel-label">Mission Brief</span>
-            <h2 style="color: var(--deep-navy); margin-bottom: 1.2rem; font-size: clamp(1.6rem, 3vw, 2.4rem);">Rewiring How We Share Ideas</h2>
-            <p style="color: rgba(15,27,61,0.75); margin-bottom: 1rem;">
-              Every presentation is an opportunity to transport your audience. This template fuses the tactile nostalgia of 16-bit aesthetics with modern typographic discipline.
+            <h2 style="color: var(--deep-navy); margin-bottom: 1.2rem; font-size: clamp(1.6rem, 3vw, 2.4rem);">Frontier Design, Set Free</h2>
+            <p style="color: rgba(15,27,61,0.85); margin-bottom: 1rem;">
+              In April 2026, Claude Design proved for the first time that an LLM can truly design — not write about design, but produce real design artifacts.
             </p>
-            <p style="color: rgba(15,27,61,0.75);">
-              No canvas limits. No cookie-cutter layouts. Just pure CSS architecture delivering cinematic slide transitions and atmospheric depth through scanlines, grain, and glowing grids.
+            <p style="color: rgba(15,27,61,0.85);">
+              Yet it is closed-source, paid, and cloud-only: locked to one model, with no agent choice, no self-hosting, no BYOK. Open Design sets that capability free — back on every creator's desk.
             </p>
           </div>
         </div>
@@ -1162,28 +1179,28 @@
       <div class="slide-content">
         <div style="text-align: center; margin-bottom: 2.5rem;">
           <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-cyan);">Core Systems</span>
-          <h2 style="color: var(--deep-navy);">Four Engines Running</h2>
+          <h2 style="color: var(--deep-navy);">Core Capabilities</h2>
         </div>
         <div class="feature-grid">
           <div class="feature-card">
             <div class="feature-icon cube"></div>
-            <h3>Modular Blocks</h3>
-            <p>Swap components without breaking the grid. Every element is containerized and responsive by default.</p>
+            <h3>HTML Video</h3>
+            <p>A full HTML-to-MP4 pipeline. HyperFrames turns artifacts into programmatic marketing shorts and demos.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon diamond"></div>
-            <h3>Crisp Vectors</h3>
-            <p>All visual effects are native CSS. No image assets required for borders, shadows, or patterns.</p>
+            <h3>Design Systems</h3>
+            <p>129 design systems ready to import — from GitHub, Figma, or local files — to keep every run on brand.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon cross"></div>
-            <h3>Live Data</h3>
-            <p>Chart slides accept dynamic values. Bars grow with CSS transitions triggered on navigation.</p>
+            <h3>Plugin Ecosystem</h3>
+            <p>217+ plugins for prototypes, slides, posters, dashboards, and more — installable in one click.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon circle"></div>
-            <h3>Retro Atmosphere</h3>
-            <p>Scanlines, CRT vignettes, starfields, and noise layers create an immersive viewing environment.</p>
+            <h3>Full-Stack BYOK</h3>
+            <p>Bring your own keys for Anthropic, OpenAI, Azure, and Google, plus 14 media providers.</p>
           </div>
         </div>
       </div>
@@ -1196,34 +1213,34 @@
         <div class="chart-slide-layout">
           <div class="pixel-chart-title">
             <span class="pixel-label">Analytics Core</span>
-            <h2>Quarterly Growth Metrics</h2>
-            <p class="subtitle">Fiscal performance across four sectors &mdash; normalized index</p>
+            <h2>GitHub Stars Growth</h2>
+            <p class="subtitle">Community growth indexed to 60K+ stars &mdash; demo data</p>
           </div>
           <div class="pixel-bar-chart" id="barChart">
             <div class="chart-bar-group">
-              <div class="chart-value" data-value="78">0</div>
-              <div class="chart-bar" data-height="78" style="height: 0%;"></div>
-              <div class="chart-bar-label">Alpha</div>
+              <div class="chart-value" data-value="12">0</div>
+              <div class="chart-bar" data-height="12" style="height: 0%;"></div>
+              <div class="chart-bar-label">Q2'25</div>
             </div>
             <div class="chart-bar-group">
-              <div class="chart-value" data-value="92">0</div>
-              <div class="chart-bar alt" data-height="92" style="height: 0%;"></div>
-              <div class="chart-bar-label">Beta</div>
+              <div class="chart-value" data-value="26">0</div>
+              <div class="chart-bar alt" data-height="26" style="height: 0%;"></div>
+              <div class="chart-bar-label">Q3'25</div>
             </div>
             <div class="chart-bar-group">
-              <div class="chart-value" data-value="64">0</div>
-              <div class="chart-bar alt2" data-height="64" style="height: 0%;"></div>
-              <div class="chart-bar-label">Gamma</div>
+              <div class="chart-value" data-value="48">0</div>
+              <div class="chart-bar alt2" data-height="48" style="height: 0%;"></div>
+              <div class="chart-bar-label">Q4'25</div>
             </div>
             <div class="chart-bar-group">
-              <div class="chart-value" data-value="85">0</div>
-              <div class="chart-bar" data-height="85" style="height: 0%;"></div>
-              <div class="chart-bar-label">Delta</div>
+              <div class="chart-value" data-value="74">0</div>
+              <div class="chart-bar" data-height="74" style="height: 0%;"></div>
+              <div class="chart-bar-label">Q1'26</div>
             </div>
             <div class="chart-bar-group">
-              <div class="chart-value" data-value="56">0</div>
-              <div class="chart-bar alt" data-height="56" style="height: 0%;"></div>
-              <div class="chart-bar-label">Epsilon</div>
+              <div class="chart-value" data-value="100">0</div>
+              <div class="chart-bar alt" data-height="100" style="height: 0%;"></div>
+              <div class="chart-bar-label">Q2'26</div>
             </div>
           </div>
         </div>
@@ -1235,45 +1252,45 @@
       <div class="slide-content">
         <div class="chart-slide-layout">
           <div class="pixel-chart-title" style="margin-bottom: 2.5rem;">
-            <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-yellow);">System Load</span>
-            <h2 style="color: var(--deep-navy);">Resource Allocation</h2>
-            <p class="subtitle" style="color: rgba(15,27,61,0.6);">Percentage distribution across operational units</p>
+            <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-yellow);">Plugin Ecosystem</span>
+            <h2 style="color: var(--deep-navy);">217+ Plugins by Type</h2>
+            <p class="subtitle" style="color: rgba(15,27,61,0.82);">Relative share per artifact type &mdash; demo data</p>
           </div>
           <div class="pixel-hbar-chart" id="hbarChart">
             <div class="hbar-row">
-              <div class="hbar-label">Compute</div>
+              <div class="hbar-label">Prototypes</div>
               <div class="hbar-track">
                 <div class="hbar-fill" data-width="88" style="width: 0%;"></div>
               </div>
               <div class="hbar-value">88%</div>
             </div>
             <div class="hbar-row">
-              <div class="hbar-label">Storage</div>
+              <div class="hbar-label">Slides</div>
               <div class="hbar-track">
                 <div class="hbar-fill alt" data-width="72" style="width: 0%;"></div>
               </div>
               <div class="hbar-value">72%</div>
             </div>
             <div class="hbar-row">
-              <div class="hbar-label">Network</div>
+              <div class="hbar-label">Images</div>
               <div class="hbar-track">
-                <div class="hbar-fill alt2" data-width="95" style="width: 0%;"></div>
+                <div class="hbar-fill alt2" data-width="64" style="width: 0%;"></div>
               </div>
-              <div class="hbar-value">95%</div>
+              <div class="hbar-value">64%</div>
             </div>
             <div class="hbar-row">
-              <div class="hbar-label">Memory</div>
+              <div class="hbar-label">Video</div>
               <div class="hbar-track">
-                <div class="hbar-fill" data-width="61" style="width: 0%;"></div>
+                <div class="hbar-fill" data-width="52" style="width: 0%;"></div>
               </div>
-              <div class="hbar-value">61%</div>
+              <div class="hbar-value">52%</div>
             </div>
             <div class="hbar-row">
-              <div class="hbar-label">Graphics</div>
+              <div class="hbar-label">Dashboards</div>
               <div class="hbar-track">
-                <div class="hbar-fill alt" data-width="44" style="width: 0%;"></div>
+                <div class="hbar-fill alt" data-width="40" style="width: 0%;"></div>
               </div>
-              <div class="hbar-value">44%</div>
+              <div class="hbar-value">40%</div>
             </div>
           </div>
         </div>
@@ -1284,17 +1301,17 @@
     <section class="slide bg-grid-pink scanlines grain" data-slide="6">
       <div class="slide-content">
         <div style="text-align: center; margin-bottom: 2.5rem;">
-          <span class="pixel-label">Chronology</span>
-          <h2 style="color: var(--deep-navy);">Development Roadmap</h2>
+          <span class="pixel-label">Workflow</span>
+          <h2 style="color: var(--deep-navy);">From Idea to Delivery</h2>
         </div>
         <div class="timeline-container">
           <div class="timeline-line"></div>
           <div class="timeline-events">
             <div class="timeline-event">
               <div class="timeline-text">
-                <span class="date">Q1 2026</span>
-                <h4>Concept & Architecture</h4>
-                <p>Wireframes, palette selection, and core grid system established.</p>
+                <span class="date">STEP 01</span>
+                <h4>Pick a Starting Point</h4>
+                <p>Describe your goal in one sentence, or start from a template or plugin.</p>
               </div>
               <div class="timeline-spacer">
                 <div class="timeline-node active"></div>
@@ -1307,16 +1324,16 @@
                 <div class="timeline-node active"></div>
               </div>
               <div class="timeline-text">
-                <span class="date">Q2 2026</span>
-                <h4>Asset Generation</h4>
-                <p>Pixel components, iconography, and atmospheric effects coded.</p>
+                <span class="date">STEP 02</span>
+                <h4>Set the Visual Direction</h4>
+                <p>Palette, type, and spacing flow into generation automatically.</p>
               </div>
             </div>
             <div class="timeline-event">
               <div class="timeline-text">
-                <span class="date">Q3 2026</span>
-                <h4>Data Integration</h4>
-                <p>Charting engine, animated counters, and dynamic state binding.</p>
+                <span class="date">STEP 03</span>
+                <h4>Generate the Artifact</h4>
+                <p>The agent reads full context and produces real runnable files, previewed in a sandbox.</p>
               </div>
               <div class="timeline-spacer">
                 <div class="timeline-node"></div>
@@ -1329,9 +1346,9 @@
                 <div class="timeline-node"></div>
               </div>
               <div class="timeline-text">
-                <span class="date">Q4 2026</span>
-                <h4>Global Launch</h4>
-                <p>Public release with full documentation and community support.</p>
+                <span class="date">STEP 04</span>
+                <h4>Ship It, or Film It</h4>
+                <p>Hand off to engineering, or turn it into video with HyperFrames. Every choice becomes memory for the next run.</p>
               </div>
             </div>
           </div>
@@ -1344,26 +1361,26 @@
       <div class="starfield" id="starfield7"></div>
       <div class="slide-content">
         <div style="text-align: center; margin-bottom: 2.5rem;">
-          <span class="pixel-label">Live Telemetry</span>
-          <h2 style="color: var(--neon-cyan);">Platform Vitals</h2>
-          <p style="color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-top: 0.5rem;">Real-time aggregate figures from active deployments</p>
+          <span class="pixel-label">Open Source</span>
+          <h2 style="color: var(--neon-cyan);">Open Design in Numbers</h2>
+          <p style="color: rgba(255,255,255,0.85); font-size: 0.9rem; margin-top: 0.5rem;">A community-built platform, open source under Apache-2.0</p>
         </div>
         <div class="stats-grid" id="statsGrid">
           <div class="stat-block">
-            <div class="stat-number" data-target="847">0</div>
-            <div class="stat-label">Active Worlds</div>
+            <div class="stat-number" data-target="60" data-suffix="K+">0</div>
+            <div class="stat-label">GitHub Stars</div>
           </div>
           <div class="stat-block">
-            <div class="stat-number" data-target="12.4" data-suffix="M">0</div>
-            <div class="stat-label">Pixels Rendered</div>
+            <div class="stat-number" data-target="300" data-suffix="+">0</div>
+            <div class="stat-label">Contributors</div>
           </div>
           <div class="stat-block">
-            <div class="stat-number" data-target="99.9" data-suffix="%">0</div>
-            <div class="stat-label">Uptime Score</div>
+            <div class="stat-number" data-target="217" data-suffix="+">0</div>
+            <div class="stat-label">Plugins</div>
           </div>
           <div class="stat-block">
-            <div class="stat-number" data-target="2048">0</div>
-            <div class="stat-label">Max Resolution</div>
+            <div class="stat-number" data-target="129">0</div>
+            <div class="stat-label">Design Systems</div>
           </div>
         </div>
       </div>
@@ -1375,10 +1392,10 @@
         <div class="quote-container pixel-corners">
           <div class="quote-mark">"</div>
           <p class="quote-text">
-            The best presentations do not merely inform. They immerse. They transform the conference room into an arcade cabinet where every slide is a new level waiting to be unlocked.
+            File-system semantics plus git-diffable design artifacts — design is finally under version control.
           </p>
           <div class="quote-line"></div>
-          <div class="quote-author">&mdash; Lead Creative Technologist, Studio Orbital</div>
+          <div class="quote-author">&mdash; Indie Developer, Open Design Community</div>
         </div>
       </div>
     </section>
@@ -1387,46 +1404,46 @@
     <section class="slide bg-grid-lavender scanlines grain" data-slide="9">
       <div class="slide-content">
         <div style="text-align: center; margin-bottom: 2.5rem;">
-          <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-pink);">Access Tiers</span>
-          <h2 style="color: var(--deep-navy);">Choose Your Loadout</h2>
+          <span class="pixel-label" style="background: var(--deep-navy); color: var(--neon-pink);">Three Pillars</span>
+          <h2 style="color: var(--deep-navy);">Why Open Design</h2>
         </div>
         <div class="tier-grid">
           <div class="tier-card">
-            <div class="tier-name">Rookie</div>
-            <div class="tier-price">$0<span>/mo</span></div>
-            <div class="tier-desc">For solo explorers testing the waters.</div>
+            <div class="tier-name">Desktop-Native</div>
+            <div class="tier-price">100%<span>&nbsp;local</span></div>
+            <div class="tier-desc">Design happens on the desktop, not in a cloud tab.</div>
             <ul class="tier-features">
-              <li>5 slide maximum</li>
-              <li>Standard grid themes</li>
-              <li>Community support</li>
-              <li>Static export only</li>
+              <li>Local files readable</li>
+              <li>Figma exports in place</li>
+              <li>Code repos as context</li>
+              <li>Full terminal power</li>
             </ul>
-            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Explore</button>
           </div>
           <div class="tier-card featured">
-            <div class="tier-name" style="color: var(--neon-yellow);">Arcade</div>
-            <div class="tier-price" style="color: var(--neon-pink);">$29<span>/mo</span></div>
-            <div class="tier-desc">Serious builders need serious tooling.</div>
+            <div class="tier-name" style="color: var(--neon-yellow);">Agent-Native</div>
+            <div class="tier-price" style="color: var(--neon-pink);">21<span>&nbsp;agents</span></div>
+            <div class="tier-desc">Plug in agents, don't rebuild them.</div>
             <ul class="tier-features">
-              <li>Unlimited slides</li>
-              <li>All atmospheric packs</li>
-              <li>Live data binding</li>
-              <li>Priority rendering</li>
-              <li>Custom cursor sets</li>
+              <li>Claude Code & Codex</li>
+              <li>Cursor Agent & more</li>
+              <li>Auto-detected from PATH</li>
+              <li>Zero configuration</li>
+              <li>Full-stack BYOK</li>
             </ul>
-            <button class="pixel-btn pink-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+            <button class="pixel-btn pink-btn" style="font-size: 0.8rem; padding: 12px 24px;">Explore</button>
           </div>
           <div class="tier-card">
-            <div class="tier-name">Boss</div>
-            <div class="tier-price">$79<span>/mo</span></div>
-            <div class="tier-desc">Enterprise-grade control and compliance.</div>
+            <div class="tier-name">Self-Evolving</div>
+            <div class="tier-price">129<span>&nbsp;systems</span></div>
+            <div class="tier-desc">It learns your taste with every run.</div>
             <ul class="tier-features">
-              <li>Everything in Arcade</li>
-              <li>White-label export</li>
-              <li>SSO & audit logs</li>
-              <li>Dedicated pipeline</li>
+              <li>Design system library</li>
+              <li>Preferences & memory</li>
+              <li>Git-diffable artifacts</li>
+              <li>Apache-2.0 licensed</li>
             </ul>
-            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Select</button>
+            <button class="pixel-btn" style="font-size: 0.8rem; padding: 12px 24px;">Explore</button>
           </div>
         </div>
       </div>
@@ -1439,11 +1456,11 @@
       <div class="pixel-landscape" id="landscape10"></div>
       <div class="slide-content" style="z-index:10;">
         <div class="cta-content">
-          <h2>Ready Player<br>One?</h2>
-          <p>Deploy your first 8-BIT ORBIT deck in under sixty seconds. No dependencies. No friction. Just pure presentation power.</p>
+          <h2>Open. Local.<br>Agent-Native.</h2>
+          <p>Frontier AI design, back on every creator's desk. Find us at github.com/nexu-io/open-design &middot; discord.gg/qhbcCH8Am4 &middot; x.com/nexudotio</p>
           <div class="cta-buttons">
-            <button class="pixel-btn">Initialize Deck</button>
-            <button class="pixel-btn pink-btn">View Documentation</button>
+            <a class="pixel-btn" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;">Download Open Design</a>
+            <a class="pixel-btn pink-btn" href="https://github.com/nexu-io/open-design" target="_blank" rel="noreferrer noopener" style="text-decoration:none;">Star on GitHub</a>
           </div>
         </div>
       </div>

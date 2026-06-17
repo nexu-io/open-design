@@ -20,17 +20,19 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   # Prefer current-head signal over preserving superseded logs: PR authors often
   # push fixups while this workflow is still running, and stale runs can report
   # failures for commits reviewers no longer need to evaluate. Release workflows
   # use cancel-in-progress: false where preserving build evidence matters more.
+  # Manual comparison runs need isolated groups so queued/stuck experiments do
+  # not block the next measurement on this branch.
   cancel-in-progress: true
 
 jobs:
   change_scopes:
     name: Detect CI change scopes
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     outputs:
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
@@ -41,116 +43,46 @@ jobs:
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
       - name: Detect workspace and app test scopes
         id: detect
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          daemon_tests_required=false
-          web_tests_required=false
-          tools_dev_tests_required=false
-          tools_pack_tests_required=false
-          nix_validation_required=false
-          ui_p0_pr_required=false
-          workspace_validation_required=false
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            gh api --paginate \
-              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-              --jq '.[].filename' > "$RUNNER_TEMP/changed-files.txt"
-            while IFS= read -r file; do
-              if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                daemon_tests_required=true
-              fi
-              if [[ "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                web_tests_required=true
-              fi
-              if [[ "$file" == "scripts/"* || "$file" == "assets/"* || "$file" == "skills/"* || "$file" == "prompt-templates/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* ]]; then
-                daemon_tests_required=true
-                web_tests_required=true
-              fi
-              if [[ "$file" == "tools/dev/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                tools_dev_tests_required=true
-              fi
-              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/components/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                tools_pack_tests_required=true
-              fi
-              if [[ "$file" == "package.json" || "$file" == "apps/daemon/package.json" || "$file" == "apps/web/package.json" || "$file" == "apps/desktop/package.json" || "$file" == "apps/packaged/package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
-                daemon_tests_required=true
-                web_tests_required=true
-                tools_dev_tests_required=true
-                tools_pack_tests_required=true
-              fi
-              if [[ "$file" == "apps/web/"* || "$file" == "apps/daemon/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "e2e/ui/"* || "$file" == "e2e/lib/"* || "$file" == "e2e/resources/"* || "$file" == "e2e/scripts/"* || "$file" == "e2e/package.json" || "$file" == "e2e/playwright.config.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/actions/setup-playwright/"* || "$file" == ".github/actions/setup-workspace/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/ui-extended-main.yml" || "$file" == ".github/workflows/ui-p0-pr.yml" ]]; then
-                ui_p0_pr_required=true
-              fi
-              # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
-              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
-                nix_validation_required=true
-              fi
-              case "$file" in
-                *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
-                  ;;
-                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-staging.yml|.github/workflows/landing-page-production.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
-                  ;;
-                *)
-                  workspace_validation_required=true
-                  ;;
-              esac
-              if [ "$daemon_tests_required" = "true" ] \
-                && [ "$web_tests_required" = "true" ] \
-                && [ "$tools_dev_tests_required" = "true" ] \
-                && [ "$tools_pack_tests_required" = "true" ] \
-                && [ "$nix_validation_required" = "true" ] \
-                && [ "$ui_p0_pr_required" = "true" ] \
-                && [ "$workspace_validation_required" = "true" ]; then
-                break
-              fi
-            done < "$RUNNER_TEMP/changed-files.txt"
-            if [ "$daemon_tests_required" = "true" ] \
-              || [ "$web_tests_required" = "true" ] \
-              || [ "$tools_dev_tests_required" = "true" ] \
-              || [ "$tools_pack_tests_required" = "true" ]; then
-              workspace_validation_required=true
-            fi
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            daemon_tests_required=true
-            web_tests_required=true
-            tools_dev_tests_required=true
-            tools_pack_tests_required=true
-            # Main already runs .github/workflows/nix-check.yml, so keep this
-            # workflow's push path focused on the non-Nix workspace signal.
-            nix_validation_required=false
-            workspace_validation_required=true
-          else
-            daemon_tests_required=true
-            web_tests_required=true
-            tools_dev_tests_required=true
-            tools_pack_tests_required=true
-            nix_validation_required=true
-            workspace_validation_required=true
-          fi
-          {
-            echo "daemon_tests_required=$daemon_tests_required"
-            echo "web_tests_required=$web_tests_required"
-            echo "tools_dev_tests_required=$tools_dev_tests_required"
-            echo "tools_pack_tests_required=$tools_pack_tests_required"
-            echo "nix_validation_required=$nix_validation_required"
-            echo "ui_p0_pr_required=$ui_p0_pr_required"
-            echo "workspace_validation_required=$workspace_validation_required"
-          } >> "$GITHUB_OUTPUT"
+        run: node --experimental-strip-types scripts/ci-change-scopes.ts
 
-  blob_guard:
-    name: Guard changed file sizes
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  static_gate:
+    name: Static gate
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: 1.7.12
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
+
+      - name: Install actionlint
+        run: |
+          case "$(uname -m)" in
+            x86_64) actionlint_arch=amd64 ;;
+            aarch64|arm64) actionlint_arch=arm64 ;;
+            *) echo "Unsupported actionlint architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${actionlint_arch}.tar.gz" \
+            | tar -xz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+      - name: Check workflow files
+        run: actionlint -color
 
       - name: Check changed tracked file sizes
         env:
@@ -218,8 +150,10 @@ jobs:
     name: Validate Nix flake
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.nix_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -327,7 +261,7 @@ jobs:
     name: Preflight
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
 
     steps:
@@ -373,7 +307,7 @@ jobs:
     name: Workspace unit tests
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
 
     steps:
@@ -415,15 +349,11 @@ jobs:
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   daemon_workspace_tests:
-    name: Daemon workspace tests (${{ matrix.shard }})
+    name: Daemon watcher tests
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.daemon_tests_required == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ["1/3", "2/3", "3/3"]
 
     steps:
       - name: Checkout
@@ -432,43 +362,28 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
+      - name: Probe watcher environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "const os=require('node:os'); console.log(JSON.stringify({node:process.version, platform:process.platform, arch:process.arch, tmpdir:os.tmpdir(), env:{NODE_ENV:process.env.NODE_ENV, VITEST:process.env.VITEST, CHOKIDAR_USEPOLLING:process.env.CHOKIDAR_USEPOLLING, CHOKIDAR_INTERVAL:process.env.CHOKIDAR_INTERVAL}}, null, 2))"
+          df -T /tmp "$RUNNER_TEMP" "$GITHUB_WORKSPACE" || true
+          mount | grep -E ' /tmp |/home/runner|_work' || true
+          cat /proc/sys/fs/inotify/max_user_watches /proc/sys/fs/inotify/max_user_instances || true
+
       - name: Prebuild daemon entrypoint declarations
         run: pnpm --filter @open-design/daemon build
 
       - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard ${{ matrix.shard }}
-
-  daemon_workspace_gate:
-    name: Daemon workspace tests
-    needs:
-      - change_scopes
-      - daemon_workspace_tests
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check daemon workspace test shards
         env:
-          DAEMON_REQUIRED: ${{ needs.change_scopes.outputs.daemon_tests_required }}
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          echo "$NEEDS_JSON" | jq .
-          shard_result="$(echo "$NEEDS_JSON" | jq -r '.daemon_workspace_tests.result')"
-          if [ "$DAEMON_REQUIRED" != "true" ] && [ "$shard_result" = "skipped" ]; then
-            exit 0
-          fi
-          if [ "$shard_result" != "success" ]; then
-            echo "Daemon workspace test shards failed: $shard_result"
-            exit 1
-          fi
+          OD_WATCHER_TEST_DEBUG: "1"
+        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
 
   web_workspace_tests:
     name: Web workspace tests
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.web_tests_required == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
 
     steps:
@@ -484,13 +399,12 @@ jobs:
       - name: Web workspace tests
         run: pnpm --filter @open-design/web test
 
-  browser_tests:
-    name: Browser tests
-    needs:
-      - change_scopes
+  e2e_vitest:
+    name: E2E Vitest
+    needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -511,21 +425,23 @@ jobs:
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
-      - name: E2E vitest
+      - name: E2E Vitest
         run: pnpm --filter @open-design/e2e test
 
-      - name: Playwright critical
-        if: ${{ github.event_name != 'pull_request' || needs.change_scopes.outputs.ui_p0_pr_required != 'true' }}
-        run: |
-          pnpm -C e2e exec tsx scripts/playwright.ts clean
-          pnpm -C e2e run test:ui:critical
-
-  build_workspaces:
-    name: Build workspaces
+  playwright_critical:
+    name: Playwright critical (${{ matrix.group }})
     needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' && (github.event_name != 'pull_request' || needs.change_scopes.outputs.ui_p0_pr_required != 'true') }}
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: a
+            files: ui/amr-onboarding.test.ts ui/app.test.ts ui/app-design-files.test.ts ui/app-manual-edit.test.ts ui/api-empty-response.test.ts
+          - group: b
+            files: ui/app-restoration.test.ts ui/entry-chrome-flows.test.ts ui/project-management-flows.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/critical-smoke.test.ts ui/workspace-keyboard-flows.test.ts
 
     steps:
       - name: Checkout
@@ -534,19 +450,26 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
 
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+
       - name: Prebuild workspace type declarations
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
-      # Keep workspace builds serialized so generated dist output and local
-      # runtime artifacts are produced in a deterministic order. Parallel
-      # recursive builds would surface late-package failures sooner, but the
-      # current workspace is small enough that safer logs and fewer shared-FS
-      # races outweigh the lost parallelism; revisit if the package count grows.
-      - name: Build workspaces
-        run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Playwright critical
+        env:
+          OD_PLAYWRIGHT_WORKERS: "4"
+          OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
+        run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
 
   validate:
     # Legacy `ci` remains the current factual gate surface. Keep this job on
@@ -555,17 +478,17 @@ jobs:
     name: Validate workspace
     needs:
       - change_scopes
-      - blob_guard
+      - static_gate
       - preflight
       - nix_validation
       - workspace_unit_tests
       - windows_tools_pack_payload_tests
-      - daemon_workspace_gate
+      - daemon_workspace_tests
       - web_workspace_tests
-      - browser_tests
-      - build_workspaces
+      - e2e_vitest
+      - playwright_critical
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     timeout-minutes: 5
 
     steps:
@@ -582,13 +505,14 @@ jobs:
             exit 1
           fi
 
-  runtime_trace:
-    name: Runtime trace
+  runtime_summary:
+    name: Runtime summary
     needs:
       - validate
-    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
     timeout-minutes: 5
+    continue-on-error: true
 
     steps:
       - name: Summarize workflow runtime

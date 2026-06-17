@@ -456,8 +456,8 @@ Marketplace 顶层 `version` 是 catalog snapshot 版本；每个 `plugins[]` en
 | --- | --- | --- | --- |
 | 1 | `<projectCwd>/.open-design/plugins/<id>/` | plugin bundle | 新增，与用户代码一起提交；必须显式安装到 project |
 | 2 | `<projectCwd>/.claude/skills/<id>/` | legacy `SKILL.md` | 沿用 [`skills-protocol.md`](skills-protocol.md) 的 project-private skill 兼容路径 |
-| 3 | `<daemonDataDir>/plugins/<id>/` | plugin bundle | 新增，由 `od plugin install` 写入 daemon data root |
-| 4 | `~/.open-design/skills/<id>/` | legacy `SKILL.md` | OD canonical skill install path；可 symlink 到其它 agent |
+| 3 | Daemon-managed plugin location | plugin bundle | 本 spec 绝不能定义 daemon 数据路径；修改或记录存储位置前必须阅读 root `AGENTS.md` → **Daemon data directory contract** |
+| 4 | 用户级 skill 位置 | legacy `SKILL.md` | 本 spec 绝不能定义 daemon 数据路径；修改或记录存储位置前必须阅读 root `AGENTS.md` → **Daemon data directory contract** |
 | 5 | `~/.claude/skills/<id>/` | legacy `SKILL.md` | 外部 Claude Code / skills 工具写入的兼容路径，只读扫描 |
 | 6 | repo root `skills/`, `design-systems/`, `craft/` | bundled resources | 现有一方资源，不变 |
 
@@ -1236,7 +1236,7 @@ OD 运行在三种 operating modes，它们共享**同一个** daemon、**同一
 解锁的能力：
 
 - 用户只有 **Claude Code**（或任意 code agent）加 `npm i -g @open-design/cli`，再启动一个 headless daemon，就能完成 install plugin → create project → run → consume artifacts 全流程。不需要 OD desktop。
-- OD desktop UI 安装相同 daemon 与相同 CLI；它只是加了一个窗口。用户之后安装 desktop 时，会看到 headless 流程创建的同一批 projects、plugins、history。不存在「headless project format」与「desktop project format」之分。都是同一个 `.od/projects/<id>/`、同一个 SQLite db。
+- OD desktop UI 安装相同 daemon 与相同 CLI；它只是加了一个窗口。用户之后安装 desktop 时，会看到 headless 流程创建的同一批 projects、plugins、history。不存在「headless project format」与「desktop project format」之分。本 spec 绝不能定义 daemon 数据路径；修改或记录共享存储前必须阅读 root `AGENTS.md` → **Daemon data directory contract**。
 - CI 是一等公民：GitHub Action 可以 `npm i -g @open-design/cli && od daemon start --headless && od plugin install … && od run start --project … --follow`。无 display、无 electron、无 UI scripting。
 - 外部产品可以通过启动 headless daemon 并 shell out 嵌入 OD：`od` 是 public surface，internals 可以自由演进。
 
@@ -1322,7 +1322,7 @@ od run logs   <runId>                # historical tail; --since for incremental
 
 #### Project 文件系统操作（新增）
 
-daemon 当前已经拥有 `.od/projects/<id>/` 下的 project filesystems（或者 imported folder 的 `metadata.baseDir`）。这些命令以 project 为 scope：agent 不需要知道 project 在磁盘哪里。
+daemon 当前已经拥有 project filesystems（或者 imported folder 的 `metadata.baseDir`）。这些命令以 project 为 scope：agent 不需要知道 project 在磁盘哪里。本 spec 绝不能定义 daemon 数据路径；修改或记录 project storage 前必须阅读 root `AGENTS.md` → **Daemon data directory contract**。
 
 ```
 od files list   <projectId> [--path <subdir>] [--json]
@@ -1569,8 +1569,8 @@ od run start --project "$PID" --plugin make-a-deck \
 CWD=$(od project info "$PID" --json | jq -r .cwd)
 cd "$CWD"
 # OD has already staged the merged SKILL.md / DESIGN.md / craft / atoms into
-# .od-skills/ inside the cwd, exactly as the desktop run would.
-claude code "Read .od-skills/ and produce the deliverables the active plugin describes."
+# skill staging directory is inside the cwd, exactly as the desktop run would.
+claude code "Read the staged skill context and produce the deliverables the active plugin describes."
 
 # Consume the produced artifacts.
 od files list "$PID" --json
@@ -1582,7 +1582,7 @@ open slides.html      # or however the user wants to view the file
 
 - 完整 marketplace → plugin → apply → run → artifact pipeline 可以在终端里用不到 10 行触达。
 - OD daemon 不需要渲染任何东西；它作为 project + plugin + artifact server 工作。
-- 同一个 project 之后在 OD desktop UI 中打开时，会显示 headless run 产生的完整 conversation history、files、artifacts，因为 storage layer 只有一套（[`spec.md`](spec.md) §4.6：`.od/projects/<id>/` + SQLite）。
+- 同一个 project 之后在 OD desktop UI 中打开时，会显示 headless run 产生的完整 conversation history、files、artifacts。本 spec 绝不能定义 daemon 数据路径；修改或记录共享存储前必须阅读 root `AGENTS.md` → **Daemon data directory contract**。
 
 ### 14.4 类比：Cursor vs `cursor-agent`，OD desktop vs `od` CLI
 
@@ -1591,7 +1591,7 @@ open slides.html      # or however the user wants to view the file
 | Layer | Cursor | Open Design |
 | --- | --- | --- |
 | Headless agent CLI | `cursor-agent`（驱动 agent loop） | `od run start --agent claude --follow` + `od plugin run` |
-| Local services / db | Cursor 的 background indexing / state | OD daemon、SQLite、`.od/projects/<id>/` |
+| Local services / db | Cursor 的 background indexing / state | OD daemon-managed state。存储路径只受 root `AGENTS.md` → **Daemon data directory contract** 约束。 |
 | GUI productivity layer | Cursor IDE | OD desktop / web UI（`apps/web` + `apps/desktop`） |
 | Plugin / skill format | `.cursor/rules/`、MCP servers | `SKILL.md` + `open-design.json` + atoms |
 
@@ -1603,7 +1603,7 @@ OD 以单个 multi-arch Docker image 发布，使完整 plugin/marketplace syste
 
 ### 15.1 Image shape
 
-- **Tag**：`ghcr.io/open-design/od:<version>`，以及 moving `:latest` 与 `:edge`。
+- **Tag**：`ghcr.io/nexu-io/od:<version>`，以及 moving `:latest` 与 `:edge`。
 - **Architectures**：`linux/amd64` 与 `linux/arm64`（single manifest list）。
 - **Contents**：
   - Node 24 runtime + daemon `dist/` bundle。
@@ -1617,15 +1617,7 @@ base image 是 `node:24-bookworm-slim`。container 内用户是 non-root（`uid 
 
 ### 15.2 Persistence
 
-operator 应挂载三个 volumes；它们映射到根 [`AGENTS.md`](../AGENTS.md) 中已有的 OD env vars，因此 daemon 不需要改代码。
-
-| Mount path | Env var | Purpose |
-| --- | --- | --- |
-| `/data/od` | `OD_DATA_DIR` | Projects、SQLite、artifacts、installed plugins（`<OD_DATA_DIR>/plugins`） |
-| `/data/config` | `OD_MEDIA_CONFIG_DIR` | Provider credentials（`media-config.json`） |
-| `/data/marketplaces` | （位于 `OD_DATA_DIR` 下） | Cached marketplace indexes |
-
-只挂载 `/data/od` 是最小配置。推荐 hosted-mode 把 `/data/config` 拆开，使 secrets 与 data 的生命周期不同。
+本部署草案绝不能定义 daemon 数据路径、挂载路径或 persistence 示例。选择、记录或修改 persistence 前必须阅读 root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**；该块是唯一真相源。
 
 ### 15.3 Configuration
 
@@ -1634,8 +1626,7 @@ operator 应挂载三个 volumes；它们映射到根 [`AGENTS.md`](../AGENTS.md
 ```env
 OD_PORT=17456
 OD_BIND_HOST=0.0.0.0                 # 当前 daemon 已读取的变量名（[`apps/daemon/src/server.ts`](../apps/daemon/src/server.ts)）
-OD_DATA_DIR=/data/od
-OD_MEDIA_CONFIG_DIR=/data/config
+# 只有阅读 root AGENTS.md -> Daemon data directory contract 后，才能设置 daemon storage env vars。
 OD_TRUST_DEFAULT=restricted          # safe default for hosted (§9) — Phase 5 引入
 OD_AGENT_BACKEND=claude              # default code agent backend
 OD_API_TOKEN=<random>                # required when OD_BIND_HOST != 127.0.0.1 — Phase 5 引入 bearer middleware
@@ -1648,31 +1639,18 @@ TAVILY_API_KEY=...
 > - `OD_BIND_HOST` 已经存在于 daemon 代码（[`apps/daemon/src/server.ts`](../apps/daemon/src/server.ts)、[`apps/daemon/src/origin-validation.ts`](../apps/daemon/src/origin-validation.ts)）。早期 spec 草稿曾以 `OD_HOST` 引用同一变量；正确名称是 `OD_BIND_HOST`，本 spec 全部采用此名称。**不**新增 `OD_HOST` 别名，避免双名漂移。
 > - `OD_TRUST_DEFAULT`、`OD_API_TOKEN` 与对应 bearer-token middleware 当前**尚未实现**；它们是 Phase 5「Cloud deployment + pluggable storage」的一部分（§15.7、§16 Phase 5）。在落地前 hosted deployments 仍依赖 reverse proxy / network ACL 做访问控制，hosted-mode security defaults 章节（§15.7）会显式调用此前置条件。
 
-任何能通过 desktop UI 设置的内容，也都能通过 `docker exec od od config set ...` 设置，或通过把预置 `media-config.json` 挂载到 `/data/config`。
+任何能通过 desktop UI 设置的内容，也都能通过 `docker exec od od config set ...` 设置。本文件绝不能提供具体存储路径。
 
 ### 15.4 一条命令部署
 
 本地 laptop：
 
 ```bash
-docker run --rm -p 17456:17456 ghcr.io/open-design/od:latest
+docker run --rm -p 17456:17456 ghcr.io/nexu-io/od:latest
 open http://localhost:17456
 ```
 
-持久服务器：
-
-```bash
-docker run -d --name od \
-  -p 17456:17456 \
-  -v od-data:/data/od \
-  -v od-config:/data/config \
-  -e OD_DATA_DIR=/data/od \
-  -e OD_MEDIA_CONFIG_DIR=/data/config \
-  -e OD_BIND_HOST=0.0.0.0 \
-  -e OD_API_TOKEN="$(openssl rand -hex 32)" \
-  -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  ghcr.io/open-design/od:latest
-```
+持久服务器 storage 示例在此处有意省略。编写前必须阅读 root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**。
 
 在 container 内触达相同 surfaces：
 
@@ -2162,7 +2140,7 @@ Phase 6、7、8 故意排在 §16 既有 Phase 5（云部署）之后，避免�
 
 契约锁定四点：
 
-1. **OD 把 design substrate stage 进 project cwd。** 按 §14.3，daemon 把 SKILL.md / DESIGN.md / craft 写入 `.od-skills/`，把生成 artifact 通过 `od files` 写入 project cwd。cwd 通过 `od project info <id> --json | jq -r .cwd` 可发现。
+1. **OD 把 design substrate stage 进 project cwd。** 按 §14.3，daemon 把 SKILL.md / DESIGN.md / craft 写入 staged skill-context directory，把生成 artifact 通过 `od files` 写入 project cwd。cwd 通过 `od project info <id> --json | jq -r .cwd` 可发现。
 2. **用户的 code agent 在该 cwd 或自己的 repo cwd 内操作。** OD 不在 IDE 里跑；它作为 daemon 与 IDE 并列。Cursor / Claude Code / Codex / Gemini CLI 是 patch-application 的表面。
 3. **簿记留在 OD。** `ArtifactManifest`（§11.5.1）记录 `sourcePluginSnapshotId`、`sourceTaskKind: 'tune-collab'`（Phase 7 落地后还有 `'code-migration'`）、`handoffKind: 'patch'`；`od files` 记录每一字节的 artifact。哪怕 patch 由 code agent 完成，OD 仍是 audit log 的拥有者。
 4. **重新进入 OD 是 single-step。** 用户随时可以通过 inline rail（§8）或 `od plugin apply ... --project <id>` 在同一个 project 上重新 apply 任意 plugin（或不同 plugin）。`parentArtifactId` 链（§11.5.1）跨越 OD ↔ code-agent 边界保留 lineage。

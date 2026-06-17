@@ -104,7 +104,7 @@ describe('syncConfigToDaemon', () => {
     });
   });
 
-  it('syncs proxy API key env values to daemon app config while localStorage strips them', async () => {
+  it('syncs CLI API key env values and intent to daemon app config while localStorage strips them', async () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -114,6 +114,10 @@ describe('syncConfigToDaemon', () => {
         claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
         codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
       },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
+      },
     });
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -121,6 +125,10 @@ describe('syncConfigToDaemon', () => {
       agentCliEnv: {
         claude: { ANTHROPIC_API_KEY: 'sk-anthropic', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic' },
         codex: { OPENAI_API_KEY: 'sk-openai', OPENAI_BASE_URL: 'https://proxy.example/openai' },
+      },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
       },
     });
   });
@@ -198,6 +206,26 @@ describe('mergeDaemonConfig', () => {
 
     expect(merged.agentCliEnv).toEqual({
       codex: { CODEX_HOME: '~/.codex-new', CODEX_BIN: '~/bin/codex-new' },
+    });
+  });
+
+  it('uses daemon CLI env intent instead of merging with stale local entries', () => {
+    const merged = mergeDaemonConfig(
+      {
+        ...DEFAULT_CONFIG,
+        agentCliEnvIntent: {
+          claude: { apiKeyOverride: true },
+        },
+      },
+      {
+        agentCliEnvIntent: {
+          codex: { apiKeyOverride: true },
+        },
+      },
+    );
+
+    expect(merged.agentCliEnvIntent).toEqual({
+      codex: { apiKeyOverride: true },
     });
   });
 
@@ -1065,7 +1093,7 @@ describe('saveConfig', () => {
     expect(saved.telemetry).toBeUndefined();
   });
 
-  it('keeps proxy API key env values out of localStorage while preserving non-secret env', () => {
+  it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {
     saveConfig({
       ...DEFAULT_CONFIG,
       agentCliEnv: {
@@ -1081,6 +1109,10 @@ describe('saveConfig', () => {
           CODEX_HOME: '~/.codex-alt',
         },
       },
+      agentCliEnvIntent: {
+        claude: { apiKeyOverride: true },
+        codex: { apiKeyOverride: true },
+      },
     });
 
     const saved = JSON.parse(store.get('open-design:config') ?? '{}');
@@ -1091,6 +1123,10 @@ describe('saveConfig', () => {
     expect(saved.agentCliEnv.codex).toEqual({
       OPENAI_BASE_URL: 'https://proxy.example/openai',
       CODEX_HOME: '~/.codex-alt',
+    });
+    expect(saved.agentCliEnvIntent).toEqual({
+      claude: { apiKeyOverride: true },
+      codex: { apiKeyOverride: true },
     });
   });
 });

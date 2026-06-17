@@ -573,6 +573,32 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(body.error?.message).toMatch(/fromTrustedPicker/i);
   });
 
+  it('rejects orchestratorWorkspace on POST /api/projects', async () => {
+    const projectId = `proj-orchestrator-create-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Smuggled scratch provenance',
+        skillId: null,
+        designSystemId: null,
+        metadata: {
+          kind: 'prototype',
+          orchestratorWorkspace: {
+            kind: 'scratch',
+            sourceRef: 'main@abc123',
+            writeback: 'external',
+          },
+        },
+      }),
+    });
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/orchestratorWorkspace.*import\/folder/i);
+  });
+
   it('rejects fromTrustedPicker on PATCH /api/projects/:id', async () => {
     // Create a vanilla native project, then try to PATCH the
     // trusted-picker marker onto it. The handler must refuse —
@@ -600,6 +626,73 @@ describe('GET /api/projects/:id resolvedDir', () => {
     const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
     expect(body.error?.code).toBe('BAD_REQUEST');
     expect(body.error?.message).toMatch(/fromTrustedPicker/i);
+  });
+
+  it('rejects valid orchestratorWorkspace on PATCH for OD-owned projects', async () => {
+    const projectId = `proj-orchestrator-owned-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          kind: 'prototype',
+          orchestratorWorkspace: {
+            kind: 'scratch',
+            sourceRef: 'main@abc123',
+            writeback: 'external',
+          },
+        },
+      }),
+    });
+    expect(patchResp.status).toBe(400);
+    const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/orchestratorWorkspace.*import\/folder/i);
+  });
+
+  it('rejects malformed orchestratorWorkspace on PATCH /api/projects/:id', async () => {
+    const projectId = `proj-orchestrator-patch-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        metadata: {
+          kind: 'prototype',
+          orchestratorWorkspace: {
+            kind: 'scratch',
+            source_reference: 'typo',
+          },
+        },
+      }),
+    });
+    expect(patchResp.status).toBe(400);
+    const body = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toMatch(/unsupported field: source_reference/i);
   });
 });
 
@@ -904,6 +997,33 @@ describe('project locations routes', () => {
     expect(patchBody.project.metadata?.importedFrom).toBe('project-location');
     expect(patchBody.project.metadata?.projectLocationId).toBe('patch-ext');
     expect(patchBody.project.metadata?.skipDiscoveryBrief).toBe(true);
+  });
+
+  it('PATCH /api/projects/:id rejects metadata null for project-location projects', async () => {
+    const extDir = makeTempDir();
+    await putProjectLocations([{ id: 'patch-null-ext', name: 'Patch Null External', path: extDir }]);
+
+    const projectId = `ext-patch-null-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Patch Null External Project',
+        projectLocationId: 'patch-null-ext',
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const patchResp = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadata: null }),
+    });
+    expect(patchResp.status).toBe(400);
+    const patchBody = (await patchResp.json()) as { error?: { code?: string; message?: string } };
+    expect(patchBody.error?.code).toBe('BAD_REQUEST');
+    expect(patchBody.error?.message).toMatch(/metadata cannot be cleared/i);
   });
 
   it('POST /api/projects with unknown projectLocationId returns 400', async () => {

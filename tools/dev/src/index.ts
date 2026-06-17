@@ -64,12 +64,15 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
+  envFile?: string | string[];
   expr?: string;
+  noEnvFile?: boolean;
   parentPid?: number;
   path?: string;
   selector?: string;
@@ -90,8 +93,6 @@ function exitWithError(error: unknown): never {
 
 process.on("uncaughtException", exitWithError);
 process.on("unhandledRejection", exitWithError);
-
-loadWorkspaceLocalEnv({ workspaceRoot: WORKSPACE_ROOT });
 
 function printJson(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -1078,6 +1079,8 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--namespace <name>", "runtime namespace (default: default)")
     .option("--tools-dev-root <path>", "tools-dev runtime root")
+    .option("--env-file <path>", "load env file before resolving tools-dev config; repeatable")
+    .option("--no-env-file", "skip automatic .env file loading", { default: false })
     .option("--json", "print JSON");
 }
 
@@ -1172,10 +1175,11 @@ cli.help();
 
 const rawCliArgs = process.argv.slice(2);
 const cliArgs = rawCliArgs[0] === "--" ? rawCliArgs.slice(1) : rawCliArgs;
-process.argv.splice(2, process.argv.length - 2, ...cliArgs);
-
-if (cliArgs.length === 0 || (cliArgs[0]?.startsWith("-") && cliArgs[0] !== "--help" && cliArgs[0] !== "-h")) {
-  process.argv.splice(2, 0, "start");
-}
+loadWorkspaceLocalEnv({
+  args: cliArgs,
+  log: (message) => process.stderr.write(`${message}\n`),
+  workspaceRoot: WORKSPACE_ROOT,
+});
+process.argv.splice(2, process.argv.length - 2, ...rewriteCliArgsForDefaultStart(cliArgs));
 
 cli.parse();

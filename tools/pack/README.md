@@ -21,7 +21,10 @@ Release artifacts keep the canonical `Open Design.app` bundle shape; local `tool
 
 Packaged runtime state is namespace-scoped under `.tmp/tools-pack/runtime/mac/namespaces/<namespace>/`:
 
-- `data/` is the daemon-managed data root passed to the daemon through the packaged sidecar launch environment.
+- Packaged daemon storage is governed only by the root `AGENTS.md` section
+  **Daemon data directory contract**. Before changing or documenting packaged
+  storage propagation, you MUST read that section; this README MUST NOT
+  restate it.
 - `logs/` contains packaged process logs for `desktop`, `web`, and `daemon`.
 - `runtime/` is the sidecar runtime base used by the packaged desktop/web/daemon process group.
 - `cache/` is reserved for namespace-local packaged cache state.
@@ -45,10 +48,9 @@ Packaged desktop also writes main-process lifecycle logs to `logs/desktop/latest
 diagnosable. This log is intentionally scoped to packaged desktop startup/shutdown/process errors and does not capture
 web/renderer console output.
 
-The packaged daemon path contract is explicit: `tools-pack` writes namespace/base config, `apps/packaged` resolves
-namespace paths, and the packaged sidecar launcher passes daemon managed paths via launch env. The daemon may keep its
-own default fallback for non-packaged launches, but packaged runtime must not rely on fallback inference from Electron
-`userData`, app bundle names, or ports.
+The packaged daemon path contract lives only in the root `AGENTS.md` section
+**Daemon data directory contract**. Before changing or documenting packaged
+path propagation, you MUST read that section; this README MUST NOT restate it.
 
 Packaged desktop can check the release metadata feed, download a verified mac DMG or Windows installer, and expose
 update actions through desktop IPC. This runtime updater phase still opens the downloaded installer for manual

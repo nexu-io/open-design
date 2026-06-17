@@ -41,7 +41,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function createClaudeStreamHandler(onEvent: EventSink) {
+interface ClaudeStreamHandlerOptions {
+  suppressHtmlArtifactsAfterFileWrite?: boolean;
+}
+
+export function createClaudeStreamHandler(
+  onEvent: EventSink,
+  options: ClaudeStreamHandlerOptions = {},
+) {
   let buffer = '';
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
@@ -73,6 +80,9 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   let suppressDuplicateArtifactText = false;
   let artifactOpenCandidate = '';
   let pendingArtifactText = '';
+  let duplicateArtifactCandidate = '';
+  const recentWriteContents: string[] = [];
+  let wroteHtmlFileThisTurn = false;
 
   function normalizeTaskStatus(value: unknown): RuntimeTask['status'] {
     if (value === 'completed' || value === 'in_progress' || value === 'stopped') {
@@ -165,6 +175,12 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     if (emitCanonicalTaskSnapshot(id, name, input)) return;
     if (isFileWriteToolUse(name, input)) {
       suppressNextArtifactText = true;
+      const content = fileWriteContent(input);
+      if (content) {
+        wroteHtmlFileThisTurn = wroteHtmlFileThisTurn || isHtmlWriteToolInput(input);
+        recentWriteContents.push(normalizeArtifactEchoContent(content));
+        if (recentWriteContents.length > 5) recentWriteContents.shift();
+      }
     }
     onEvent({
       type: 'tool_use',
@@ -222,7 +238,8 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     if (
       !suppressNextArtifactText &&
       !suppressDuplicateArtifactText &&
-      artifactOpenCandidate.length === 0
+      artifactOpenCandidate.length === 0 &&
+      recentWriteContents.length === 0
     ) {
       return text;
     }
@@ -230,30 +247,61 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     const current = `${artifactOpenCandidate}${text}`;
     artifactOpenCandidate = '';
     if (suppressDuplicateArtifactText) {
-      const closeIndex = current.indexOf('</artifact>');
+      duplicateArtifactCandidate += current;
+      const closeIndex = duplicateArtifactCandidate.indexOf('</artifact>');
       if (closeIndex === -1) return '';
+      const closeEnd = closeIndex + '</artifact>'.length;
+      const candidate = duplicateArtifactCandidate.slice(0, closeEnd);
+      const rest = duplicateArtifactCandidate.slice(closeEnd);
+      duplicateArtifactCandidate = '';
       suppressDuplicateArtifactText = false;
       suppressNextArtifactText = false;
-      return stripDuplicateArtifactText(current.slice(closeIndex + '</artifact>'.length));
+      const duplicate = isRedundantWrittenArtifact(candidate);
+      if (options.suppressHtmlArtifactsAfterFileWrite !== true) {
+        recentWriteContents.length = 0;
+      }
+      return `${duplicate ? '' : candidate}${stripDuplicateArtifactText(rest)}`;
     }
     const openIndex = current.indexOf(openTag);
     if (openIndex === -1) {
       const candidateLength = artifactOpenCandidateLength(current, openTag);
-      if (suppressNextArtifactText && candidateLength > 0) {
+      if ((suppressNextArtifactText || recentWriteContents.length > 0) && candidateLength > 0) {
         artifactOpenCandidate = current.slice(-candidateLength);
         return current.slice(0, -candidateLength);
-      }
-      if (suppressNextArtifactText) {
-        suppressNextArtifactText = false;
-        return current;
       }
       return current;
     }
     suppressDuplicateArtifactText = true;
     suppressNextArtifactText = false;
+    duplicateArtifactCandidate = current.slice(openIndex);
     const prefix = `${pendingArtifactText}${current.slice(0, openIndex)}`;
     pendingArtifactText = '';
-    return `${prefix}${stripDuplicateArtifactText(current.slice(openIndex))}`;
+    return `${prefix}${stripDuplicateArtifactText('')}`;
+  }
+
+  function isRedundantWrittenArtifact(candidate: string): boolean {
+    const gt = candidate.indexOf('>');
+    const close = candidate.lastIndexOf('</artifact>');
+    if (gt === -1 || close === -1 || close <= gt) return false;
+    if (
+      options.suppressHtmlArtifactsAfterFileWrite === true &&
+      isHtmlArtifact(candidate) &&
+      wroteHtmlFileThisTurn
+    ) return true;
+    const body = normalizeArtifactEchoContent(candidate.slice(gt + 1, close));
+    return recentWriteContents.some((content) => content === body);
+  }
+
+  function isHtmlArtifact(candidate: string): boolean {
+    const openTag = candidate.slice(0, Math.max(0, candidate.indexOf('>') + 1));
+    return /\btype\s*=\s*["']text\/html["']/i.test(openTag);
+  }
+
+  function normalizeArtifactEchoContent(value: string): string {
+    return value
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/^(?:\s|\\r|\\n)+|(?:\s|\\r|\\n)+$/g, '');
   }
 
   function artifactOpenCandidateLength(text: string, openTag: string): number {
@@ -278,6 +326,21 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
     if (!writesFile) return false;
     if (/\.(html|htm|css|js|jsx|ts|tsx|md)$/iu.test(path)) return true;
     return typeof input.content === 'string' || typeof input.new_string === 'string';
+  }
+
+  function fileWriteContent(input: unknown): string | null {
+    if (!isRecord(input)) return null;
+    if (typeof input.content === 'string') return input.content;
+    if (typeof input.new_string === 'string') return input.new_string;
+    return null;
+  }
+
+  function isHtmlWriteToolInput(input: unknown): boolean {
+    if (!isRecord(input)) return false;
+    const rawPath = input.file_path ?? input.filePath;
+    if (typeof rawPath === 'string' && /\.(?:html?|xhtml)$/i.test(rawPath)) return true;
+    const content = fileWriteContent(input);
+    return typeof content === 'string' && /<!doctype\s+html\b|<html\b/i.test(content);
   }
 
   function feed(chunk: string) {
@@ -361,7 +424,6 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
         if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
           if (typeof block.id === 'string' && streamedToolUseIds.has(block.id)) {
-            streamedToolUseIds.delete(block.id);
             continue;
           }
           emitToolUse(block.id, block.name, block.input ?? null);
@@ -387,6 +449,10 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
       // close stream-json input stdin.
       if (stopReason) {
         onEvent({ type: 'turn_end', stopReason });
+        if (stopReason !== 'tool_use') {
+          recentWriteContents.length = 0;
+          wroteHtmlFileThisTurn = false;
+        }
       }
       if (typeof obj.error === 'string' && obj.error.trim()) {
         onEvent({
@@ -527,11 +593,15 @@ export function createClaudeStreamHandler(onEvent: EventSink) {
   }
 
   function flushPendingArtifactText() {
-    const text = `${pendingArtifactText}${artifactOpenCandidate}`;
+    const text = `${pendingArtifactText}${artifactOpenCandidate}${duplicateArtifactCandidate}`;
     if (!text) return;
     pendingArtifactText = '';
     artifactOpenCandidate = '';
+    duplicateArtifactCandidate = '';
     suppressNextArtifactText = false;
+    suppressDuplicateArtifactText = false;
+    recentWriteContents.length = 0;
+    wroteHtmlFileThisTurn = false;
     emitSafeText(currentMessageId, text);
   }
 

@@ -1,8 +1,12 @@
 ---
 import { googleAnalyticsHeadHtml } from '../_lib/google-analytics';
+import { pageNameFromPath } from '../i18n';
 
 const measurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID;
-const headHtml = googleAnalyticsHeadHtml(measurementId);
+// Derive page_name server-side from the route so cta_click reports the real
+// page — GA is injected on every landing page.
+const pageName = pageNameFromPath(Astro.url.pathname);
+const headHtml = googleAnalyticsHeadHtml(measurementId, pageName);
 ---
 
 <Fragment set:html={headHtml} />

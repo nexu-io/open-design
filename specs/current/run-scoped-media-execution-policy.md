@@ -94,7 +94,7 @@ in the linked issues and PRs.
 | #1637/#1746: avoid more isolated engine churn when product/pipeline boundary is unresolved. | Do not start by refactoring providers. Start at the run boundary, media command boundary, and request event boundary. |
 | #1637/#3021: use an integration-shape doc with concrete decision points. | This doc names the policy modes, API contracts, event/resource model, owner decisions, and phased implementation sequence. |
 | #3021: keep the doc self-contained and grounded in live daemon contracts. | The background section names the live files and primitives this patch should change. It does not depend on a parked branch. |
-| #3021: preserve the current data-root/runtime contract exactly. | New persistent state should follow daemon runtime data ownership under `OD_DATA_DIR` if set, else `<projectRoot>/.od`. `OD_MEDIA_CONFIG_DIR` remains media-config-only and should not own request state. |
+| #3021: preserve the current daemon storage contract exactly. | New persistent state should follow daemon runtime data ownership. This spec MUST NOT define daemon data paths; read root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**. Media config storage remains media-config-only and should not own request state. |
 
 ## Decision summary
 

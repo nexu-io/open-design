@@ -153,7 +153,9 @@ pnpm tools-dev run web
 #      Design system / Image / Video / Audio)
 #    - Find your skill in the picker
 #    - Click it, paste the example_prompt
-#    - Watch the artifact stream into .od/artifacts/<run-id>/
+#    - Watch the artifact stream in the UI. This guide MUST NOT define daemon
+#      data paths; read the root AGENTS.md section "Daemon data directory
+#      contract" before changing or documenting artifact storage.
 #    - Verify preview iframe renders correctly
 #    - Verify export (PPTX / PDF) works if the mode supports it
 ```

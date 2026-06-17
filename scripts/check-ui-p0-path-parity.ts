@@ -3,7 +3,7 @@ import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const uiP0WorkflowPath = ".github/workflows/ui-p0-pr.yml";
-const ciWorkflowPath = ".github/workflows/ci.yml";
+const ciChangeScopesPath = "scripts/ci-change-scopes.ts";
 
 type NormalizedPathRule = {
   kind: "exact" | "prefix";
@@ -11,25 +11,25 @@ type NormalizedPathRule = {
 };
 
 async function main(): Promise<void> {
-  const [uiP0Workflow, ciWorkflow] = await Promise.all([
+  const [uiP0Workflow, ciChangeScopes] = await Promise.all([
     readFile(path.join(repoRoot, uiP0WorkflowPath), "utf8"),
-    readFile(path.join(repoRoot, ciWorkflowPath), "utf8"),
+    readFile(path.join(repoRoot, ciChangeScopesPath), "utf8"),
   ]);
 
   const uiP0Rules = normalizeRules(extractUiP0WorkflowPaths(uiP0Workflow));
-  const ciRules = normalizeRules(extractCiUiP0Rules(ciWorkflow));
+  const ciRules = normalizeRules(extractCiUiP0Rules(ciChangeScopes));
 
   const missingFromCi = difference(uiP0Rules, ciRules);
   const missingFromWorkflow = difference(ciRules, uiP0Rules);
 
   if (missingFromCi.length || missingFromWorkflow.length) {
-    console.error("UI P0 PR path rules drifted between ui-p0-pr.yml and ci.yml.");
+    console.error(`UI P0 PR path rules drifted between ${uiP0WorkflowPath} and ${ciChangeScopesPath}.`);
     if (missingFromCi.length) {
-      console.error(`\nRules present in ${uiP0WorkflowPath} but missing from ${ciWorkflowPath}:`);
+      console.error(`\nRules present in ${uiP0WorkflowPath} but missing from ${ciChangeScopesPath}:`);
       for (const rule of missingFromCi) console.error(`- ${rule}`);
     }
     if (missingFromWorkflow.length) {
-      console.error(`\nRules present in ${ciWorkflowPath} but missing from ${uiP0WorkflowPath}:`);
+      console.error(`\nRules present in ${ciChangeScopesPath} but missing from ${uiP0WorkflowPath}:`);
       for (const rule of missingFromWorkflow) console.error(`- ${rule}`);
     }
     process.exitCode = 1;
@@ -53,13 +53,25 @@ function extractUiP0WorkflowPaths(source: string): string[] {
 }
 
 function extractCiUiP0Rules(source: string): string[] {
-  const blockMatch = source.match(/^\s*if \[\[ (?<condition>[^\n]+) \]\]; then\n\s+ui_p0_pr_required=true$/mu);
-  const condition = blockMatch?.groups?.condition;
-  if (!condition) {
-    throw new Error(`Unable to find ui_p0_pr_required path condition in ${ciWorkflowPath}.`);
+  const functionMatch = source.match(/function isUiP0RelevantFile\(file: string\): boolean \{(?<body>[\s\S]+?)\n\}/u);
+  const body = functionMatch?.groups?.body;
+  if (!body) {
+    throw new Error(`Unable to find isUiP0RelevantFile in ${ciChangeScopesPath}.`);
   }
 
-  return [...condition.matchAll(/\$file"\s+==\s+"([^"]+)"(\*)?/gu)].map((match) => `${match[1]}${match[2] ?? ""}`);
+  const prefixBlock = body.match(/startsWithAny\(file,\s+\[(?<block>[\s\S]+?)\]\)/u)?.groups?.block;
+  const exactBlock = body.match(/\]\)\s+\|\|\s+\[(?<block>[\s\S]+?)\]\.includes\(file\)/u)?.groups?.block;
+  if (!prefixBlock || !exactBlock) {
+    throw new Error(`Unable to find UI P0 prefix/exact rules in ${ciChangeScopesPath}.`);
+  }
+
+  const prefixes = extractQuotedStrings(prefixBlock).map((value) => `${value}*`);
+  const exact = extractQuotedStrings(exactBlock);
+  return [...prefixes, ...exact];
+}
+
+function extractQuotedStrings(source: string): string[] {
+  return [...source.matchAll(/"([^"]+)"/gu)].map((match) => match[1]).filter((value): value is string => Boolean(value));
 }
 
 function normalizeRules(paths: string[]): string[] {

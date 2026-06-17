@@ -1,22 +1,23 @@
 ---
 /*
- * Open Design — OG image (1200×630).
+ * Open Design — OG image source (1200×630).
  *
  * Stand-alone Astro route at `/og/` used purely as a screenshotable
- * surface to produce the canonical og:image. Render with a real
- * browser at viewport 1200×630, capture a full-page screenshot, then
- * upload the resulting PNG to R2 and reference it from `index.astro`'s
- * og:image meta.
+ * surface to produce the canonical og:image. It is the editable source
+ * of truth for the card art; the shipped image is a static PNG, NOT this
+ * page rendered live.
  *
- * Visual reference: the dark "Manifesto / 2026 Edition" cover plate
- * (chocolate background, big serif headline, four-up stats footer,
- * device collage on the right). Self-contained — does not import
- * globals.css so the marketing page styles never leak in.
+ * Regenerate:
+ *   1. Build / serve the landing page and open `/og/`.
+ *   2. Screenshot at viewport 1200×630 (a 2× capture downscaled to
+ *      1200×630 is crispest).
+ *   3. Upload the PNG to R2 at `landing/assets/og-card.png`.
+ *   `ogDefaultImage` (app/image-assets.ts) points at that object.
+ *
+ * Self-contained — does not import globals.css so the marketing page
+ * styles never leak in. `noindex` so the surface itself never ranks.
  */
-import GoogleAnalytics from '../_components/google-analytics.astro';
-import { heroImage } from '../image-assets';
-
-const title = 'Open Design — Design with the agent already on your laptop.';
+const title = 'Open Design — The official open-source Claude Design alternative.';
 ---
 
 <!doctype html>
@@ -26,399 +27,245 @@ const title = 'Open Design — Design with the agent already on your laptop.';
     <title>{title}</title>
     <meta name="viewport" content="width=1200, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <GoogleAnalytics />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;0,700;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800;900&display=swap"
     />
     <style>
       :root {
-        --ink: #14110b;
-        --ink-2: #1c1810;
-        --ink-3: #2a241a;
-        --paper: #efe7d2;
-        --paper-warm: #d8cfb6;
-        --paper-mute: #8d8472;
-        --paper-faint: #5b5648;
-        --coral: #ed6f5c;
-        --coral-soft: #f08e7c;
-        --mustard: #e9b94a;
-        --line: rgba(239, 231, 210, 0.14);
-        --line-soft: rgba(239, 231, 210, 0.07);
-        --serif: 'Playfair Display', 'Times New Roman', serif;
-        --sans: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-        --body: 'Inter', -apple-system, system-ui, sans-serif;
-        --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+        --paper: #fafafa;
+        --paper-warm: #f5f5f5;
+        --ink: #262626;
+        --ink-soft: #434343;
+        --ink-mute: #595959;
+        --ink-faint: #8c8c8c;
+        --lime: #63fe13;
+        --olive: #218c00;
+        --line: #d9d9d9;
+        --sans: 'Albert Sans', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
       }
 
       * {
-        box-sizing: border-box;
         margin: 0;
         padding: 0;
+        box-sizing: border-box;
       }
 
       html,
       body {
-        background: var(--ink);
-        color: var(--paper);
-        font-family: var(--body);
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-
-      .og {
-        position: relative;
         width: 1200px;
         height: 630px;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at 88% 22%, rgba(237, 111, 92, 0.10) 0, transparent 38%),
-          radial-gradient(circle at 12% 90%, rgba(233, 185, 74, 0.06) 0, transparent 42%),
-          linear-gradient(180deg, #14110b 0%, #1a1610 60%, #14110b 100%);
       }
 
-      /* paper-grain overlay, identical mood to the live site */
-      .og::before {
+      body {
+        font-family: var(--sans);
+        background: var(--paper);
+        background-image:
+          linear-gradient(to right, rgba(38, 38, 38, 0.045) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(38, 38, 38, 0.045) 1px, transparent 1px);
+        background-size: 48px 48px;
+        color: var(--ink);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .frame {
+        position: absolute;
+        inset: 40px;
+        border: 1px solid #e3e3e3;
+      }
+
+      /* crop marks */
+      .crop {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+      }
+
+      .crop::before,
+      .crop::after {
         content: '';
         position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image:
-          url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95  0 0 0 0 0.90  0 0 0 0 0.78  0 0 0 0.05 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-        background-size: 240px 240px;
-        mix-blend-mode: screen;
-        opacity: 0.55;
+        background: var(--ink);
       }
 
-      /* ===== top metadata strip ===== */
-      .topbar {
+      .crop::before {
+        width: 14px;
+        height: 1.5px;
+        top: 6px;
+      }
+
+      .crop::after {
+        width: 1.5px;
+        height: 14px;
+        left: 6px;
+      }
+
+      .c1 {
+        top: 33px;
+        left: 33px;
+      }
+
+      .c2 {
+        top: 33px;
+        right: 33px;
+      }
+
+      .c3 {
+        bottom: 33px;
+        left: 33px;
+      }
+
+      .c4 {
+        bottom: 33px;
+        right: 33px;
+      }
+
+      .wrap {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 38px;
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        align-items: center;
-        padding: 0 36px;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--paper-mute);
-        border-bottom: 1px solid var(--line-soft);
-      }
-
-      .topbar .center {
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 14px;
-        letter-spacing: 0;
-        text-transform: none;
-        color: var(--paper);
-      }
-
-      .topbar .center::before {
-        content: '·';
-        color: var(--coral);
-        margin-right: 6px;
-      }
-
-      .topbar .right {
-        text-align: right;
-      }
-
-      /* ===== body grid ===== */
-      .grid {
-        position: absolute;
-        inset: 38px 0 0 0;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        padding: 36px 56px 28px;
-        gap: 48px;
-      }
-
-      .copy {
+        inset: 40px;
+        padding: 64px 76px;
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
       }
 
-      /* tag chips */
-      .tags {
-        display: inline-flex;
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .brand svg {
+        width: 46px;
+        height: 46px;
+        display: block;
+      }
+
+      .brand .name {
+        font-weight: 800;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+
+      .url {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--ink-faint);
+        display: flex;
+        align-items: center;
         gap: 10px;
-        margin-bottom: 28px;
+        letter-spacing: 0.01em;
+      }
+
+      .url .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--lime);
+        box-shadow: 0 0 0 4px color-mix(in oklab, var(--lime), transparent 75%);
+      }
+
+      .mid {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .kicker {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        margin-bottom: 26px;
+      }
+
+      h1 {
+        font-size: 76px;
+        line-height: 1.04;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: var(--ink);
+        max-width: 980px;
+      }
+
+      h1 .hl {
+        position: relative;
+        white-space: nowrap;
+      }
+
+      h1 .hl::after {
+        content: '';
+        position: absolute;
+        left: -2px;
+        right: -2px;
+        bottom: 0.1em;
+        height: 0.34em;
+        background: var(--lime);
+        opacity: 0.42;
+        z-index: -1;
+        border-radius: 2px;
+      }
+
+      .bot {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        border-top: 1px solid #e3e3e3;
+        padding-top: 26px;
+      }
+
+      .tags {
+        display: flex;
+        gap: 10px;
       }
 
       .tag {
-        font-family: var(--mono);
-        font-size: 9.5px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--paper-warm);
-        padding: 5px 10px;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--ink-mute);
         border: 1px solid var(--line);
         border-radius: 999px;
-        background: rgba(239, 231, 210, 0.04);
-      }
-
-      .tag.coral {
-        color: var(--coral);
-        border-color: rgba(237, 111, 92, 0.35);
-        background: rgba(237, 111, 92, 0.08);
-      }
-
-      /* big serif headline */
-      .headline {
-        font-family: var(--serif);
-        font-weight: 600;
-        font-size: 64px;
-        line-height: 1.04;
-        letter-spacing: -0.02em;
-        color: var(--paper);
-      }
-
-      .headline em {
-        font-style: italic;
-        font-weight: 600;
-        color: var(--coral);
-      }
-
-      .headline u {
-        text-decoration: none;
-        position: relative;
-        display: inline-block;
-      }
-
-      .headline u::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 6px;
-        height: 2px;
-        background: var(--coral);
-        opacity: 0.85;
-      }
-
-      .headline .dot {
-        color: var(--coral);
-      }
-
-      /* lead copy */
-      .lead {
-        margin-top: 22px;
-        max-width: 480px;
-        font-family: var(--body);
-        font-size: 14.5px;
-        line-height: 1.55;
-        color: var(--paper-warm);
-      }
-
-      .lead b {
-        color: var(--paper);
-        font-weight: 600;
-      }
-
-      /* ===== device art ===== */
-      .art {
-        position: relative;
-        align-self: stretch;
-      }
-
-      .art-frame {
-        position: absolute;
-        inset: -8px -56px 56px 0;
-        border-radius: 14px;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.05) 0, transparent 55%),
-          linear-gradient(180deg, #1f1b13, #15110a);
-        box-shadow:
-          0 30px 80px -20px rgba(0, 0, 0, 0.6),
-          inset 0 0 1px rgba(239, 231, 210, 0.06);
-      }
-
-      .art-frame img {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: center;
-        opacity: 0.92;
-        mix-blend-mode: lighten;
-        filter: contrast(1.05) saturate(0.92) brightness(0.96);
-      }
-
-      .art-frame::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background:
-          radial-gradient(circle at 25% 12%, rgba(237, 111, 92, 0.10) 0, transparent 45%),
-          linear-gradient(180deg, transparent 30%, rgba(20, 17, 11, 0.55) 100%);
-        pointer-events: none;
-      }
-
-      /* annotations on art */
-      .annot {
-        position: absolute;
-        font-family: var(--mono);
-        font-size: 9.5px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--paper-mute);
-        z-index: 2;
-      }
-
-      .annot.tl {
-        top: 14px;
-        left: 18px;
-      }
-
-      .annot.tr {
-        top: 14px;
-        right: 14px;
-        color: var(--paper-warm);
-      }
-
-      .annot.br {
-        bottom: 64px;
-        right: 14px;
-        color: var(--coral);
-      }
-
-      /* OS coral coin */
-      .coin {
-        position: absolute;
-        top: 78px;
-        right: 36px;
-        width: 78px;
-        height: 78px;
-        border-radius: 999px;
-        background: radial-gradient(circle at 30% 28%, #f5876f 0%, #ed6f5c 55%, #c54a3a 100%);
-        box-shadow:
-          0 0 0 1px rgba(237, 111, 92, 0.35),
-          0 0 32px rgba(237, 111, 92, 0.55),
-          0 18px 40px -10px rgba(237, 111, 92, 0.45);
-        display: grid;
-        place-items: center;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: #14110b;
-        text-align: center;
-        line-height: 1.1;
-        font-weight: 600;
-        z-index: 4;
-      }
-
-      /* ===== bottom stats strip ===== */
-      .stats {
-        position: absolute;
-        left: 56px;
-        right: 56px;
-        bottom: 38px;
-        padding-top: 18px;
-        border-top: 1px solid var(--line);
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 24px;
-        max-width: 540px;
-      }
-
-      .stat {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .stat .num {
-        font-family: var(--serif);
-        font-size: 38px;
-        line-height: 1;
-        font-weight: 600;
-        color: var(--paper);
-      }
-
-      .stat.zero .num {
-        font-style: italic;
-        color: var(--coral);
-      }
-
-      .stat .lbl {
-        font-family: var(--mono);
-        font-size: 9px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--paper-mute);
-        line-height: 1.4;
+        padding: 7px 15px;
       }
     </style>
   </head>
   <body>
-    <div class="og">
-      <div class="topbar">
-        <span>Open Design · Manifesto · 2026 Edition</span>
-        <span class="center">open.design</span>
-        <span class="right">Cover · 01 / 08 · OSS Alternative</span>
+    <div class="frame"></div>
+    <span class="crop c1"></span><span class="crop c2"></span><span class="crop c3"></span><span class="crop c4"></span>
+    <div class="wrap">
+      <div class="top">
+        <div class="brand">
+          <svg width="46" height="46" viewBox="0 0.726562 82 82" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M41 0.726562C76.5753 0.726562 82 6.15121 82 41.7266C82 77.3019 76.5753 82.7266 41 82.7266C5.42465 82.7266 0 77.3019 0 41.7266C0 6.15121 5.42465 0.726562 41 0.726562ZM40.8906 16.4258C26.9164 16.4258 15.5879 27.7543 15.5879 41.7285C15.5879 46.7757 15.5879 58.0219 15.5879 63.665C15.588 65.5281 17.091 67.0312 18.9541 67.0312H40.8906C54.8647 67.0311 66.1932 55.7026 66.1934 41.7285C66.1934 27.7544 54.8647 16.4259 40.8906 16.4258ZM40.8906 21.4863C52.0699 21.4864 61.1328 30.5492 61.1328 41.7285C61.1327 52.9078 52.0699 61.9706 40.8906 61.9707C29.7113 61.9707 20.6485 52.9078 20.6484 41.7285C20.6484 30.5491 29.7113 21.4863 40.8906 21.4863ZM32.6445 32.2549C31.9921 32.0027 31.3503 32.6469 31.5996 33.3037L39.3145 53.6045C39.6345 54.4468 40.877 54.2162 40.877 53.3145V41.6836H52.665C53.5605 41.6836 53.7908 40.4368 52.9551 40.1133L32.6445 32.2549Z"
+              fill="#26251E"
+            ></path>
+          </svg>
+          <span class="name">Open Design</span>
+        </div>
+        <div class="url"><span class="dot"></span>open-design.ai</div>
       </div>
-
-      <div class="grid">
-        <div class="copy">
-          <div class="tags">
-            <span class="tag coral">Apache 2.0</span>
-            <span class="tag">Local-first</span>
-            <span class="tag">BYOK</span>
-          </div>
-
-          <h1 class="headline">
-            Design with the<br />
-            <em>agent</em> already<br />
-            on your <u>laptop</u><span class="dot">.</span>
-          </h1>
-
-          <p class="lead">
-            Open Design is the open-source alternative to Claude Design.
-            Your existing coding agent — <b>Claude · Codex · Cursor · Gemini · OpenCode · Qwen</b>
-            — becomes the design engine, driven by 31 composable skills and
-            72 brand-grade design systems.
-          </p>
-        </div>
-
-        <div class="art">
-          <span class="annot tl">Fig. 01 / OD-26</span>
-          <span class="annot tr">Plate Nº 08</span>
-          <div class="art-frame">
-            <img src={heroImage} alt="" />
-          </div>
-          <span class="annot br">Composed in Open Design</span>
-        </div>
+      <div class="mid">
+        <div class="kicker">Agent-Native Design Workspace</div>
+        <h1>The official <span class="hl">open-source</span> Claude&nbsp;Design alternative.</h1>
       </div>
-
-      <span class="coin">Open<br />Source</span>
-
-      <div class="stats">
-        <div class="stat">
-          <span class="num">72</span>
-          <span class="lbl">Design<br />Systems</span>
-        </div>
-        <div class="stat">
-          <span class="num">31</span>
-          <span class="lbl">Composable<br />Skills</span>
-        </div>
-        <div class="stat">
-          <span class="num">12</span>
-          <span class="lbl">Coding<br />Agents</span>
-        </div>
-        <div class="stat zero">
-          <span class="num">0</span>
-          <span class="lbl">Lock-in /<br />Vendor Cloud</span>
+      <div class="bot">
+        <div class="tags">
+          <span class="tag">Local-first</span>
+          <span class="tag">Apache-2.0</span>
+          <span class="tag">BYO coding agent</span>
+          <span class="tag">Claude · Codex · Cursor · Gemini</span>
         </div>
       </div>
     </div>
