@@ -2848,11 +2848,12 @@ export function createFinalizedMessageTelemetryReporter({
     skipReason,
     status,
   }) => {
-    if (!analyticsContext || !design?.analytics?.capture || !runId || !delivery) return;
+    const context = analyticsContext ?? run?.analyticsContext ?? null;
+    if (!context || !design?.analytics?.capture || !runId || !delivery) return;
     const terminalResult = status ? runResultFromStatus(status) : undefined;
     design.analytics.capture({
       eventName: 'langfuse_report_result',
-      context: analyticsContext,
+      context,
       appVersion: appVersionForCapture(),
       properties: {
         page_name: 'chat_panel',
@@ -10519,6 +10520,9 @@ export async function startServer({
     // here so PostHog actually receives the event. Both fire under the
     // same insert_id prefix so any web-side mirror dedupes by $insert_id.
     const analyticsContext = readAnalyticsContext(req);
+    if (analyticsContext) {
+      run.analyticsContext = analyticsContext;
+    }
     design.runs.wait(run).then((status: { status: string }) => {
       reportRunCompletionTelemetryFallback({
         analyticsContext: analyticsContext ?? null,
