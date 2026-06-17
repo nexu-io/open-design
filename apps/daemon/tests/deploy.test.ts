@@ -789,6 +789,97 @@ describe('render deploys', () => {
     expect(requestedUrls).toContain('GET https://api.render.com/v1/services/stale-service-id');
     expect(requestedUrls).toContain('POST https://api.render.com/v1/services');
   });
+
+  it('throws DeployError when Render services lookup returns non-2xx API error (duplicate protection)', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-render-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 200 });
+      }
+      if (url.includes('/owners') && method === 'GET') {
+        return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      }
+      if (url.includes('/services?limit=100') && method === 'GET') {
+        return new Response('Internal Server Error', { status: 500 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRender({
+        config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+      })
+    ).rejects.toThrowError(/Failed to search existing Render services: 500/);
+  });
+
+  it('throws DeployError when Render pre-trigger lookup fails and trigger response lacks deployId', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-render-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 200 });
+      }
+      if (url.includes('/owners') && method === 'GET') {
+        return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      }
+      if (url.includes('/services?limit=100') && method === 'GET') {
+        return new Response(JSON.stringify([{ service: { id: 'render-service-1', name: 'od-render-p1', url: 'https://od-render-p1.onrender.com' } }]), { status: 200 });
+      }
+      if (url.includes('/services/render-service-1/deploys?limit=1') && method === 'GET') {
+        return new Response('Internal Server Error', { status: 500 });
+      }
+      if (url.includes('/services/render-service-1/deploys') && method === 'POST') {
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRender({
+        config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+        priorMetadata: { serviceId: 'render-service-1', serviceUrl: 'https://od-render-p1.onrender.com' },
+      })
+    ).rejects.toThrowError(/baseline deployment ID could not be established/);
+  });
 });
 
 describe('netlify and railway deploys', () => {
@@ -3114,6 +3205,105 @@ describe('netlify and railway deploys', () => {
     expect(result.providerMetadata?.serviceId).toBe('new-service-id');
     expect(createdProject).toBe(true);
     expect(createdService).toBe(true);
+  });
+
+  it('throws DeployError when Netlify sites lookup returns non-2xx API error (duplicate protection)', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+      }
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response('Internal Server Error', { status: 500 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToNetlify({
+        config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+      })
+    ).rejects.toThrowError(/Failed to search existing Netlify sites: 500/);
+  });
+
+  it('throws DeployError when Netlify pre-trigger lookup fails and trigger response lacks deploy_id', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'testuser' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123, name: 'od-netlify-p1' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/testuser/od-netlify-p1/keys' && method === 'POST') {
+        return new Response(JSON.stringify({ id: 789 }), { status: 201 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/testuser/od-netlify-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 201 });
+      }
+      if (url.includes('/sites?name=od-p1') && method === 'GET') {
+        return new Response(JSON.stringify([{ id: 'site-1', site_id: 'site-1', name: 'od-p1', ssl_url: 'https://example.netlify.app' }]), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1', deploy_key_id: 'existing-key-id' }), { status: 200 });
+      }
+      if (url.endsWith('/sites/site-1') && method === 'PUT') {
+        return new Response(JSON.stringify({ id: 'site-1', site_id: 'site-1' }), { status: 200 });
+      }
+      if (url.endsWith('/deploy_keys/existing-key-id') && method === 'GET') {
+        return new Response(JSON.stringify({ id: 'existing-key-id', public_key: 'ssh-rsa AAAAB3NzaC1...' }), { status: 200 });
+      }
+      if (url.includes('/sites/site-1/deploys?per_page=1') && method === 'GET') {
+        return new Response('Internal Server Error', { status: 500 });
+      }
+      if (url.endsWith('/sites/site-1/builds') && method === 'POST') {
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToNetlify({
+        config: { token: 'netlify-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+      })
+    ).rejects.toThrowError(/baseline deployment ID could not be established/);
   });
 });
 
