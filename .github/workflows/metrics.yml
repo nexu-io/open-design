@@ -2,8 +2,9 @@ name: github-metrics
 
 on:
   schedule:
-    # Runs daily at 00:15 UTC; output is committed to docs/assets/github-metrics.svg.
-    - cron: '15 0 * * *'
+    # Runs weekly Mon 00:15 UTC (was daily); output is committed to docs/assets/github-metrics.svg.
+    # Reduced from daily to cut Actions minutes — this is a vanity metrics SVG. Use workflow_dispatch for ad-hoc refresh.
+    - cron: '15 0 * * 1'
   workflow_dispatch:
   push:
     branches:
