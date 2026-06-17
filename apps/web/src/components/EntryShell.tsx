@@ -592,7 +592,10 @@ export function EntryShell({
   // submits now arrive with the hidden od-default router plugin and
   // projectKind='other', so the agent asks for the exact task type
   // before continuing.
-  function handlePluginLoopSubmit(payload: PluginLoopSubmit) {
+  // Forwards onCreateProject's result so HomeView can hold its sending
+  // state until the creation roundtrip settles, and recover on failure
+  // (#4082).
+  function handlePluginLoopSubmit(payload: PluginLoopSubmit): Promise<boolean> | boolean | void {
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -628,7 +631,7 @@ export function EntryShell({
         examplePromptBrief: payload.examplePromptContext.brief,
       } : {}),
     };
-    onCreateProject({
+    return onCreateProject({
       name,
       skillId: payload.skillId ?? null,
       designSystemId: payload.designSystemId ?? null,
