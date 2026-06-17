@@ -455,16 +455,19 @@ function isSupportedPackageLauncherPlatform(platform: string): boolean {
   return platform === "darwin" || platform === "win32";
 }
 
-function capabilitiesFor(status: { mode: DesktopUpdateMode; platform: string; supported: boolean }) {
+function capabilitiesFor(status: { artifactType?: string; mode: DesktopUpdateMode; platform: string; supported: boolean }) {
   const packageLauncher =
     status.mode === DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER &&
     isSupportedPackageLauncherPlatform(status.platform) &&
     status.supported;
+  const payloadUpdate = status.artifactType === "payload";
+  const hasSelectedArtifact = status.artifactType != null && status.artifactType.length > 0;
+  const manualInstaller = packageLauncher && (!hasSelectedArtifact || !payloadUpdate);
   return {
-    canApplyInPlace: false,
+    canApplyInPlace: packageLauncher && payloadUpdate,
     canDownload: packageLauncher,
-    canOpenInstaller: packageLauncher,
-    requiresManualInstall: packageLauncher,
+    canOpenInstaller: manualInstaller,
+    requiresManualInstall: manualInstaller,
   };
 }
 
@@ -2343,6 +2346,7 @@ export function createDesktopUpdater(
     const statusSupported = supported();
     const active = activeRelease == null ? undefined : releaseSnapshot(activeRelease);
     const activeArtifact = activeRelease?.ref.artifact ?? (state === DESKTOP_UPDATE_STATES.AVAILABLE ? candidate?.artifact : undefined);
+    const capabilityArtifactType = activeArtifact?.type ?? incomingRelease?.artifact.type ?? candidate?.artifact.type;
     const activeChecksum = activeRelease?.ref.checksum ?? (state === DESKTOP_UPDATE_STATES.AVAILABLE ? candidate?.checksum : undefined);
     const availableVersion = activeRelease?.ref.version ?? candidate?.version;
     const downloadPath = activeRelease?.path;
@@ -2354,7 +2358,12 @@ export function createDesktopUpdater(
       ...(activeArtifact?.url == null ? {} : { artifactUrl: activeArtifact.url }),
       ...(availableVersion == null ? {} : { availableVersion }),
       ...(lifecycleSummary == null ? {} : { cache: { lifecycle: lifecycleSummary } }),
-      capabilities: capabilitiesFor({ mode: config.mode, platform: config.platform, supported: statusSupported }),
+      capabilities: capabilitiesFor({
+        artifactType: capabilityArtifactType,
+        mode: config.mode,
+        platform: config.platform,
+        supported: statusSupported,
+      }),
       channel: config.channel,
       ...(activeChecksum == null ? {} : { checksum: activeChecksum }),
       currentVersion: config.currentVersion,
