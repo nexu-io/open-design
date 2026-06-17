@@ -73,6 +73,9 @@ describe('reasoningExecution egress policy', () => {
       routeKind: expected.routeKind,
       provider: expected.provider,
     });
+    if (typeof body.apiKey === 'string') {
+      expect(JSON.stringify(payload)).not.toContain(body.apiKey);
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   }
 
