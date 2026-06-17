@@ -981,8 +981,6 @@ function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS
     '--json',
     '--skip-git-repo-check',
     ...sandbox,
-    '-c',
-    'permissions.default_permissions=":workspace"',
     '-C',
     ctx.projectRoot,
     '--add-dir',

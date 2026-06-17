@@ -155,7 +155,7 @@ process.stdin.on('end', () => {
     process.stderr.write('expected args to include ' + expectedArgsIncludes);
     process.exit(10);
   }
-  if (expectedArgsExcludes && args.includes(expectedArgsExcludes)) {
+  if (expectedArgsExcludes && args.some((arg) => arg.includes(expectedArgsExcludes))) {
     process.stderr.write('expected args to exclude ' + expectedArgsExcludes);
     process.exit(11);
   }
@@ -571,8 +571,7 @@ process.stdin.on('end', () => {
     await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
       expectedConfigIncludes: 'service_tier = "fast"',
       expectedConfigExcludes: 'service_tier = "default"',
-      expectedArgsIncludes: 'permissions.default_permissions=":workspace"',
-      expectedArgsExcludes: 'default_permissions=":workspace"',
+      expectedArgsExcludes: 'default_permissions',
     });
 
     const result = await generateMedia({
