@@ -3711,6 +3711,7 @@ export function SettingsDialog({
                                         skipInitialRefresh
                                         signInLabel={t('settings.amrAuthorize')}
                                         showConsoleAction={amrCardStatus?.loggedIn === true}
+                                        iconOnlySignOut
                                         amrEntrySourceDetail="settings_amr_authorize"
                                         metricsConsent={cfg.telemetry?.metrics === true}
                                         installationId={cfg.installationId}

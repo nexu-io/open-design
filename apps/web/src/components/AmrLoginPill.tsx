@@ -27,6 +27,7 @@ import {
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { Icon } from './Icon';
 import { amrConsoleUrlForProfile, amrProfileBadgeLabel } from '../runtime/amr-guidance';
 
 interface AmrLoginPillProps {
@@ -42,6 +43,7 @@ interface AmrLoginPillProps {
   showActivationDetails?: boolean;
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
+  iconOnlySignOut?: boolean;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
 
@@ -72,6 +74,7 @@ export interface AmrAccountControlProps {
   signInLabel?: string;
   showConsoleAction?: boolean;
   consoleUrl?: string;
+  iconOnlySignOut?: boolean;
   showCancelSignInAction?: boolean;
   // Device-authorization details surfaced while signing in, so the user can
   // complete login manually when the browser did not auto-open (see
@@ -119,6 +122,7 @@ export function AmrAccountControl({
   signInLabel,
   showConsoleAction = false,
   consoleUrl,
+  iconOnlySignOut = false,
   showCancelSignInAction = false,
   activationUrl,
   userCode,
@@ -156,6 +160,9 @@ export function AmrAccountControl({
         ? ''
         : t('settings.amrNotSignedIn');
   const canSignIn = showSignInAction && (status === 'signed-out' || hasError);
+  const signOutLabel = signOutDisabled
+    ? t('settings.amrLoggingOut')
+    : t('settings.amrLogout');
 
   return (
     <div
@@ -191,13 +198,23 @@ export function AmrAccountControl({
       {isSignedIn && onSignOut ? (
         <button
           type="button"
-          className="amr-account-control__action"
+          className={classNames(
+            'amr-account-control__action',
+            iconOnlySignOut && 'amr-account-control__action--icon',
+            iconOnlySignOut && 'od-tooltip',
+          )}
           disabled={signOutDisabled}
           onClick={onSignOut}
-          title={email || undefined}
-          aria-label={t('settings.amrLogout')}
+          title={iconOnlySignOut ? signOutLabel : email || undefined}
+          aria-label={signOutLabel}
+          data-tooltip={iconOnlySignOut ? signOutLabel : undefined}
+          data-tooltip-placement={iconOnlySignOut ? 'bottom' : undefined}
         >
-          {signOutDisabled ? t('settings.amrLoggingOut') : t('settings.amrLogout')}
+          {iconOnlySignOut ? (
+            <Icon name="log-out" size={15} strokeWidth={1.8} />
+          ) : (
+            signOutLabel
+          )}
         </button>
       ) : null}
       {isSigningIn && showCancelSignInAction && onCancelSignIn ? (
@@ -290,6 +307,7 @@ export function AmrLoginPill({
   showActivationDetails = false,
   revealPendingCancelAction = false,
   showConsoleAction = false,
+  iconOnlySignOut = false,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
@@ -614,6 +632,7 @@ export function AmrLoginPill({
         hideSignedInStatus={hideSignedInStatus}
         signInLabel={signInLabel}
         showConsoleAction={showConsoleAction}
+        iconOnlySignOut={iconOnlySignOut}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}
         showCancelSignInAction={revealPendingCancelAction && loginInFlight}

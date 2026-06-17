@@ -1279,16 +1279,24 @@
 .agent-card-name--amr {
   align-items: center;
   gap: 8px;
+  row-gap: 5px;
+  flex-wrap: wrap;
+  white-space: normal;
+  overflow: visible;
 }
-.agent-card-name--amr .agent-card-title {
+.agent-card-name.agent-card-name--amr .agent-card-title {
   flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
-  min-width: 0;
-  overflow: hidden;
+  min-width: min(100%, 220px);
+  overflow: visible;
 }
 .agent-card-benefit {
   display: inline-flex;
@@ -1400,8 +1408,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  gap: 8px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 10px;
 }
 .agent-card-amr-auth .amr-account-control__status {
   display: inline-flex;
@@ -1425,24 +1433,39 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0 18px;
+  min-height: 32px;
+  padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-panel));
   color: var(--text);
-  font-size: 13px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 650;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.agent-card-amr-auth .amr-account-control__action--icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border-soft));
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--accent-tint) 12%);
+  color: var(--text-muted);
 }
 .agent-card-amr-auth .amr-account-control__action:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   background: color-mix(in srgb, var(--accent-tint) 76%, var(--bg-panel));
   color: var(--accent-strong);
   transform: translateY(-1px);
+}
+.agent-card-amr-auth .amr-account-control__action--icon:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 78%, var(--accent-tint) 22%);
+  color: var(--text);
 }
 .agent-card-amr-auth .amr-account-control__action:disabled {
   cursor: default;
