@@ -65,6 +65,7 @@ import {
   modelsForSurface,
 } from './media-models.js';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
+import { normalizeCodexConfigFile } from './codex-config-normalize.js';
 import {
   resolveCodexImagegenEnv,
   resolveCodexSubscriptionStatus,
@@ -1064,6 +1065,7 @@ async function runCodexImagegen(
 
 async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
   const env = await resolveCodexImagegenEnv(ctx.projectRoot);
+  await normalizeCodexConfigFile(env);
   const generatedRoot = codexGeneratedImagesRoot(env);
   await mkdir(generatedRoot, { recursive: true });
   const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);

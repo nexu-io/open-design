@@ -113,13 +113,22 @@ describe('OpenAI-compatible media providers', () => {
     await writeFile(path.join(codexHome, 'auth.json'), JSON.stringify(data), 'utf8');
   }
 
-  async function installFakeCodex(codexHome: string, threadId: string) {
+  async function installFakeCodex(
+    codexHome: string,
+    threadId: string,
+    options: {
+      expectedConfigIncludes?: string;
+      expectedConfigExcludes?: string;
+    } = {},
+  ) {
     const codexBin = path.join(root, `${threadId}.mjs`);
     await writeFile(codexBin, `#!/usr/bin/env node
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const pngBase64 = '${PNG_BASE64}';
+const expectedConfigIncludes = ${JSON.stringify(options.expectedConfigIncludes ?? '')};
+const expectedConfigExcludes = ${JSON.stringify(options.expectedConfigExcludes ?? '')};
 const args = process.argv.slice(2);
 const addDirIndex = args.indexOf('--add-dir');
 const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
@@ -127,6 +136,17 @@ let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
 process.stdin.on('end', () => {
+  if (expectedConfigIncludes || expectedConfigExcludes) {
+    const config = readFileSync(path.join(process.env.CODEX_HOME || '', 'config.toml'), 'utf8');
+    if (expectedConfigIncludes && !config.includes(expectedConfigIncludes)) {
+      process.stderr.write('expected normalized config to include ' + expectedConfigIncludes);
+      process.exit(8);
+    }
+    if (expectedConfigExcludes && config.includes(expectedConfigExcludes)) {
+      process.stderr.write('expected normalized config to exclude ' + expectedConfigExcludes);
+      process.exit(9);
+    }
+  }
   if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
   const outDir = path.join(generatedRoot, '${threadId}');
   mkdirSync(outDir, { recursive: true });
@@ -523,6 +543,38 @@ process.stdin.on('end', () => {
     expect(result.providerId).toBe('codex');
     expect(result.providerNote).toContain('codex/gpt-image-2');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('normalizes stale Codex service_tier before subscription image generation', async () => {
+    const generatedHome = path.join(root, 'stale-tier-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    await writeFile(
+      path.join(generatedHome, 'config.toml'),
+      `[model]\nservice_tier = "default"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+    await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
+      expectedConfigIncludes: 'service_tier = "fast"',
+      expectedConfigExcludes: 'service_tier = "default"',
+    });
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'subscription-stale-tier.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    const after = await readFile(path.join(generatedHome, 'config.toml'), 'utf8');
+    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('"default"');
   });
 
   it('does not reroute OpenAI image models without a Codex twin', async () => {
