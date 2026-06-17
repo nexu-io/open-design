@@ -813,8 +813,12 @@ export async function deployToNetlify({
     const listResp = await fetch(`${NETLIFY_API}/sites?name=${siteName}&filter=all`, {
       headers: { Authorization: `Bearer ${config.token}` },
     });
+    if (!listResp.ok) {
+      const errText = await listResp.text().catch(() => '');
+      throw new DeployError(`Failed to search existing Netlify sites: ${listResp.status} ${errText}`, 502);
+    }
     const sites = await readNetlifyJson(listResp);
-    if (listResp.ok && Array.isArray(sites)) {
+    if (Array.isArray(sites)) {
       const existing = sites.find((s: any) => s.name === siteName);
       if (existing) {
         siteId = existing.id || existing.site_id;
@@ -1021,8 +1025,8 @@ export async function deployToNetlify({
     });
     if (preListResp.ok) {
       const deploys = await readNetlifyJson(preListResp);
-      if (Array.isArray(deploys) && deploys.length > 0) {
-        latestDeployIdBefore = deploys[0].id;
+      if (Array.isArray(deploys)) {
+        latestDeployIdBefore = deploys[0]?.id || null;
       }
     }
   } catch (err) {
@@ -1065,6 +1069,9 @@ export async function deployToNetlify({
 
   // Fallback: If trigger succeeded but no deployment ID was returned, query the site's deploys list
   if (triggerSucceeded && !deploymentId) {
+    if (latestDeployIdBefore === undefined) {
+      throw new DeployError('Failed to resolve new Netlify deployment because baseline deployment ID could not be established.', 502);
+    }
     // Poll up to 5 times (1s interval) for a new deploy to show up
     for (let attempt = 0; attempt < 5; attempt++) {
       const listDeploysResp = await fetch(`${NETLIFY_API}/sites/${siteId}/deploys?per_page=1`, {
@@ -1422,18 +1429,20 @@ export async function deployToRender({
       Accept: 'application/json',
     },
   });
-  if (listResp.ok) {
-    const services = (await listResp.json()) as any[];
-    if (Array.isArray(services)) {
-      const existing = services.find((s) => {
-        const item = s.service || s;
-        return item.name === repoName && item.type === 'static_site';
-      });
-      if (existing) {
-        const item = existing.service || existing;
-        serviceId = item.id;
-        serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
-      }
+  if (!listResp.ok) {
+    const errText = await listResp.text().catch(() => '');
+    throw new DeployError(`Failed to search existing Render services: ${listResp.status} ${errText}`, 502);
+  }
+  const services = (await listResp.json()) as any[];
+  if (Array.isArray(services)) {
+    const existing = services.find((s) => {
+      const item = s.service || s;
+      return item.name === repoName && item.type === 'static_site';
+    });
+    if (existing) {
+      const item = existing.service || existing;
+      serviceId = item.id;
+      serviceUrl = item.serviceDetails?.url || item.url || `https://${repoName}.onrender.com`;
     }
   }
 
@@ -1448,9 +1457,10 @@ export async function deployToRender({
       });
       if (listDeploysResp.ok) {
         const deploys = await listDeploysResp.json().catch(() => null);
-        if (Array.isArray(deploys) && deploys.length > 0) {
-          const item = deploys[0].deploy || deploys[0];
-          preTriggerDeployId = item.id;
+        if (Array.isArray(deploys)) {
+          const firstDeploy = deploys[0];
+          const item = firstDeploy?.deploy || firstDeploy;
+          preTriggerDeployId = item?.id || null;
         }
       }
     } catch {
@@ -1528,6 +1538,9 @@ export async function deployToRender({
 
   // Poll up to 5 times (1s intervals) to resolve the new deploy ID if it wasn't returned immediately or is stale
   if (!deployId || (!isNewService && deployId === preTriggerDeployId)) {
+    if (!isNewService && preTriggerDeployId === undefined) {
+      throw new DeployError('Failed to resolve new Render deployment because baseline deployment ID could not be established.', 502);
+    }
     for (let i = 0; i < 5; i++) {
       try {
         const listDeploysResp = await fetch(`${RENDER_API}/services/${serviceId}/deploys?limit=1`, {
