@@ -17,37 +17,13 @@ services:
       OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
       OD_ACCESS_TOKEN: ${OD_ACCESS_TOKEN:-}
       OD_CODEX_SANDBOX: ${OD_CODEX_SANDBOX:-}
-      # Trusted reverse proxy (set OD_TRUSTED_PROXY=1 if the daemon is behind
-      # Cloudflare Access, nginx, or another trusted reverse proxy)
+      # Trusted reverse proxy (set when an authenticated proxy gates access)
       OD_TRUSTED_PROXY: ${OD_TRUSTED_PROXY:-}
-      OD_CF_ACCESS_TEAM_DOMAIN: ${OD_CF_ACCESS_TEAM_DOMAIN:-}
-      OD_CF_ACCESS_AUD: ${OD_CF_ACCESS_AUD:-}
     ports:
       - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
     volumes:
       - open_design_data:/app/.od
-      # Persistent CLI config directories — credentials survive restarts
-      - open_design_claude:/home/open-design/.claude
-      - open_design_codex:/home/open-design/.codex
-      - open_design_gemini:/home/open-design/.config/gemini
-      - open_design_devin:/home/open-design/.config/devin
-      - open_design_copilot:/home/open-design/.copilot
-      - open_design_cursor:/home/open-design/.cursor
-      - open_design_opencode:/home/open-design/.opencode
-      - open_design_openclaw:/home/open-design/.openclaw
-      - open_design_deepseek:/home/open-design/.deepseek
-      - open_design_qoder:/home/open-design/.qoder
-      - open_design_pi:/home/open-design/.pi
-      - open_design_kiro:/home/open-design/.config/kiro
-      - open_design_kilo:/home/open-design/.config/kilo
-      - open_design_vibe:/home/open-design/.vibe
-      - open_design_trae:/home/open-design/.trae
-      - open_design_kimi:/home/open-design/.kimi
-      - open_design_qwen:/home/open-design/.qwen
-      - open_design_aider:/home/open-design/.aider
-      - open_design_grok:/home/open-design/.grok
-      - open_design_reasonix:/home/open-design/.reasonix
-      - open_design_hermes:/home/open-design/.hermes
+      - open_design_home:/home/open-design
     read_only: true
     tmpfs:
       - /tmp
@@ -64,8 +40,6 @@ services:
           "-e",
           "fetch('http://127.0.0.1:7456/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
-      # Healthcheck uses /api/health which is always open (probe path).
-      # Works in all auth modes: CF Access, bearer token, or none.
       interval: 30s
       timeout: 5s
       retries: 3
@@ -73,25 +47,4 @@ services:
 
 volumes:
   open_design_data:
-  # CLI config volumes — persist auth credentials across restarts
-  open_design_claude:
-  open_design_codex:
-  open_design_gemini:
-  open_design_devin:
-  open_design_copilot:
-  open_design_cursor:
-  open_design_opencode:
-  open_design_openclaw:
-  open_design_deepseek:
-  open_design_qoder:
-  open_design_pi:
-  open_design_kiro:
-  open_design_kilo:
-  open_design_vibe:
-  open_design_trae:
-  open_design_kimi:
-  open_design_qwen:
-  open_design_aider:
-  open_design_grok:
-  open_design_reasonix:
-  open_design_hermes:
+  open_design_home:
