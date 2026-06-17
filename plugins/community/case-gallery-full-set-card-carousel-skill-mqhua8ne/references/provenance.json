@@ -1,0 +1,19 @@
+{
+  "candidateId": "6832f6fb-4621-49fa-9e93-f79dcc224523",
+  "projectId": "d9b6f84b-b3f7-4eb4-a2c8-dcf537e91890",
+  "runId": "d74c60c0-e9bd-4bcb-b821-bcb181efe381",
+  "conversationId": "fac3a533-0497-4911-8066-57315ac19e0d",
+  "provenance": {
+    "summary": "Detected from mqhty1ex-SKILL.md after a successful run.",
+    "detectedAt": 1781686711890
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mqhty1ex-SKILL.md",
+      "label": "mqhty1ex-SKILL.md",
+      "size": 4887,
+      "copied": true
+    }
+  ]
+}

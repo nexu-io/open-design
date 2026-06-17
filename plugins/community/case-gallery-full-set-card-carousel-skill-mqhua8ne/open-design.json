@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "case-gallery-full-set-card-carousel-skill-mqhua8ne",
+  "title": "Case Gallery Full-Set Card Carousel Skill",
+  "version": "0.1.0",
+  "description": "Reusable skill material detected from a project file.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
