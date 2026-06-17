@@ -14,6 +14,7 @@ export const pluginDetailL10n: Partial<
   Record<LandingLocaleCode, Partial<PluginsCopy>>
 > = {
   zh: {
+    detailSystemLabel: '设计系统',
     systemsMdHead: '每一套系统都是一个 DESIGN.md 文件',
     systemsMdBody: [
       '这里的每套设计系统都是一个 DESIGN.md——一份人类和 agent 都能读懂的 markdown 规范，记录品牌的视觉主题、色彩角色、字号层级和交互语言。它存放在你的仓库里，随 git 版本管理，并跟随你的项目一起流转。',
@@ -53,6 +54,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} 设计系统, ${name} DESIGN.md, ${name} 设计 token, 设计系统示例, 开源设计系统`,
   },
   'zh-tw': {
+    detailSystemLabel: '設計系統',
     systemsMdHead: '每一套系統都是一份 DESIGN.md 檔案',
     systemsMdBody: [
       '這裡的每一套設計系統都是單一的 DESIGN.md——一份人類與 agent 都能讀懂的 markdown 規格，記錄了品牌的視覺主題、色彩角色、字級階層與互動語言。它存放在你的儲存庫裡，隨 git 版控，並與你的專案一同流轉。',
@@ -92,6 +94,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} 設計系統, ${name} DESIGN.md, ${name} 設計 token, 設計系統範例, 開源設計系統`,
   },
   ja: {
+    detailSystemLabel: 'デザインシステム',
     systemsMdHead: 'すべてのシステムは DESIGN.md ファイル',
     systemsMdBody: [
       'ここにある各デザインシステムは1つの DESIGN.md です。人間と agent の両方が読めるマークダウン仕様で、ブランドのビジュアルテーマ、カラーの役割、タイポグラフィのスケール、インタラクションの言語を定義します。リポジトリ内に置かれ、git でバージョン管理され、プロジェクトとともに移動します。',
@@ -131,6 +134,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} デザインシステム, ${name} DESIGN.md, ${name} デザイントークン, デザインシステムの例, オープンソースのデザインシステム`,
   },
   ko: {
+    detailSystemLabel: '디자인 시스템',
     systemsMdHead: '모든 시스템은 하나의 DESIGN.md 파일입니다',
     systemsMdBody: [
       '여기 있는 각 디자인 시스템은 하나의 DESIGN.md입니다. 사람과 agent가 모두 읽을 수 있는 마크다운 명세로, 브랜드의 비주얼 테마, 색상 역할, 타이포그래피 스케일, 인터랙션 언어를 담습니다. 이 파일은 저장소 안에 존재하고, git으로 버전 관리되며, 프로젝트와 함께 이동합니다.',
@@ -170,6 +174,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} 디자인 시스템, ${name} DESIGN.md, ${name} 디자인 토큰, 디자인 시스템 예시, 오픈소스 디자인 시스템`,
   },
   de: {
+    detailSystemLabel: 'Designsystem',
     systemsMdHead: 'Jedes System ist eine DESIGN.md-Datei',
     systemsMdBody: [
       'Jedes Designsystem hier ist eine einzige DESIGN.md – eine für Menschen und Agents lesbare Markdown-Spezifikation, die das visuelle Thema der Marke, die Farbrollen, die Typografie-Skala und die Interaktionssprache erfasst. Sie liegt in deinem Repo, wird in git versioniert und reist mit deinem Projekt.',
@@ -209,6 +214,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} Designsystem, ${name} DESIGN.md, ${name} Design-Tokens, Designsystem-Beispiel, quelloffenes Designsystem`,
   },
   fr: {
+    detailSystemLabel: 'système de design',
     systemsMdHead: 'Chaque système est un fichier DESIGN.md',
     systemsMdBody: [
       'Chaque système de design présenté ici est un unique fichier DESIGN.md — une spécification markdown lisible par les humains comme par les agents, qui décrit le thème visuel de la marque, les rôles de couleur, l’échelle typographique et le langage d’interaction. Il vit dans votre dépôt, se versionne avec git et accompagne votre projet.',
@@ -248,6 +254,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `système de design ${name}, ${name} DESIGN.md, tokens de design ${name}, exemple de système de design, système de design open source`,
   },
   ru: {
+    detailSystemLabel: 'дизайн-система',
     systemsMdHead: 'Каждая система — это файл DESIGN.md',
     systemsMdBody: [
       'Каждая дизайн-система здесь — это единый DESIGN.md: понятная и человеку, и agent-у markdown-спецификация, которая описывает визуальную тему бренда, роли цветов, типографическую шкалу и язык взаимодействия. Он лежит в вашем репозитории, версионируется в git и путешествует вместе с проектом.',
@@ -287,6 +294,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `дизайн-система ${name}, ${name} DESIGN.md, дизайн-токены ${name}, пример дизайн-системы, дизайн-система с открытым исходным кодом`,
   },
   es: {
+    detailSystemLabel: 'sistema de diseño',
     systemsMdHead: 'Cada sistema es un archivo DESIGN.md',
     systemsMdBody: [
       'Cada sistema de diseño aquí es un único DESIGN.md: una especificación en markdown legible por personas y por agentes que captura el tema visual de la marca, los roles de color, la escala tipográfica y el lenguaje de interacción. Vive en tu repositorio, se versiona en git y viaja con tu proyecto.',
@@ -326,6 +334,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `sistema de diseño ${name}, ${name} DESIGN.md, tokens de diseño ${name}, ejemplo de sistema de diseño, sistema de diseño de código abierto`,
   },
   'pt-br': {
+    detailSystemLabel: 'design system',
     systemsMdHead: 'Todo sistema é um arquivo DESIGN.md',
     systemsMdBody: [
       'Cada design system aqui é um único DESIGN.md — uma especificação em markdown legível por pessoas e por agents que captura o tema visual da marca, os papéis de cor, a escala tipográfica e a linguagem de interação. Ele vive no seu repositório, é versionado no git e acompanha o seu projeto.',
@@ -365,6 +374,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `design system ${name}, ${name} DESIGN.md, design tokens ${name}, exemplo de design system, design system open-source`,
   },
   it: {
+    detailSystemLabel: 'design system',
     systemsMdHead: 'Ogni sistema è un file DESIGN.md',
     systemsMdBody: [
       'Ogni design system qui è un singolo DESIGN.md — una specifica markdown leggibile da persone e agent che racchiude il tema visivo del brand, i ruoli cromatici, la scala tipografica e il linguaggio di interazione. Vive nel tuo repo, viene versionato in git e viaggia con il tuo progetto.',
@@ -404,6 +414,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} design system, ${name} DESIGN.md, ${name} design token, esempio di design system, design system open-source`,
   },
   vi: {
+    detailSystemLabel: 'hệ thống thiết kế',
     systemsMdHead: 'Mỗi hệ thống là một tệp DESIGN.md',
     systemsMdBody: [
       'Mỗi hệ thống thiết kế ở đây là một DESIGN.md duy nhất — một bản đặc tả markdown mà cả con người lẫn agent đều đọc được, nắm bắt chủ đề hình ảnh của thương hiệu, vai trò màu sắc, thang kiểu chữ và ngôn ngữ tương tác. Nó nằm trong repo của bạn, được quản lý phiên bản bằng git và đi cùng dự án của bạn.',
@@ -443,6 +454,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `hệ thống thiết kế ${name}, DESIGN.md ${name}, token thiết kế ${name}, ví dụ hệ thống thiết kế, hệ thống thiết kế mã nguồn mở`,
   },
   pl: {
+    detailSystemLabel: 'system projektowy',
     systemsMdHead: 'Każdy system to plik DESIGN.md',
     systemsMdBody: [
       'Każdy system projektowy tutaj to pojedynczy DESIGN.md — czytelna dla ludzi i agentów specyfikacja w formacie markdown, która opisuje motyw wizualny marki, role kolorów, skalę typografii i język interakcji. Mieszka w Twoim repozytorium, jest wersjonowana w git i podróżuje razem z Twoim projektem.',
@@ -482,6 +494,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `system projektowy ${name}, ${name} DESIGN.md, tokeny projektowe ${name}, przykład systemu projektowego, system projektowy open source`,
   },
   id: {
+    detailSystemLabel: 'design system',
     systemsMdHead: 'Setiap sistem adalah sebuah file DESIGN.md',
     systemsMdBody: [
       'Setiap design system di sini adalah satu DESIGN.md — spesifikasi markdown yang bisa dibaca manusia maupun agent, yang merangkum tema visual brand, peran warna, skala tipografi, dan bahasa interaksinya. File ini tinggal di repo Anda, diversikan di git, dan ikut berpindah bersama proyek Anda.',
@@ -521,6 +534,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `design system ${name}, DESIGN.md ${name}, design token ${name}, contoh design system, design system open-source`,
   },
   nl: {
+    detailSystemLabel: 'designsysteem',
     systemsMdHead: 'Elk systeem is een DESIGN.md-bestand',
     systemsMdBody: [
       'Elk designsysteem hier is één enkel DESIGN.md — een door mensen en agents leesbare markdown-specificatie die het visuele thema, de kleurrollen, de typografieschaal en de interactietaal van het merk vastlegt. Het leeft in je repo, wordt geversioneerd in git en reist mee met je project.',
@@ -560,6 +574,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} designsysteem, ${name} DESIGN.md, ${name} design-tokens, voorbeeld designsysteem, open-source designsysteem`,
   },
   ar: {
+    detailSystemLabel: 'نظام تصميم',
     systemsMdHead: 'كل نظام هو ملف DESIGN.md',
     systemsMdBody: [
       'كل نظام تصميم هنا هو ملف DESIGN.md واحد — مواصفات بصيغة markdown قابلة للقراءة من البشر والـ agent، تلتقط الطابع البصري للعلامة وأدوار الألوان ومقياس الخطوط ولغة التفاعل. يقيم في مستودعك، ويُدار إصداره عبر git، ويرافق مشروعك أينما ذهب.',
@@ -599,6 +614,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `نظام تصميم ${name}، ${name} DESIGN.md، رموز تصميم ${name}، مثال على نظام تصميم، نظام تصميم مفتوح المصدر`,
   },
   tr: {
+    detailSystemLabel: 'tasarım sistemi',
     systemsMdHead: 'Her sistem bir DESIGN.md dosyasıdır',
     systemsMdBody: [
       'Buradaki her tasarım sistemi tek bir DESIGN.md dosyasıdır — markanın görsel temasını, renk rollerini, tipografi ölçeğini ve etkileşim dilini yakalayan, hem insan hem de agent tarafından okunabilen bir markdown belirtimi. Repo’nuzda yaşar, git ile sürümlenir ve projenizle birlikte taşınır.',
@@ -638,6 +654,7 @@ export const pluginDetailL10n: Partial<
     detailSystemKeywords: (name) => `${name} tasarım sistemi, ${name} DESIGN.md, ${name} tasarım token’ları, tasarım sistemi örneği, açık kaynaklı tasarım sistemi`,
   },
   uk: {
+    detailSystemLabel: 'дизайн-система',
     systemsMdHead: 'Кожна система — це файл DESIGN.md',
     systemsMdBody: [
       'Кожна дизайн-система тут — це єдиний DESIGN.md: зрозуміла людині й агенту markdown-специфікація, що фіксує візуальну тему бренду, ролі кольорів, типографічну шкалу та мову взаємодії. Вона живе у вашому репозиторії, версіонується в git і подорожує разом із вашим проєктом.',
