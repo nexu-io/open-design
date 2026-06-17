@@ -6848,7 +6848,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('tracks display.dev Share menu deploy clicks with the displaydev export format', async () => {
+  it('tracks display.dev deploy results without treating the Share menu click as an export', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -6863,8 +6863,10 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
       if (url === '/api/projects/project-1/deployments') {
         return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
       }
@@ -6872,6 +6874,41 @@ describe('FileViewer SVG artifacts', () => {
         return new Response(JSON.stringify({
           providerId: 'displaydev-self',
           configured: false,
+          tokenMask: '',
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: '',
+          displayDev: {
+            defaultArtifactName: '',
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://public.dsp.so/demo-anon',
+          deploymentCount: 1,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'anonymous',
+            shortId: 'demo-anon',
+            claimUrl: 'https://app.display.dev/claim?code=anon',
+            expiresAt: '2026-06-27T00:00:00.000Z',
+          },
+          createdAt: 1,
+          updatedAt: 2,
         }), { status: 200 });
       }
       return new Response(JSON.stringify({}), { status: 404 });
@@ -6894,21 +6931,32 @@ describe('FileViewer SVG artifacts', () => {
     const shareClickCalls = analyticsTrackMock.mock.calls.filter(([event, props]) => (
       event === 'ui_click'
       && (props as { area?: string }).area === 'share_option_popover'
+      && (props as { element?: string }).element === 'displaydev'
     ));
-    expect(shareClickCalls).toHaveLength(1);
-    expect(shareClickCalls[0]?.[1]).toMatchObject({
-      element: 'displaydev',
+    expect(shareClickCalls).toHaveLength(0);
+    expect(analyticsTrackMock.mock.calls.filter(([event]) => event === 'artifact_export_result')).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /Deploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      fileName: 'index.html',
+    });
+    const deployResultCalls = analyticsTrackMock.mock.calls.filter(([event]) => (
+      event === 'artifact_deploy_result'
+    ));
+    expect(deployResultCalls).toHaveLength(1);
+    expect(deployResultCalls[0]?.[1]).toMatchObject({
+      area: 'deploy_modal',
+      provider: 'displaydev',
+      result: 'success',
+      saved_new_token: false,
+      first_configure: true,
       project_id: 'project-1',
       project_kind: 'prototype',
-    });
-
-    const exportResultCalls = analyticsTrackMock.mock.calls.filter(([event]) => (
-      event === 'artifact_export_result'
-    ));
-    expect(exportResultCalls).toHaveLength(1);
-    expect(exportResultCalls[0]?.[1]).toMatchObject({
-      export_format: 'displaydev',
-      result: 'success',
     });
   });
 
