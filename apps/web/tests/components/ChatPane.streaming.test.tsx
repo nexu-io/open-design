@@ -231,6 +231,57 @@ describe('ChatPane streaming state', () => {
     expect(css).toContain('width: 24px;');
     expect(css).toContain('height: 24px;');
     expect(css).toContain('.chat-queued-send-overflow');
+    expect(css).toContain('.chat-log.is-balanced-transcript > .msg:first-of-type');
+    expect(css).toContain('margin-top: auto;');
+  });
+
+  it('balances finished transcripts near the composer without affecting active turns', () => {
+    const baseProps = {
+      projectKindForTracking: 'prototype' as const,
+      streaming: false,
+      error: null,
+      projectId: 'project-1',
+      projectFiles: [],
+      onEnsureProject: async () => 'project-1',
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      conversations,
+      activeConversationId: 'conv-1',
+      onSelectConversation: vi.fn(),
+      onDeleteConversation: vi.fn(),
+      projectMetadata,
+    };
+    const { container, rerender } = render(
+      <ChatPane
+        {...baseProps}
+        messages={[
+          { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+          { id: 'assistant-1', role: 'assistant', content: 'Done', createdAt: 2 },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.chat-log')?.className).toContain('is-balanced-transcript');
+
+    rerender(
+      <ChatPane
+        {...baseProps}
+        streaming
+        messages={[
+          { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+          { id: 'assistant-1', role: 'assistant', content: 'Done', createdAt: 2 },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: '',
+            createdAt: 3,
+            runStatus: 'running',
+          },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.chat-log')?.className).not.toContain('is-balanced-transcript');
   });
 
   it('keeps composer popovers above the chat jump button', () => {

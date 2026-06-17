@@ -237,6 +237,9 @@
   background: color-mix(in srgb, var(--text-muted) 28%, transparent);
   background-clip: padding-box;
 }
+.chat-log.is-balanced-transcript > .msg:first-of-type {
+  margin-top: auto;
+}
 
 /* Anchor-to-top tail spacer. Height is driven imperatively by ChatPane; the
    negative margin cancels the flex `gap` so it contributes nothing when idle
