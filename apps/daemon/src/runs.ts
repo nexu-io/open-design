@@ -7,6 +7,7 @@ import {
   normalizeRunToolBundleForRun,
   summarizeRunToolBundle,
 } from './run-tool-bundle.js';
+import { projectWorkspaceProvenance } from './workspace-contract.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -53,6 +54,7 @@ export function createChatRunService({
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
           ? meta.projectMetadata
           : null,
+      workspace: projectWorkspaceProvenance(meta.projectMetadata),
       // Plan §3.A1 / spec §11.5. The applied plugin snapshot id pins
       // every prompt fragment and tool gate to a frozen view so replay
       // is byte-equal across plugin upgrades. Runs are in-memory in
@@ -167,6 +169,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     resumable: run.resumable ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
+    workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),

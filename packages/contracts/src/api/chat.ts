@@ -1,4 +1,5 @@
 import type { ProjectFile } from './files';
+import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
   PreviewCommentMember,
@@ -343,7 +344,11 @@ export interface ChatRunStatusResponse {
   toolBundle?: RunScopedToolBundleSummary;
   /** Browser Use availability for runs that requested in-app browser automation. */
   browserUse?: BrowserUseRunState;
+  /** Effective storage/provenance for the workspace used by this run. */
+  workspace?: RunWorkspace;
 }
+
+export type ChatRunResultPackageResponse = RunResultPackageResponse;
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];

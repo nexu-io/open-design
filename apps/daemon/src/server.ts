@@ -16,6 +16,7 @@ import {
   type OpenDesignGithubLatestReleaseResponse,
   type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  RUN_RESULT_PACKAGE_SCHEMA,
 } from '@open-design/contracts';
 import {
   composeSystemPrompt,
@@ -11964,6 +11965,82 @@ export async function startServer({
     /** @type {import('@open-design/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
+  });
+
+  app.get('/api/runs/:id/result-package', async (req, res) => {
+    const run = design.runs.get(req.params.id);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    const status = design.runs.statusBody(run);
+    const project = run.projectId ? getProject(db, run.projectId) : null;
+    let files: any[] = [];
+    if (project) {
+      const packageMetadata = run.projectMetadata ?? null;
+      try {
+        if (status.workspace?.storage?.kind === 'folder-backed') {
+          const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, packageMetadata);
+          const projectRootStat = await fs.promises.stat(projectRoot);
+          if (!projectRootStat.isDirectory()) {
+            throw new Error('workspace root is not a directory');
+          }
+        }
+        files = await listFiles(PROJECTS_DIR, project.id, { metadata: packageMetadata });
+      } catch (err) {
+        return sendApiError(
+          res,
+          500,
+          'WORKSPACE_ENUMERATION_FAILED',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+    const artifacts = files
+      .filter((file) => file?.artifactManifest && typeof file.artifactManifest === 'object')
+      .map((file) => ({
+        file: file.name,
+        kind: typeof file.artifactManifest.kind === 'string'
+          ? file.artifactManifest.kind
+          : file.artifactKind ?? null,
+        renderer: typeof file.artifactManifest.renderer === 'string'
+          ? file.artifactManifest.renderer
+          : null,
+        title: typeof file.artifactManifest.title === 'string'
+          ? file.artifactManifest.title
+          : file.name,
+        status: typeof file.artifactManifest.status === 'string'
+          ? file.artifactManifest.status
+          : null,
+        manifest: file.artifactManifest,
+      }));
+    res.json({
+      schema: RUN_RESULT_PACKAGE_SCHEMA,
+      run: {
+        id: status.id,
+        status: status.status,
+        projectId: status.projectId,
+        conversationId: status.conversationId,
+        assistantMessageId: status.assistantMessageId,
+        agentId: status.agentId,
+        createdAt: status.createdAt,
+        updatedAt: status.updatedAt,
+        cancelRequested: status.cancelRequested,
+        exitCode: status.exitCode,
+        signal: status.signal,
+        error: status.error,
+        errorCode: status.errorCode,
+      },
+      workspace: status.workspace,
+      events: {
+        logPath: status.eventsLogPath,
+      },
+      project: project
+        ? {
+            id: project.id,
+            name: project.name,
+            fileCount: files.length,
+          }
+        : null,
+      artifacts,
+    });
   });
 
   app.get('/api/runs/:id', (req, res) => {
