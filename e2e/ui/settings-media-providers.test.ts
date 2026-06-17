@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import type { Page, Route } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';

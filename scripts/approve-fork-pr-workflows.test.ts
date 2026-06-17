@@ -5,7 +5,6 @@ import test from "node:test";
 import {
   hasPullApprovalStateDrift,
   isAllowedChangedPath,
-  isAllowedVisualCaptureChangedPath,
   isDeniedChangedPath,
   isPendingApprovalRun,
   listPendingApprovalRuns,
@@ -130,23 +129,6 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
   assert.equal(
     isPendingApprovalRun(
       {
-        id: 26273463771,
-        name: "Visual PR Capture",
-        event: "pull_request",
-        status: "completed",
-        conclusion: "action_required",
-        head_sha: "734076155c44e569304856590019cea54506fdab",
-        path: ".github/workflows/visual-pr-capture.yml@main",
-        pull_requests: [],
-      },
-      pull,
-    ),
-    false,
-  );
-
-  assert.equal(
-    isPendingApprovalRun(
-      {
         id: 26273463770,
         name: "Visual PR Comment",
         event: "pull_request",
@@ -158,56 +140,6 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
       },
       pull,
     ),
-    false,
-  );
-});
-
-test("isPendingApprovalRun approves visual capture only for strict web source changes", () => {
-  const pull = {
-    number: 2683,
-    state: "open",
-    changed_files: 1,
-    head: {
-      ref: "fix/button-copy",
-      sha: "734076155c44e569304856590019cea54506fdab",
-      repo: { full_name: "someone/open-design" },
-    },
-    base: {
-      ref: "main",
-      sha: "4cd93a5c7a7b0db1961c854e55f8e0e6b1b45542",
-      repo: { full_name: "nexu-io/open-design" },
-    },
-  };
-  const run = {
-    id: 26273463771,
-    name: "Visual PR Capture",
-    event: "pull_request",
-    status: "completed",
-    conclusion: "action_required",
-    head_sha: "734076155c44e569304856590019cea54506fdab",
-    path: ".github/workflows/visual-pr-capture.yml@main",
-    pull_requests: [],
-  };
-
-  assert.equal(
-    isPendingApprovalRun(run, pull, [
-      { filename: "apps/web/src/components/Button.tsx", status: "modified" },
-      { filename: "apps/web/src/styles/button.css", status: "modified" },
-    ]),
-    true,
-  );
-  assert.equal(
-    isPendingApprovalRun(run, pull, [{ filename: "apps/web/public/logo.png", status: "modified" }]),
-    false,
-  );
-  assert.equal(
-    isPendingApprovalRun(run, pull, [
-      {
-        filename: "apps/web/src/components/Button.tsx",
-        previous_filename: "scripts/build.ts",
-        status: "renamed",
-      },
-    ]),
     false,
   );
 });
@@ -604,7 +536,7 @@ test("listPendingApprovalRuns paginates all pull_request runs for the head SHA a
   );
 });
 
-test("listPendingApprovalRuns applies strict changed-path filtering only to visual capture", async () => {
+test("listPendingApprovalRuns only approves the unified CI workflow", async () => {
   const pull = {
     number: 2683,
     state: "open",
@@ -633,18 +565,6 @@ test("listPendingApprovalRuns applies strict changed-path filtering only to visu
       path: ".github/workflows/ci.yml@main",
       pull_requests: [],
     },
-    {
-      id: 26273463770,
-      name: "Visual PR Capture",
-      event: "pull_request",
-      head_branch: pull.head.ref,
-      head_repository: pull.head.repo,
-      status: "completed",
-      conclusion: "action_required",
-      head_sha: pull.head.sha,
-      path: ".github/workflows/visual-pr-capture.yml@main",
-      pull_requests: [],
-    },
   ];
   const deps = {
     loadWorkflowRunsResponsePage: async () => ({ workflow_runs: workflowRuns }),
@@ -662,7 +582,7 @@ test("listPendingApprovalRuns applies strict changed-path filtering only to visu
       [{ filename: "apps/web/src/components/Button.tsx", status: "modified" }],
       deps,
     )).map((run) => run.id),
-    [26273463769, 26273463770],
+    [26273463769],
   );
 });
 
@@ -731,17 +651,6 @@ test("isAllowedChangedPath allows ordinary app and package source/test paths whi
   assert.equal(isAllowedChangedPath("apps/packaged/vitest.config.ts"), false);
 });
 
-test("isAllowedVisualCaptureChangedPath is limited to web ts tsx and css source", () => {
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/app/page.tsx"), true);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/lib/theme.ts"), true);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/components/Button.css"), true);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/src/assets/icon.svg"), false);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/public/logo.png"), false);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/package.json"), false);
-  assert.equal(isAllowedVisualCaptureChangedPath("apps/web/tests/Button.test.tsx"), false);
-  assert.equal(isAllowedVisualCaptureChangedPath("packages/contracts/src/api.ts"), false);
-});
-
 test("waitForPendingApprovalRuns retries until action_required runs appear and keeps polling through the retry window", async () => {
   const run = {
     id: 26273463769,
@@ -783,23 +692,23 @@ test("waitForPendingApprovalRuns keeps polling and returns the latest eligible r
     path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
-  const visualRun = {
+  const laterCiRun = {
     id: 26273463770,
-    name: "Visual PR Verify",
+    name: "CI",
     event: "pull_request",
     status: "completed",
     conclusion: "action_required",
     head_sha: "734076155c44e569304856590019cea54506fdab",
-    path: ".github/workflows/visual-pr-verify.yml@main",
+    path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
 
-  const batches = [[ciRun], [ciRun], [ciRun, visualRun], [ciRun, visualRun]];
+  const batches = [[ciRun], [ciRun], [ciRun, laterCiRun], [ciRun, laterCiRun]];
   const sleeps: number[] = [];
   let now = 0;
 
   const pendingRuns = await waitForPendingApprovalRuns(
-    async () => batches.shift() ?? [ciRun, visualRun],
+    async () => batches.shift() ?? [ciRun, laterCiRun],
     async (ms) => {
       sleeps.push(ms);
       now += ms;
@@ -808,7 +717,7 @@ test("waitForPendingApprovalRuns keeps polling and returns the latest eligible r
     { settlingWindowMs: 9_000 },
   );
 
-  assert.deepEqual(pendingRuns, [ciRun, visualRun]);
+  assert.deepEqual(pendingRuns, [ciRun, laterCiRun]);
   assert.deepEqual(sleeps, [3000, 3000, 3000, 3000, 3000]);
 });
 
@@ -826,8 +735,8 @@ test("waitForPendingApprovalRuns drops runs that disappear in later polls", asyn
   const survivingRun = {
     ...staleRun,
     id: 26273463770,
-    name: "Visual PR Verify",
-    path: ".github/workflows/visual-pr-verify.yml@main",
+    name: "CI",
+    path: ".github/workflows/ci.yml@main",
   };
 
   const batches = [[staleRun], [staleRun, survivingRun], [survivingRun], [survivingRun]];
@@ -856,23 +765,23 @@ test("waitForPendingApprovalRuns keeps polling until the run set is stable, even
     path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
-  const visualRun = {
+  const laterCiRun = {
     id: 26273463770,
-    name: "Visual PR Verify",
+    name: "CI",
     event: "pull_request",
     status: "completed",
     conclusion: "action_required",
     head_sha: "734076155c44e569304856590019cea54506fdab",
-    path: ".github/workflows/visual-pr-verify.yml@main",
+    path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
 
-  const batches = [[ciRun], [ciRun], [ciRun], [ciRun], [ciRun], [ciRun, visualRun], [ciRun, visualRun]];
+  const batches = [[ciRun], [ciRun], [ciRun], [ciRun], [ciRun], [ciRun, laterCiRun], [ciRun, laterCiRun]];
   const sleeps: number[] = [];
   let now = 0;
 
   const pendingRuns = await waitForPendingApprovalRuns(
-    async () => batches.shift() ?? [ciRun, visualRun],
+    async () => batches.shift() ?? [ciRun, laterCiRun],
     async (ms) => {
       sleeps.push(ms);
       now += ms;
@@ -884,7 +793,7 @@ test("waitForPendingApprovalRuns keeps polling until the run set is stable, even
     },
   );
 
-  assert.deepEqual(pendingRuns, [ciRun, visualRun]);
+  assert.deepEqual(pendingRuns, [ciRun, laterCiRun]);
   assert.equal(sleeps.length, 10);
 });
 
@@ -899,23 +808,23 @@ test("waitForPendingApprovalRuns gives late first appearances their own full set
     path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
-  const visualRun = {
+  const laterCiRun = {
     id: 26273463770,
-    name: "Visual PR Verify",
+    name: "CI",
     event: "pull_request",
     status: "completed",
     conclusion: "action_required",
     head_sha: "734076155c44e569304856590019cea54506fdab",
-    path: ".github/workflows/visual-pr-verify.yml@main",
+    path: ".github/workflows/ci.yml@main",
     pull_requests: [],
   };
 
-  const batches = [[], [], [], [ciRun], [ciRun], [ciRun, visualRun], [ciRun, visualRun], [ciRun, visualRun]];
+  const batches = [[], [], [], [ciRun], [ciRun], [ciRun, laterCiRun], [ciRun, laterCiRun], [ciRun, laterCiRun]];
   const sleeps: number[] = [];
   let now = 0;
 
   const pendingRuns = await waitForPendingApprovalRuns(
-    async () => batches.shift() ?? [ciRun, visualRun],
+    async () => batches.shift() ?? [ciRun, laterCiRun],
     async (ms) => {
       sleeps.push(ms);
       now += ms;
@@ -927,7 +836,7 @@ test("waitForPendingApprovalRuns gives late first appearances their own full set
     },
   );
 
-  assert.deepEqual(pendingRuns, [ciRun, visualRun]);
+  assert.deepEqual(pendingRuns, [ciRun, laterCiRun]);
   assert.deepEqual(sleeps, [3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000]);
 });
 

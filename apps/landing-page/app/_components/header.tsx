@@ -508,6 +508,7 @@ export function Header({
             title={headerCopy.downloadTitle}
             data-download-cta
             data-download-page
+            data-download-placement='nav'
           >
             {headerCopy.download}
           </a>

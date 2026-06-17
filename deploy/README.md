@@ -25,9 +25,12 @@ Before starting:
 Then pull and start the service:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose pull
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design:latest docker compose up -d --no-build
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose pull
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 ```
+
+Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
+`ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
 Defaults:
 
@@ -54,7 +57,7 @@ OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 dock
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash
-OPEN_DESIGN_IMAGE=docker.io/vanjayak/open-design@sha256:<digest> docker compose up -d --no-build
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od@sha256:<digest> docker compose up -d --no-build
 ```
 The image intentionally does not bundle Claude/Codex/Gemini CLI binaries. Keep
 those outside the image, or build a separate private runtime layer if a server
@@ -74,7 +77,7 @@ without the workspace-write sandbox, which is useful when the container host
 blocks unprivileged user namespaces, but it gives the Codex process broader
 filesystem access inside the container.
 
-## Publish to Docker Hub
+## Manual image publish override
 
 ```bash
 deploy/scripts/publish-images.sh --image_tag latest
@@ -83,15 +86,15 @@ deploy/scripts/publish-images.sh --image_tag latest
 Useful overrides:
 
 ```bash
-IMAGE_NAMESPACE=your-dockerhub-user deploy/scripts/publish-images.sh --arch arm64
-deploy/scripts/publish-images.sh --image docker.io/your-user/open-design:0.1.0
+IMAGE_NAMESPACE=your-ghcr-org deploy/scripts/publish-images.sh --arch arm64
+deploy/scripts/publish-images.sh --image ghcr.io/your-org/od:0.1.0
 ```
 
 The script defaults to:
 
-- `docker.io/vanjayak/open-design:<tag>`
+- `ghcr.io/nexu-io/od:<tag>`
 - `linux/amd64,linux/arm64`
-- `skopeo` push strategy with Docker credentials read from `~/.docker/config.json`
+- `skopeo` push strategy with registry credentials read from `~/.docker/config.json`
 - preloading base images through `skopeo` to reduce Docker Hub pull flakiness
 
 If `127.0.0.1:7890` is available and no proxy is already set, the script uses it

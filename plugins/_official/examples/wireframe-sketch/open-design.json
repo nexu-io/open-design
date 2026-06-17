@@ -24,7 +24,7 @@
     "en": "Wireframe Sketch"
   },
   "version": "0.1.0",
-  "description": "A hand-drawn wireframe exploration — graph-paper background, marker /\npencil tone, multiple tab labels for variants, sticky-note annotations,\nscribbled chart placeholders, hatched fills. Reads like a designer's\nwhiteboard before any pixels are committed. Use when the brief asks for\n\"wireframe\", \"sketch wireframe\", \"hand-drawn\", \"lo-fi\", \"whiteboard\",\n\"草稿\", or \"手绘原型\".",
+  "description": "A hand-drawn wireframe exploration — graph-paper background, marker / pencil tone, multiple tab labels for variants, sticky-note annotations, scribbled chart placeholders, hatched fills. Reads like a designer's whiteboard before any pixels are committed. Use when the brief asks for \"wireframe\", \"sketch wireframe\", \"hand-drawn\", \"lo-fi\", \"whiteboard\", \"草稿\", or \"手绘原型\".",
   "description_i18n": {
     "zh-CN": "手绘风格的线框图，包含方格纸背景、马克笔/铅笔质感、多标签页变体、便签注释、图表占位符和阴影填充。适用于「线框图」「草图线框」「手绘」「低保真」「白板」「草稿」「手绘原型」等需求。",
     "zh-TW": "手繪風格的線框圖，包含方格紙背景、麥克筆/鉛筆質感、多標籤頁變體、便利貼註解、圖表佔位符和陰影填充。適用於「線框圖」「草圖線框」「手繪」「低保真」「白板」「草稿」「手繪原型」等需求。",
@@ -43,7 +43,7 @@
     "ar": "إطار سلكي مرسوم يدويًا مع خلفية ورق رسم بياني، نغمة قلم تحديد/رصاص، علامات تبويب متعددة، ملاحظات لاصقة وعناصر نائبة للمخططات. مثالي لطلبات wireframe أو sketch أو lo-fi أو السبورة البيضاء.",
     "tr": "Elle çizilmiş wireframe: kareli kağıt arka plan, kalem/işaretleyici ton, çoklu sekme etiketleri, yapışkan not açıklamaları ve taslak grafik yer tutucular. Wireframe, sketch, lo-fi veya beyaz tahta talepleri için ideal.",
     "uk": "Вайрфрейм у стилі ручного начерку: фон у клітинку, текстура маркера/олівця, варіанти вкладок, стікери із замітками та заштриховані заповнення. Підходить для запитів «вайрфрейм», «ескіз», «lo-fi», «дошка».",
-    "en": "A hand-drawn wireframe exploration — graph-paper background, marker /\npencil tone, multiple tab labels for variants, sticky-note annotations,\nscribbled chart placeholders, hatched fills. Reads like a designer's\nwhiteboard before any pixels are committed. Use when the brief asks for\n\"wireframe\", \"sketch wireframe\", \"hand-drawn\", \"lo-fi\", \"whiteboard\",\n\"草稿\", or \"手绘原型\"."
+    "en": "A hand-drawn wireframe exploration — graph-paper background, marker / pencil tone, multiple tab labels for variants, sticky-note annotations, scribbled chart placeholders, hatched fills. Reads like a designer's whiteboard before any pixels are committed. Use when the brief asks for \"wireframe\", \"sketch wireframe\", \"hand-drawn\", \"lo-fi\", \"whiteboard\", \"草稿\", or \"手绘原型\"."
   },
   "license": "MIT",
   "author": {

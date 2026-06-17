@@ -242,6 +242,75 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('summarizes OD-owned project storage on run status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+
+    expect(runs.statusBody(run).workspace).toEqual({
+      storage: {
+        kind: 'od-owned',
+        baseDir: null,
+      },
+      provenance: null,
+    });
+  });
+
+  it('summarizes user-local folder provenance on run status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-a',
+      projectMetadata: {
+        importedFrom: 'folder',
+        baseDir: '/Users/alice/site',
+      },
+    });
+
+    expect(runs.statusBody(run).workspace).toEqual({
+      storage: {
+        kind: 'folder-backed',
+        baseDir: '/Users/alice/site',
+      },
+      provenance: {
+        kind: 'user-local',
+        writeback: 'in-place',
+      },
+    });
+  });
+
+  it('summarizes orchestrator scratch workspace provenance on run status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-a',
+      projectMetadata: {
+        importedFrom: 'folder',
+        baseDir: '/tmp/od-scratch',
+        orchestratorWorkspace: {
+          kind: 'scratch',
+          sourceLabel: 'checkout:main',
+          sourceRef: 'main@abc123',
+          baseRevision: 'abc123',
+          writeback: 'external',
+        },
+      },
+    });
+
+    expect(runs.statusBody(run).workspace).toEqual({
+      storage: {
+        kind: 'folder-backed',
+        baseDir: '/tmp/od-scratch',
+      },
+      provenance: {
+        kind: 'orchestrator-scratch',
+        sourceLabel: 'checkout:main',
+        sourceRef: 'main@abc123',
+        baseRevision: 'abc123',
+        writeback: 'external',
+      },
+    });
+  });
+
   it('stores a run-scoped tool bundle and returns a redacted status summary', () => {
     const runs = createRuns();
     const run = runs.create({

@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vellum Presentation</title>
+    <title>Open Design · Vellum</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,300;1,400;1,500;1,600&family=DM+Sans:wght@300;400;500&family=Courier+Prime:wght@400;700&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,400;1,500&family=DM+Sans:wght@400&family=Courier+Prime:wght@400&display=swap"
       rel="stylesheet"
     />
 
@@ -29,14 +29,18 @@
         --c-bg-light-alt: #343f80;
 
         --c-fg: #E8D85C;       /* warm yellow type — every slide       */
-        --c-fg-2: rgba(232, 216, 92, 0.62);
-        --c-fg-3: rgba(232, 216, 92, 0.32);
+        --c-fg-2: rgba(232, 216, 92, 0.78);
+        /* fg-3 floor: 0.72 keeps small mono labels (chart axis, placeholders)
+           at >= 4.5:1 against the navy field; 0.55 fell below AA. */
+        --c-fg-3: rgba(232, 216, 92, 0.72);
         --c-fg-light: #E8D85C; /* alias                                */
-        --c-fg-light-2: rgba(232, 216, 92, 0.62);
-        --c-fg-light-3: rgba(232, 216, 92, 0.32);
+        --c-fg-light-2: rgba(232, 216, 92, 0.78);
+        --c-fg-light-3: rgba(232, 216, 92, 0.72);
 
-        --c-accent: #3a7878;       /* dusty teal — only used on the large quote-mark glyph */
-        --c-emphasis: #F5E168;     /* brighter yellow — used for <em> emphasis and small accent text */
+        --c-accent: #cfc05a;       /* deeper chartreuse for annotations, kickers, quote glyph.
+                                      Vellum is strictly duotone: navy field + chartreuse type.
+                                      No third hue; hierarchy comes from value, not color. */
+        --c-emphasis: #F8EC79;     /* brighter yellow, used for <em> emphasis and small accent text */
         --c-border: rgba(232, 216, 92, 0.20);
         --c-border-light: rgba(232, 216, 92, 0.20);
 
@@ -53,14 +57,16 @@
         --f-annotation: "Courier Prime", "Courier New", monospace;
 
         /* ── Type Scale ──────────────────────────────────────────────────── */
+        /* vw-driven scale with px floors so mono labels and body copy never
+           collapse below legibility in narrow preview panes */
         --sz-display: 11vw;
         --sz-h1: 7vw;
         --sz-h2: 4vw;
-        --sz-h3: 2.4vw;
-        --sz-lead: 1.5vw;
-        --sz-body: 1.05vw;
-        --sz-caption: 0.85vw;
-        --sz-label: 0.72vw;
+        --sz-h3: max(20px, 2.4vw);
+        --sz-lead: max(17px, 1.5vw);
+        --sz-body: max(14px, 1.05vw);
+        --sz-caption: max(12px, 0.85vw);
+        --sz-label: max(11px, 0.72vw);
 
         /* ── Spacing — generous, the field breathes ─────────────────────── */
         --pad-x: 6vw;
@@ -69,11 +75,11 @@
         --gap-md: 3vh;
         --gap-sm: 1.5vh;
 
-        /* ── Motion: zero ────────────────────────────────────────────────── */
+        /* ── Motion: instant slide change, soft content settle ───────────── */
         --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
         --dur-slide: 0s;
         --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
-        --dur-enter: 0s;
+        --dur-enter: 0.6s;
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -153,7 +159,7 @@
         height: 5px;
         border-radius: 50%;
         border: none;
-        background: rgba(255, 255, 255, 0.22);
+        background: rgba(232, 216, 92, 0.28);
         cursor: pointer;
         transition:
           background 0.3s,
@@ -161,7 +167,7 @@
         padding: 0;
       }
       .nav-dot.is-active {
-        background: rgba(255, 255, 255, 0.8);
+        background: rgba(232, 216, 92, 0.9);
         transform: scale(1.4);
       }
 
@@ -172,9 +178,50 @@
         font-family: var(--f-mono);
         font-size: 10px;
         letter-spacing: 0.12em;
-        color: rgba(255, 255, 255, 0.25);
+        color: rgba(232, 216, 92, 0.72);
         z-index: 100;
         user-select: none;
+      }
+
+      /* ── Entrance: active slide content settles in (transform + opacity only) ── */
+      @keyframes vellum-rise {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .slide.is-active .slide-body,
+      .slide.is-active .cover-title,
+      .slide.is-active .end-body,
+      .slide.is-active .quote-mark,
+      .slide.is-active .quote-text,
+      .slide.is-active .quote-attr {
+        animation: vellum-rise var(--dur-enter) var(--ease-enter) both;
+      }
+      .slide.is-active .quote-text,
+      .slide.is-active .quote-attr {
+        animation-delay: 0.07s;
+      }
+      .slide.is-active .quote-attr {
+        animation-delay: 0.14s;
+      }
+      .slide.is-active .pin-annotation {
+        animation: vellum-rise var(--dur-enter) var(--ease-enter) 0.18s both;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .slide.is-active .slide-body,
+        .slide.is-active .cover-title,
+        .slide.is-active .end-body,
+        .slide.is-active .quote-mark,
+        .slide.is-active .quote-text,
+        .slide.is-active .quote-attr,
+        .slide.is-active .pin-annotation {
+          animation: none;
+        }
       }
 
       /* ╔══════════════════════════════════════════════════════════════════════╗
@@ -219,7 +266,9 @@
       /* Roman (non-italic) for emphasis within italic headlines */
       .h1 em,
       .h2 em,
-      .display em {
+      .h3 em,
+      .display em,
+      .quote-text em {
         font-style: normal;
         font-weight: 600;
         color: var(--c-emphasis);
@@ -258,7 +307,8 @@
         color: var(--c-fg-2);
       }
       /* .accent: small text emphasis. Uses brighter yellow for legibility.
-         The teal --c-accent is reserved for large graphic marks (quote-mark). */
+         The deeper chartreuse --c-accent is reserved for kickers, counters,
+         and large graphic marks (quote-mark). */
       .accent {
         color: var(--c-emphasis);
       }
@@ -269,8 +319,8 @@
       /* Annotation: the handwriting font — only used for .pin-note */
       .pin-note {
         font-family: var(--f-annotation);
-        font-size: 1.15vw;
-        font-weight: 500;
+        font-size: max(13px, 1.05vw);
+        font-weight: 400;
         line-height: 1.5;
         color: var(--c-accent);
         letter-spacing: 0.01em;
@@ -298,7 +348,8 @@
         gap: 0.5em;
       }
       .bullet-list li::before {
-        content: counter(list-counter);
+        /* Leading-zero counters read as typed manuscript folios */
+        content: counter(list-counter, decimal-leading-zero);
         counter-increment: list-counter;
         font-family: var(--f-mono);
         font-size: var(--sz-label);
@@ -313,20 +364,10 @@
    ║  Bottom-left .pin-annotation on every slide. No containers.          ║
    ╚══════════════════════════════════════════════════════════════════════╝ */
 
-      /* ── Slide themes ────────────────────────────────────────────────── */
-      .slide.dark {
-        background: var(--c-bg);
-        color: var(--c-fg);
-      }
-      /* Vellum: every slide uses the navy + chartreuse aesthetic.
-         The .light class is preserved for backwards compatibility but
-         renders identically to .dark — no inverted theme. */
-      .slide.light {
-        background: var(--c-bg);
-        color: var(--c-fg);
-      }
+      /* Slide themes are defined once in Zone B; both .dark and .light
+         resolve to the same navy + chartreuse field. */
 
-      /* Chrome + foot — minimal, type-only, no strong borders */
+      /* Chrome + foot: minimal, type-only, no strong borders */
       .slide-chrome,
       .slide-foot {
         display: flex;
@@ -338,6 +379,10 @@
         border-bottom: 1px solid var(--c-border);
         margin-bottom: var(--gap-md);
       }
+      /* Chrome labels recede; the slide body carries the voice */
+      .slide-chrome .label {
+        color: var(--c-fg-2);
+      }
       .slide-foot {
         padding-top: var(--gap-sm);
         border-top: 1px solid var(--c-border);
@@ -346,6 +391,19 @@
       .light .slide-chrome,
       .light .slide-foot {
         border-color: var(--c-border-light);
+      }
+      /* Flex-centered slide patterns pull the chrome out of the top row and
+         collapse its width, which concatenates the two labels. Pin the chrome
+         back to the top of the padding box so space-between works and the
+         hairline spans the full text column, matching the grid-based slides. */
+      .slide--stats .slide-chrome,
+      .slide--list .slide-chrome,
+      .slide--chart .slide-chrome {
+        position: absolute;
+        top: var(--pad-y);
+        left: var(--pad-x);
+        right: var(--pad-x);
+        margin-bottom: 0;
       }
 
       /* Kicker + rule */
@@ -390,9 +448,12 @@
         left: var(--pad-x);
         display: flex;
         flex-direction: column;
+        align-items: flex-start;
         gap: 0.3vh;
         z-index: 10;
         max-width: 22vw;
+        /* Typed notes rag left even on centered slides */
+        text-align: left;
       }
 
       /* ── 1. COVER — centered float on the chromatic field ────────────── */
@@ -507,6 +568,12 @@
         font-style: italic;
         line-height: 1;
         letter-spacing: -0.02em;
+      }
+      /* Roman emphasis inside stat values, consistent with .display em */
+      .pin-stat-val em {
+        font-style: normal;
+        font-weight: 600;
+        color: var(--c-emphasis);
       }
       .pin-stat-label {
         font-family: var(--f-mono);
@@ -644,8 +711,12 @@
       }
       .chart-header {
         display: flex;
-        justify-content: space-between;
-        align-items: baseline;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        margin-bottom: var(--gap-md);
+      }
+      .chart-header .label {
+        color: var(--c-fg-2);
       }
       .chart-wrapper {
         flex: 1;
@@ -674,15 +745,19 @@
         gap: 1vh;
         height: 100%;
       }
+      /* Vellum bars: ruled outlines, like manuscript line work. Only the
+         final value gets a solid chartreuse fill. */
       .bar-fill {
         width: 100%;
-        background: var(--c-fg-3);
+        background: transparent;
+        border: 1px solid rgba(232, 216, 92, 0.5);
       }
       .bar-fill.accent {
         background: var(--c-fg);
+        border-color: var(--c-fg);
       }
       .light .bar-fill {
-        background: var(--c-fg-light-3);
+        background: transparent;
       }
       .light .bar-fill.accent {
         background: var(--c-fg-light);
@@ -698,12 +773,12 @@
       }
       .bar-val {
         font-family: var(--f-annotation);
-        font-size: 1.1vw;
+        font-size: max(13px, 1.1vw);
         color: var(--c-fg-2);
       }
       .bar-val.hi {
         color: var(--c-fg);
-        font-size: 1.15vw;
+        font-size: max(13px, 1.15vw);
       }
       .light .bar-val {
         color: var(--c-fg-light-2);
@@ -742,16 +817,16 @@
       <!-- ═══ SLIDE 01 · COVER ═══════════════════════════════════════════ -->
       <section class="slide light slide--cover" data-slide="1" style="position: relative">
         <div class="cover-title">
-          <span class="kicker">Essay 01 · 2026</span>
-          <h1 class="display">On <em>Restraint</em></h1>
+          <span class="kicker">Apache-2.0 · Runs Locally · BYOK</span>
+          <h1 class="display">Open <em>Design</em></h1>
           <p class="lead" style="max-width: 70%; text-align: center; color: var(--c-fg-2)">
-            Field notes on the discipline of less, written for designers who already know how to add.
+            The open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — on your own machine.
           </p>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">01 / 09</span>
-          <span class="pin-note">The Quiet Studio.</span>
-          <span class="pin-note">Edition One.</span>
+          <span class="pin-note">Open Design.</span>
+          <span class="pin-note">github.com/nexu-io/open-design</span>
         </div>
       </section>
 
@@ -760,34 +835,34 @@
         <div class="slide-body">
           <span class="kicker">[The Argument]</span>
           <h1 class="h1">
-            Most design problems<br />are <em>removed</em>, not solved.
+            Frontier AI design,<br />back on every creator's <em>desk</em>.
           </h1>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">02 / 09</span>
-          <span class="pin-note">Bold claim.</span>
-          <span class="pin-note">Stand by it.</span>
+          <span class="pin-note">Open. Local.</span>
+          <span class="pin-note">Agent-native.</span>
         </div>
       </section>
 
       <!-- ═══ SLIDE 03 · OBSERVATION (full text, no image) ═══════════════ -->
       <section class="slide light slide--text" data-slide="3" style="position: relative">
         <header class="slide-chrome">
-          <span class="label">[Field Note 03]</span>
+          <span class="label">[Why Open Design]</span>
           <span class="label">03</span>
         </header>
         <div class="slide-body" style="display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--gap-md); text-align: center; padding: 0 8vw">
-          <span class="kicker">Observation</span>
+          <span class="kicker">The Problem</span>
           <h2 class="h2">
-            What you <em>remove</em> is louder<br />than what you keep.
+            AI proved it can <em>design</em>.<br />Then it locked the door.
           </h2>
           <p class="lead" style="max-width: 64ch; color: var(--c-fg-2)">
-            Subtraction creates the figure. Addition only fills the ground. Working drafts always carry more than they need; the work of editing is mostly the work of cutting.
+            In April 2026, Claude Design proved an LLM can truly design — real artifacts, not essays about design. Yet it is closed-source, paid, and cloud-only: one model, no agent choice, no self-hosting, no BYOK. Open Design sets that capability free.
           </p>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">03 / 09</span>
-          <span class="pin-note">Show, don't tell.</span>
+          <span class="pin-note">Open the door.</span>
         </div>
       </section>
 
@@ -799,27 +874,27 @@
         </header>
         <div class="slide-body">
           <h2 class="h2" style="text-align: center">
-            Three findings from a year of <em>editing</em>.
+            Three numbers from an open <em>community</em>.
           </h2>
           <div class="stats-row">
             <div class="pin-stat">
-              <div class="pin-stat-val">73<em>%</em></div>
-              <div class="pin-stat-label">of choices in early drafts are removed before publication</div>
+              <div class="pin-stat-val">60K<em>+</em></div>
+              <div class="pin-stat-label">GitHub stars — open source under Apache-2.0</div>
             </div>
             <div class="pin-stat">
-              <div class="pin-stat-val">1.4<em>×</em></div>
-              <div class="pin-stat-label">time spent removing vs. adding material in mature work</div>
+              <div class="pin-stat-val">300<em>+</em></div>
+              <div class="pin-stat-label">contributors building the platform together</div>
             </div>
             <div class="pin-stat">
-              <div class="pin-stat-val">#<em>1</em></div>
-              <div class="pin-stat-label">predictor of perceived quality is amount of white space (n=412)</div>
+              <div class="pin-stat-val">217<em>+</em></div>
+              <div class="pin-stat-label">plugins for prototypes, slides, posters, and dashboards</div>
             </div>
           </div>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">04 / 09</span>
-          <span class="pin-note">Three facts.</span>
-          <span class="pin-note">One argument.</span>
+          <span class="pin-note">Three numbers.</span>
+          <span class="pin-note">One community.</span>
         </div>
       </section>
 
@@ -831,42 +906,43 @@
         </header>
         <div class="slide-body">
           <div class="list-header">
-            <span class="kicker">[Why It Matters]</span>
+            <span class="kicker">[Workflow]</span>
             <h2 class="h2">
-              Four rules that <em>hold</em>.
+              From idea to delivery in five <em>steps</em>.
             </h2>
           </div>
           <div class="list-items">
             <ul class="bullet-list">
-              <li>One accent color per spread. Never two.</li>
-              <li>Body text obeys the grid. Display is allowed to break it.</li>
-              <li>White space is a choice, not a default.</li>
-              <li>Reduce until removal hurts. Stop one step before that.</li>
+              <li>Pick a starting point — one sentence, a template, or a plugin.</li>
+              <li>Set the visual direction; palette, type, and spacing flow in.</li>
+              <li>The agent generates real runnable files, previewed in a sandbox.</li>
+              <li>Hand off to engineering, or film it with HyperFrames.</li>
+              <li>Every choice becomes memory for the next run.</li>
             </ul>
           </div>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">05 / 09</span>
-          <span class="pin-note">Four rules.</span>
-          <span class="pin-note">No exceptions.</span>
+          <span class="pin-note">Five steps.</span>
+          <span class="pin-note">Memory compounds.</span>
         </div>
       </section>
 
       <!-- ═══ SLIDE 06 · QUOTE (chromeless, the big quote) ═══════════════ -->
       <section class="slide dark slide--quote" data-slide="6" style="position: relative">
-        <div class="quote-mark">"</div>
+        <div class="quote-mark" aria-hidden="true">&#8220;</div>
         <div class="quote-text">
-          Design is a plan for arranging elements<br />
-          to accomplish a particular <em>purpose</em>.
+          File-system semantics plus git-diffable artifacts —<br />
+          design is finally under version <em>control</em>.
         </div>
         <div class="quote-attr">
-          <span class="label accent">Charles Eames</span>
-          <span class="label" style="color: var(--c-fg-2)">Designer · 1972</span>
+          <span class="label accent">Indie developer</span>
+          <span class="label" style="color: var(--c-fg-2)">Open Design community</span>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">06 / 09</span>
-          <span class="pin-note">Eames said it.</span>
-          <span class="pin-note">Still true.</span>
+          <span class="pin-note">Diff the design.</span>
+          <span class="pin-note">Commit the taste.</span>
         </div>
       </section>
 
@@ -875,33 +951,33 @@
         <div class="slide-body">
           <div class="compare-panel left">
             <span class="compare-label" style="color: var(--c-fg-2)">Before</span>
-            <h3 class="h3">The <em>unfocused</em> draft</h3>
+            <h3 class="h3">The <em>closed</em> cloud</h3>
             <p class="lead" style="color: var(--c-fg-2)">
-              Three points compete for the title slot. Two accent colors. The body copy is two paragraphs and ends mid-thought.
+              One vendor, one model, one bill. Your designs live on someone else's servers, and the workflow ends where the subscription does.
             </p>
             <ul class="bullet-list" style="--sz-lead: var(--sz-body)">
-              <li>Three claims, none load-bearing</li>
-              <li>Twin accents pull the eye apart</li>
-              <li>Body unedited; reader does the work</li>
+              <li>Locked to a single model</li>
+              <li>No agent choice, no BYOK</li>
+              <li>No self-hosting; cloud-only</li>
             </ul>
           </div>
           <div class="compare-panel right">
             <span class="compare-label" style="color: var(--c-fg-2)">After</span>
-            <h3 class="h3">The <em>edited</em> piece</h3>
+            <h3 class="h3">The <em>open</em> desk</h3>
             <p class="lead" style="color: var(--c-fg-2)">
-              One claim takes the title. One accent does the work. The paragraph ends where the thought ends.
+              Open Design runs on your machine. Your agents, your keys, your files — and every choice becomes memory for the next run.
             </p>
             <ul class="bullet-list" style="--sz-lead: var(--sz-body)">
-              <li>One claim, fully argued</li>
-              <li>One accent, used once</li>
-              <li>Body cut to the bone</li>
+              <li>21 coding agents, zero config</li>
+              <li>Full-stack BYOK, your providers</li>
+              <li>Apache-2.0 — fork and self-host</li>
             </ul>
           </div>
         </div>
         <div class="pin-annotation" style="bottom: calc(var(--pad-y) * 0.9); left: var(--pad-x); z-index: 5">
           <span class="pin-note">07 / 09</span>
           <span class="pin-note">Two states.</span>
-          <span class="pin-note">Same essay.</span>
+          <span class="pin-note">Same capability.</span>
         </div>
       </section>
 
@@ -913,35 +989,35 @@
         </header>
         <div class="slide-body">
           <div class="chart-header">
-            <h2 class="h2">How drafts <em>shrink</em> during editing.</h2>
-            <span class="label">Word count, indexed (start = 100)</span>
+            <h2 class="h2">How the monthly bill <em>shrinks</em>.</h2>
+            <span class="label">Monthly cost, indexed (Claude Design = 100)</span>
           </div>
           <div class="chart-wrapper">
             <div class="bar-track">
               <div class="bar-col">
                 <span class="bar-val hi">100</span>
                 <div class="bar-fill" style="height: 100%"></div>
-                <span class="bar-x-label">Draft</span>
+                <span class="bar-x-label">Claude Design</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">92</span>
-                <div class="bar-fill" style="height: 92%"></div>
-                <span class="bar-x-label">First read</span>
+                <span class="bar-val">82</span>
+                <div class="bar-fill" style="height: 82%"></div>
+                <span class="bar-x-label">Month 1</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">78</span>
-                <div class="bar-fill" style="height: 78%"></div>
-                <span class="bar-x-label">Second read</span>
+                <span class="bar-val">54</span>
+                <div class="bar-fill" style="height: 54%"></div>
+                <span class="bar-x-label">Month 2</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val">65</span>
-                <div class="bar-fill" style="height: 65%"></div>
-                <span class="bar-x-label">Peer review</span>
+                <span class="bar-val">31</span>
+                <div class="bar-fill" style="height: 31%"></div>
+                <span class="bar-x-label">Month 3</span>
               </div>
               <div class="bar-col">
-                <span class="bar-val hi">58</span>
-                <div class="bar-fill accent" style="height: 58%"></div>
-                <span class="bar-x-label">Final</span>
+                <span class="bar-val hi">15</span>
+                <div class="bar-fill accent" style="height: 15%"></div>
+                <span class="bar-x-label">Open Design</span>
               </div>
             </div>
             <div class="chart-baseline"></div>
@@ -949,26 +1025,26 @@
         </div>
         <div class="pin-annotation">
           <span class="pin-note">08 / 09</span>
-          <span class="pin-note">Internal study, 2026.</span>
-          <span class="pin-note">n = 412.</span>
+          <span class="pin-note">$500 → ~$73 / mo.</span>
+          <span class="pin-note">Demo data, BYOK.</span>
         </div>
       </section>
 
       <!-- ═══ SLIDE 09 · END (closing thought) ═══════════════════════════ -->
       <section class="slide light slide--end" data-slide="9" style="position: relative">
         <div class="end-body">
-          <span class="kicker">[End notes]</span>
+          <span class="kicker">Open · Local · Agent-native</span>
           <h1 class="h1">
-            Edit until it stops<br />looking <em>edited</em>.
+            Frontier AI design, back on<br />every creator's <em>desk</em>.
           </h1>
           <p class="lead" style="color: var(--c-fg-2); max-width: 56ch">
-            Thank you for reading. Comments, corrections, or quiet disagreement welcome at <span style="color: var(--c-emphasis)">notes@quiet-studio.com</span>.
+            Download Open Design for macOS / Windows, or star it on GitHub: <span style="color: var(--c-emphasis)">github.com/nexu-io/open-design</span>.
           </p>
         </div>
         <div class="pin-annotation">
           <span class="pin-note">09 / 09</span>
-          <span class="pin-note">The Quiet Studio.</span>
-          <span class="pin-note">Set in Cormorant + DM Sans.</span>
+          <span class="pin-note">discord.gg/qhbcCH8Am4</span>
+          <span class="pin-note">x.com/nexudotio</span>
         </div>
       </section>
     </div>

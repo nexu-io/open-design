@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '../lib/playwright/mock-factory.js';

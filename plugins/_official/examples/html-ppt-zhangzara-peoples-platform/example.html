@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Block &amp; Bold — Presentation Template</title>
+<title>Open Design — The Open-Source Design Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Archivo+Narrow:wght@400;500;600;700&family=Caveat+Brush&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -136,14 +136,14 @@
     color:var(--red); margin-bottom:48px;
   }
   .s-manifesto h1{
-    margin:0; font-family:'Alfa Slab One', serif; line-height:1.04;
-    font-size:108px; letter-spacing:.005em; text-transform:uppercase;
-    color:var(--blue);
+    margin:0; font-family:'Alfa Slab One', serif; line-height:1.06;
+    font-size:96px; letter-spacing:.005em; text-transform:uppercase;
+    color:var(--blue); max-width:1560px; text-wrap:balance;
   }
   .s-manifesto h1 .y{ color:var(--orange); text-shadow: 5px 5px 0 var(--red);}
   .s-manifesto h1 .scriptline{
     display:inline-block; font-family:'Caveat Brush', cursive; color:var(--red);
-    font-size:104px; transform:rotate(-2deg); margin: 0 14px;
+    font-size:96px; transform:rotate(-2deg); margin: 0 14px;
     text-transform:lowercase;
   }
   .s-manifesto .underline{
@@ -215,8 +215,10 @@
     font-family:'DM Mono', monospace; letter-spacing:.18em; font-size:24px;
   }
   .s-stat .stat{
-    position:absolute; left:90px; right:90px; top:200px;
-    display:grid; grid-template-columns: 1fr 1fr; gap:80px; align-items:center;
+    /* optically centered between the topbar (90px) and the ribbon (60px) */
+    position:absolute; left:90px; right:90px; top:96px; bottom:66px;
+    display:grid; grid-template-columns: 1fr 1fr; gap:80px;
+    align-items:center; align-content:center;
   }
   .s-stat .num{
     font-family:'Alfa Slab One', serif; font-size:540px; line-height:.82;
@@ -435,32 +437,32 @@
     font-family:'DM Mono', monospace; letter-spacing:.22em; color:var(--cream); font-size:24px;
   }
   .s-close .center{
-    position:absolute; left:100px; right:100px; top:260px;
+    position:absolute; left:100px; right:100px; top:236px;
   }
   .s-close .center .pre{
     font-family:'Caveat Brush', cursive; color:var(--orange);
-    font-size:96px; transform:rotate(-3deg); display:inline-block;
+    font-size:88px; transform:rotate(-3deg); display:inline-block;
   }
   .s-close .center h1{
     margin:10px 0 0; font-family:'Alfa Slab One', serif;
-    font-size:260px; line-height:.86; color:var(--orange);
-    text-shadow: 10px 10px 0 var(--red), 20px 20px 0 var(--red-deep);
-    text-transform:uppercase;
+    font-size:176px; line-height:.86; color:var(--orange);
+    text-shadow: 9px 9px 0 var(--red), 18px 18px 0 var(--red-deep);
+    text-transform:uppercase; white-space:nowrap;
   }
   .s-close .row{
-    margin-top:60px;
-    display:grid; grid-template-columns: auto 1fr; gap:40px; align-items:center;
+    margin-top:64px;
+    display:flex; gap:48px; align-items:center;
   }
   .s-close .cta{
     background:var(--orange); color:var(--blue);
-    padding:24px 44px; font-family:'Alfa Slab One', serif;
-    font-size:48px; text-transform:uppercase;
+    padding:20px 40px; font-family:'Alfa Slab One', serif;
+    font-size:40px; text-transform:uppercase;
     border:6px solid var(--cream);
-    box-shadow: 10px 10px 0 var(--red);
+    box-shadow: 8px 8px 0 var(--red);
     letter-spacing:.02em;
   }
   .s-close .url{
-    font-family:'Alfa Slab One', serif; font-size:46px; color:var(--cream);
+    font-family:'Alfa Slab One', serif; font-size:40px; color:var(--cream);
     text-transform:uppercase; letter-spacing:.02em;
   }
   .s-close .footrow{
@@ -488,16 +490,16 @@
 
 <script type="application/json" id="speaker-notes">
 [
-  "Title slide. Use to open any deck — set the project name, the audience, and the date. The big stamped headline is the brand voice; the subtitle below it carries the descriptor.",
-  "Table of contents. Drop in the four to eight chapters of your deck. Page numbers on the right help in printed handouts.",
-  "Big idea slide. Use this for the one sentence you want the audience to leave the room remembering. One per deck — keep it short.",
-  "Three-column overview. Use to introduce three pillars, three workstreams, three offerings. The middle column is highlighted blue to anchor the eye.",
-  "Hero stat. Pair one giant number with a one-line headline and a single source. Don't crowd it — the number is the slide.",
-  "Detailed list. High information density: eight items in two columns. Use for a feature breakdown, an agenda, a launch checklist.",
-  "Pull quote. Use to break up data with a human voice — a customer testimonial, a research interview, a leadership quote.",
-  "Timeline / roadmap. Four phases on the track plus three KPI cards beneath. Edit dates and milestones to fit your plan.",
-  "Two-column compare. Use for before/after, current/proposed, problem/solution. The blue side is the recommendation.",
-  "Closing slide. Big thanks, a call to action, and contact details. Always end the deck here."
+  "Title slide. Open Design — the open-source, local, agent-driven design platform. Set the tone: this is a product story about giving frontier AI design back to creators.",
+  "Table of contents. Eight chapters: from why Open Design exists, through the numbers and the workflow, to how to get started.",
+  "The one sentence to remember: frontier AI design, back on every creator's desk — open, local, agent-native.",
+  "Three pillars. Desktop-native, plug in agents instead of rebuilding them, and a memory that learns your taste. The middle column anchors the agent story.",
+  "Hero stat. 60K+ GitHub stars under Apache-2.0, with 300+ contributors, 217+ plugins, and 129 design systems behind it.",
+  "The full stack. Eight core capabilities in two columns — desktop-first, 21 coding agents, the HTML video pipeline, design systems, plugins, BYOK, memory, and the license.",
+  "Pull quote from an indie developer: file-system semantics plus git-diffable artifacts finally put design under version control.",
+  "The workflow. From idea to delivery in four moves — pick a start, set the visual direction, generate the artifact, ship it or film it. Memory compounds with every run.",
+  "Two-column compare. Cloud-locked design tools on the left, Open Design on the right. The blue side is the recommendation: open, local, yours.",
+  "Closing slide. Download Open Design, star it on GitHub, and join the community."
 ]
 </script>
 
@@ -507,25 +509,25 @@
 <section class="s-cover grain" data-screen-label="01 Cover">
   <div class="frame"></div>
   <div class="meta-top">
-    <div class="pill">Q2 · 2026</div>
-    <div>STRATEGIC REVIEW · INTERNAL</div>
-    <div class="pill">VOL. 01</div>
+    <div class="pill">APACHE-2.0</div>
+    <div>OPEN · LOCAL · AGENT-DRIVEN</div>
+    <div class="pill">BYOK</div>
   </div>
 
   <div class="center">
-    <div class="title">QUARTERLY<br/>REVIEW</div>
+    <div class="title">OPEN<br/>DESIGN</div>
     <div class="row2">
-      <div class="for">a</div>
-      <div class="sub">PRESENTATION TEMPLATE</div>
+      <div class="for">the</div>
+      <div class="sub">OPEN-SOURCE DESIGN PLATFORM</div>
     </div>
   </div>
 
   <div class="footline">
-    <span>PREPARED BY THE TEAM</span>
+    <span>GITHUB.COM/NEXU-IO/OPEN-DESIGN</span>
     <span class="dot"></span>
-    <span>MAY 2026</span>
+    <span>RUNS LOCALLY</span>
     <span class="dot"></span>
-    <span>VERSION 01</span>
+    <span>NO SIGN-UP</span>
   </div>
 </section>
 
@@ -540,14 +542,14 @@
     </div>
   </div>
   <div class="list">
-    <div class="row"><div class="n">01</div><div class="t">The Big Idea</div><div class="pg">PG 03</div></div>
+    <div class="row"><div class="n">01</div><div class="t">Why Open Design</div><div class="pg">PG 03</div></div>
     <div class="row"><div class="n">02</div><div class="t">Three Pillars</div><div class="pg">PG 04</div></div>
     <div class="row"><div class="n">03</div><div class="t">By the Numbers</div><div class="pg">PG 05</div></div>
-    <div class="row"><div class="n">04</div><div class="t">The Full Plan</div><div class="pg">PG 06</div></div>
-    <div class="row"><div class="n">05</div><div class="t">Voice of the Customer</div><div class="pg">PG 07</div></div>
-    <div class="row"><div class="n">06</div><div class="t">Roadmap</div><div class="pg">PG 08</div></div>
-    <div class="row"><div class="n">07</div><div class="t">Where We Land</div><div class="pg">PG 09</div></div>
-    <div class="row"><div class="n">08</div><div class="t">Next Steps</div><div class="pg">PG 10</div></div>
+    <div class="row"><div class="n">04</div><div class="t">Core Capabilities</div><div class="pg">PG 06</div></div>
+    <div class="row"><div class="n">05</div><div class="t">Voice of the Builders</div><div class="pg">PG 07</div></div>
+    <div class="row"><div class="n">06</div><div class="t">The Workflow</div><div class="pg">PG 08</div></div>
+    <div class="row"><div class="n">07</div><div class="t">Open vs. Closed</div><div class="pg">PG 09</div></div>
+    <div class="row"><div class="n">08</div><div class="t">Get Started</div><div class="pg">PG 10</div></div>
   </div>
 </section>
 
@@ -561,42 +563,42 @@
   <div class="body">
     <div class="kicker">★ ★ ★&nbsp;&nbsp;OUR THESIS&nbsp;&nbsp;★ ★ ★</div>
     <h1>
-      The product gets <span class="scriptline">simpler</span><br/>
-      as the team gets <span class="y">braver</span> —<br/>
-      not the other way around.
+      Frontier AI design, <span class="scriptline">back</span><br/>
+      on every <span class="y">creator's</span> desk —<br/>
+      open, local, agent-native.
     </h1>
     <div class="underline"></div>
   </div>
   <div class="footrow">
-    <div>— PARAGRAPH 01 —</div>
-    <div>SET IN ALFA SLAB</div>
+    <div>— WHY OPEN DESIGN —</div>
+    <div>GITHUB.COM/NEXU-IO/OPEN-DESIGN</div>
   </div>
 </section>
 
 <!-- ============ 04 — THREE COLUMNS ============ -->
 <section class="s-pillars grain" data-screen-label="04 Pillars">
   <div class="head">
-    <h2>THREE<br/>PRIORITIES.</h2>
-    <div class="lede">The work falls into three buckets this quarter. Each has a clear owner, a clear deliverable, and a clear way to know we are done.</div>
+    <h2>THREE<br/>PILLARS.</h2>
+    <div class="lede">Open Design stands on three product commitments: where design happens, who does the work, and what the platform remembers.</div>
   </div>
   <div class="grid">
     <div class="col">
       <div class="num">01</div>
-      <div class="tag">— FOCUS —</div>
-      <h3>Ship the<br/>core flow.</h3>
-      <p>Cut three legacy paths and double down on the one that drives ninety percent of activations.</p>
+      <div class="tag">— DESKTOP —</div>
+      <h3>Design on<br/>your desk.</h3>
+      <p>Design happens on the desktop. Local files, Figma exports, and code repos are directly readable; agents get full terminal power.</p>
     </div>
     <div class="col alt">
       <div class="num">02</div>
-      <div class="tag">— LEARN —</div>
-      <h3>Talk to<br/>ten teams.</h3>
-      <p>Standing weekly research with target customers. Findings briefed every Friday in a one-page memo.</p>
+      <div class="tag">— AGENTS —</div>
+      <h3>Plug in<br/>agents.</h3>
+      <p>Claude Code, Codex, and Cursor on your machine are already powerful. Open Design wires them into a complete design workflow.</p>
     </div>
     <div class="col">
       <div class="num">03</div>
-      <div class="tag">— SHIP —</div>
-      <h3>One launch,<br/>not five.</h3>
-      <p>Combine the four small drops on the calendar into a single, well-told release with shared positioning.</p>
+      <div class="tag">— MEMORY —</div>
+      <h3>It learns<br/>your taste.</h3>
+      <p>Every choice becomes design systems, preferences, and memory, so the next generation lands closer to what you want.</p>
     </div>
   </div>
 </section>
@@ -609,84 +611,84 @@
     <div>SECTION 02 / DATA</div>
   </div>
   <div class="stat">
-    <div class="num">63<sup>%</sup></div>
+    <div class="num">60<sup>K+</sup></div>
     <div class="desc">
-      <h3>of customers<br/><span class="accent">recommend us</span> after onboarding.</h3>
-      <p>Net promoter scores climbed eighteen points after we shipped the redesigned first-run experience in March, the largest single-quarter jump on record for the product.</p>
-      <div class="source">SOURCE — INTERNAL NPS, Q1 2026</div>
+      <h3>GitHub <span class="accent">stars</span><br/>and counting.</h3>
+      <p>Open source under Apache-2.0, built in the open by a community of 300+ contributors — with 217+ plugins, 129 design systems, and 21 coding agents already wired in.</p>
+      <div class="source">SOURCE — GITHUB.COM/NEXU-IO/OPEN-DESIGN</div>
     </div>
   </div>
   <div class="ribbon">
-    <span>★ FOCUS</span>
-    <span>★ LEARN</span>
-    <span>★ SHIP</span>
-    <span>★ FOCUS</span>
-    <span>★ LEARN</span>
-    <span>★ SHIP</span>
+    <span>★ OPEN</span>
+    <span>★ LOCAL</span>
+    <span>★ AGENT-NATIVE</span>
+    <span>★ OPEN</span>
+    <span>★ LOCAL</span>
+    <span>★ AGENT-NATIVE</span>
   </div>
 </section>
 
 <!-- ============ 06 — DENSE LIST ============ -->
 <section class="s-platform grain" data-screen-label="06 Plan">
   <div class="head">
-    <h2>THE FULL<br/>PLAN.</h2>
-    <div class="lede">Eight workstreams, costed and owned. Each links to a longer brief in the appendix; team leads are listed in the back of the book.</div>
+    <h2>THE FULL<br/>STACK.</h2>
+    <div class="lede">Eight core capabilities, one local platform. From idea to prototypes, web pages, slides, and HTML video — on your own machine.</div>
   </div>
   <div class="body">
     <div class="item">
       <div class="n">01</div>
       <div>
-        <h4>Onboarding refresh</h4>
-        <p>Rebuild the first-run experience with progressive disclosure and a single primary action per screen.</p>
+        <h4>Desktop-first</h4>
+        <p>Local files, Figma exports, and code repositories are directly readable in place — no uploads.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">02</div>
       <div>
-        <h4>Pricing simplification</h4>
-        <p>Collapse the seven plans into three. Move add-ons behind a clearer feature matrix.</p>
+        <h4>21 coding agents</h4>
+        <p>Auto-detected from the CLIs already on your PATH. Zero configuration to get started.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">03</div>
       <div>
-        <h4>Mobile parity</h4>
-        <p>Bring the four most-used desktop flows to mobile by end of quarter, including offline drafts.</p>
+        <h4>HTML video pipeline</h4>
+        <p>Programmatic video via HyperFrames — turn an artifact into an MP4 marketing short or demo.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">04</div>
       <div>
-        <h4>Self-serve setup</h4>
-        <p>Reduce time-to-first-value from three days to thirty minutes for teams under fifty seats.</p>
+        <h4>129 design systems</h4>
+        <p>Import from GitHub, Figma, or local files. Markdown design systems keep tokens from drifting.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">05</div>
       <div>
-        <h4>Trust &amp; security</h4>
-        <p>Ship audit logs, role-based access, and SSO for all paid tiers. SOC 2 Type II by year-end.</p>
+        <h4>Plugin ecosystem</h4>
+        <p>217+ plugins covering prototypes, slides, posters, dashboards, weekly reports, and OKRs.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">06</div>
       <div>
-        <h4>Performance budget</h4>
-        <p>Cut median page load by forty percent. Set a hard ceiling and wire it into the release pipeline.</p>
+        <h4>Full-stack BYOK</h4>
+        <p>Anthropic, OpenAI, Azure, and Google endpoints plus 14 media providers — your keys, your machine.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">07</div>
       <div>
-        <h4>Integrations push</h4>
-        <p>Native connectors for the top five tools customers ask for, plus a public API for the long tail.</p>
+        <h4>Self-evolving memory</h4>
+        <p>Remembers your preferences and color lineage, so every generation lands closer to your taste.</p>
       </div>
     </div>
     <div class="item">
       <div class="n">08</div>
       <div>
-        <h4>Brand refresh</h4>
-        <p>New marketing site, sharper category positioning, and a unified visual system across surfaces.</p>
+        <h4>Apache-2.0</h4>
+        <p>Fork it, self-host it, ship it commercially — all allowed, with no sign-up required.</p>
       </div>
     </div>
   </div>
@@ -696,67 +698,67 @@
 <section class="s-quote grain" data-screen-label="07 Quote">
   <div class="marks">"</div>
   <div class="quote">
-    The new onboarding cut our setup time<br/>
-    from three days to thirty minutes —<br/>
-    <span class="em">we shipped the same week.</span>
+    File-system semantics plus<br/>
+    git-diffable design artifacts —<br/>
+    <span class="em">design is finally under version control.</span>
   </div>
   <div class="attribution">
     <div class="who">
-      <div class="avatar">M</div>
+      <div class="avatar">D</div>
       <div>
-        <div class="name">Maya Okonkwo</div>
-        <div class="role">— HEAD OF OPS, NORTH STAR LABS —</div>
+        <div class="name">Indie Developer</div>
+        <div class="role">— OPEN DESIGN COMMUNITY —</div>
       </div>
     </div>
-    <div class="stamp">★ Voice of the Customer ★</div>
+    <div class="stamp">★ Voice of the Builders ★</div>
   </div>
 </section>
 
 <!-- ============ 08 — TIMELINE ============ -->
 <section class="s-timeline grain" data-screen-label="08 Roadmap">
   <div class="head">
-    <h2>THE<br/>ROADMAP.</h2>
-    <div class="sub">— a plan, on a clock —</div>
+    <h2>THE<br/>WORKFLOW.</h2>
+    <div class="sub">— from idea to delivery —</div>
   </div>
   <div class="track"></div>
   <div class="nodes">
     <div class="node">
       <div class="dot"></div>
-      <div class="when">MAY</div>
-      <h4>Kickoff</h4>
-      <p>Charter the workstreams, lock owners, and publish the shared scorecard.</p>
+      <div class="when">STEP 01</div>
+      <h4>Pick a start</h4>
+      <p>Describe your goal in one sentence, or start from a template or plugin.</p>
     </div>
     <div class="node alt">
       <div class="dot"></div>
-      <div class="when">JUNE</div>
-      <h4>Beta opens</h4>
-      <p>Onboard the first ten design partners on the new core flow.</p>
+      <div class="when">STEP 02</div>
+      <h4>Set direction</h4>
+      <p>Palette, type, and spacing flow into generation automatically.</p>
     </div>
     <div class="node">
       <div class="dot"></div>
-      <div class="when">AUGUST</div>
-      <h4>Launch</h4>
-      <p>Public release, marketing site refresh, and sales enablement complete.</p>
+      <div class="when">STEP 03</div>
+      <h4>Generate</h4>
+      <p>The agent reads full context and produces real runnable files, previewed in a sandbox.</p>
     </div>
     <div class="node alt">
       <div class="dot"></div>
-      <div class="when">OCTOBER</div>
-      <h4>Scale</h4>
-      <p>Roll the changes to the long tail and retire the legacy paths for good.</p>
+      <div class="when">STEP 04</div>
+      <h4>Ship or film</h4>
+      <p>Hand off to engineering, or turn it into a marketing video with HyperFrames. Memory compounds with every run.</p>
     </div>
   </div>
   <div class="below">
     <div class="kpi">
-      <div class="label">— TIME-TO-VALUE —</div>
-      <div class="v">30m</div>
+      <div class="label">— CODING AGENTS —</div>
+      <div class="v">21</div>
     </div>
     <div class="kpi alt">
-      <div class="label">— ACTIVATION RATE —</div>
-      <div class="v">+24%</div>
+      <div class="label">— DESIGN SYSTEMS —</div>
+      <div class="v">129</div>
     </div>
     <div class="kpi">
-      <div class="label">— REVENUE LIFT —</div>
-      <div class="v">$1.4M</div>
+      <div class="label">— PLUGINS —</div>
+      <div class="v">217+</div>
     </div>
   </div>
 </section>
@@ -764,28 +766,28 @@
 <!-- ============ 09 — TWO-COLUMN COMPARE ============ -->
 <section class="s-compare grain" data-screen-label="09 Compare">
   <div class="head">
-    <h2>WHERE<br/>WE LAND.</h2>
-    <div class="sub">A side-by-side of where the product is today and where this plan takes us by the end of the year.</div>
+    <h2>OPEN VS.<br/>CLOSED.</h2>
+    <div class="sub">In April 2026, Claude Design proved an LLM can truly design. But it is closed, paid, and cloud-only. Open Design sets that capability free.</div>
   </div>
   <div class="grid">
     <div class="side left">
-      <div class="label">— TODAY —</div>
-      <h3>Capable, but cluttered.</h3>
+      <div class="label">— CLOUD-LOCKED —</div>
+      <h3>Powerful, but closed.</h3>
       <ul>
-        <li>Three-day median time-to-value for new teams.</li>
-        <li>Seven pricing plans with overlapping feature sets.</li>
-        <li>Mobile parity at sixty percent of desktop flows.</li>
-        <li>Onboarding NPS sits at forty-five points.</li>
+        <li>Closed-source and paid, running only in the cloud.</li>
+        <li>Locked to a single model vendor, no agent choice.</li>
+        <li>No self-hosting and no BYOK.</li>
+        <li>Your files and keys live on someone else's servers.</li>
       </ul>
     </div>
     <div class="side right">
-      <div class="label">— END OF YEAR —</div>
-      <h3>Sharper, faster, fewer.</h3>
+      <div class="label">— OPEN DESIGN —</div>
+      <h3>Open, local, yours.</h3>
       <ul>
-        <li>Thirty-minute self-serve setup, no human required.</li>
-        <li>Three pricing plans with a clear feature matrix.</li>
-        <li>Full mobile parity, plus offline drafts.</li>
-        <li>Onboarding NPS targeted at sixty-three points.</li>
+        <li>Apache-2.0 — fork, self-host, and use commercially.</li>
+        <li>21 coding agents, auto-detected, zero config.</li>
+        <li>Full-stack BYOK — keys never leave your machine.</li>
+        <li>Monthly cost down 80%: from $500 to ~$73.</li>
       </ul>
     </div>
   </div>
@@ -801,20 +803,20 @@
   </div>
   <div class="center">
     <div class="pre">over to you —</div>
-    <h1 style="font-size: 230px">QUESTIONS?</h1>
+    <h1>GET STARTED</h1>
     <div class="row">
-      <div class="cta">LET'S TALK</div>
-      <div class="url">team@company.com</div>
+      <a class="cta" href="https://open-design.ai/" target="_blank" rel="noreferrer noopener" style="text-decoration:none;">DOWNLOAD</a>
+      <div class="url">github.com/nexu-io/open-design</div>
     </div>
   </div>
   <div class="footrow">
     <div class="signoff">
-      PREPARED BY <span class="b">THE PRODUCT TEAM</span><br/>
-      ★ MAY 2026 ★ INTERNAL DRAFT
+      BUILT BY <span class="b">THE OPEN DESIGN COMMUNITY</span><br/>
+      ★ APACHE-2.0 ★ MACOS / WINDOWS
     </div>
     <div class="stamp">
-      <div class="big">END</div>
-      <div class="small">— V. 01 —</div>
+      <div class="big">OSS</div>
+      <div class="small">— STAR US —</div>
     </div>
   </div>
 </section>

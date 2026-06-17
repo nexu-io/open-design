@@ -1,4 +1,5 @@
 import type { ProjectFile } from './files';
+import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
   PreviewCommentMember,
@@ -52,6 +53,14 @@ export interface ChatRequest {
    */
   mediaExecution?: MediaExecutionPolicy;
   /**
+   * Ask the selected run agent to emit a short title for this first turn.
+   * The daemon strips the title marker from visible assistant text and falls
+   * back to client-side naming when the marker is absent or malformed.
+   */
+  titleGeneration?: {
+    enabled?: boolean;
+  };
+  /**
    * Run-scoped tool bundle supplied by an external orchestrator.
    * These servers are made available only to the spawned agent for this run
    * and are never written into the persistent Settings MCP registry.
@@ -77,7 +86,20 @@ export type ChatAnalyticsEntryFrom =
   // A turn started by the "Continue the run" affordance on a resumable failed
   // run. Lets run_created / run_finished isolate resume-continuations so the
   // recovery mechanism's usage and success rate are measurable.
-  | 'resume_continue';
+  | 'resume_continue'
+  // A turn started from a preview annotation: `comment` is the comment/board
+  // pin flow (chat-new-line tool), `mark` is the Mark draw-overlay flow
+  // (mark-pen tool). Both edit an existing artifact, so isolating them lets the
+  // dashboard separate annotation-driven runs from plain composer sends.
+  | 'comment'
+  | 'mark'
+  // A turn whose composer was seeded by a guided Next-step action (the
+  // next-step card prefills a skill/prompt; the run fires on the following
+  // Send). Best-effort: the pending tag is consumed by the next send.
+  | 'next_step'
+  // A turn that submits answers to an inline `<question-form>` clarification
+  // (the question still being clarified, not a fresh create/edit intent).
+  | 'question_answer';
 
 export type ChatAnalyticsLengthBucket =
   | '0'
@@ -123,6 +145,16 @@ export interface ChatAnalyticsHints {
     | 'design_system'
     | 'other';
   designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
+  // Session-dimension run context, computed client-side and stamped onto
+  // run_created / run_finished so a session's run sequence is analysable
+  // ("did this session reach an artifact, and on which turn?").
+  // `turnIndex` is 0-based within the browser analytics session;
+  // `isFirstRun` === (turnIndex === 0). `hasExistingArtifact` is true when the
+  // project already had a generated artifact when this run was started
+  // (project-scoped) — the run is an edit rather than a first creation.
+  turnIndex?: number;
+  isFirstRun?: boolean;
+  hasExistingArtifact?: boolean;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
@@ -312,7 +344,11 @@ export interface ChatRunStatusResponse {
   toolBundle?: RunScopedToolBundleSummary;
   /** Browser Use availability for runs that requested in-app browser automation. */
   browserUse?: BrowserUseRunState;
+  /** Effective storage/provenance for the workspace used by this run. */
+  workspace?: RunWorkspace;
 }
+
+export type ChatRunResultPackageResponse = RunResultPackageResponse;
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
@@ -368,6 +404,7 @@ export type PersistedAgentEvent =
   // decide error-specific affordances such as the hosted-AMR nudge.
   | { kind: 'status'; label: string; detail?: string; code?: string }
   | { kind: 'text'; text: string }
+  | { kind: 'conversation_title'; title: string }
   | { kind: 'thinking'; text: string }
   | {
       kind: 'live_artifact';

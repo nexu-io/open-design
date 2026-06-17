@@ -1,0 +1,96 @@
+---
+/*
+ * /terms/ — Terms of Service.
+ *
+ * Standard terms for the open-design.ai site + Open Design software.
+ * English single page. DRAFT — review by counsel before relying on it.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+
+const updated = 'June 16, 2026';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Terms of Service — Open Design',
+  url: new URL('/terms/', Astro.site).toString(),
+  isPartOf: { '@type': 'WebSite', name: 'Open Design', url: Astro.site?.toString() },
+};
+---
+
+<Layout
+  title="Terms of Service — Open Design"
+  description="The terms that govern use of the open-design.ai website and the open-source Open Design software."
+  jsonLd={jsonLd}
+>
+  <article class="legal">
+    <h1 class="legal-h1">Terms of Service</h1>
+    <p class="legal-meta">Last updated: {updated}</p>
+
+    <p>These Terms govern your use of the website <a href="https://open-design.ai">open-design.ai</a> and the Open Design software provided by <strong>Powerformer, Inc.</strong> (“Open Design”, “we”, “us”). By using the site or the software, you agree to these Terms.</p>
+
+    <h2>1. The software is open source</h2>
+    <p>Open Design is released under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a>. Your use, modification, and distribution of the software are governed by that license. These Terms cover the website and our hosted services; the Apache-2.0 license controls the software itself and prevails in any conflict regarding the code.</p>
+
+    <h2>2. Bring your own keys</h2>
+    <p>Open Design is local-first and BYOK: you connect your own model-provider credentials, and your use of those providers is subject to their terms and pricing. You are responsible for the keys you configure and the costs they incur.</p>
+
+    <h2>3. Acceptable use</h2>
+    <p>You agree not to use the site or software to break the law, infringe others’ rights, distribute malware, or disrupt the service. Community spaces (GitHub, Discord) are also governed by their respective codes of conduct.</p>
+
+    <h2>4. Content &amp; contributions</h2>
+    <p>You retain ownership of what you create with Open Design. Contributions you submit to the open-source project are licensed under the project’s license as described in its CONTRIBUTING guide.</p>
+
+    <h2>5. Trademarks</h2>
+    <p>“Open Design”, “Powerformer”, and related logos are marks of Powerformer, Inc. Third-party names and brands referenced on the site (e.g., for comparisons) belong to their respective owners and are used for identification only.</p>
+
+    <h2>6. No warranty</h2>
+    <p>The site and software are provided “as is,” without warranties of any kind, to the fullest extent permitted by law. We do not warrant that the site or software will be uninterrupted, error-free, or fit for a particular purpose.</p>
+
+    <h2>7. Limitation of liability</h2>
+    <p>To the maximum extent permitted by law, Powerformer, Inc. will not be liable for any indirect, incidental, or consequential damages arising from your use of the site or software.</p>
+
+    <h2>8. Changes</h2>
+    <p>We may update these Terms from time to time; the “Last updated” date reflects the latest version. Continued use after changes means you accept them.</p>
+
+    <h2>9. Contact</h2>
+    <p>Questions? Reach us via the <a href="https://github.com/nexu-io/open-design">Open Design GitHub repository</a> or the community <a href="https://discord.gg/9ptkbbqRu">Discord</a>.</p>
+  </article>
+
+  <style>
+    .legal {
+      max-width: 720px;
+    }
+    .legal-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink, #262626);
+    }
+    .legal-meta {
+      margin: 10px 0 32px;
+      font-size: 14px;
+      color: var(--ink-mute, #595959);
+    }
+    .legal h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .legal p,
+    .legal li {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink-soft, #434343);
+    }
+    .legal p {
+      margin: 0 0 14px;
+    }
+    .legal a {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+  </style>
+</Layout>

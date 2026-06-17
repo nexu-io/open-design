@@ -16,12 +16,13 @@ import {
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
+import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 
 const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
-const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta-win';
+const namespace = resolvePackagedSmokeNamespace('win');
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
 const smokeProfile = process.env.OD_PACKAGED_E2E_WIN_SMOKE_PROFILE ?? 'core';

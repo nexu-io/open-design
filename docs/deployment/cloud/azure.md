@@ -120,7 +120,7 @@ az deployment group create \
     odApiToken="$OD_API_TOKEN" \
     dnsNameLabel="$DNS_LABEL" \
     allowedOrigins="$BROWSER_ORIGIN" \
-    image="docker.io/vanjayak/open-design:latest" \
+    image="ghcr.io/nexu-io/od:latest" \
     cpuCores=1 \
     memoryInGB=1 \
     fileShareQuotaGB=10

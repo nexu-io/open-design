@@ -210,6 +210,32 @@ describe('streamViaDaemon', () => {
     });
   });
 
+  it('requests title generation when enabled', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'name this conversation' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+      titleGeneration: { enabled: true },
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.titleGeneration).toEqual({ enabled: true });
+  });
+
   it('sends the applied plugin snapshot id to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -1888,6 +1914,31 @@ describe('streamViaDaemon', () => {
       kind: 'status',
       label: 'researching',
       detail: 'tavily · shallow',
+    });
+  });
+
+  it('forwards agent-generated conversation title events', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"conversation_title","title":"Infographic Habits"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'conversation_title',
+      title: 'Infographic Habits',
     });
   });
 

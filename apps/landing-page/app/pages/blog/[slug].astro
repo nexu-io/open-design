@@ -15,8 +15,15 @@ import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
+import BlogToc from '../../_components/blog-toc.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import {
+  injectTocIntoHtml,
+  tocFromHeadings,
+  type TocEntry,
+} from '../../_lib/blog-toc';
+import { getInfoPageCopy } from '../../info-page-i18n';
 import {
   explicitLocalizedString,
   localizeBlogPostText,
@@ -40,7 +47,7 @@ export async function getStaticPaths() {
 }
 
 const { post } = Astro.props;
-const { Content } = await render(post);
+const { Content, headings } = await render(post);
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const ui = getLandingUiCopy(locale);
@@ -55,16 +62,53 @@ const fallbackPost = localizeBlogPostText({
   category: post.data.category,
   locale,
 });
-const localizedPostField = (field: 'title' | 'summary' | 'category') => {
-  return explicitLocalizedString(
-    localizedPostI18n?.[field] as Parameters<typeof explicitLocalizedString>[0],
-    locale,
-  ) ?? fallbackPost[field];
+// `localizedPostI18n[field]` is already scoped to the current locale, so a
+// plain string there IS the human translation — prefer it directly. (The
+// `explicitLocalizedString` map-resolver only accepts a string for the default
+// locale, which would otherwise leave hand-written frontmatter translations
+// dormant on every non-English page.) Fall back to the locale-map resolver,
+// then to the synthetic `localizeBlogPostText` template.
+const directLocalized = (field: 'title' | 'summary' | 'category' | 'bodyHtml') => {
+  const value = localizedPostI18n?.[field];
+  return typeof value === 'string' && value.trim() ? value : undefined;
 };
-const localizedBodyHtml = explicitLocalizedString(
-  localizedPostI18n?.bodyHtml as Parameters<typeof explicitLocalizedString>[0],
-  locale,
-) ?? fallbackPost.bodyHtml;
+const localizedPostField = (field: 'title' | 'summary' | 'category') => {
+  return (
+    directLocalized(field) ??
+    explicitLocalizedString(
+      localizedPostI18n?.[field] as Parameters<typeof explicitLocalizedString>[0],
+      locale,
+    ) ??
+    fallbackPost[field]
+  );
+};
+const localizedBodyHtml =
+  directLocalized('bodyHtml') ??
+  explicitLocalizedString(
+    localizedPostI18n?.bodyHtml as Parameters<typeof explicitLocalizedString>[0],
+    locale,
+  ) ??
+  fallbackPost.bodyHtml;
+
+// Build the table of contents. For pre-rendered bodyHtml (rich/localized
+// posts) inject heading ids and collect the TOC in one pass; for the Markdown
+// `<Content />` path use Astro's already-slugged `headings` array.
+let bodyHtmlToRender = localizedBodyHtml;
+let toc: TocEntry[];
+if (localizedBodyHtml) {
+  const injected = injectTocIntoHtml(localizedBodyHtml);
+  bodyHtmlToRender = injected.html;
+  toc = injected.toc;
+} else {
+  toc = tocFromHeadings(headings);
+}
+const tocLabel = getInfoPageCopy(locale).common.onThisPage;
+
+// Each post ships a unified cover at `/blog/<slug>-cover.webp` (see the
+// `od-site-illustration` skill). Surfaced as a hero banner on the post itself,
+// not just on the index card.
+const coverSrc = `/blog/${post.id}-cover.webp`;
+
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 const category = post.data.category.toLowerCase();
@@ -156,23 +200,41 @@ const fmtDate = (d: Date) =>
       <main class='post-shell'>
       <article class='post'>
         <div class='container'>
-          <a class='post-back' href={href('/blog/')}>{ui.blog.backToBlog}</a>
+          <div class='post-grid'>
+            <aside class='post-toc-rail'>
+              <BlogToc toc={toc} label={tocLabel} />
+            </aside>
 
-          <h1 class='post-title'>{localizedPostField('title')}</h1>
+            <div class='post-main'>
+          <div class='post-head'>
+            <a class='post-back' href={href('/blog/')}>{ui.blog.backToBlog}</a>
 
-          <p class='post-summary'>{localizedPostField('summary')}</p>
+            <h1 class='post-title'>{localizedPostField('title')}</h1>
 
-          <div class='post-meta'>
-            <span>{fmtDate(post.data.date)}</span>
-            <span>{post.data.readingTime} {ui.blog.minRead}</span>
-            <span>{localizedPostField('category')}</span>
+            <p class='post-summary'>{localizedPostField('summary')}</p>
+
+            <div class='post-meta'>
+              <span>{fmtDate(post.data.date)}</span>
+              <span>{post.data.readingTime} {ui.blog.minRead}</span>
+              <span>{localizedPostField('category')}</span>
+            </div>
+
+            <figure class='post-cover'>
+              <img
+                src={coverSrc}
+                alt={localizedPostField('title')}
+                width='1536'
+                height='1024'
+                loading='eager'
+              />
+            </figure>
+
+            <hr class='post-rule' />
           </div>
 
-          <hr class='post-rule' />
-
           <div class='post-body'>
-            {localizedBodyHtml ? (
-              <Fragment set:html={localizedBodyHtml} />
+            {bodyHtmlToRender ? (
+              <Fragment set:html={bodyHtmlToRender} />
             ) : (
               <Content />
             )}
@@ -212,6 +274,8 @@ const fmtDate = (d: Date) =>
               {ui.blog.viewSource}
             </a>
           </div>
+            </div>
+          </div>
         </div>
       </article>
       </main>
@@ -235,8 +299,62 @@ const fmtDate = (d: Date) =>
          * offset the other sub-pages use. */
         padding: 140px 0 96px;
       }
+      /* Default: a single, generous reading column centered on the page. The
+       * masthead and body live in the same column (`.post-main`) so they always
+       * share the exact same width — no offset, no compression. */
       .post .container {
-        max-width: 860px;
+        max-width: 780px;
+      }
+      .post-head {
+        margin: 0;
+      }
+      .post-grid {
+        display: block;
+      }
+      .post-main {
+        min-width: 0;
+      }
+      /* Narrow / tablet: the TOC rail folds away; the article keeps full width.
+       * It only returns once the viewport is wide enough to host it in the
+       * right gutter WITHOUT stealing width from the body (below). */
+      .post-toc-rail {
+        display: none;
+      }
+      /* Wide screens: park the sticky TOC in the right gutter. The page widens
+       * to make room; the body column stays a fixed 780px measure so it is
+       * never squeezed by the rail. */
+      @media (min-width: 1140px) {
+        .post .container {
+          max-width: 1088px;
+        }
+        .post-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 780px) 230px;
+          gap: 0 78px;
+          justify-content: center;
+          align-items: start;
+        }
+        .post-main {
+          grid-column: 1;
+        }
+        .post-toc-rail {
+          display: block;
+          grid-column: 2;
+          grid-row: 1;
+          position: sticky;
+          top: 140px;
+          /* Cap the rail so very long TOCs scroll internally instead of running
+           * past the viewport. */
+          max-height: calc(100vh - 180px);
+          overflow-y: auto;
+        }
+      }
+      /* Anchor jumps land the heading below the sticky site chrome instead of
+       * under it — also keeps the scroll-spy offset and the visible heading in
+       * agreement. */
+      .post-body :global(h2),
+      .post-body :global(h3) {
+        scroll-margin-top: 124px;
       }
       .post-back {
         display: inline-block;
@@ -288,6 +406,17 @@ const fmtDate = (d: Date) =>
         vertical-align: middle;
         background: var(--line);
       }
+      .post-cover {
+        margin: 8px 0 28px;
+      }
+      .post-cover img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--bone);
+      }
       .post-rule {
         border: 0;
         border-top: 1px solid var(--line);
@@ -295,8 +424,8 @@ const fmtDate = (d: Date) =>
       }
       .post-body {
         font-family: var(--body);
-        font-size: 17px;
-        line-height: 1.7;
+        font-size: 18px;
+        line-height: 1.8;
         color: var(--ink-soft);
       }
       .post-body :global(p) {

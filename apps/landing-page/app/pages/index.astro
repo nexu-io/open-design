@@ -374,6 +374,15 @@ const matterRuntime = readFileSync(
               .then((n) => {
                 if (typeof n === 'number' && n > 0) {
                   for (const slot of contribSlots) slot.textContent = String(n);
+                  // Feed the same live total into the "贡献者" stat card. Updating
+                  // `data-countup-to` retargets the roll-up if it hasn't run yet;
+                  // setting the text keeps the fallback correct (and fixes the
+                  // value if the roll already finished before this resolved).
+                  const card = document.querySelector('[data-github-contributors-countup]');
+                  if (card) {
+                    card.dataset.countupTo = String(n);
+                    card.textContent = String(n) + (card.dataset.countupSuffix || '');
+                  }
                 }
               })
               .catch(() => {});
@@ -1167,10 +1176,29 @@ const matterRuntime = readFileSync(
             const stickyH = sticky ? sticky.offsetHeight : window.innerHeight;
             return Math.max(1, scrolly.offsetHeight - stickyH);
           };
+          // Below 880px the section is no longer pinned (`.cap-sticky` is
+          // `position: static`), so `range()` collapses to ~1px and the
+          // scroll-driven reel would push every frame to translateY(0),
+          // stacking all four images. On mobile we hand control to click +
+          // CSS: clear the inline reel transforms so the `.is-active`
+          // translateY rule alone decides which frame shows.
+          const isMobile = () => window.innerWidth <= 880;
           let activeStep = -1;
           let ticking = false;
+          const setActive = (idx) => {
+            activeStep = idx;
+            steps.forEach((s, k) => s.classList.toggle('is-active', k === idx));
+            frames.forEach((f, k) => f.classList.toggle('is-active', k === idx));
+          };
           const update = () => {
             ticking = false;
+            if (isMobile()) {
+              frames.forEach((f) => {
+                f.style.transform = '';
+                f.style.zIndex = '';
+              });
+              return;
+            }
             const r = range();
             const scrolled = Math.min(Math.max(-scrolly.getBoundingClientRect().top, 0), r);
             // Continuous progress 0..(n-1). The reel position tracks the scroll
@@ -1184,11 +1212,7 @@ const matterRuntime = readFileSync(
               f.style.transform = `translateY(${ty}%)`;
             });
             const idx = Math.min(Math.max(Math.round(p), 0), n - 1);
-            if (idx !== activeStep) {
-              activeStep = idx;
-              steps.forEach((s, k) => s.classList.toggle('is-active', k === idx));
-              frames.forEach((f, k) => f.classList.toggle('is-active', k === idx));
-            }
+            if (idx !== activeStep) setActive(idx);
           };
           const onScroll = () => {
             if (!ticking) {
@@ -1200,6 +1224,10 @@ const matterRuntime = readFileSync(
           window.addEventListener('resize', onScroll);
           steps.forEach((s, i) => {
             s.addEventListener('click', () => {
+              if (isMobile()) {
+                setActive(i);
+                return;
+              }
               const targetY =
                 window.scrollY + scrolly.getBoundingClientRect().top + (i / span) * range();
               window.scrollTo({ top: targetY, behavior: 'smooth' });
@@ -1280,6 +1308,11 @@ const matterRuntime = readFileSync(
           window.addEventListener('resize', onScroll);
           labels.forEach((label, i) => {
             label.addEventListener('click', () => {
+              // Click → scroll the pin to the matching frame only makes sense
+              // while the section is pinned (desktop). On mobile there's no pin
+              // and the CSS :checked rules switch panels in place, so scrolling
+              // here would just shove the page up/down for no reason.
+              if (!pinned()) return;
               const frac = n > 1 ? (i / (n - 1)) * STACK_END : 0;
               const targetY =
                 window.scrollY +

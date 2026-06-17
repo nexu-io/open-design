@@ -1,5 +1,7 @@
-// @ts-nocheck
-import type { OrchestratorWorkspace } from '@open-design/contracts';
+import type {
+  OrchestratorWorkspace,
+  RunWorkspace,
+} from '@open-design/contracts';
 
 const ORCHESTRATOR_WORKSPACE_KIND = 'scratch';
 const ORCHESTRATOR_WRITEBACK = 'external';
@@ -85,4 +87,42 @@ export function parseOrchestratorWorkspace(value: unknown): {
 export function isOrchestratorScratchWorkspace(metadata: unknown): boolean {
   const record = plainObject(metadata);
   return !!record && normalizeOrchestratorWorkspace(record.orchestratorWorkspace) !== null;
+}
+
+export function projectWorkspaceProvenance(metadata: unknown): RunWorkspace {
+  const record = plainObject(metadata);
+  const baseDir = stringField(record?.baseDir);
+  const orchestratorWorkspace = normalizeOrchestratorWorkspace(record?.orchestratorWorkspace);
+  if (orchestratorWorkspace) {
+    return {
+      storage: {
+        kind: 'folder-backed',
+        baseDir,
+      },
+      provenance: {
+        ...orchestratorWorkspace,
+        kind: 'orchestrator-scratch',
+        writeback: ORCHESTRATOR_WRITEBACK,
+      },
+    };
+  }
+  if (baseDir) {
+    return {
+      storage: {
+        kind: 'folder-backed',
+        baseDir,
+      },
+      provenance: {
+        kind: 'user-local',
+        writeback: 'in-place',
+      },
+    };
+  }
+  return {
+    storage: {
+      kind: 'od-owned',
+      baseDir: null,
+    },
+    provenance: null,
+  };
 }

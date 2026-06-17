@@ -22,6 +22,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import TemplateCard from '../../../_components/template-card.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import { getBundledPlugins, type BundledPluginRecord } from '../../../_lib/bundled-plugins';
 import {
   PLUGIN_CATEGORIES,
@@ -128,11 +129,17 @@ const jsonLd = [
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
   <header class="catalog-head tpl-hero plugin-templates-head">
     <div class="tpl-hero-text">
-      <span class="label">{pcopy.templatesHeroEyebrow}</span>
+      <nav class="label detail-crumb" aria-label="Breadcrumb">
+        <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+        <span class="crumb-sep" aria-hidden="true">·</span>
+        <span aria-current="page">{pcopy.tileTemplates}</span>
+      </nav>
       <h1 class="display">{pcopy.tileTemplates}<span class="dot">.</span></h1>
       <p class="lead">{pcopy.templatesHeroLead}</p>
     </div>
   </header>
+
+  <PluginContribute />
 
   <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
     <div class="filter-group">
@@ -155,6 +162,18 @@ const jsonLd = [
       </ul>
     </div>
   </section>
+
+  <div class="catalog-search-wrap">
+    <input
+      type="search"
+      class="catalog-search"
+      data-catalog-search
+      placeholder={pcopy.searchPlaceholder}
+      aria-label={pcopy.searchPlaceholder}
+    />
+  </div>
+
+  <p class="catalog-no-results" data-catalog-empty hidden>{pcopy.searchNoResults}</p>
 
   <section class="tpl-grid" aria-label={pcopy.tileTemplates}>
     {templates.map((item, idx) => (
@@ -256,8 +275,38 @@ const jsonLd = [
       border-top: 0;
       padding-top: 0;
     }
-    .plugin-templates-head .label {
-      display: none;
+    .detail-crumb a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .detail-crumb a:hover {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+    }
+    .detail-crumb .crumb-sep {
+      margin: 0 0.45em;
+      opacity: 0.55;
+    }
+    .catalog-search-wrap {
+      margin: 0 0 24px;
+    }
+    .catalog-search {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper, #fafafa);
+      color: var(--ink, #262626);
+    }
+    .catalog-search:focus {
+      outline: none;
+      border-color: var(--ink-mute, #595959);
+    }
+    .catalog-no-results {
+      margin: 24px 0;
+      color: var(--ink-mute, #595959);
     }
   </style>
 </Layout>
@@ -379,6 +428,26 @@ const jsonLd = [
           positionPopover(btn);
         });
       });
+
+    // 3) Client-side filter for the card grid — typing narrows the
+    //    visible templates by name/keyword so users don't scroll the
+    //    whole catalogue to find one.
+    const search = document.querySelector<HTMLInputElement>('[data-catalog-search]');
+    if (search && !search.dataset.bound) {
+      search.dataset.bound = '1';
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('.tpl-grid > *'));
+      const empty = document.querySelector<HTMLElement>('[data-catalog-empty]');
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+        cards.forEach((el) => {
+          const match = !q || (el.textContent || '').toLowerCase().includes(q);
+          el.hidden = !match;
+          if (match) shown += 1;
+        });
+        if (empty) empty.hidden = shown !== 0;
+      });
+    }
   };
 
   if (document.readyState === 'loading') {

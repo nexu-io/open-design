@@ -1109,9 +1109,40 @@ test('codex json stream emits status text and usage events', () => {
 
   assert.deepEqual(events, [
     { type: 'status', label: 'initializing' },
-    { type: 'status', label: 'running' },
+    { type: 'status', label: 'thinking' },
     { type: 'text_delta', delta: 'hello' },
     { type: 'usage', usage: { input_tokens: 12, output_tokens: 3, cached_read_tokens: 4 } },
+  ]);
+});
+
+test('codex json stream emits thinking status and reasoning token usage', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    JSON.stringify({ type: 'turn.started' }) + '\n' +
+    JSON.stringify({
+      type: 'turn.completed',
+      usage: {
+        input_tokens: 12,
+        cached_input_tokens: 4,
+        output_tokens: 3,
+        reasoning_output_tokens: 8,
+      },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'thinking' },
+    {
+      type: 'usage',
+      usage: {
+        input_tokens: 12,
+        output_tokens: 3,
+        thought_tokens: 8,
+        cached_read_tokens: 4,
+      },
+    },
   ]);
 });
 
@@ -1520,7 +1551,7 @@ test('codex json stream treats reconnect errors as status warnings not fatal (re
 
   assert.deepEqual(events, [
     { type: 'status', label: 'initializing' },
-    { type: 'status', label: 'running' },
+    { type: 'status', label: 'thinking' },
     { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
     { type: 'text_delta', delta: 'OK' },
     { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
@@ -1543,7 +1574,7 @@ test('codex json stream treats stream disconnect reconnect errors as status warn
 
   assert.deepEqual(events, [
     { type: 'status', label: 'initializing' },
-    { type: 'status', label: 'running' },
+    { type: 'status', label: 'thinking' },
     {
       type: 'status',
       label: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',

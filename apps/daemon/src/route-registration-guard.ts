@@ -12,7 +12,7 @@ const guardedRouteKeys = new Set([
   'POST /api/projects/:id/media/generate',
 ]);
 
-const guardedMethods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'all'] as const;
+const guardedMethods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'all', 'use'] as const;
 
 export function guardedRouteKey(method: string, path: unknown): string | null {
   if (typeof path !== 'string') return null;

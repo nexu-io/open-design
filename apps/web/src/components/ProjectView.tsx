@@ -53,6 +53,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
+import { claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
@@ -865,6 +866,10 @@ export function ProjectView({
     }
   }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
@@ -3211,13 +3216,16 @@ export function ProjectView({
           current.filter((comment) => !consumedCommentIds.has(comment.id)),
         );
       }
+      const isFirstTurn = !retryTarget && historyBase.length === 0;
+      const fallbackFirstTurnTitle = isDesignSystemWorkspacePrompt(prompt)
+        ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
+        : summarizeProjectNameFromPrompt(prompt) || prompt.slice(0, 60).trim();
+      const fallbackProjectName = summarizeProjectNameFromPrompt(prompt);
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
-      if (!retryTarget && historyBase.length === 0) {
-        const title = isDesignSystemWorkspacePrompt(prompt)
-          ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
-          : prompt.slice(0, 60).trim();
+      if (isFirstTurn) {
+        const title = fallbackFirstTurnTitle;
         if (title) {
           setConversations((curr) =>
             curr.map((c) =>
@@ -3226,11 +3234,11 @@ export function ProjectView({
           );
           void patchConversation(project.id, runConversationId, { title });
         }
-        const projectName = summarizeProjectNameFromPrompt(prompt);
+        const projectName = fallbackProjectName;
         if (
           projectName &&
           projectName !== project.name &&
-          canAutoRenameProjectFromPrompt(project)
+          canAutoRenameProjectFromPrompt(project, prompt)
         ) {
           const metadata = project.metadata
             ? { ...project.metadata, nameSource: 'prompt' as const }
@@ -3248,6 +3256,52 @@ export function ProjectView({
           });
         }
       }
+      const canReplaceConversationTitle = (title: string | null | undefined) => {
+        const trimmed = (title ?? '').trim();
+        return (
+          !trimmed ||
+          trimmed === fallbackFirstTurnTitle ||
+          trimmed === prompt.slice(0, 60).trim()
+        );
+      };
+      const applyAgentGeneratedTitle = (rawTitle: string) => {
+        if (!isFirstTurn) return;
+        const agentTitle = rawTitle.trim();
+        if (!agentTitle || isDesignSystemWorkspacePrompt(prompt)) return;
+        const currentConversationTitle = conversationsRef.current.find(
+          (conversation) => conversation.id === runConversationId,
+        )?.title;
+        const shouldPatchConversation = canReplaceConversationTitle(currentConversationTitle);
+        setConversations((curr) =>
+          curr.map((conversation) => {
+            if (conversation.id !== runConversationId) return conversation;
+            if (!canReplaceConversationTitle(conversation.title)) return conversation;
+            return { ...conversation, title: agentTitle };
+          }),
+        );
+        if (shouldPatchConversation) {
+          void patchConversation(project.id, runConversationId, { title: agentTitle });
+        }
+        if (
+          agentTitle !== project.name &&
+          canAutoRenameProjectFromPrompt(project, prompt)
+        ) {
+          const metadata = project.metadata
+            ? { ...project.metadata, nameSource: 'agent' as const }
+            : undefined;
+          const updated: Project = {
+            ...project,
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+            updatedAt: Date.now(),
+          };
+          onProjectChange(updated);
+          void patchProject(project.id, {
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+          });
+        }
+      };
 
       // Snapshot the file list at turn-start so we can diff after the
       // agent finishes and surface anything new (e.g. a generated .pptx)
@@ -3419,6 +3473,10 @@ export function ProjectView({
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (ev.kind === 'conversation_title') {
+            applyAgentGeneratedTitle(ev.title);
+            return;
+          }
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
@@ -3650,10 +3708,24 @@ export function ProjectView({
         // A caller-supplied entry_from (e.g. 'resume_continue' from the
         // resumable-failure Continue action) overrides the DS default so the
         // run is attributed to the affordance that started it.
-        const runAnalyticsHints =
-          meta?.entryFrom
-            ? { ...(dsAnalyticsHints ?? {}), entryFrom: meta.entryFrom }
-            : dsAnalyticsHints;
+        //
+        // Session-dimension hints are stamped on every real run creation (this
+        // path only runs for non-queued sends): claim the next 0-based turn
+        // index for this browser session, and flag whether the project already
+        // had a generated artifact (project-scoped) so the run reads as an edit
+        // rather than a first creation.
+        const sessionTurn = claimRunTurnIndex();
+        const hasExistingArtifact = projectFilesRef.current.some(
+          (file) => Boolean(file.artifactManifest),
+        );
+        const runAnalyticsHints = {
+          ...(dsAnalyticsHints ?? {}),
+          ...(meta?.entryFrom ? { entryFrom: meta.entryFrom } : {}),
+          ...(sessionTurn
+            ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
+            : {}),
+          hasExistingArtifact,
+        };
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -3677,6 +3749,7 @@ export function ProjectView({
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
+          titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
@@ -4142,18 +4215,20 @@ export function ProjectView({
         uploaded = result.uploaded;
       }
       if (commentAttachments.length === 0) {
-        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true });
+        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true, entryFrom: 'comment' });
         return true;
       }
       for (let i = 0; i < commentAttachments.length; i++) {
         const commentAttachment = commentAttachments[i]!;
         const savedImages = chatAttachmentsFromPreviewCommentImages(commentAttachment.imageAttachments);
         const prompt = commentTaskQuery(commentAttachment);
+        // Comment/board pin → run: tag entry_from='comment' so the dashboard
+        // separates annotation-driven runs from plain composer sends.
         await handleSend(
           prompt,
           mergeChatAttachments(i === 0 ? uploaded : [], savedImages),
           [commentTaskContextAttachment(commentAttachment)],
-          { queueOnly: true },
+          { queueOnly: true, entryFrom: 'comment' },
         );
       }
       return true;
@@ -5870,6 +5945,8 @@ export function ProjectView({
                 agents={agents}
                 artifactId={headerArtifact.artifact_id}
                 artifactKind={headerArtifact.artifact_kind}
+                metricsConsent={config.telemetry?.metrics === true}
+                installationId={config.installationId}
               />
               <EntrySettingsMenu
                 config={config}
@@ -5900,7 +5977,9 @@ export function ProjectView({
           focusQuestionsRequest={focusQuestionsRequest}
           onSubmitQuestionForm={(text) => {
             if (currentConversationActionDisabled) return;
-            void handleSend(text, [], []);
+            // Submitting question-form answers is a clarification turn, not a
+            // fresh create/edit — tag entry_from so the dashboard can separate it.
+            void handleSend(text, [], [], { entryFrom: 'question_answer' });
           }}
         />
       </div>

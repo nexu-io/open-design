@@ -21,6 +21,7 @@ import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { Toast } from './components/Toast';
+import { CenteredLoader } from './components/Loading';
 import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
@@ -1041,6 +1042,12 @@ function AppInner() {
     reconcileFetchedProjects(list, request);
   }, [beginProjectListRequest, reconcileFetchedProjects]);
 
+  const refreshProjectsStrict = useCallback(async () => {
+    const request = beginProjectListRequest();
+    const list = await listProjects({ throwOnError: true });
+    reconcileFetchedProjects(list, request);
+  }, [beginProjectListRequest, reconcileFetchedProjects]);
+
   const refreshDesignSystems = useCallback(async () => {
     const list = await fetchDesignSystems();
     setDesignSystems(list);
@@ -2005,7 +2012,18 @@ function AppInner() {
   // EntryView / ProjectView split so the discovery surface stays
   // independent of any active project.
   let appMain: ReactNode;
-  if (route.kind === 'marketplace') {
+  const pendingFirstRunOnboardingRoute =
+    route.kind === 'home' &&
+    route.view === 'home' &&
+    config.onboardingCompleted !== true &&
+    !daemonConfigLoaded;
+  if (pendingFirstRunOnboardingRoute) {
+    appMain = (
+      <div className="entry-shell entry-shell--no-header">
+        <CenteredLoader label={t('entry.loadingWorkspace')} />
+      </div>
+    );
+  } else if (route.kind === 'marketplace') {
     appMain = <MarketplaceView />;
   } else if (route.kind === 'marketplace-detail') {
     appMain = <PluginDetailView pluginId={route.pluginId} />;
@@ -2127,6 +2145,7 @@ function AppInner() {
         onOpenLiveArtifact={handleOpenLiveArtifact}
         onDeleteProject={handleDeleteProject}
         onRenameProject={handleRenameProject}
+        onProjectsRefresh={refreshProjectsStrict}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}

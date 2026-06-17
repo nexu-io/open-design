@@ -12,6 +12,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import SystemCard from '../../../_components/system-card.astro';
+import PluginContribute from '../../../_components/plugin-contribute.astro';
 import { getSystemRecords } from '../../../_lib/catalog';
 import { getPluginsCopy } from '../../../_lib/plugins-i18n';
 import { getLandingUiCopy, localeFromPath, localizedHref } from '../../../i18n';
@@ -22,8 +23,8 @@ const pcopy = getPluginsCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 const systems = await getSystemRecords(locale);
 
-const title = `${pcopy.tileSystems} · ${systems.length} · Open Design`;
-const description = pcopy.systemsLead;
+const title = pcopy.systemsMetaTitle(systems.length);
+const description = pcopy.systemsMetaDescription;
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -36,19 +37,27 @@ const jsonLd = {
 ---
 
 <Layout title={title} description={description} active="plugins" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
-    <span>/</span>
-    <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
-    <span>/</span>
-    <span aria-current="page">{pcopy.tileSystems}</span>
-  </nav>
-
   <header class="catalog-head plugin-systems-head">
-    <span class="label">{pcopy.systemsLabel}</span>
+    <nav class="label detail-crumb" aria-label="Breadcrumb">
+      <a href={href('/plugins/')}>{pcopy.hubLabel}</a>
+      <span class="crumb-sep" aria-hidden="true">·</span>
+      <span aria-current="page">{pcopy.tileSystems}</span>
+    </nav>
     <h1 class="display">{pcopy.systemsHeading(systems.length)}<span class="dot">.</span></h1>
     <p class="lead">{pcopy.systemsLead}</p>
   </header>
+
+  <PluginContribute />
+
+  <div class="catalog-search-wrap">
+    <input
+      type="search"
+      class="catalog-search"
+      data-catalog-search
+      placeholder={pcopy.searchPlaceholder}
+      aria-label={pcopy.searchPlaceholder}
+    />
+  </div>
 
   <section class="catalog-grid systems-grid" aria-label={ui.catalog.systems.allAria}>
     <ul>
@@ -56,13 +65,94 @@ const jsonLd = {
     </ul>
   </section>
 
+  <p class="catalog-no-results" data-catalog-empty hidden>{pcopy.searchNoResults}</p>
+
+  <section class="systems-about" aria-labelledby="systems-about-head">
+    <h2 id="systems-about-head">{pcopy.systemsAboutHead}</h2>
+    <p>{pcopy.systemsAboutBody}</p>
+  </section>
+
   <style>
     .plugin-systems-head {
       border-top: 0;
       padding-top: 0;
     }
-    .plugin-systems-head .label {
-      display: none;
+    .detail-crumb a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .detail-crumb a:hover {
+      color: var(--ink, #262626);
+      text-decoration: underline;
+    }
+    .detail-crumb .crumb-sep {
+      margin: 0 0.45em;
+      opacity: 0.55;
+    }
+    .systems-about {
+      max-width: 760px;
+      margin: 64px auto 0;
+      padding-top: 32px;
+      border-top: 1px solid var(--line);
+    }
+    .systems-about h2 {
+      margin: 0 0 12px;
+    }
+    .systems-about p {
+      margin: 0;
+      color: var(--ink-soft, #434343);
+      line-height: 1.6;
+    }
+    .catalog-search-wrap {
+      margin: 0 0 24px;
+    }
+    .catalog-search {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper, #fafafa);
+      color: var(--ink, #262626);
+    }
+    .catalog-search:focus {
+      outline: none;
+      border-color: var(--ink-mute, #595959);
+    }
+    .catalog-no-results {
+      margin: 24px 0;
+      color: var(--ink-mute, #595959);
     }
   </style>
+
+  <script>
+    (() => {
+      const init = () => {
+        const input = document.querySelector<HTMLInputElement>('[data-catalog-search]');
+        if (!input || input.dataset.bound) return;
+        input.dataset.bound = '1';
+        const items = Array.from(
+          document.querySelectorAll<HTMLElement>('.systems-grid > ul > li'),
+        );
+        const empty = document.querySelector<HTMLElement>('[data-catalog-empty]');
+        input.addEventListener('input', () => {
+          const q = input.value.trim().toLowerCase();
+          let shown = 0;
+          items.forEach((el) => {
+            const match = !q || (el.textContent || '').toLowerCase().includes(q);
+            el.hidden = !match;
+            if (match) shown += 1;
+          });
+          if (empty) empty.hidden = shown !== 0;
+        });
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+      document.addEventListener('astro:page-load', init);
+    })();
+  </script>
 </Layout>

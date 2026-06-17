@@ -424,7 +424,6 @@ export function createClaudeStreamHandler(
         if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
           if (typeof block.id === 'string' && streamedToolUseIds.has(block.id)) {
-            streamedToolUseIds.delete(block.id);
             continue;
           }
           emitToolUse(block.id, block.name, block.input ?? null);

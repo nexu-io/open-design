@@ -63,6 +63,16 @@ Open Design is BYOK at every layer. The API keys you configure for coding
 agents and model providers are stored locally and used only to talk to those
 providers directly. They are never sent to the Open Design team.
 
+## Open Design AMR
+
+“Open Design AMR” is Open Design’s official, first-party model service. Because
+the two are part of the same product family operated by the same team, we may
+share information between them as needed to provide, connect, and improve the
+combined experience — for example, to recognize that you arrived from Open
+Design, to help you get set up, and to keep the products working well together.
+This sharing is between our own products, not with unrelated third parties, and
+any data involved still follows the controls described on this page.
+
 ## Changes to this page
 
 This document tracks the data handling of the shipped app. When the telemetry

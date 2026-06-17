@@ -10,6 +10,7 @@
  * expanding tool-group disclosures.
  */
 import type { AgentEvent } from '../types';
+import { dedupeToolUsesById } from './tool-events';
 
 export type FileOpKind = 'read' | 'write' | 'edit';
 export type FileOpStatus = 'running' | 'done' | 'error';
@@ -62,16 +63,17 @@ function mergeStatus(a: FileOpStatus, b: FileOpStatus): FileOpStatus {
 
 export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
   if (!events || events.length === 0) return [];
+  const dedupedEvents = dedupeToolUsesById(events);
   const resultByToolId = new Map<
     string,
     Extract<AgentEvent, { kind: 'tool_result' }>
   >();
-  for (const ev of events) {
+  for (const ev of dedupedEvents) {
     if (ev.kind === 'tool_result') resultByToolId.set(ev.toolUseId, ev);
   }
 
   const byPath = new Map<string, FileOpEntry>();
-  for (const ev of events) {
+  for (const ev of dedupedEvents) {
     if (ev.kind !== 'tool_use') continue;
     const kind = classify(ev.name);
     if (!kind) continue;
