@@ -34,11 +34,9 @@ import {
 } from './plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
 import {
-  createCloudflareAccessMiddleware,
   resolveAuthMode,
-  resolveCloudflareAccessConfig,
   type AuthMode,
-} from './cf-access-middleware.js';
+} from './auth/auth-mode.js';
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
@@ -4655,15 +4653,13 @@ export async function startServer({
   // Plan §3.K1 / spec §15.7 — bound-API-token guard.
   //
   // The daemon refuses to bind to a public interface unless
-  // OD_ACCESS_TOKEN or OD_TRUSTED_PROXY=1 is configured.
+  // OD_ACCESS_TOKEN or OD_TRUSTED_PROXY is configured.
   // This is the spec §16 Phase 5 safety floor: a hosted operator can
   // no longer accidentally publish an unsecured daemon by setting
   // OD_BIND_HOST=0.0.0.0 without authentication.
   //
   // Two auth modes:
-  //   1. OD_TRUSTED_PROXY=1 → trusted reverse proxy
-  //      (with optional Cloudflare Access JWT validation via
-  //       OD_CF_ACCESS_TEAM_DOMAIN + OD_CF_ACCESS_AUD).
+  //   1. OD_TRUSTED_PROXY → trusted reverse proxy (no JWT validation)
   //   2. OD_ACCESS_TOKEN → access-token middleware (existing).
   //
   // Loopback hosts (127.0.0.1 / ::1 / localhost) are always allowed —
@@ -4697,12 +4693,9 @@ export async function startServer({
   //
   // Two mutually exclusive modes are supported:
   //
-  //   trusted-proxy:   OD_TRUSTED_PROXY=1. The daemon is behind a trusted
-  //                    reverse proxy. If OD_CF_ACCESS_* vars are also set,
-  //                    Cloudflare Access JWT validation is enabled.
-  //                    Otherwise, the proxy is trusted without additional
-  //                    validation (the operator is responsible for proxy
-  //                    configuration).
+  //   trusted-proxy:   OD_TRUSTED_PROXY is set. The daemon trusts the
+  //                    proxy without additional validation (the operator
+  //                    is responsible for proxy configuration).
   //
   //   access-token:    OD_ACCESS_TOKEN (Authorization: Bearer <token>).
   //                    Loopback origins are exempt so the desktop UI keeps
@@ -4715,22 +4708,9 @@ export async function startServer({
   // =========================================================================
 
   if (authMode === 'trusted-proxy') {
-    const cfConfig = resolveCloudflareAccessConfig();
-    if (cfConfig) {
-      console.log(
-        `[cf-access] Cloudflare Access JWT validation ENABLED ` +
-        `(team=${cfConfig.teamDomain}, aud=${cfConfig.aud})`,
-      );
-      app.use('/api', createCloudflareAccessMiddleware(cfConfig));
-    } else {
-      console.log('[auth] Trusted-proxy mode ENABLED (no JWT validation configured)');
-    }
-    // Warn if OD_ACCESS_TOKEN is also set — trusted-proxy takes precedence
+    console.log('[auth] Trusted-proxy mode ENABLED');
     if (accessToken.length > 0) {
-      console.warn(
-        '[auth] OD_ACCESS_TOKEN is set but OD_TRUSTED_PROXY=1 takes precedence; ' +
-        'OD_ACCESS_TOKEN is ignored.',
-      );
+      console.warn('[auth] OD_ACCESS_TOKEN ignored; OD_TRUSTED_PROXY takes precedence');
     }
   } else if (authMode === 'access-token') {
     console.log('[auth] Access-token middleware ENABLED (OD_ACCESS_TOKEN)');
