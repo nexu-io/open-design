@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   readAliasMap,
   readMaskedConfig,
+  resolveCodexSubscriptionStatus,
   resolveModelAlias,
   resolveProviderConfig,
   seedProviderIfMissing,
@@ -169,6 +170,70 @@ describe('media-config OpenAI auth-file fallback', () => {
       configured: true,
       source: 'codex-auth',
       apiKeyTail: '',
+    });
+  });
+
+  it('detects a Codex ChatGPT subscription auth file', async () => {
+    await writeHomeJson('.codex/auth.json', {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+
+    await expect(resolveCodexSubscriptionStatus(projectRoot)).resolves.toEqual({
+      available: true,
+    });
+  });
+
+  it('detects Codex OAuth tokens as subscription availability', async () => {
+    await writeHomeJson('.codex/auth.json', {
+      tokens: { access_token: 'codex-oauth-token' },
+    });
+
+    await expect(resolveCodexSubscriptionStatus(projectRoot)).resolves.toEqual({
+      available: true,
+    });
+  });
+
+  it('does not treat an API-key-only Codex auth file as subscription availability', async () => {
+    await writeHomeJson('.codex/auth.json', {
+      OPENAI_API_KEY: 'codex-api-key',
+    });
+
+    await expect(resolveCodexSubscriptionStatus(projectRoot)).resolves.toEqual({
+      available: false,
+    });
+  });
+
+  it('does not read Codex subscription status in sandbox mode', async () => {
+    process.env.OD_SANDBOX_MODE = '1';
+    await writeHomeJson('.codex/auth.json', {
+      auth_mode: 'chatgpt',
+      tokens: { access_token: 'codex-oauth-token' },
+    });
+
+    await expect(resolveCodexSubscriptionStatus(projectRoot)).resolves.toEqual({
+      available: false,
+    });
+  });
+
+  it('detects subscription auth from app-config Codex home overrides', async () => {
+    const dataDir = path.join(projectRoot, 'data-root');
+    const configuredCodexHome = path.join(projectRoot, 'configured-codex-home');
+    process.env.OD_DATA_DIR = dataDir;
+    process.env.CODEX_HOME = path.join(projectRoot, 'wrong-codex-home');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+      agentCliEnv: {
+        codex: { CODEX_HOME: configuredCodexHome },
+      },
+    }), 'utf8');
+    await mkdir(configuredCodexHome, { recursive: true });
+    await writeFile(path.join(configuredCodexHome, 'auth.json'), JSON.stringify({
+      auth_mode: 'chatgpt',
+    }), 'utf8');
+
+    await expect(resolveCodexSubscriptionStatus(projectRoot)).resolves.toEqual({
+      available: true,
     });
   });
 

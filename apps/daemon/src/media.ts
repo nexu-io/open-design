@@ -65,10 +65,13 @@ import {
   modelsForSurface,
 } from './media-models.js';
 import { assertAndFetchExternalAsset } from './connectionTest.js';
-import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
+import {
+  resolveCodexImagegenEnv,
+  resolveCodexSubscriptionStatus,
+  resolveModelAlias,
+  resolveProviderConfig,
+} from './media-config.js';
 import { codexNeedsDangerFullAccessSandbox } from './runtimes/defs/codex.js';
-import { spawnEnvForAgent } from './agents.js';
-import { agentCliEnvForAgent, appConfigDir, readAppConfig } from './app-config.js';
 import {
   ensureProject,
   kindFor,
@@ -515,14 +518,41 @@ export async function generateMedia(args: {
   // True only when the dispatcher intentionally returned a stub because
   // no real renderer is wired up for this (provider, surface) pair.
   let intentionalStub = false;
+  const customImageOverride = customImageOverridesOpenAIModel(
+    ctx,
+    customImageCredentials,
+  );
+  const codexSubscriptionModel =
+    !customImageOverride
+    && surface === 'image'
+    && def.provider === 'openai'
+    && ctx.wireModel === ctx.model
+      ? codexSubscriptionEquivalent(ctx.model)
+      : null;
+  const useCodexSubscription =
+    codexSubscriptionModel
+      ? (await resolveCodexSubscriptionStatus(projectRoot)).available
+      : false;
   try {
     if (
       def.provider === 'openai'
       && surface === 'image'
-      && customImageOverridesOpenAIModel(ctx, customImageCredentials)
+      && customImageOverride
     ) {
       providerId = 'custom-image';
       const result = await renderCustomOpenAIImage(ctx, customImageCredentials!);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (codexSubscriptionModel && useCodexSubscription) {
+      providerId = 'codex';
+      const result = await renderCodexImage({
+        ...ctx,
+        model: codexSubscriptionModel.id,
+        wireModel: codexSubscriptionModel.id,
+        modelDef: codexSubscriptionModel,
+        provider: findProvider('codex'),
+      });
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -831,9 +861,14 @@ function withMediaRequestInit(
   };
 }
 
+const OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE =
+  'no OpenAI credential - configure an API key in Settings or set OPENAI_API_KEY. ' +
+  "If you're signed into Codex with a ChatGPT subscription, use the codex-gpt-image-2 model instead; " +
+  'it renders through your local Codex login and needs no OpenAI API key.';
+
 async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
+    throw new Error(OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE);
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
@@ -933,17 +968,6 @@ function codexImagePrompt(ctx: MediaContext): string {
     ? '$imagegen Edit the attached reference image:'
     : '$imagegen';
   return `${prefix} ${prompt}${aspect}`;
-}
-
-async function resolveCodexImagegenEnv(projectRoot: string): Promise<NodeJS.ProcessEnv> {
-  const dataDir = appConfigDir(projectRoot);
-  try {
-    const appConfig = await readAppConfig(dataDir);
-    const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
-    return spawnEnvForAgent('codex', process.env, configuredEnv);
-  } catch {
-    return spawnEnvForAgent('codex', process.env);
-  }
 }
 
 function codexImagegenArgs(ctx: MediaContext, generatedRoot: string, env: NodeJS.ProcessEnv): string[] {
@@ -1181,6 +1205,11 @@ function customImageOverridesOpenAIModel(
   const model = credentials?.model?.trim();
   if (!baseUrl || !model) return false;
   return model === ctx.model || model === ctx.wireModel;
+}
+
+function codexSubscriptionEquivalent(modelId: string): MediaModel | null {
+  const candidate = findMediaModel(`codex-${modelId}`);
+  return candidate?.provider === 'codex' ? candidate : null;
 }
 
 async function parseOpenAICompatibleJson(resp: Response, providerTag: string): Promise<any> {
