@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Sealos üzerinde dağıtın
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos şablonu, yayımlanmış Open Design Docker imajını kalıcı çalışma alanı depolamasıyla çalıştırır. Herkese açık veya paylaşılan dağıtımlar için erişim denetimini yukarıdaki Docker dağıtım rehberine göre yapılandırın.
+
 ### 🧑‍💻 Kaynaktan çalıştırın
 
 ```bash

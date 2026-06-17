@@ -328,6 +328,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 النشر على Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+يشغّل قالب Sealos صورة Docker المنشورة لـ Open Design مع تخزين دائم لمساحة العمل. اضبط التحكم في الوصول لأي نشر عام أو مشترك بما يتوافق مع إرشادات نشر Docker أعلاه.
+
 ### 🧑‍💻 التشغيل من المصدر
 
 ```bash

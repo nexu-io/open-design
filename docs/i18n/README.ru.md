@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Развертывание на Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Шаблон Sealos запускает опубликованный Docker-образ Open Design с постоянным хранилищем рабочей области. Настройте контроль доступа для публичного или совместного развертывания согласно рекомендациям Docker выше.
+
 ### 🧑‍💻 Запуск из исходников
 
 ```bash

@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Sealos에 배포
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos 템플릿은 게시된 Open Design Docker 이미지를 영구 워크스페이스 스토리지와 함께 실행합니다. 공개 또는 공유 배포에서는 위 Docker 배포 안내에 맞춰 접근 제어를 설정하세요.
+
 ### 🧑‍💻 소스에서 실행
 
 ```bash

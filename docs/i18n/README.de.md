@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Auf Sealos bereitstellen
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Die Sealos-Vorlage führt das veröffentlichte Open-Design-Docker-Image mit persistentem Workspace-Speicher aus. Konfigurieren Sie die Zugriffskontrolle für öffentliche oder gemeinsam genutzte Deployments gemäß den Docker-Hinweisen oben.
+
 ### 🧑‍💻 Aus dem Quellcode ausführen
 
 ```bash
