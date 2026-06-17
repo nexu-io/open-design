@@ -7,19 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **Cloudflare Access JWT validation** via `OD_BEHIND_PROXY=cloudflare`. When enabled, every `/api/*` request must carry a valid `Cf-Access-Jwt-Assertion` header. The JWT is validated against Cloudflare's public JWKS endpoint with key rotation support, full claim validation (alg, exp, nbf, iat, type, aud, iss, identity_nonce), and stale-cache fallback on JWKS fetch failure.
-- **Pre-installed coding-agent CLIs in Docker.** The runtime image now ships 22 coding-agent CLIs (Claude Code, Codex, Gemini, Cursor, Copilot, DeepSeek, Qwen, Qoder, OpenCode, Trae, Kimi, Pi, Vibe, Hermes, Grok, Kiro, Kilo, Reasonix, Aider, Devin) installed under `/usr/local/lib/open-design-clis/`. Each CLI is installed without authentication — users exec into the container to run auth flows.
-- **Persistent CLI config volumes in Docker Compose.** 21 named volumes preserve CLI credentials across container restarts, one per supported coding-agent CLI.
-- **`OD_CF_ACCESS_TEAM_DOMAIN` and `OD_CF_ACCESS_AUD`** environment variables for Cloudflare Access configuration.
-- **`OD_CF_ACCESS_UNSAFE_DOMAIN=1`** to bypass Cloudflare domain validation in development.
-
 ### Changed
 
-- **`OD_API_TOKEN` is no longer required** when `OD_BEHIND_PROXY=cloudflare` is configured with valid Cloudflare Access settings. The two auth modes are mutually exclusive.
-- **Docker runtime image** now includes `python3`, `py3-pip`, `bash`, and `curl` for CLI installation support.
-- **Startup guard** now accepts `OD_BEHIND_PROXY=cloudflare` as an alternative to `OD_API_TOKEN` for non-loopback binds.
+- **Cloudflare Access JWT auth removed.** `OD_BEHIND_PROXY=cloudflare` and the `OD_CF_ACCESS_*` variables no longer activate JWT validation. Use `OD_TRUSTED_PROXY` with a generic reverse proxy instead — identity enforcement stays at the proxy layer.
+- **CLI credential volumes consolidated.** The 20 per-CLI named volumes (`open_design_claude` through `open_design_hermes`) have been replaced by a single `open_design_home` volume mounted at `/home/open-design`.
+- **`dokploy-compose.yml` added** as a mirror of `docker-compose.yml` for Dokploy and similar PaaS deployments that manage their own proxy networking. The only difference is `expose` instead of `ports`.
 
 ### Fixed
 

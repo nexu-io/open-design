@@ -30,7 +30,7 @@ services:
     # hosted-mode tuple; remove these two if running on a private
     # docker network with an upstream reverse proxy that already
     # gates access. Alternatively set OD_TRUSTED_PROXY=1 if the daemon
-    # is behind a trusted reverse proxy (Cloudflare Access, nginx, etc.).
+    # is behind a trusted reverse proxy.
     environment:
       OD_BIND_HOST: ${OD_BIND_HOST:-0.0.0.0}
       OD_PORT: ${OD_PORT:-7456}

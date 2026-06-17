@@ -74,28 +74,23 @@ filesystem access inside the container.
 
 ## Authentication modes
 
-Open Design supports three mutually exclusive authentication modes. Choose one
-and configure only that mode in your `.env` file.
+Open Design supports two authentication modes. Choose one and configure only
+that mode in your `.env` file.
 
 | Mode | Variable(s) | Loopback exempt | Use case |
 |------|-------------|-----------------|----------|
 | Bearer token | `OD_ACCESS_TOKEN` | Yes | Simplest; single-user, LAN, or VPN-gated deployments |
-| Cloudflare Access | `OD_BEHIND_PROXY=cloudflare`, `OD_CF_ACCESS_TEAM_DOMAIN`, `OD_CF_ACCESS_AUD` | No | Teams using Cloudflare Zero Trust |
-| Trusted proxy | `OD_TRUSTED_PROXY` | Varies | Custom reverse proxy with forwarded headers |
+| Trusted proxy | `OD_TRUSTED_PROXY` | Varies | Production-grade reverse proxy with forwarded headers |
 
 **Bearer token** is the default for local Compose. Generate a token with
 `openssl rand -hex 32`, set it in `OD_ACCESS_TOKEN`, and pass
 `Authorization: Bearer <token>` with every `/api` request. Requests from
 `127.0.0.1` are exempt.
 
-**Cloudflare Access** mode validates `Cf-Access-Jwt-Assertion` headers issued by
-your Cloudflare Access application. Set `OD_BEHIND_PROXY=cloudflare`, then
-provide your team domain and application AUD tag. In this mode the bearer token
-is ignored and loopback requests are *not* exempt.
-
 **Trusted proxy** mode tells the daemon to trust `X-Forwarded-*` headers from a
 named proxy (e.g. `nginx`, `caddy`, `cloudflare`). Pair it with
-`OPEN_DESIGN_ALLOWED_ORIGINS` to validate browser origins.
+`OPEN_DESIGN_ALLOWED_ORIGINS` to validate browser origins. This is the
+recommended mode for production deployments behind a reverse proxy.
 
 The backward-compatible `OD_API_TOKEN` variable is still accepted by the server
 as a deprecated fallback. New deployments should use `OD_ACCESS_TOKEN`.
@@ -154,8 +149,8 @@ The daemon rejects API requests that lack authentication. Verify:
 
 1. `OD_ACCESS_TOKEN` is set in your `.env` file.
 2. Your client sends `Authorization: Bearer <token>` with every `/api` request.
-3. If you are using Cloudflare Access mode, ensure `OD_BEHIND_PROXY=cloudflare`
-   is set and the request carries a valid `Cf-Access-Jwt-Assertion` header.
+3. If you are using trusted-proxy mode, ensure `OD_TRUSTED_PROXY` is set and
+   the request carries forwarded headers from that proxy.
 
 ### `Origin: null` not allowed
 
@@ -196,6 +191,39 @@ Workaround — enable host networking:
    docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
    # host
    ```
+
+## Dokploy and PaaS deployments
+
+Dokploy and similar PaaS platforms manage their own networking and proxy layer.
+Use `dokploy-compose.yml`, which mirrors `docker-compose.yml` but exposes the
+daemon port internally instead of publishing it to the host:
+
+```bash
+docker compose -f deploy/dokploy-compose.yml up -d --no-build
+```
+
+The only difference is `expose: ["7456"]` instead of `ports:` — the daemon is
+reachable by other containers on the same network but not bound to localhost.
+All other settings (image, environment, volumes, security, healthcheck) are
+identical.
+
+## Migration from Cloudflare Access JWT
+
+Previous deployments used `OD_BEHIND_PROXY=cloudflare` with
+`OD_CF_ACCESS_TEAM_DOMAIN` and `OD_CF_ACCESS_AUD` for Cloudflare Access JWT
+validation. This mode has been removed.
+
+To migrate:
+
+1. Delete `OD_BEHIND_PROXY=cloudflare`, `OD_CF_ACCESS_TEAM_DOMAIN`, and
+   `OD_CF_ACCESS_AUD` from your `.env` file.
+2. Set `OD_TRUSTED_PROXY=cloudflare` (or your proxy name). The daemon will
+   trust forwarded headers from that proxy.
+3. Keep identity enforcement at the proxy layer — Cloudflare Access still works
+   as a generic trusted proxy; only the JWT validation in the daemon is removed.
+
+See the [spec migration block](../openspec/changes/simplify-docker-deployment/spec.md#migration)
+for the full migration sequence including volume consolidation.
 
 ## Publish to Docker Hub
 
