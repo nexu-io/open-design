@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
 import { projectKindToTracking } from "@open-design/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
@@ -39,6 +39,7 @@ type DesignListItem =
 	  };
 
 const DESIGNS_VIEW_STORAGE_KEY = "od:designs:view";
+const PROJECTS_AUTO_REFRESH_MS = 15000;
 
 export const STATUS_ORDER = [
 	"not_started",
@@ -71,6 +72,8 @@ interface Props {
 	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
 	onNewProject?: () => void;
+	onRefresh?: () => Promise<void> | void;
+	isActive?: boolean;
 }
 
 export function DesignsTab({
@@ -82,6 +85,8 @@ export function DesignsTab({
 	onDelete,
 	onRename,
 	onNewProject,
+	onRefresh,
+	isActive = true,
 }: Props) {
 	const renameTitleId = useId();
 	const confirmTitleId = useId();
@@ -108,9 +113,16 @@ export function DesignsTab({
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
-	const deleteToastIdRef = useRef(0);
-	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
+	const toastIdRef = useRef(0);
+	const [designsToast, setDesignsToast] = useState<{
+		id: number;
+		message: string;
+		role?: "status" | "alert";
+		tone?: "default" | "success" | "error";
+	} | null>(null);
+	const [projectsRefreshing, setProjectsRefreshing] = useState(false);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
+	const projectsRefreshInFlightRef = useRef(false);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
 	const [confirmTarget, setConfirmTarget] = useState<{
@@ -262,6 +274,62 @@ export function DesignsTab({
 		if (view === "kanban" && selectMode) exitSelectMode();
 	}, [selectMode, view]);
 
+	const refreshProjectsList = useCallback(
+		async (source: "manual" | "auto") => {
+			if (!onRefresh || projectsRefreshInFlightRef.current) return;
+			projectsRefreshInFlightRef.current = true;
+			setProjectsRefreshing(true);
+			if (source === "manual") {
+				trackProjectsListControlsClick(analytics.track, {
+					page_name: "projects",
+					area: "list_controls",
+					element: "refresh",
+				});
+			}
+			try {
+				await onRefresh();
+			} catch {
+				if (source === "manual") {
+					setDesignsToast({
+						id: (toastIdRef.current += 1),
+						message: t("liveArtifact.refresh.networkFailure"),
+						role: "alert",
+						tone: "error",
+					});
+				}
+			} finally {
+				projectsRefreshInFlightRef.current = false;
+				setProjectsRefreshing(false);
+			}
+		},
+		[analytics.track, onRefresh, t],
+	);
+
+	const refreshProjectsListRef = useRef(refreshProjectsList);
+	useEffect(() => {
+		refreshProjectsListRef.current = refreshProjectsList;
+	}, [refreshProjectsList]);
+
+	const hasProjectsRefresh = Boolean(onRefresh);
+	useEffect(() => {
+		if (!isActive || !hasProjectsRefresh) return;
+
+		const refreshIfVisible = () => {
+			if (document.visibilityState !== "visible") return;
+			void refreshProjectsListRef.current("auto");
+		};
+
+		refreshIfVisible();
+		const interval = window.setInterval(refreshIfVisible, PROJECTS_AUTO_REFRESH_MS);
+		window.addEventListener("focus", refreshIfVisible);
+		document.addEventListener("visibilitychange", refreshIfVisible);
+		return () => {
+			window.clearInterval(interval);
+			window.removeEventListener("focus", refreshIfVisible);
+			document.removeEventListener("visibilitychange", refreshIfVisible);
+		};
+	}, [hasProjectsRefresh, isActive]);
+
 	const filtered = useMemo(() => {
 		const q = filter.trim().toLowerCase();
 		let list: DesignListItem[] = projects
@@ -384,9 +452,10 @@ export function DesignsTab({
 					failed > 0
 						? t("designs.deleteSelectedPartial", { deleted, failed })
 						: t("designs.deleteSelectedSuccess", { n: deleted });
-				setDeleteToast({
-					id: (deleteToastIdRef.current += 1),
+				setDesignsToast({
+					id: (toastIdRef.current += 1),
 					message,
+					tone: "success",
 				});
 			},
 		});
@@ -474,6 +543,35 @@ export function DesignsTab({
 							}}
 						/>
 					</div>
+					{onRefresh ? (
+						<button
+							type="button"
+							className="designs-refresh-button"
+							onClick={() => void refreshProjectsList("manual")}
+							disabled={projectsRefreshing}
+							title={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+							aria-label={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+						>
+							<Icon
+								name={projectsRefreshing ? "spinner" : "refresh"}
+								size={13}
+								className={projectsRefreshing ? "icon-spin" : undefined}
+							/>
+							<span>
+								{projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")}
+							</span>
+						</button>
+					) : null}
 					{view === "grid" && selectMode ? (
 						<div className="designs-select-bar" role="group">
 							<span className="designs-select-count">
@@ -997,11 +1095,13 @@ export function DesignsTab({
 				</Dialog>
 			) : null}
 			<AnimatePresence>
-				{deleteToast ? (
+				{designsToast ? (
 					<Toast
-						key={deleteToast.id}
-						message={deleteToast.message}
-						onDismiss={() => setDeleteToast(null)}
+						key={designsToast.id}
+						message={designsToast.message}
+						role={designsToast.role}
+						tone={designsToast.tone}
+						onDismiss={() => setDesignsToast(null)}
 					/>
 				) : null}
 			</AnimatePresence>

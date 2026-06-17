@@ -1042,6 +1042,12 @@ function AppInner() {
     reconcileFetchedProjects(list, request);
   }, [beginProjectListRequest, reconcileFetchedProjects]);
 
+  const refreshProjectsStrict = useCallback(async () => {
+    const request = beginProjectListRequest();
+    const list = await listProjects({ throwOnError: true });
+    reconcileFetchedProjects(list, request);
+  }, [beginProjectListRequest, reconcileFetchedProjects]);
+
   const refreshDesignSystems = useCallback(async () => {
     const list = await fetchDesignSystems();
     setDesignSystems(list);
@@ -2139,6 +2145,7 @@ function AppInner() {
         onOpenLiveArtifact={handleOpenLiveArtifact}
         onDeleteProject={handleDeleteProject}
         onRenameProject={handleRenameProject}
+        onProjectsRefresh={refreshProjectsStrict}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}

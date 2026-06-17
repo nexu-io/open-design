@@ -1272,6 +1272,7 @@ export interface ProjectsListControlsClickProps {
     | 'your_designs'
     | 'search_input'
     | 'select'
+    | 'refresh'
     | 'create_project'
     | 'grid_view'
     | 'list_view';
