@@ -817,6 +817,24 @@ describe('image-based PPTX export', () => {
   const transparentPng =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+  it('generates a theme that satisfies OOXML font and style minimums', () => {
+    const entries = buildImagePptxEntries('Quarterly & Plan', [
+      { dataUrl: transparentPng, w: 1600, h: 900 },
+    ]);
+
+    const theme = entries.find((entry) => entry.path === 'ppt/theme/theme1.xml')?.content;
+    const themeXml = String(theme);
+    const listXml = (tag: string) => themeXml.match(new RegExp(`<a:${tag}>[\\s\\S]*?</a:${tag}>`))?.[0] ?? '';
+    const countTags = (xml: string, tag: string) => xml.match(new RegExp(`<a:${tag}\\b`, 'g'))?.length ?? 0;
+
+    expect(themeXml).toContain('<a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>');
+    expect(themeXml).toContain('<a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>');
+    expect(countTags(listXml('fillStyleLst'), 'solidFill')).toBeGreaterThanOrEqual(3);
+    expect(countTags(listXml('lnStyleLst'), 'ln')).toBeGreaterThanOrEqual(3);
+    expect(countTags(listXml('effectStyleLst'), 'effectStyle')).toBeGreaterThanOrEqual(3);
+    expect(countTags(listXml('bgFillStyleLst'), 'solidFill')).toBeGreaterThanOrEqual(3);
+  });
+
   it('builds a PPTX package that embeds one preview PNG per slide', async () => {
     const entries = buildImagePptxEntries('Quarterly & Plan', [
       { dataUrl: transparentPng, w: 1600, h: 900 },
