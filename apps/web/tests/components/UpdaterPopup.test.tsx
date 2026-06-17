@@ -47,6 +47,12 @@ function payloadDownloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusS
       type: 'payload',
       url: 'https://example.test/payload.zip',
     },
+    capabilities: {
+      canApplyInPlace: true,
+      canDownload: true,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
     downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
     ...overrides,
   });
