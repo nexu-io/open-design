@@ -103,11 +103,11 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  daemon_workspace_tests:");
+    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  web_workspace_tests:");
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("runs-on: windows-latest");
-    expect(job).toContain("needs.change_scopes.outputs.tools_pack_tests_required == 'true'");
+    expect(job).toContain("needs.scopes.outputs.tools_pack_tests_required == 'true'");
     expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
@@ -117,8 +117,8 @@ describe("packaged smoke workflow", () => {
     const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
 
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
-    expect(blobGuard).toContain("git merge-base origin/main HEAD");
-    expect(blobGuard).toContain('git diff --name-only --diff-filter=AMR "$base" HEAD');
+    expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
+    expect(blobGuard).toContain("select(.status != \"removed\") | .filename");
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {

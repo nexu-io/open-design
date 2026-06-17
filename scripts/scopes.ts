@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync, appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+
+import { uiP0CiMatrix, visualCiMatrix } from "../e2e/lib/playwright/suites.ts";
 
 type ScopeOutputs = {
   daemon_tests_required: boolean;
@@ -13,66 +15,91 @@ type ScopeOutputs = {
   workspace_validation_required: boolean;
 };
 
+type ScopePlan = ScopeOutputs & {
+  ui_p0_matrix: string;
+  visual_matrix: string;
+};
+
 type GitHubEvent = {
   pull_request?: {
     number?: number;
   };
 };
 
-const outputs: ScopeOutputs = {
-  daemon_tests_required: false,
-  web_tests_required: false,
-  tools_dev_tests_required: false,
-  tools_pack_tests_required: false,
-  nix_validation_required: false,
-  ui_p0_pr_required: false,
-  visual_validation_required: false,
-  docker_validation_required: false,
-  workspace_validation_required: false,
-};
+const commandName = process.argv[2] ?? "github-output";
 
-const eventName = requiredEnv("GITHUB_EVENT_NAME");
-
-if (eventName === "pull_request") {
-  for (const file of changedPullRequestFiles()) {
-    applyChangedFile(file, outputs);
-    if (allOutputsTrue(outputs)) break;
-  }
-
-  if (
-    outputs.daemon_tests_required ||
-    outputs.web_tests_required ||
-    outputs.tools_dev_tests_required ||
-    outputs.tools_pack_tests_required
-  ) {
-    outputs.workspace_validation_required = true;
-  }
-} else if (eventName === "push") {
-  outputs.daemon_tests_required = true;
-  outputs.web_tests_required = true;
-  outputs.tools_dev_tests_required = true;
-  outputs.tools_pack_tests_required = true;
-  // Main already runs .github/workflows/nix-check.yml, so keep this workflow's
-  // push path focused on the non-Nix workspace signal.
-  outputs.nix_validation_required = false;
-  // Main Docker publishing stays owned by .github/workflows/docker-image.yml.
-  outputs.docker_validation_required = false;
-  outputs.workspace_validation_required = true;
+if (commandName === "github-output") {
+  writeGithubOutputs(createScopePlan());
+} else if (commandName === "print") {
+  console.log(JSON.stringify(createScopePlan(), null, 2));
+} else if (commandName === "help") {
+  printUsage();
 } else {
-  outputs.daemon_tests_required = true;
-  outputs.web_tests_required = true;
-  outputs.tools_dev_tests_required = true;
-  outputs.tools_pack_tests_required = true;
-  outputs.nix_validation_required = true;
-  if (eventName === "workflow_dispatch") {
-    outputs.ui_p0_pr_required = true;
-  }
-  outputs.visual_validation_required = true;
-  outputs.docker_validation_required = true;
-  outputs.workspace_validation_required = true;
+  console.error(`Unknown scopes command: ${commandName}`);
+  printUsage();
+  process.exitCode = 1;
 }
 
-writeOutputs(outputs);
+function createScopePlan(): ScopePlan {
+  const outputs: ScopeOutputs = {
+    daemon_tests_required: false,
+    web_tests_required: false,
+    tools_dev_tests_required: false,
+    tools_pack_tests_required: false,
+    nix_validation_required: false,
+    ui_p0_pr_required: false,
+    visual_validation_required: false,
+    docker_validation_required: false,
+    workspace_validation_required: false,
+  };
+
+  const eventName = requiredEnv("GITHUB_EVENT_NAME");
+
+  if (eventName === "pull_request") {
+    for (const file of changedPullRequestFiles()) {
+      applyChangedFile(file, outputs);
+      if (allScopeOutputsTrue(outputs)) break;
+    }
+
+    if (
+      outputs.daemon_tests_required ||
+      outputs.web_tests_required ||
+      outputs.tools_dev_tests_required ||
+      outputs.tools_pack_tests_required
+    ) {
+      outputs.workspace_validation_required = true;
+    }
+  } else if (eventName === "push") {
+    outputs.daemon_tests_required = true;
+    outputs.web_tests_required = true;
+    outputs.tools_dev_tests_required = true;
+    outputs.tools_pack_tests_required = true;
+    // Main already runs .github/workflows/nix-check.yml, so keep this workflow's
+    // push path focused on the non-Nix workspace signal.
+    outputs.nix_validation_required = false;
+    // Main Docker publishing stays owned by .github/workflows/docker-image.yml.
+    outputs.docker_validation_required = false;
+    outputs.workspace_validation_required = true;
+  } else {
+    outputs.daemon_tests_required = true;
+    outputs.web_tests_required = true;
+    outputs.tools_dev_tests_required = true;
+    outputs.tools_pack_tests_required = true;
+    outputs.nix_validation_required = true;
+    if (eventName === "workflow_dispatch") {
+      outputs.ui_p0_pr_required = true;
+    }
+    outputs.visual_validation_required = true;
+    outputs.docker_validation_required = true;
+    outputs.workspace_validation_required = true;
+  }
+
+  return {
+    ...outputs,
+    ui_p0_matrix: JSON.stringify(uiP0CiMatrix),
+    visual_matrix: JSON.stringify(visualCiMatrix),
+  };
+}
 
 function changedPullRequestFiles(): string[] {
   const eventPath = requiredEnv("GITHUB_EVENT_PATH");
@@ -341,17 +368,21 @@ function startsWithAny(value: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => value.startsWith(prefix));
 }
 
-function allOutputsTrue(value: ScopeOutputs): boolean {
+function allScopeOutputsTrue(value: ScopeOutputs): boolean {
   return Object.values(value).every(Boolean);
 }
 
-function writeOutputs(value: ScopeOutputs): void {
-  const lines = Object.entries(value).map(([key, enabled]) => `${key}=${enabled ? "true" : "false"}`);
+function writeGithubOutputs(value: ScopePlan): void {
+  const lines = Object.entries(value).map(([key, output]) => `${key}=${formatOutput(output)}`);
   console.log(lines.join("\n"));
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath != null && outputPath.length > 0) {
     appendFileSync(outputPath, `${lines.join("\n")}\n`);
   }
+}
+
+function formatOutput(value: boolean | string): string {
+  return typeof value === "boolean" ? (value ? "true" : "false") : value;
 }
 
 function requiredEnv(name: string): string {
@@ -360,4 +391,14 @@ function requiredEnv(name: string): string {
     throw new Error(`${name} is required`);
   }
   return value;
+}
+
+function printUsage(): void {
+  console.log(`Usage: node --experimental-strip-types scripts/scopes.ts <command>
+
+Commands:
+  github-output  Write validation scope outputs for GitHub Actions
+  print          Print the validation scope plan as JSON
+  help           Show this help
+`);
 }
