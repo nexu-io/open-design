@@ -3321,6 +3321,7 @@ function isLoopbackPeerAddress(address) {
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
+const PROJECT_UI_PREVIEW_PROXY_PATH_RE = /^\/api\/projects\/[^/]+\/ui-preview\/proxy\/[^/]+(?:\/|$)/u;
 
 function createProjectPreviewScopeRegistry() {
   const scopes = new Map();
@@ -3365,6 +3366,10 @@ function parseProjectPreviewAssetPath(pathname) {
   } catch {
     return null;
   }
+}
+
+function isProjectUiPreviewProxyPath(pathname) {
+  return PROJECT_UI_PREVIEW_PROXY_PATH_RE.test(String(pathname || ''));
 }
 
 function localOriginFromHeader(value) {
@@ -4590,7 +4595,11 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
-  app.use(express.json({ limit: '4mb' }));
+  const apiJsonParser = express.json({ limit: '4mb' });
+  app.use((req, res, next) => {
+    if (isProjectUiPreviewProxyPath(req.path)) return next();
+    return apiJsonParser(req, res, next);
+  });
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — bearer-token middleware.

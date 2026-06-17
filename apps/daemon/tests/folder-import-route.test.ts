@@ -940,6 +940,21 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/large-json') {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      const parsed = JSON.parse(body);
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({
+        contentType: req.headers['content-type'],
+        bytes: Buffer.byteLength(body),
+        payloadLength: parsed.payload.length,
+      }));
+    });
+    return;
+  }
   if (req.url === '/fonts/Inter.woff2') {
     res.setHeader('content-type', 'font/woff2');
     res.end('font');
@@ -1096,6 +1111,19 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     const postHtml = await postResp.text();
     expect(postHtml).toContain('Content-Type application/x-www-form-urlencoded');
     expect(postHtml).toContain('Body query=Search&intent=preview');
+
+    const largeJsonPayload = JSON.stringify({ payload: 'x'.repeat(4 * 1024 * 1024 + 512) });
+    const largeJsonResp = await fetch(`${baseUrl}${previewBody.baseUrl!}/large-json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: largeJsonPayload,
+    });
+    expect(largeJsonResp.status).toBe(200);
+    await expect(largeJsonResp.json()).resolves.toEqual({
+      contentType: 'application/json',
+      bytes: Buffer.byteLength(largeJsonPayload),
+      payloadLength: 4 * 1024 * 1024 + 512,
+    });
 
     const preflight = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
       method: 'OPTIONS',
