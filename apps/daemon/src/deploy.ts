@@ -794,6 +794,20 @@ export async function deployToNetlify({
   let serviceUrl = priorMetadata?.serviceUrl;
   const siteName = safeVercelProjectName(`od-${projectId}`);
 
+  if (siteId) {
+    try {
+      const verifyResp = await fetch(`${NETLIFY_API}/sites/${siteId}`, {
+        headers: { Authorization: `Bearer ${config.token}` },
+      });
+      if (verifyResp.status === 404) {
+        siteId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch {
+      // Ignore network/fetch errors during verification to avoid duplicate resource creation on transient network drop
+    }
+  }
+
   if (!siteId) {
     // Try to find existing site by name
     const listResp = await fetch(`${NETLIFY_API}/sites?name=${siteName}&filter=all`, {
@@ -879,7 +893,11 @@ export async function deployToNetlify({
     });
     if (!addKeyResp.ok) {
       const errText = await addKeyResp.text();
-      if (!errText.includes('already_exists') && !errText.includes('already exists')) {
+      const isDuplicate =
+        errText.includes('already_exists') ||
+        errText.includes('already exists') ||
+        errText.includes('key is already in use');
+      if (!isDuplicate) {
         throw new DeployError(`Failed to add deploy key to GitHub repository: ${errText}`, 502);
       }
     }
@@ -1381,6 +1399,23 @@ export async function deployToRender({
   let serviceId = priorMetadata?.serviceId;
   let serviceUrl = priorMetadata?.serviceUrl;
 
+  if (serviceId) {
+    try {
+      const verifyResp = await fetch(`${RENDER_API}/services/${serviceId}`, {
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: 'application/json',
+        },
+      });
+      if (verifyResp.status === 404) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch {
+      // Ignore network/fetch errors during verification to avoid duplicate resource creation on transient network drop
+    }
+  }
+
   const listResp = await fetch(`${RENDER_API}/services?limit=100&name=${repoName}`, {
     headers: {
       Authorization: `Bearer ${config.token}`,
@@ -1879,6 +1914,54 @@ export async function deployToRailway({
   let environmentId = priorMetadata?.environmentId;
   let serviceId = priorMetadata?.serviceId;
   let serviceUrl = priorMetadata?.serviceUrl;
+
+  if (railwayProjectId) {
+    try {
+      const projData = await queryRailway(`
+        query project($id: String!) {
+          project(id: $id) {
+            id
+            name
+          }
+        }
+      `, { id: railwayProjectId });
+      if (!projData?.project) {
+        railwayProjectId = undefined;
+        environmentId = undefined;
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch (err: any) {
+      if (err instanceof DeployError && (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('notfound'))) {
+        railwayProjectId = undefined;
+        environmentId = undefined;
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    }
+  }
+
+  if (railwayProjectId && serviceId) {
+    try {
+      const serviceData = await queryRailway(`
+        query service($id: String!) {
+          service(id: $id) {
+            id
+            name
+          }
+        }
+      `, { id: serviceId });
+      if (!serviceData?.service) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    } catch (err: any) {
+      if (err instanceof DeployError && (err.message.toLowerCase().includes('not found') || err.message.toLowerCase().includes('notfound'))) {
+        serviceId = undefined;
+        serviceUrl = undefined;
+      }
+    }
+  }
 
   const railwayName = repoName.slice(0, 30);
 
