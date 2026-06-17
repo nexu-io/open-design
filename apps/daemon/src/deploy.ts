@@ -1567,10 +1567,12 @@ export async function deployToRender({
     }
   }
 
-  // Poll deployment status
-  if (deployId) {
-    await pollRenderDeploy(config, serviceId!, deployId);
+  if (!deployId) {
+    throw new DeployError('Failed to resolve new Render deployment after trigger.', 502);
   }
+
+  // Poll deployment status
+  await pollRenderDeploy(config, serviceId!, deployId);
 
   // 7. Wait for URL to be reachable
   const link = await waitForReachableDeploymentUrl([serviceUrl!], { providerLabel: 'Render', timeoutMs: 5_000 });
@@ -1588,8 +1590,9 @@ export async function deployToRender({
 }
 
 async function getLatestRailwayDeployment(
-  queryRailway: (query: string, variables?: JsonObject) => Promise<any>,
-  variables: { projectId: string; serviceId: string; environmentId: string }
+  queryRailway: (query: string, variables?: JsonObject, options?: { signal?: AbortSignal }) => Promise<any>,
+  variables: { projectId: string; serviceId: string; environmentId: string },
+  options?: { signal?: AbortSignal }
 ) {
   const data = await queryRailway(`
     query deployments($input: DeploymentListInput!) {
@@ -1609,12 +1612,12 @@ async function getLatestRailwayDeployment(
       serviceId: variables.serviceId,
       environmentId: variables.environmentId,
     }
-  });
+  }, options);
   return data?.deployments?.edges?.[0]?.node;
 }
 
 async function pollRailwayDeploy(
-  queryRailway: (query: string, variables?: JsonObject) => Promise<any>,
+  queryRailway: (query: string, variables?: JsonObject, options?: { signal?: AbortSignal }) => Promise<any>,
   deploymentId: string,
   { timeoutMs = 180_000, intervalMs = 2_000 } = {}
 ) {
@@ -1625,6 +1628,9 @@ async function pollRailwayDeploy(
     const remaining = timeoutMs - elapsed;
     if (remaining <= 0) break;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), remaining);
+
     try {
       const data = await queryRailway(`
         query deployment($id: String!) {
@@ -1633,7 +1639,8 @@ async function pollRailwayDeploy(
             status
           }
         }
-      `, { id: deploymentId });
+      `, { id: deploymentId }, { signal: controller.signal });
+      clearTimeout(timeoutId);
       const deploy = data?.deployment;
       if (!deploy) {
         throw new DeployError('Railway deployment not found.', 502);
@@ -1645,6 +1652,10 @@ async function pollRailwayDeploy(
         throw new DeployError(`Railway deployment failed with status: ${deploy.status}.`, 502, deploy);
       }
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError' || (err instanceof Error && err.name === 'AbortError')) {
+        throw new DeployError('Railway deployment poll timed out.', 504);
+      }
       if (err instanceof DeployError) throw err;
       if (Date.now() - startedAt >= timeoutMs) {
         throw new DeployError('Railway deployment poll timed out.', 504);
@@ -1907,7 +1918,7 @@ export async function deployToRailway({
 
   // Helper to query Railway API
   const RAILWAY_API = 'https://backboard.railway.com/graphql/v2';
-  async function queryRailway(query: string, variables: JsonObject = {}) {
+  async function queryRailway(query: string, variables: JsonObject = {}, options?: { signal?: AbortSignal }) {
     const resp = await fetch(RAILWAY_API, {
       method: 'POST',
       headers: {
@@ -1915,6 +1926,7 @@ export async function deployToRailway({
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query, variables }),
+      signal: options?.signal ?? null,
     });
     const result = (await resp.json().catch(() => null)) as any;
     if (!resp.ok || result?.errors) {
@@ -2102,7 +2114,7 @@ export async function deployToRailway({
         serviceId,
         environmentId,
       });
-      preTriggerDeployId = latest?.id;
+      preTriggerDeployId = latest?.id || null;
     } catch {
       // Ignore
     }
@@ -2110,6 +2122,9 @@ export async function deployToRailway({
 
   // Trigger deployment to start the build programmatically (if it's not a newly created service, which automatically deploys)
   if (!isNewService) {
+    if (preTriggerDeployId === undefined) {
+      throw new DeployError('Failed to resolve new Railway deployment because baseline deployment ID could not be established.', 502);
+    }
     try {
       await queryRailway(`
         mutation serviceInstanceDeploy($serviceId: String!, $environmentId: String!) {
@@ -2218,29 +2233,28 @@ export async function deployToRailway({
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
+  if (!railwayDeployId) {
+    throw new DeployError('Failed to resolve new Railway deployment after trigger.', 502);
+  }
+
   let deployStatus = 'link-delayed';
   let deployStatusMessage = 'Railway deployment is currently preparing.';
   let reachableAt: number | undefined;
 
-  if (railwayDeployId) {
-    try {
-      const polled = await pollRailwayDeploy(queryRailway, railwayDeployId);
-      const status = typeof polled?.status === 'string' ? polled.status.toUpperCase() : '';
-      if (status === 'ACTIVE') {
-        const link = await waitForReachableDeploymentUrl([serviceUrl], { providerLabel: 'Railway', timeoutMs: 5_000 });
-        deployStatus = link.status;
-        deployStatusMessage = link.statusMessage;
-        reachableAt = link.reachableAt;
-      } else {
-        deployStatus = 'link-delayed';
-        deployStatusMessage = `Railway deployment is currently: ${polled?.status?.toLowerCase() || 'unknown'}.`;
-      }
-    } catch (err: any) {
-      throw err;
+  try {
+    const polled = await pollRailwayDeploy(queryRailway, railwayDeployId);
+    const status = typeof polled?.status === 'string' ? polled.status.toUpperCase() : '';
+    if (status === 'ACTIVE') {
+      const link = await waitForReachableDeploymentUrl([serviceUrl], { providerLabel: 'Railway', timeoutMs: 5_000 });
+      deployStatus = link.status;
+      deployStatusMessage = link.statusMessage;
+      reachableAt = link.reachableAt;
+    } else {
+      deployStatus = 'link-delayed';
+      deployStatusMessage = `Railway deployment is currently: ${polled?.status?.toLowerCase() || 'unknown'}.`;
     }
-  } else {
-    deployStatus = 'link-delayed';
-    deployStatusMessage = 'Failed to resolve the new Railway deployment ID.';
+  } catch (err: any) {
+    throw err;
   }
 
   return {

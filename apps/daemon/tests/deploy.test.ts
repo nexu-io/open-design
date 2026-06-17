@@ -880,6 +880,56 @@ describe('render deploys', () => {
       })
     ).rejects.toThrowError(/baseline deployment ID could not be established/);
   });
+
+  it('throws DeployError when Render trigger response omits id + latest deploy never advances', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-render-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-render-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { sha: 'abc123' } }), { status: 200 });
+      }
+      if (url.includes('/owners') && method === 'GET') {
+        return new Response(JSON.stringify([{ owner: { id: 'owner-1' } }]), { status: 200 });
+      }
+      if (url.includes('/services?limit=100') && method === 'GET') {
+        return new Response(JSON.stringify([{ service: { id: 'render-service-1', name: 'od-render-p1', url: 'https://od-render-p1.onrender.com' } }]), { status: 200 });
+      }
+      if (url.includes('/services/render-service-1/deploys?limit=1') && method === 'GET') {
+        // Return the stale deploy ID
+        return new Response(JSON.stringify([{ deploy: { id: 'render-deploy-old' } }]), { status: 200 });
+      }
+      if (url.includes('/services/render-service-1/deploys') && method === 'POST') {
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRender({
+        config: { token: 'render-token-secret', githubToken: 'ghp-test-token' },
+        projectId: 'p1',
+        files: [
+          {
+            file: 'index.html',
+            data: Buffer.from('<!doctype html><h1>Hello Render</h1>'),
+            contentType: 'text/html',
+          },
+        ],
+        priorMetadata: { serviceId: 'render-service-1', serviceUrl: 'https://od-render-p1.onrender.com' },
+      })
+    ).rejects.toThrowError(/Failed to resolve new Render deployment after trigger/);
+  });
 });
 
 describe('netlify and railway deploys', () => {
@@ -2750,7 +2800,7 @@ describe('netlify and railway deploys', () => {
     expect(deploymentPollCount).toBe(2);
   });
 
-  it('returns link-delayed if the new Railway deployment ID cannot be resolved', async () => {
+  it('throws DeployError if the new Railway deployment ID cannot be resolved', async () => {
     let triggered = false;
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : String(input);
@@ -2804,15 +2854,14 @@ describe('netlify and railway deploys', () => {
     });
     stubGlobalFetch(fetchMock);
 
-    const result = await deployToRailway({
-      config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
-      projectId: 'p1',
-      files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
-      priorMetadata: { serviceId: 'service-1' },
-    });
-
-    expect(result.status).toBe('link-delayed');
-    expect(result.statusMessage).toContain('Failed to resolve the new Railway deployment ID');
+    await expect(
+      deployToRailway({
+        config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+        projectId: 'p1',
+        files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+        priorMetadata: { serviceId: 'service-1' },
+      })
+    ).rejects.toThrowError(/Failed to resolve new Railway deployment after trigger/);
   });
 
   it('throws DeployError if the new Railway deployment fails', async () => {
@@ -2889,6 +2938,151 @@ describe('netlify and railway deploys', () => {
         priorMetadata: { serviceId: 'service-1' },
       })
     ).rejects.toThrowError(/Railway deployment failed with status: FAILED/);
+  });
+
+  it('throws DeployError when Railway pre-trigger lookup fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { path: 'index.html' } }), { status: 200 });
+      }
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        const query = String(body.query ?? '');
+
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [{ node: { id: 'railway-project-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({
+            data: {
+              environments: {
+                edges: [{ node: { id: 'environment-1', name: 'production' } }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'service-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          // pre-trigger lookup query: fail!
+          return new Response(JSON.stringify({
+            errors: [{ message: 'Database error fetching deployments' }]
+          }), { status: 200 });
+        }
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    await expect(
+      deployToRailway({
+        config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+        projectId: 'p1',
+        files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+        priorMetadata: { railwayProjectId: 'railway-project-1', environmentId: 'environment-1', serviceId: 'service-1' },
+      })
+    ).rejects.toThrowError(/baseline deployment ID could not be established/);
+  });
+
+  it('aborts Railway deploy status poll on timeout budget exhaustion', async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    let triggered = false;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      const method = init?.method || 'GET';
+
+      if (url === 'https://api.github.com/user' && method === 'GET') {
+        return new Response(JSON.stringify({ login: 'octo' }), { status: 200 });
+      }
+      if (url === 'https://api.github.com/repos/octo/od-railway-p1' && method === 'GET') {
+        return new Response(JSON.stringify({ id: 123 }), { status: 200 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'GET') {
+        return new Response('', { status: 404 });
+      }
+      if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'PUT') {
+        return new Response(JSON.stringify({ content: { path: 'index.html' } }), { status: 200 });
+      }
+      if (url === 'https://backboard.railway.com/graphql/v2' && method === 'POST') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        const query = String(body.query ?? '');
+
+        if (query.includes('query projects')) {
+          return new Response(JSON.stringify({ data: { projects: { edges: [{ node: { id: 'railway-project-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query environments')) {
+          return new Response(JSON.stringify({
+            data: {
+              environments: {
+                edges: [{ node: { id: 'environment-1', name: 'production' } }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('query services')) {
+          return new Response(JSON.stringify({ data: { services: { edges: [{ node: { id: 'service-1', name: 'od-railway-p1' } }] } } }), { status: 200 });
+        }
+        if (query.includes('query deployments')) {
+          const deployNode = triggered
+            ? { id: 'deploy-new', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' }
+            : { id: 'deploy-pre', status: 'ACTIVE', url: 'https://od-railway-p1.up.railway.app' };
+          return new Response(JSON.stringify({
+            data: {
+              deployments: {
+                edges: [{ node: deployNode }],
+              },
+            },
+          }), { status: 200 });
+        }
+        if (query.includes('query deployment(')) {
+          return new Promise<Response>((_, reject) => {
+            if (init?.signal) {
+              init.signal.addEventListener('abort', () => {
+                aborted = true;
+                reject(new DOMException('The user aborted a request.', 'AbortError'));
+              });
+            }
+          });
+        }
+        if (query.includes('mutation serviceInstanceDeploy')) {
+          triggered = true;
+          return new Response(JSON.stringify({ data: { serviceInstanceDeploy: true } }), { status: 200 });
+        }
+        if (query.includes('query domains')) {
+          return new Response(JSON.stringify({ data: { domains: { serviceDomains: [{ domain: 'od-railway-p1.up.railway.app' }] } } }), { status: 200 });
+        }
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    stubGlobalFetch(fetchMock);
+
+    const deployPromise = deployToRailway({
+      config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
+      projectId: 'p1',
+      files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
+      priorMetadata: { railwayProjectId: 'railway-project-1', environmentId: 'environment-1', serviceId: 'service-1' },
+    });
+
+    const assertionPromise = expect(deployPromise).rejects.toThrowError(/Railway deployment poll timed out/);
+
+    await vi.advanceTimersByTimeAsync(185_000);
+
+    await assertionPromise;
+    expect(aborted).toBe(true);
   });
 
   it('throws a 502 DeployError when GitHub PUT upload fails', async () => {
