@@ -25,6 +25,7 @@ import {
   localizeTemplateText,
 } from '../content-i18n';
 import { getBundledPlugins } from './bundled-plugins';
+import { SYSTEM_TAGLINE_L10N, SYSTEM_CATEGORY_L10N } from './system-l10n';
 import {
   bundledRecordOf,
   categorizePlugin,
@@ -432,12 +433,17 @@ export function shapeSystem(
     fallbackTagline: localized?.tagline ?? tagline,
     fallbackAtmosphere: localized?.atmosphere ?? atmosphere,
   });
+  // Prefer the curated, UNIQUE localized card tagline / category over the
+  // generic `systemTagline` template (and the CJK English-name fallback) when
+  // we have one for this system+locale. English uses the DESIGN.md source.
+  const taglineL10n = SYSTEM_TAGLINE_L10N[slug]?.[locale];
+  const categoryL10n = SYSTEM_CATEGORY_L10N[rawCategory]?.[locale];
   return {
     slug,
     name,
     category: rawCategory,
-    categoryLabel: localizedText.category,
-    tagline: localizedText.tagline,
+    categoryLabel: categoryL10n ?? localizedText.category,
+    tagline: taglineL10n ?? localizedText.tagline,
     atmosphere: localizedText.atmosphere,
     palette,
     source: `${REPO_TREE}/design-systems/${slug}`,
