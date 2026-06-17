@@ -655,6 +655,9 @@ describe('POST /api/import/folder', () => {
     await mkdir(path.join(folder, 'app'), { recursive: true });
     await mkdir(path.join(folder, 'packages/admin/src'), { recursive: true });
     await mkdir(path.join(folder, 'packages/app/src'), { recursive: true });
+    await mkdir(path.join(folder, 'packages/app/styles'), { recursive: true });
+    await mkdir(path.join(folder, 'src'), { recursive: true });
+    await mkdir(path.join(folder, 'styles'), { recursive: true });
     await writeFile(
       path.join(folder, 'package.json'),
       JSON.stringify({
@@ -665,6 +668,8 @@ describe('POST /api/import/folder', () => {
       }),
     );
     await writeFile(path.join(folder, 'app/page.tsx'), 'export default function Page(){return <main>Root Next</main>}');
+    await writeFile(path.join(folder, 'src/App.tsx'), 'export function App(){return <main>Root App</main>}');
+    await writeFile(path.join(folder, 'styles/theme.css'), 'main{color:red}');
     await writeFile(
       path.join(folder, 'packages/admin/package.json'),
       JSON.stringify({
@@ -704,9 +709,10 @@ describe('POST /api/import/folder', () => {
     );
     await writeFile(
       path.join(folder, 'packages/app/src/main.tsx'),
-      "import React from 'react';\nimport './App';\n",
+      "import React from 'react';\nimport App from '@/App';\nimport '~/styles/theme.css';\n",
     );
-    await writeFile(path.join(folder, 'packages/app/src/App.tsx'), 'export function App(){return <main>Nested Vite</main>}');
+    await writeFile(path.join(folder, 'packages/app/src/App.tsx'), 'export default function App(){return <main>Nested Vite</main>}');
+    await writeFile(path.join(folder, 'packages/app/styles/theme.css'), 'main{color:blue}');
 
     const importResp = await importFolder({ baseDir: folder });
     expect(importResp.status).toBe(200);
@@ -722,6 +728,7 @@ describe('POST /api/import/folder', () => {
         previewFile: string | null;
         previewRuntimeRoot: string | null;
         sourceFiles: string[];
+        styleFiles: string[];
       }>;
     };
 
@@ -771,6 +778,9 @@ describe('POST /api/import/folder', () => {
         'packages/app/src/App.tsx',
       ]),
     );
+    expect(appSurface?.styleFiles).toContain('packages/app/styles/theme.css');
+    expect(appSurface?.sourceFiles).not.toContain('src/App.tsx');
+    expect(appSurface?.styleFiles).not.toContain('styles/theme.css');
   });
 
   it('does not let root Next signals classify a nested non-Next package src/pages tree', async () => {
@@ -900,6 +910,16 @@ const server = http.createServer((req, res) => {
     res.end("@font-face{font-family:Inter;src:url('/fonts/Inter.woff2')}body{font-family:Inter}");
     return;
   }
+  if (req.url === '/src/main.tsx') {
+    res.setHeader('content-type', 'text/javascript');
+    res.end('export default "preview module";');
+    return;
+  }
+  if (req.url === '/assets/logo.png') {
+    res.setHeader('content-type', 'image/png');
+    res.end('png');
+    return;
+  }
   if (req.url === '/api/hello') {
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ ok: true, url: req.url }));
@@ -927,7 +947,7 @@ const server = http.createServer((req, res) => {
   }
   res.setHeader('content-type', 'text/html');
   res.write('<!doctype html>');
-  res.end('<html><head><link rel="stylesheet" href="/styles.css"><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><form method="post" action="/submit"><input name="query" value="Search"></form><a href="/search">Search</a><h1>Preview ' + req.url + '</h1><script data-test-preview-api-fetch>window.__previewApiPromise = fetch("/api/hello").then(function(resp){ return resp.json(); });</script></body></html>');
+  res.end('<html><head><base href="/"><link rel="stylesheet" href="/styles.css"><script type="module" src="./src/main.tsx"></script><script type="module">import RefreshRuntime from "/@react-refresh"; import "/@vite/client";</script></head><body><form method="post" action="/submit"><input name="query" value="Search"></form><a href="/search">Search</a><img src="assets/logo.png" alt="Logo"><h1>Preview ' + req.url + '</h1><script data-test-preview-api-fetch>window.__previewApiPromise = fetch("/api/hello").then(function(resp){ return resp.json(); });</script></body></html>');
 });
 server.listen(port, '127.0.0.1');
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
@@ -992,7 +1012,11 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     expect(rendered.status).toBe(200);
     const renderedHtml = await rendered.text();
     expect(renderedHtml).toContain('Preview /messages/preview');
+    expect(renderedHtml).toContain(`<base href="${previewBody.baseUrl}/">`);
+    expect(renderedHtml).not.toContain('<base href="/">');
     expect(renderedHtml).toContain(`<link rel="stylesheet" href="${previewBody.baseUrl}/styles.css">`);
+    expect(renderedHtml).toContain('src="./src/main.tsx"');
+    expect(renderedHtml).toContain('src="assets/logo.png"');
     expect(renderedHtml).toContain(`from "${previewBody.baseUrl}/@react-refresh"`);
     expect(renderedHtml).toContain(`import "${previewBody.baseUrl}/@vite/client"`);
     expect(renderedHtml).toContain(`action="${previewBody.baseUrl}/submit"`);
@@ -1055,6 +1079,13 @@ process.on('SIGTERM', () => server.close(() => process.exit(0)));
     const xhr = new previewWindow.XMLHttpRequest();
     xhr.open('POST', '/auth/login');
     expect(xhr.url).toBe(`${previewBody.baseUrl}/auth/login`);
+
+    const relativeModuleResp = await fetch(new URL('./src/main.tsx', `${baseUrl}${previewBody.baseUrl!}/`));
+    expect(relativeModuleResp.status).toBe(200);
+    await expect(relativeModuleResp.text()).resolves.toBe('export default "preview module";');
+    const relativeAssetResp = await fetch(new URL('assets/logo.png', `${baseUrl}${previewBody.baseUrl!}/`));
+    expect(relativeAssetResp.status).toBe(200);
+    await expect(relativeAssetResp.text()).resolves.toBe('png');
 
     const postResp = await fetch(`${baseUrl}${previewBody.baseUrl!}/submit`, {
       method: 'POST',

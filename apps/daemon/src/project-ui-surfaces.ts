@@ -370,10 +370,10 @@ function resolveImportSpecifier(
     return resolveLocalModule(ctx, fromFile, specifier);
   }
   if (specifier.startsWith('@/')) {
-    return resolveModulePath(ctx, `src/${specifier.slice(2)}`);
+    return resolveAliasImport(ctx, fromFile, 'src', specifier.slice(2));
   }
   if (specifier.startsWith('~/')) {
-    return resolveModulePath(ctx, specifier.slice(2));
+    return resolveAliasImport(ctx, fromFile, '', specifier.slice(2));
   }
   const localPackage = resolveLocalPackageImport(ctx, specifier);
   if (localPackage) return localPackage;
@@ -385,6 +385,19 @@ function resolveImportSpecifier(
     kind: classifyExternalDependency(packageName, specifier),
     ...(version ? { version } : {}),
   };
+}
+
+function resolveAliasImport(ctx: DiscoveryContext, fromFile: string, baseDir: string, suffix: string): string | null {
+  const owner = packageInfoForFile(ctx, fromFile);
+  const candidates = new Set<string>();
+  const aliasPath = baseDir ? normalizeProjectPath(path.posix.join(baseDir, suffix)) : normalizeProjectPath(suffix);
+  if (owner) candidates.add(projectPathInDir(owner.dir, aliasPath));
+  candidates.add(aliasPath);
+  for (const candidate of candidates) {
+    const resolved = resolveModulePath(ctx, candidate);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 function resolveReference(ctx: DiscoveryContext, fromFile: string, raw: string): string | null {

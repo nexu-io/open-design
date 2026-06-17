@@ -1063,8 +1063,8 @@ function previewProxyNetworkBridgeScript(proxyBasePath: string): string {
 }
 
 function injectPreviewProxyBase(html: string, proxyBasePath: string): string {
-  if (/<base\b/i.test(html)) return html;
   const tag = `<base href="${proxyBasePath}/">`;
+  if (/<base\b/i.test(html)) return html.replace(/<base\b[^>]*>/i, tag);
   const headOpen = html.search(/<head(?:\s[^>]*)?>/i);
   if (headOpen >= 0) {
     const close = html.indexOf('>', headOpen);
