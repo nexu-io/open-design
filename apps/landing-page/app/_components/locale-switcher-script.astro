@@ -154,6 +154,10 @@ const script = `
     // Never auto-redirect away from a canonical-only page — its /<locale>/
     // variant does not exist, so a zh-preference visitor would hit a 404.
     if (isCanonicalOnly()) return;
+    // Pages that are localized but opt OUT of the on-load auto-redirect (e.g.
+    // design-system detail pages): keep the visitor on the URL they clicked.
+    // hreflang + manual language switching stay intact.
+    if (document.documentElement.getAttribute('data-locale-autoredirect') === 'off') return;
     if (currentFromPath() !== DEFAULT_LOCALE) return;
     let saved = null;
     try {

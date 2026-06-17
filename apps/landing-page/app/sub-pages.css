@@ -811,6 +811,12 @@ body.sub-page {
 
 .detail-block {
   margin-bottom: 48px;
+  /* Cancel the homepage `section { padding: 130px 0 }` rule from globals.css
+   * (same counter as .catalog-grid / .tpl-grid): detail-page sections are
+   * `<section>` elements, so without this each one opens with a ~130px hole
+   * top and bottom — glaring on short blocks like Tags. Spacing between
+   * blocks is handled by margin-bottom above. */
+  padding: 0;
 }
 .detail-block h2 {
   font-family: var(--serif);

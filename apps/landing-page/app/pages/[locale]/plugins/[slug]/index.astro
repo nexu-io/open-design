@@ -1,0 +1,35 @@
+---
+/*
+ * /<locale>/plugins/<slug>/ — localized design-system detail pages.
+ *
+ * The canonical /plugins/<slug>/ route is canonical-only for templates and
+ * skills (their detail body is generic plugin chrome). Design-system detail
+ * pages, however, carry localizable chrome — the TOC, token-group labels,
+ * section headings, scenario captions, FAQ, related-systems block, and CTAs
+ * all resolve through `getPluginsCopy(locale)`. So we emit locale-prefixed
+ * variants for ONLY the design-system bucket; the underlying DESIGN.md prose
+ * stays English (it's reference content, not chrome). Templates/skills keep
+ * their canonical-only English URLs.
+ *
+ * The shared detail page reads `locale` from the path and the `plugin` from
+ * props, so we re-export it and forward the prop.
+ */
+import DetailPage from '../../../plugins/[slug]/index.astro';
+import { getDetailPlugins, type BundledPluginRecord } from '../../../../_lib/bundled-plugins';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../i18n';
+
+export function getStaticPaths() {
+  const locales = LANDING_LOCALES.filter((l) => l.code !== DEFAULT_LOCALE);
+  const designSystems = getDetailPlugins().filter((p) => p.bucket === 'design-systems');
+  return locales.flatMap((locale) =>
+    designSystems.map((plugin) => ({
+      params: { locale: locale.code, slug: plugin.detailSlug },
+      props: { plugin },
+    })),
+  );
+}
+
+const { plugin } = Astro.props as { plugin: BundledPluginRecord };
+---
+
+<DetailPage plugin={plugin} />

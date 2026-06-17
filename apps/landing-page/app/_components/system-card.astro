@@ -25,9 +25,13 @@ const { system } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const pcopy = getPluginsCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
-// The bundled-plugin detail page is canonical-only (no locale prefix); only
-// the `/plugins/systems/` index fallback has localized variants to link to.
-const detailHref = detailHrefForSystemSlug(system.slug) ?? href('/plugins/systems/');
+// Design-system detail pages now have per-locale variants, so localize the
+// card link — clicking a card on /<locale>/plugins/systems/ stays in that
+// locale (e.g. /zh/plugins/design-system-apple/) instead of dropping to the
+// English canonical. The ~8 systems without a manifest fall back to the
+// (also localized) systems index.
+const rawDetailHref = detailHrefForSystemSlug(system.slug);
+const detailHref = rawDetailHref ? href(rawDetailHref) : href('/plugins/systems/');
 ---
 
 <li class="system-card">
