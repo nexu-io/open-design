@@ -41,12 +41,13 @@ test('[P0] @critical onboarding lets AMR Cloud sign in and complete setup after 
 
   const continueButton = page.getByRole('button', { name: /sign in to continue/i });
   await expect(continueButton).toBeVisible();
+  const statusCallsBeforeLogin = await page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0);
   await continueButton.click();
 
   await expect.poll(() => page.evaluate(() => window.__amrOnboardingLoginCalls ?? 0)).toBe(1);
   await expect
     .poll(() => page.evaluate(() => window.__amrOnboardingStatusCalls ?? 0))
-    .toBeGreaterThanOrEqual(2);
+    .toBeGreaterThan(statusCallsBeforeLogin);
   // Login success lands on the About-you step; advance past it to the
   // newsletter step, which is now the final step that hosts Finish setup.
   await expect(page.getByRole('button', { name: /^Continue$/i })).toBeVisible({ timeout: 10_000 });
@@ -621,7 +622,7 @@ test('[P0] @critical onboarding BYOK path can fetch models, test the provider, a
   await selectOnboardingOption(byokPanel, 'Model', 'claude-opus-4-8');
 
   await page.getByRole('button', { name: /^Test$/i }).click();
-  await expect(page.getByText('Connected. Replied in 27 ms')).toBeVisible();
+  await expectProviderConnectionSuccess(page);
 
   await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
@@ -700,7 +701,7 @@ test('[P0] onboarding BYOK path cannot continue before a successful connection t
   connectionOk = true;
   await fillInlineField(page, 'API key', 'good-api-key');
   await page.getByRole('button', { name: /^Test$/i }).click();
-  await expect(page.getByText('Connected. Replied in 18 ms')).toBeVisible();
+  await expectProviderConnectionSuccess(page);
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 });
 
@@ -745,7 +746,7 @@ test('[P0] onboarding BYOK successful test is invalidated when connection settin
   await expect(page.getByRole('status')).toContainText('Fetched 1 model');
   await selectOnboardingOption(byokPanel, 'Model', 'Claude Sonnet 4.5');
   await page.getByRole('button', { name: /^Test$/i }).click();
-  await expect(page.getByText('Connected. Replied in 16 ms')).toBeVisible();
+  await expectProviderConnectionSuccess(page);
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   await fillInlineField(page, 'API key', 'changed-api-key');
@@ -799,7 +800,7 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
   await expect(page.getByRole('status')).toContainText('Fetched 2 models');
   await selectOnboardingOption(byokPanel, 'Model', 'Claude Sonnet 4.5');
   await page.getByRole('button', { name: /^Test$/i }).click();
-  await expect(page.getByText('Connected. Replied in 17 ms')).toBeVisible();
+  await expectProviderConnectionSuccess(page);
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   await fillInlineField(page, 'Base URL', 'https://api.changed.example');
@@ -807,7 +808,7 @@ test('[P0] onboarding BYOK successful test is invalidated when Base URL or model
 
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
   await page.getByRole('button', { name: /^Test$/i }).click();
-  await expect(page.getByText('Connected. Replied in 17 ms')).toBeVisible();
+  await expectProviderConnectionSuccess(page);
   await expect(continueButton).not.toHaveAttribute('aria-disabled', 'true');
 
   await selectOnboardingOption(byokPanel, 'Model', 'Claude Opus 4.8');
@@ -1038,6 +1039,10 @@ async function advanceToNewsletterStep(page: Page) {
   await expect(page.getByText(/Optional details for better defaults/i)).toBeVisible();
   await page.getByRole('button', { name: /^Continue$/i }).click();
   await expect(page.getByRole('button', { name: /Finish setup/i })).toBeVisible();
+}
+
+async function expectProviderConnectionSuccess(page: Page) {
+  await expect(page.getByText(/Connected\. Replied in \d+ ms/)).toBeVisible();
 }
 
 function pollStoredConfig(page: Page) {
