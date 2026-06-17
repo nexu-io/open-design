@@ -1077,7 +1077,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
+              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
                 0,

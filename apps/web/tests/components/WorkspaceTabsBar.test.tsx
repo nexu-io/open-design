@@ -1,3 +1,4 @@
+
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -583,7 +584,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('sizes the hover preview to the hovered tab width', async () => {
+  it('clamps the hover preview to 220px for narrow tabs', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
       JSON.stringify({
@@ -624,8 +625,53 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     await new Promise((resolve) => window.setTimeout(resolve, 430));
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.style.width).toBe('148px');
+    expect(tooltip.style.width).toBe('220px');
     expect(tooltip.style.left).toBe('32px');
+  });
+
+  it('matches anchor width for tabs wider than the 220px floor', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'entry:home:seed',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 2,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 1,
+          },
+        ],
+      }),
+    );
+
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2);
+    });
+
+    const projectTab = screen.getAllByRole('tab').find((tab) =>
+      (tab.textContent ?? '').includes('Project Alpha'),
+    ) as HTMLElement;
+    mockTabRect(projectTab, 50, 300);
+    fireEvent.mouseEnter(projectTab);
+
+    await new Promise((resolve) => window.setTimeout(resolve, 430));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.style.width).toBe('300px');
+    expect(tooltip.style.left).toBe('50px');
   });
 
   it('keeps the Home tab pinned leftmost when a tab is dropped onto its left edge', async () => {
