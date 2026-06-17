@@ -139,6 +139,21 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
+import {
+  cleanString,
+  normalizePreviewCommentImageAttachments,
+  imageOnlyCommentFallback,
+  normalizeVisualMarkKind,
+  visualAnnotationIntent,
+  compactString,
+  normalizeAttachmentPosition,
+  normalizeAttachmentPodMembers,
+  normalizeAnnotationStyle,
+  formatAnnotationStyle,
+  ANNOTATION_STYLE_KEYS,
+  finiteAttachmentNumber,
+  formatAttachmentPosition,
+} from './annotation-attachments.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import {
   AssetCacheError,
@@ -984,127 +999,8 @@ export function renderCommentAttachmentHint(commentAttachments) {
   return lines.join('\n');
 }
 
-function cleanString(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizePreviewCommentImageAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue;
-    const path = cleanString(item.path);
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    const name = cleanString(item.name) || path.split('/').pop() || path;
-    out.push({ path, name });
-    if (out.length >= 20) break;
-  }
-  return out;
-}
-
-function imageOnlyCommentFallback(count) {
-  if (count <= 0) return '';
-  return count > 1
-    ? `Use the ${count} attached images as the comment reference.`
-    : 'Use the attached image as the comment reference.';
-}
-
-function normalizeVisualMarkKind(value) {
-  return value === 'click' || value === 'click+stroke' || value === 'stroke'
-    ? value
-    : 'stroke';
-}
-
-function visualAnnotationIntent(markKind) {
-  if (markKind === 'click') {
-    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
-  }
-  if (markKind === 'click+stroke') {
-    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
-  }
-  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
-}
-
-function compactString(value, max) {
-  const text = cleanString(value).replace(/\s+/g, ' ');
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function normalizeAttachmentPosition(input) {
-  const value = input && typeof input === 'object' ? input : {};
-  return {
-    x: finiteAttachmentNumber(value.x),
-    y: finiteAttachmentNumber(value.y),
-    width: finiteAttachmentNumber(value.width),
-    height: finiteAttachmentNumber(value.height),
-  };
-}
-
-function normalizeAttachmentPodMembers(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanString(member.elementId);
-      const selector = cleanString(member.selector);
-      const label = cleanString(member.label);
-      if (!elementId || !selector) return null;
-      return {
-        elementId,
-        selector,
-        label,
-        text: compactString(member.text, 160),
-        position: normalizeAttachmentPosition(member.position),
-        htmlHint: compactString(member.htmlHint, 180),
-        style: normalizeAnnotationStyle(member.style),
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizeAnnotationStyle(input) {
-  if (!input || typeof input !== 'object') return undefined;
-  const style = {};
-  for (const key of ANNOTATION_STYLE_KEYS) {
-    const value = input[key];
-    if (typeof value !== 'string') continue;
-    const trimmed = value.replace(/\s+/g, ' ').trim();
-    if (trimmed) style[key] = trimmed.slice(0, 120);
-  }
-  return Object.keys(style).length > 0 ? style : undefined;
-}
-
-function formatAnnotationStyle(style) {
-  if (!style || typeof style !== 'object') return '';
-  return ANNOTATION_STYLE_KEYS
-    .map((key) => {
-      const value = style[key];
-      return value ? `${key}: ${value}` : null;
-    })
-    .filter(Boolean)
-    .join('; ');
-}
-
-const ANNOTATION_STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'textAlign',
-  'fontFamily',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderRadius',
-];
-
-function finiteAttachmentNumber(value) {
-  return Number.isFinite(value) ? Math.round(value) : 0;
-}
+// Preview-comment image attachments + visual annotation styling/positioning
+// helpers moved to ./annotation-attachments.ts (imported above).
 
 const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
 const DESIGN_FILES_HINT_FILE_LIMIT = 80;
@@ -1116,9 +1012,6 @@ type DesignFilesHintEntry = {
   size?: number;
 };
 
-function formatAttachmentPosition(position) {
-  return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
-}
 
 function isPathWithin(base, target) {
   const relativePath = path.relative(path.resolve(base), path.resolve(target));
