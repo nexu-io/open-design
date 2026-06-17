@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
@@ -35,12 +35,13 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
-    await expect(dialog.getByText('Leave the API key blank to publish a public 30-day preview with a claim link.')).toBeVisible();
+    await expect(dialog.getByText('Leave blank to publish anonymously with a 30-day URL and claim link.')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Deploy to display.dev' }).click();
 
-    await expect(dialog.getByRole('link', { name: displayDev.previewUrl })).toBeVisible();
-    await expect(dialog.getByRole('link', { name: displayDev.claimUrl })).toBeVisible();
+    const resultBlock = dialog.locator('.deploy-result-block');
+    await expect(resultBlock.getByRole('link', { name: displayDev.previewUrl })).toBeVisible();
+    await expect(resultBlock.getByRole('link', { name: displayDev.claimUrl })).toBeVisible();
     await expect
       .poll(() => displayDev.publishes.length, { timeout: T.medium })
       .toBe(1);
