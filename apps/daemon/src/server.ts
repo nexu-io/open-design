@@ -483,6 +483,7 @@ import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
 import { registerGenuiRoutes } from './routes/genui.js';
+import { registerDesignSystemRoutes } from './routes/design-systems.js';
 import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerPluginAssetRoutes } from './routes/plugins/assets.js';
 import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.js';
@@ -492,7 +493,7 @@ import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
-import { registerMediaRoutes } from './media-routes.js';
+import { registerMediaRoutes } from './routes/media.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
@@ -504,7 +505,7 @@ import { registerTerminalRoutes } from './terminal-routes.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './social-share-routes.js';
 import { registerMemoryRoutes } from './routes/memory.js';
-import { registerStaticResourceRoutes } from './routes/static-resource.js';
+import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
@@ -5597,6 +5598,7 @@ export async function startServer({
     USER_DESIGN_SYSTEMS_DIR,
     DESIGN_TEMPLATES_DIR,
     USER_DESIGN_TEMPLATES_DIR,
+    CRAFT_DIR,
     SKILLS_DIR,
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
@@ -5717,7 +5719,7 @@ export async function startServer({
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
-  const nativeDialogDeps = { openNativeFolderDialog };
+  const nativeDialogDeps = { openBrowser, openNativeFolderDialog };
   const researchDeps = { searchResearch, ResearchError };
   const liveArtifactDeps = {
     createLiveArtifact,
@@ -5866,6 +5868,30 @@ export async function startServer({
         return { decision: preparation.decision, job };
       },
     },
+  });
+  registerDesignSystemRoutes(app, {
+    db,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    designSystems: {
+      createUserDesignSystem,
+      deleteUserDesignSystem,
+      ensureUserDesignSystemWorkspaceProject,
+      listAllDesignSystems,
+      listUserDesignSystemFiles,
+      listUserDesignSystemRevisions,
+      prepareDesignTokenContractRebuild,
+      readAvailableDesignSystem,
+      readAvailableDesignSystemPackageInfo,
+      readDesignSystemWorkspaceTextFile,
+      readUserDesignSystemFile,
+      renderDesignSystemPreview,
+      renderDesignSystemShowcase,
+      updateUserDesignSystem,
+      updateUserDesignSystemRevisionStatus,
+    },
+    generationJobs: designSystemGenerationJobs,
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -6210,110 +6236,6 @@ export async function startServer({
     },
   );
 
-  // ---- Tabs -----------------------------------------------------------------
-
-  app.get('/api/projects/:id/tabs', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    res.json(listTabs(db, req.params.id));
-  });
-
-  app.put('/api/projects/:id/tabs', (req, res) => {
-    if (!getProject(db, req.params.id)) {
-      return res.status(404).json({ error: 'project not found' });
-    }
-    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
-    if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
-      return res.status(400).json({ error: 'tabs must be string[]' });
-    }
-    if (!Array.isArray(browserTabs)) {
-      return res.status(400).json({ error: 'browserTabs must be an array' });
-    }
-    const result = setTabs(
-      db,
-      req.params.id,
-      {
-        tabs,
-        active: typeof active === 'string' ? active : null,
-        browserTabs,
-      },
-    );
-    res.json(result);
-  });
-
-  // ---- Templates ----------------------------------------------------------
-  // User-saved snapshots of a project's HTML files. Surfaced in the
-  // "From template" tab of the new-project panel so a user can spin up
-  // a fresh project pre-seeded with another project's design as a
-  // starting point. Created via the project's Share menu (snapshots
-  // every .html file in the project folder at the moment of save).
-
-  app.get('/api/templates', (_req, res) => {
-    res.json({ templates: listTemplates(db) });
-  });
-
-  app.get('/api/templates/:id', (req, res) => {
-    const t = getTemplate(db, req.params.id);
-    if (!t) return res.status(404).json({ error: 'not found' });
-    res.json({ template: t });
-  });
-
-  app.post('/api/templates', async (req, res) => {
-    try {
-      const { name, description, sourceProjectId } = req.body || {};
-      if (typeof name !== 'string' || !name.trim()) {
-        return res.status(400).json({ error: 'name required' });
-      }
-      if (typeof sourceProjectId !== 'string') {
-        return res.status(400).json({ error: 'sourceProjectId required' });
-      }
-      const sourceProject = getProject(db, sourceProjectId);
-      if (!sourceProject) {
-        return res.status(404).json({ error: 'source project not found' });
-      }
-      // Snapshot every HTML / sketch / text file in the source project.
-      // We deliberately skip binary uploads — templates are about the
-      // generated design, not the user's reference imagery.
-      const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
-        metadata: sourceProject.metadata,
-      });
-      const snapshot = [];
-      for (const f of files) {
-        if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
-          continue;
-        const entry = await readProjectFile(
-          PROJECTS_DIR,
-          sourceProjectId,
-          f.name,
-          sourceProject.metadata,
-        );
-        if (entry && Buffer.isBuffer(entry.buffer)) {
-          snapshot.push({
-            name: f.name,
-            content: entry.buffer.toString('utf8'),
-          });
-        }
-      }
-      const t = insertTemplate(db, {
-        id: randomId(),
-        name: name.trim(),
-        description: typeof description === 'string' ? description : null,
-        sourceProjectId,
-        files: snapshot,
-        createdAt: Date.now(),
-      });
-      res.json({ template: t });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.delete('/api/templates/:id', (req, res) => {
-    deleteTemplate(db, req.params.id);
-    res.json({ ok: true });
-  });
-
   async function resolveAmrModelProbe() {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
@@ -6353,206 +6275,6 @@ export async function startServer({
     appConfig: { readAppConfig },
     http: { getPublicBaseUrl },
     env: process.env,
-  });
-
-  app.get('/api/design-systems', async (_req, res) => {
-    try {
-      const systems = await listAllDesignSystems();
-      res.json({
-        designSystems: systems.map(({ body, ...rest }) => rest),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/design-systems', async (req, res) => {
-    try {
-      const created = await createUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.body || {});
-      res.status(201).json({ ...created, designSystem: created });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/design-systems/generation-jobs', async (req, res) => {
-    try {
-      const job = designSystemGenerationJobs.start(req.body || {});
-      res.status(202).json({ job });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/design-systems/generation-jobs/:jobId', async (req, res) => {
-    try {
-      const job = designSystemGenerationJobs.get(req.params.jobId);
-      if (!job) {
-        return res.status(404).json({ error: 'design system generation job not found' });
-      }
-      res.json({ job });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/design-systems/:id/revision-jobs', async (req, res) => {
-    try {
-      const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
-      if (!feedback.trim()) return res.status(400).json({ error: 'feedback is required' });
-      const job = designSystemGenerationJobs.revise({
-        designSystemId: req.params.id,
-        feedback,
-        sectionTitle: typeof req.body?.sectionTitle === 'string' ? req.body.sectionTitle : undefined,
-        body: typeof req.body?.body === 'string' ? req.body.body : undefined,
-      });
-      res.status(202).json({ job });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/design-systems/:id/token-contract/rebuild-jobs', async (req, res) => {
-    try {
-      const preparation = await prepareDesignTokenContractRebuild(
-        USER_DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        { force: req.body?.force === true },
-      );
-      if (!preparation.decision.available) {
-        return res.status(200).json({ decision: preparation.decision });
-      }
-      if (!preparation.revision) {
-        return res.status(200).json({ decision: preparation.decision });
-      }
-      const job = designSystemGenerationJobs.rebuildTokenContract({
-        designSystemId: req.params.id,
-        decision: preparation.decision,
-        ...preparation.revision,
-      });
-      res.status(202).json({ decision: preparation.decision, job });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/design-systems/:id/revisions', async (req, res) => {
-    try {
-      const revisions = await listUserDesignSystemRevisions(
-        USER_DESIGN_SYSTEMS_DIR,
-        req.params.id,
-      );
-      if (!revisions) {
-        return res.status(404).json({ error: 'editable design system not found' });
-      }
-      res.json({ revisions });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.patch('/api/design-systems/:id/revisions/:revisionId', async (req, res) => {
-    try {
-      const status = typeof req.body?.status === 'string' ? req.body.status : '';
-      if (status !== 'accepted' && status !== 'rejected') {
-        return res.status(400).json({ error: 'status must be accepted or rejected' });
-      }
-      const revision = await updateUserDesignSystemRevisionStatus(
-        USER_DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        req.params.revisionId,
-        status,
-      );
-      if (!revision) {
-        return res.status(404).json({ error: 'design system revision not found' });
-      }
-      res.json({ revision });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/design-systems/:id', async (req, res) => {
-    try {
-      const systems = await listAllDesignSystems();
-      const summary = systems.find((s) => s.id === req.params.id);
-      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-      const body = projectBody ?? await readAvailableDesignSystem(req.params.id);
-      if (body === null || !summary)
-        return res.status(404).json({ error: 'design system not found' });
-      const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id);
-      const detail = { ...summary, body, ...(packageInfo ? { packageInfo } : {}) };
-      res.json({ ...detail, designSystem: detail });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/design-systems/:id/workspace', async (req, res) => {
-    try {
-      const workspace = await ensureUserDesignSystemWorkspaceProject(db, req.params.id);
-      if (!workspace) {
-        return res.status(404).json({ error: 'editable design system not found' });
-      }
-      res.status(201).json(workspace);
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/design-systems/:id/files', async (req, res) => {
-    try {
-      const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, req.params.id);
-      if (!files) {
-        return res.status(404).json({ error: 'editable design system not found' });
-      }
-      res.json({ files });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/design-systems/:id/file', async (req, res) => {
-    try {
-      const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
-      const file = await readUserDesignSystemFile(
-        USER_DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        requestedPath,
-      );
-      if (!file) return res.status(404).json({ error: 'design system file not found' });
-      res.json({ file });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.patch('/api/design-systems/:id', async (req, res) => {
-    try {
-      const updated = await updateUserDesignSystem(
-        USER_DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        req.body || {},
-      );
-      if (!updated) {
-        return res.status(404).json({ error: 'editable design system not found' });
-      }
-      res.json({ ...updated, designSystem: updated });
-    } catch (err) {
-      res.status(400).json({ error: String(err) });
-    }
-  });
-
-  app.delete('/api/design-systems/:id', async (req, res) => {
-    try {
-      const ok = await deleteUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id);
-      if (!ok) {
-        return res.status(404).json({ error: 'editable design system not found' });
-      }
-      res.status(204).end();
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
   });
 
   const pluginRouteHelpers = {
@@ -6768,68 +6490,6 @@ export async function startServer({
     return Array.from(byTaskKind.values());
   }
 
-  // Plan §3.H2 / spec §12.2 — craft list endpoint.
-  // Mirrors the daemon's existing /api/skills + /api/design-systems
-  // discovery surface so `od craft list` is a thin wrapper over a
-  // single HTTP call. Each entry returns a slug + size + first
-  // markdown header so a code agent can browse without a separate
-  // /api/craft/:id read.
-  app.get('/api/craft', async (_req, res) => {
-    try {
-      const fsp = await import('node:fs/promises');
-      let entries;
-      try {
-        entries = await fsp.readdir(CRAFT_DIR, { withFileTypes: true });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          return res.json({ craft: [] });
-        }
-        throw err;
-      }
-      const out = [];
-      for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
-        const slug = entry.name.replace(/\.md$/, '');
-        try {
-          const fullPath = `${CRAFT_DIR}/${entry.name}`;
-          const text = await fsp.readFile(fullPath, 'utf8');
-          const heading = text.split('\n').find((line) => line.startsWith('# '));
-          out.push({
-            id:     slug,
-            label:  heading ? heading.replace(/^#+\s*/, '').trim() : slug,
-            bytes:  Buffer.byteLength(text, 'utf8'),
-          });
-        } catch {
-          // Skip unreadable files; surface what we can.
-        }
-      }
-      res.json({ craft: out });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.get('/api/craft/:id', async (req, res) => {
-    try {
-      const slug = req.params.id;
-      if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-        return res.status(400).json({ error: 'invalid craft id' });
-      }
-      const fsp = await import('node:fs/promises');
-      try {
-        const text = await fsp.readFile(`${CRAFT_DIR}/${slug}.md`, 'utf8');
-        res.json({ id: slug, body: text });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          return res.status(404).json({ error: 'craft section not found' });
-        }
-        throw err;
-      }
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
   registerPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
@@ -6854,22 +6514,9 @@ export async function startServer({
     },
     helpers: pluginRouteHelpers,
   });
-  app.get('/api/atoms', (_req, res) => {
-    res.json({ atoms: FIRST_PARTY_ATOMS.map((a) => ({ ...a, taskKinds: a.taskKinds.slice() })) });
-  });
-  app.get('/api/atoms/:id', async (req, res) => {
-    const id = req.params.id;
-    const atom = FIRST_PARTY_ATOMS.find((a) => a.id === id);
-    if (!atom) return res.status(404).json({ error: { code: 'atom-not-found', message: `Unknown atom "${id}"` } });
-    const body = { ...atom, taskKinds: atom.taskKinds.slice() };
-    try {
-      const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
-      const bodies = await loadAtomBodies(db, [id]);
-      if (bodies[0] && typeof bodies[0].body === 'string') body.skillBody = bodies[0].body;
-    } catch (err) {
-      console.warn(`[atoms] failed to load SKILL.md body for ${id}:`, err);
-    }
-    res.json(body);
+  registerAtomRoutes(app, {
+    db,
+    resources: { FIRST_PARTY_ATOMS },
   });
   registerPluginMarketplaceRoutes(app, {
     db,
@@ -6890,366 +6537,6 @@ export async function startServer({
     db,
     design,
     paths: { PROJECTS_DIR },
-  });
-
-  // Showcase HTML for a design system — palette swatches, typography
-  // samples, sample components, and the full DESIGN.md rendered as prose.
-  // Built at request time from the on-disk DESIGN.md so any update to the
-  // file shows up on the next view, no rebuild needed.
-  app.get('/api/design-systems/:id/preview', async (req, res) => {
-    try {
-      const body = await readAvailableDesignSystem(req.params.id);
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
-      const html = renderDesignSystemPreview(req.params.id, body);
-      res.type('text/html').send(html);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  // Marketing-style showcase derived from the same DESIGN.md — full landing
-  // page parameterised by the system's tokens. Same lazy-render strategy as
-  // /preview: built at request time, no caching.
-  app.get('/api/design-systems/:id/showcase', async (req, res) => {
-    try {
-      const body = await readAvailableDesignSystem(req.params.id);
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
-      const html = renderDesignSystemShowcase(req.params.id, body);
-      res.type('text/html').send(html);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  // Pre-built example HTML for a skill — what a typical artifact from this
-  // skill looks like. Lets users browse skills without running an agent.
-  //
-  // The skill's `id` (from SKILL.md frontmatter `name`) can differ from its
-  // on-disk folder name (e.g. id `magazine-web-ppt` lives in `skills/guizang-ppt/`),
-  // so we resolve the actual directory via listSkills() rather than guessing.
-  //
-  // Resolution order:
-  //   1. Derived id (`<parent>:<child>`):
-  //      <parentDir>/examples/<child>.html — pre-baked single-file sample.
-  //      Subfolder layouts (e.g. live-artifact's
-  //      `examples/<name>/template.html`) are intentionally not served:
-  //      they still contain `{{data.x}}` placeholders that only the
-  //      daemon-side renderer fills in, and serving the raw template
-  //      would render visible placeholder braces in the gallery.
-  //   2. <skillDir>/example.html — fully-baked static example (preferred)
-  //   3. <skillDir>/assets/template.html  +
-  //      <skillDir>/assets/example-slides.html — assemble at request time
-  //      by replacing the `<!-- SLIDES_HERE -->` marker with the snippet
-  //      and patching the placeholder <title>. Lets a skill ship one
-  //      canonical seed plus a small content fragment, so the example
-  //      never drifts from the seed.
-  //   4. <skillDir>/assets/template.html — raw template, no content slides
-  //   5. <skillDir>/assets/index.html — generic fallback
-  //   6. First .html in <skillDir>/examples/ — used as a friendly fallback
-  //      so a skill that aggregates examples (like live-artifact) still has
-  //      a real preview on its parent card instead of returning 404.
-  app.get('/api/skills/:id/example', async (req, res) => {
-    try {
-      const skills = await listAllSkills();
-
-      // 1. Derived `<parent>:<child>` id — resolve straight to the matching
-      // file under <parentDir>/examples/. Done before findSkillById so the
-      // parent's normal fallback chain never accidentally serves a stale
-      // file when a sample is missing (we'd rather 404 explicitly).
-      const derived = splitDerivedSkillId(req.params.id);
-      if (derived) {
-        const parent = findSkillById(skills, derived.parentId);
-        if (!parent) {
-          return res.status(404).type('text/plain').send('skill not found');
-        }
-        const candidate = path.join(
-          parent.dir,
-          'examples',
-          `${derived.childKey}.html`,
-        );
-        if (fs.existsSync(candidate)) {
-          const html = await fs.promises.readFile(candidate, 'utf8');
-          return res
-            .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id));
-        }
-        return res
-          .status(404)
-          .type('text/plain')
-          .send('derived example not found');
-      }
-
-      const skill = findSkillById(skills, req.params.id);
-      if (!skill) {
-        return res.status(404).type('text/plain').send('skill not found');
-      }
-
-      const baked = path.join(skill.dir, 'example.html');
-      if (fs.existsSync(baked)) {
-        const html = await fs.promises.readFile(baked, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
-      }
-
-      const tpl = path.join(skill.dir, 'assets', 'template.html');
-      const slides = path.join(skill.dir, 'assets', 'example-slides.html');
-      if (fs.existsSync(tpl) && fs.existsSync(slides)) {
-        try {
-          const tplHtml = await fs.promises.readFile(tpl, 'utf8');
-          const slidesHtml = await fs.promises.readFile(slides, 'utf8');
-          const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
-          return res
-            .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id));
-        } catch {
-          // Fall through to raw template on read failure.
-        }
-      }
-      if (fs.existsSync(tpl)) {
-        const html = await fs.promises.readFile(tpl, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
-      }
-      const idx = path.join(skill.dir, 'assets', 'index.html');
-      if (fs.existsSync(idx)) {
-        const html = await fs.promises.readFile(idx, 'utf8');
-        return res
-          .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
-      }
-
-      // Friendly fallback for skills that aggregate examples in a sibling
-      // `examples/` folder (e.g. live-artifact). The parent card would
-      // otherwise 404 even though plenty of perfectly valid samples ship
-      // alongside SKILL.md; pick the first .html file alphabetically so
-      // direct URL access (e.g. deep links) shows something representative.
-      // Subfolder layouts are excluded for the same reason as the derived
-      // resolver above — their `template.html` still has unresolved
-      // `{{data.x}}` placeholders.
-      const examplesDir = path.join(skill.dir, 'examples');
-      if (fs.existsSync(examplesDir)) {
-        let entries: string[] = [];
-        try {
-          entries = await fs.promises.readdir(examplesDir);
-        } catch {
-          entries = [];
-        }
-        entries.sort();
-        for (const name of entries) {
-          if (name.startsWith('.')) continue;
-          if (!name.toLowerCase().endsWith('.html')) continue;
-          const direct = path.join(examplesDir, name);
-          try {
-            const html = await fs.promises.readFile(direct, 'utf8');
-            return res
-              .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id));
-          } catch {
-            continue;
-          }
-        }
-      }
-
-      res
-        .status(404)
-        .type('text/plain')
-        .send(
-          'no example.html, assets/template.html, assets/index.html, or examples/*.html for this skill',
-        );
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  // Static assets shipped beside a skill's example/template HTML. Lets the
-  // example HTML reference `./assets/foo.png`-style paths that resolve
-  // correctly when the response is loaded into a sandboxed `srcdoc` iframe
-  // (where relative URLs would otherwise resolve against `about:srcdoc`).
-  // The example response above rewrites `./assets/<file>` into a request
-  // against this route; we still keep the on-disk paths human-friendly so
-  // contributors can preview `example.html` straight from disk.
-  app.get('/api/skills/:id/assets/*splat', async (req, res) => {
-    try {
-      const skills = await listAllSkills();
-      const skill = findSkillById(skills, req.params.id);
-      if (!skill) {
-        return res.status(404).type('text/plain').send('skill not found');
-      }
-      const splatParam = req.params.splat;
-      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
-      const assetsRoot = path.resolve(skill.dir, 'assets');
-      const target = path.resolve(assetsRoot, relPath);
-      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
-        return res.status(400).type('text/plain').send('invalid asset path');
-      }
-      if (!fs.existsSync(target)) {
-        return res.status(404).type('text/plain').send('asset not found');
-      }
-      // The example HTML is rendered inside a sandboxed iframe (Origin: null).
-      // Mirror the project /raw route's allowance so the iframe can fetch the
-      // image bytes; same-origin web callers do not need this header.
-      if (req.headers.origin === 'null') {
-        res.header('Access-Control-Allow-Origin', '*');
-      }
-      await res.type(mimeFor(target)).sendFile(target);
-    } catch (err) {
-      res.status(500).type('text/plain').send(String(err));
-    }
-  });
-
-  app.post('/api/upload', upload.array('images', 8), (req, res) => {
-    const files = (req.files || []).map((f) => ({
-      name: f.originalname,
-      path: f.path,
-      size: f.size,
-    }));
-    res.json({ files });
-  });
-
-  // Persist a generated artifact (HTML) to disk so the user can re-open it
-  // in their browser or hand it off. Returns the on-disk path + a served URL.
-  // The body is also passed through the anti-slop linter; findings are
-  // returned alongside the path so the UI can render a P0/P1 badge and the
-  // chat layer can splice them into a system reminder for the agent.
-  app.post('/api/artifacts/save', (req, res) => {
-    try {
-      const { identifier, title, html } = req.body || {};
-      if (typeof html !== 'string' || html.length === 0) {
-        return res.status(400).json({ error: 'html required' });
-      }
-      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
-      const slug = sanitizeSlug(identifier || title || 'artifact');
-      const dir = path.join(ARTIFACTS_DIR, `${stamp}-${slug}`);
-      fs.mkdirSync(dir, { recursive: true });
-      const file = path.join(dir, 'index.html');
-      fs.writeFileSync(file, html, 'utf8');
-      const findings = lintArtifact(html);
-      res.json({
-        path: file,
-        url: `/artifacts/${path.basename(dir)}/index.html`,
-        lint: findings,
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  // Standalone lint endpoint — POST raw HTML, get findings back.
-  // The chat layer uses this to lint streamed-in artifacts without writing
-  // them to disk first, so a P0 issue can be surfaced before save.
-  app.post('/api/artifacts/lint', (req, res) => {
-    try {
-      const { html } = req.body || {};
-      if (typeof html !== 'string' || html.length === 0) {
-        return res.status(400).json({ error: 'html required' });
-      }
-      const findings = lintArtifact(html);
-      res.json({
-        findings,
-        agentMessage: renderFindingsForAgent(findings),
-      });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
-
-  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
-    try {
-      // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
-      // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
-      // the char-class regex and resolve to the parent directory under
-      // path.join. Express decodes percent-encoded `%2e%2e` to `..` before
-      // we see it, so this check covers both URL-supplied and stored-row
-      // attack vectors.
-      if (!isSafeId(req.params.id)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
-      }
-
-      if (typeof apiKey !== 'string' || !apiKey.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
-      }
-      if (typeof model !== 'string' || !model.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
-      }
-      if (baseUrl !== undefined) {
-        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
-        }
-        const validated = validateExternalApiBaseUrl(baseUrl);
-        if (validated.error) {
-          return sendApiError(
-            res,
-            validated.forbidden ? 403 : 400,
-            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-            validated.error,
-          );
-        }
-      }
-      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
-      }
-
-      const project = getProject(db, req.params.id);
-      if (!project) {
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
-      }
-
-      const result = await finalizeDesignPackage(
-        db,
-        PROJECTS_DIR,
-        DESIGN_SYSTEMS_DIR,
-        req.params.id,
-        { apiKey, baseUrl, model, maxTokens },
-      );
-      res.json(result);
-    } catch (err) {
-      // Concurrent finalize - the lockfile was already held by another
-      // call. Caller can retry after a short wait; not a client error.
-      // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
-      if (err instanceof FinalizePackageLockedError) {
-        return sendApiError(res, 409, 'CONFLICT', err.message);
-      }
-
-      // Upstream Anthropic error - status-aware mapping using shared
-      // ApiErrorCode values. Run the raw upstream body through
-      // redactSecrets so the API key cannot leak even if Anthropic
-      // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
-      // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
-      if (err instanceof FinalizeUpstreamError) {
-        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
-        const init = safeDetails ? { details: safeDetails } : {};
-        if (err.status === 401) {
-          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
-        }
-        if (err.status === 429) {
-          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
-        }
-        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
-      }
-
-      // The blocking call hit our 120s AbortController timeout - or the
-      // caller passed an already-aborted signal. Either way, surface as
-      // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
-      // TIMEOUT code in the contracts ApiErrorCode union).
-      const errName =
-        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
-      if (errName === 'AbortError') {
-        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
-      }
-
-      // Unexpected runtime failure (file IO, db access, prompt build).
-      // Log via console.error per the daemon convention; client sees a
-      // generic 500 with the shared INTERNAL_ERROR code. Run the message
-      // through redactSecrets defensively.
-      console.error('[finalize/anthropic]', err);
-      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
-    }
   });
 
   registerProjectPluginRoutes(app, {
@@ -7276,286 +6563,6 @@ export async function startServer({
     },
     helpers: pluginRouteHelpers,
   });
-
-  app.get('/api/media/models', (_req, res) => {
-    res.json({
-      providers: MEDIA_PROVIDERS,
-      image: IMAGE_MODELS,
-      video: VIDEO_MODELS,
-      audio: AUDIO_MODELS_BY_KIND,
-      aspects: MEDIA_ASPECTS,
-      videoLengthsSec: VIDEO_LENGTHS_SEC,
-      audioDurationsSec: AUDIO_DURATIONS_SEC,
-    });
-  });
-
-  app.get('/api/media/config', async (_req, res) => {
-    try {
-      const cfg = await readMaskedConfig(PROJECT_ROOT);
-      res.json(cfg);
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.put('/api/media/config', async (req, res) => {
-    try {
-      const cfg = await writeConfig(PROJECT_ROOT, req.body);
-      res.json(cfg);
-    } catch (err) {
-      const status = typeof err?.status === 'number' ? err.status : 400;
-      res
-        .status(status)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.get('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const config = await readAppConfig(RUNTIME_DATA_DIR);
-      res.json({ config });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.put('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
-      orbitService.configure(config.orbit);
-      res.json({ config });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.get('/api/orbit/status', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      res.json(await orbitService.status());
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.post('/api/orbit/run', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
-      res.json(await orbitService.start('manual', { locale }));
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.post('/api/system/open-external', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-      let parsed;
-      try {
-        parsed = new URL(url);
-      } catch {
-        return res.status(400).json({ ok: false, error: 'url must be a valid URL' });
-      }
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return res.status(400).json({ ok: false, error: 'url must be http or https' });
-      }
-      const child = openBrowser(parsed.toString());
-      res.json({ ok: Boolean(child) });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ ok: false, error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-	  // Native OS folder picker dialog. Returns { path: string | null }.
-	  app.post('/api/dialog/open-folder', async (req, res) => {
-	    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const selected = await openNativeFolderDialog();
-      res.json({ path: selected });
-    } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.post('/api/research/search', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({
-        error:
-          'cross-origin request rejected: research search is restricted to the local UI / CLI',
-      });
-    }
-
-    try {
-      const result = await searchResearch({
-        projectRoot: PROJECT_ROOT,
-        query: req.body?.query,
-        maxSources:
-          typeof req.body?.maxSources === 'number'
-            ? req.body.maxSources
-            : undefined,
-        providers: Array.isArray(req.body?.providers)
-          ? req.body.providers
-          : undefined,
-      });
-      res.json(result);
-    } catch (err) {
-      if (err instanceof ResearchError) {
-        return res.status(err.status).json({
-          error: { code: err.code, message: err.message },
-        });
-      }
-      res.status(500).json({
-        error: {
-          code: 'RESEARCH_FAILED',
-          message: String(err && err.message ? err.message : err),
-        },
-      });
-    }
-  });
-
-  app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const taskId = req.params.id;
-    const task = getLiveMediaTask(db, taskId);
-    if (!task) return res.status(404).json({ error: 'task not found' });
-
-    const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
-    const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
-      ? Number(req.body.timeoutMs)
-      : 25_000;
-    const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
-
-    const respond = () => {
-      if (res.writableEnded) return;
-      res.json(mediaTaskSnapshot(task, since));
-    };
-
-    if (
-      MEDIA_TERMINAL_STATUSES.has(task.status) ||
-      task.progress.length > since
-    ) {
-      return respond();
-    }
-
-    let resolved = false;
-    const wake = () => {
-      if (resolved) return;
-      resolved = true;
-      task.waiters.delete(wake);
-      clearTimeout(timer);
-      respond();
-    };
-    task.waiters.add(wake);
-    const timer = setTimeout(wake, timeoutMs);
-    res.on('close', wake);
-  });
-
-  app.get('/api/projects/:id/media/tasks', (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    const projectId = req.params.id;
-    const includeDone =
-      req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = listMediaTasksByProject(db, projectId, {
-      includeTerminal: includeDone,
-    }).map((t) => ({
-      taskId: t.id,
-      status: t.status,
-      startedAt: t.startedAt,
-      endedAt: t.endedAt,
-      elapsed: Math.round(((t.endedAt ?? Date.now()) - t.startedAt) / 1000),
-      surface: t.surface,
-      model: t.model,
-      progress: t.progress.slice(-3),
-      progressCount: t.progress.length,
-      ...(t.status === 'done' ? { file: t.file } : {}),
-      ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
-    }));
-    tasks.sort((a, b) => b.startedAt - a.startedAt);
-    res.json({ tasks });
-  });
-
-  // Multi-file upload that the chat composer uses for paste/drop/picker.
-  // Files land flat in the project folder; the response carries the same
-  // metadata as listFiles so the client can stage them as ChatAttachments
-  // without a separate refetch.
-  app.post(
-    '/api/projects/:id/upload',
-    handleProjectUpload,
-    async (req, res) => {
-      try {
-        const incoming = Array.isArray(req.files) ? req.files : [];
-        // Subfolder the upload targeted (sanitized, forward-slash, '' for root),
-        // stashed by the multer destination resolver. Prepend it so the client
-        // gets the file's true project-relative path, not just its basename.
-        const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
-        const out = [];
-        for (const f of incoming) {
-          try {
-            const stat = await fs.promises.stat(f.path);
-            const rel = relDir ? `${relDir}/${f.filename}` : f.filename;
-            out.push({
-              name: rel,
-              path: rel,
-              size: stat.size,
-              mtime: stat.mtimeMs,
-              originalName: f.originalname,
-            });
-          } catch {
-            // skip files that vanished mid-flight
-          }
-        }
-        /** @type {import('@open-design/contracts').UploadProjectFilesResponse} */
-        const body = { files: out };
-        res.json(body);
-      } catch (err) {
-        sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
-      }
-    },
-  );
-
-  // `design` already declared once above (after the chat-run service is
-  // wired into the main daemon dependency graph). The garnet legacy block
-  // re-introduced it here; duplicate declarations crash the esbuild
-  // transformer at boot. Re-using the earlier `design` is correct — the
-  // inline routes below want the same runs service as the registered
-  // route modules.
-  // main: file-upload routes lifted to a dedicated module. Keep alongside the
-  // inline routes garnet still owns above; duplicate registrations resolve in
-  // a follow-up after route-routes.ts vs garnet inline coverage is audited.
   registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
 
   const composeDaemonSystemPrompt = async ({

@@ -1,17 +1,17 @@
 import fs from 'node:fs';
 import type { Express } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
-import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.js';
-import type { RouteDeps } from './server-context.js';
-import { proxyDispatcherRequestInit } from './connectionTest.js';
+import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media-policy.js';
+import type { RouteDeps } from '../server-context.js';
+import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import {
   aihubmixCatalogUrl,
   parseAIHubMixCatalog,
   AIHUBMIX_DEFAULT_BASE_URL,
   type AIHubMixCatalogType,
-} from './aihubmix.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
-import type { ToolTokenGrant } from './tool-tokens.js';
+} from '../aihubmix.js';
+import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import type { ToolTokenGrant } from '../tool-tokens.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -74,7 +74,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { orbitService } = ctx.orbit;
-  const { openNativeFolderDialog } = ctx.nativeDialogs;
+  const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
   const { getProject } = ctx.projectStore;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
@@ -445,6 +445,30 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
   });
 
+  app.post('/api/system/open-external', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return res.status(400).json({ ok: false, error: 'url must be a valid URL' });
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return res.status(400).json({ ok: false, error: 'url must be http or https' });
+      }
+      const child = openBrowser(parsed.toString());
+      res.json({ ok: Boolean(child) });
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ ok: false, error: String(err && err.message ? err.message : err) });
+    }
+  });
+
   // Native OS folder picker dialog. Returns { path: string | null }.
   app.post('/api/dialog/open-folder', async (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
@@ -614,6 +638,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         ...(t.status === 'done' ? { file: t.file } : {}),
         ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
       }));
+    tasks.sort((a: any, b: any) => b.startedAt - a.startedAt);
     res.json({ tasks });
   });
 

@@ -9,7 +9,7 @@ import type { RegisterHandoffRoutesDeps } from './routes/handoff.js';
 import type { RegisterHostToolsRoutesDeps } from './routes/host-tools.js';
 import type { RegisterLiveArtifactRoutesDeps } from './routes/live-artifact.js';
 import type { RegisterMcpRoutesDeps } from './mcp-routes.js';
-import type { RegisterMediaRoutesDeps } from './media-routes.js';
+import type { RegisterMediaRoutesDeps } from './routes/media.js';
 import type { RegisterMemoryRoutesDeps } from './routes/memory.js';
 import type { RegisterProjectArtifactRoutesDeps, RegisterProjectFileRoutesDeps, RegisterProjectRoutesDeps, RegisterProjectUploadRoutesDeps } from './project-routes.js';
 import type { RegisterRoutineRoutesDeps } from './routes/routine.js';

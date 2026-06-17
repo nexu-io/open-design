@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 import { memoryDir, writeMemoryConfig } from '../src/memory.js';
-import { resolveLegacyMediaRouteGrant } from '../src/media-routes.js';
+import { resolveLegacyMediaRouteGrant } from '../src/routes/media.js';
 
 type FakeMediaEndpoint = 'tool' | 'legacy';
 
