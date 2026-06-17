@@ -8,6 +8,8 @@ type ScopeOutputs = {
   tools_pack_tests_required: boolean;
   nix_validation_required: boolean;
   ui_p0_pr_required: boolean;
+  visual_validation_required: boolean;
+  docker_validation_required: boolean;
   workspace_validation_required: boolean;
 };
 
@@ -24,6 +26,8 @@ const outputs: ScopeOutputs = {
   tools_pack_tests_required: false,
   nix_validation_required: false,
   ui_p0_pr_required: false,
+  visual_validation_required: false,
+  docker_validation_required: false,
   workspace_validation_required: false,
 };
 
@@ -51,6 +55,8 @@ if (eventName === "pull_request") {
   // Main already runs .github/workflows/nix-check.yml, so keep this workflow's
   // push path focused on the non-Nix workspace signal.
   outputs.nix_validation_required = false;
+  // Main Docker publishing stays owned by .github/workflows/docker-image.yml.
+  outputs.docker_validation_required = false;
   outputs.workspace_validation_required = true;
 } else {
   outputs.daemon_tests_required = true;
@@ -58,6 +64,11 @@ if (eventName === "pull_request") {
   outputs.tools_dev_tests_required = true;
   outputs.tools_pack_tests_required = true;
   outputs.nix_validation_required = true;
+  if (eventName === "workflow_dispatch") {
+    outputs.ui_p0_pr_required = true;
+  }
+  outputs.visual_validation_required = true;
+  outputs.docker_validation_required = true;
   outputs.workspace_validation_required = true;
 }
 
@@ -142,6 +153,14 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
     target.ui_p0_pr_required = true;
   }
 
+  if (isVisualRelevantFile(file)) {
+    target.visual_validation_required = true;
+  }
+
+  if (isDockerRelevantFile(file)) {
+    target.docker_validation_required = true;
+  }
+
   if (isNixRelevantFile(file)) {
     target.nix_validation_required = true;
   }
@@ -190,7 +209,56 @@ function isUiP0RelevantFile(file: string): boolean {
       "pnpm-workspace.yaml",
       ".github/workflows/ci.yml",
       ".github/workflows/ui-extended-main.yml",
-      ".github/workflows/ui-p0-pr.yml",
+    ].includes(file)
+  );
+}
+
+function isVisualRelevantFile(file: string): boolean {
+  return (
+    startsWithAny(file, [
+      "apps/web/",
+      "e2e/lib/playwright/",
+      ".github/actions/setup-playwright/",
+      ".github/actions/setup-workspace/",
+    ]) ||
+    /^e2e\/ui\/visual-[^/]+\.test\.ts$/.test(file) ||
+    [
+      "e2e/package.json",
+      "e2e/playwright.visual.config.ts",
+      "e2e/scripts/playwright.ts",
+      "e2e/scripts/visual-report.ts",
+      "pnpm-lock.yaml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/visual-baseline.yml",
+      ".github/workflows/visual-pr-comment.yml",
+    ].includes(file)
+  );
+}
+
+function isDockerRelevantFile(file: string): boolean {
+  return (
+    startsWithAny(file, [
+      "deploy/",
+      "apps/daemon/",
+      "apps/web/",
+      "apps/packaged/",
+      "packages/",
+      "tools/",
+      "assets/",
+      "plugins/",
+      "skills/",
+      "design-systems/",
+      "design-templates/",
+      "craft/",
+      "prompt-templates/",
+    ]) ||
+    [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      ".dockerignore",
+      ".github/workflows/ci.yml",
+      ".github/workflows/docker-image.yml",
     ].includes(file)
   );
 }
@@ -252,9 +320,8 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/blog-indexing-monitor.yml",
       ".github/workflows/blog-3day-report.yml",
       ".github/workflows/seo-daily-report.yml",
-      ".github/workflows/actionlint.yml",
-      ".github/workflows/visual-pr-capture.yml",
       ".github/workflows/visual-pr-comment.yml",
+      ".github/workflows/docker-image.yml",
     ].includes(file)
   );
 }
