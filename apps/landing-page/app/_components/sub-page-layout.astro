@@ -46,6 +46,13 @@ export interface Props {
   ogImage?: string;
   /** Optional comma-separated meta keywords. Emitted only when provided. */
   keywords?: string;
+  /**
+   * Suppress the on-load locale auto-redirect for THIS page while keeping it
+   * fully localized (hreflang alternates + working language switcher). Unlike
+   * `localeCanonicalOnly`, the page still has per-locale variants; we just
+   * don't bounce a (e.g.) zh-preference visitor off the URL they clicked.
+   */
+  suppressLocaleAutoRedirect?: boolean;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
   /**
    * Set on pages that are NOT generated per-locale (e.g. plugin detail pages,
@@ -65,6 +72,7 @@ const {
   keywords,
   jsonLd,
   localeCanonicalOnly = false,
+  suppressLocaleAutoRedirect = false,
 } = Astro.props;
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -109,6 +117,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
   lang={localeDef.htmlLang}
   dir={localeDef.dir}
   data-locale-canonical={localeCanonicalOnly ? 'true' : undefined}
+  data-locale-autoredirect={suppressLocaleAutoRedirect ? 'off' : undefined}
 >
   <head>
     <meta charset="utf-8" />

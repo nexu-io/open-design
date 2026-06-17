@@ -231,6 +231,7 @@ const jsonLd = [
   jsonLd={jsonLd}
   keywords={keywords}
   localeCanonicalOnly={!isDesignSystem}
+  suppressLocaleAutoRedirect={isDesignSystem}
 >
   <article class:list={['detail', isDesignSystem && 'detail-ds']}>
     {isDesignSystem && detailToc.length > 1 && (
