@@ -53,7 +53,7 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
-  // Once onboarding is finished (completed or skipped), the permanent entry
+  // Once onboarding is finished, the permanent entry
   // tab must never linger on the 'onboarding' (Welcome) view — some completion
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
@@ -494,9 +494,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
 
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
-  // finish path uniformly — Skip, last-step Continue, and the design-system
-  // Generate route that navigates to a fresh project while leaving the entry
-  // tab on Welcome in the background.
+  // finish path uniformly — last-step Continue and any future route that
+  // navigates away while leaving the entry tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
     setState((current) => {
@@ -976,6 +975,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           data-tooltip="New tab"
           data-tooltip-placement="bottom"
           aria-label="New tab"
+          data-testid="workspace-tabs-new-tab"
           disabled={onboardingActive}
         >
           <Icon name="plus" size={14} />
@@ -1077,7 +1077,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
+              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
                 0,

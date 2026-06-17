@@ -37,6 +37,7 @@ import {
   startProjectUiPreviewRuntime,
   stopProjectUiPreviewRuntimesForProject,
 } from './project-ui-preview-runtime.js';
+import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
@@ -152,6 +153,13 @@ const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
   }
 })();
 </script>`;
+
+function sameOrchestratorWorkspace(a: unknown, b: unknown): boolean {
+  const parsedA = parseOrchestratorWorkspace(a);
+  const parsedB = parseOrchestratorWorkspace(b);
+  if (!parsedA.ok || !parsedB.ok) return false;
+  return JSON.stringify(parsedA.value) === JSON.stringify(parsedB.value);
+}
 
 const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
 (function(){
@@ -1456,6 +1464,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        if ('orchestratorWorkspace' in metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
+          );
+        }
         // Reject invalid linked working directories up front (consistent with
         // PATCH /api/projects/:id) instead of silently dropping them. The
         // caller promises the agent `--add-dir` access to this folder; if the
@@ -1710,6 +1724,17 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // For case 2 we re-stamp the immutable fields from the existing
       // project record onto the incoming patch so the user can keep
       // patching other metadata without ever losing their import root.
+      if (patch.metadata === null) {
+        const existing = getProject(db, req.params.id);
+        if (existing?.metadata?.baseDir) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'metadata cannot be cleared for imported projects',
+          );
+        }
+      }
       if (patch.metadata && typeof patch.metadata === 'object') {
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
@@ -1720,7 +1745,34 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'fromTrustedPicker can only be set via POST /api/import/folder',
           );
         }
+        if ('orchestratorWorkspace' in patch.metadata) {
+          const parsedOrchestratorWorkspace = parseOrchestratorWorkspace(
+            patch.metadata.orchestratorWorkspace,
+          );
+          if (!parsedOrchestratorWorkspace.ok) {
+            return sendApiError(
+              res,
+              400,
+              'BAD_REQUEST',
+              parsedOrchestratorWorkspace.message,
+            );
+          }
+        }
         if (existingMeta?.baseDir) {
+          if ('orchestratorWorkspace' in patch.metadata) {
+            if (
+              existingMeta.orchestratorWorkspace == null ||
+              !sameOrchestratorWorkspace(
+                patch.metadata.orchestratorWorkspace,
+                existingMeta.orchestratorWorkspace,
+              )
+            ) {
+              return sendApiError(
+                res, 400, 'BAD_REQUEST',
+                'orchestratorWorkspace is immutable after import; use the working-dir route to change it',
+              );
+            }
+          }
           if ('baseDir' in patch.metadata && patch.metadata.baseDir !== existingMeta.baseDir) {
             return sendApiError(
               res, 400, 'BAD_REQUEST',
@@ -1742,6 +1794,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             ...(existingMeta.fromTrustedPicker === true
               ? { fromTrustedPicker: true as const }
               : {}),
+            ...(existingMeta.orchestratorWorkspace
+              ? { orchestratorWorkspace: existingMeta.orchestratorWorkspace }
+              : {}),
           };
         } else if ('baseDir' in patch.metadata) {
           // Non-imported project trying to acquire a baseDir → reject (only
@@ -1749,6 +1804,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'baseDir can only be set via POST /api/import/folder',
+          );
+        } else if ('orchestratorWorkspace' in patch.metadata) {
+          return sendApiError(
+            res, 400, 'BAD_REQUEST',
+            'orchestratorWorkspace can only be set via POST /api/import/folder or POST /api/projects/:id/working-dir',
           );
         }
       }

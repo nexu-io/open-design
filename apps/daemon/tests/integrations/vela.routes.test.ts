@@ -178,6 +178,8 @@ afterEach(() => {
   delete process.env.FAKE_VELA_LOGIN_DELAY_MS;
   delete process.env.FAKE_VELA_LOGIN_FAIL;
   delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL;
+  delete process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS;
+  delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
   delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
   delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
   delete process.env.FAKE_VELA_ENV_DUMP_PATH;
@@ -315,6 +317,47 @@ describe('GET /api/integrations/vela/status', () => {
     }
   });
 
+  it('keeps Settings-configured AMR env, profile, status, and model catalog in sync', async () => {
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    process.env.OPEN_DESIGN_AMR_PROFILE = 'prod';
+    await writeAppConfig(dataDir, {
+      ...previous,
+      agentCliEnv: {
+        ...(previous.agentCliEnv ?? {}),
+        amr: {
+          ...((previous.agentCliEnv?.amr as Record<string, string>) ?? {}),
+          VELA_BIN: FAKE_VELA,
+          OPEN_DESIGN_AMR_PROFILE: 'local',
+          VELA_RUNTIME_KEY: 'rt-settings-risk-smoke',
+          VELA_LINK_URL: 'http://localhost:18081',
+        },
+      },
+    });
+
+    try {
+      const statusResponse = await getJson<{
+        loggedIn: boolean;
+        profile: string;
+        user: { email?: string } | null;
+      }>(`${baseUrl}/api/integrations/vela/status`);
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body).toMatchObject({
+        loggedIn: true,
+        profile: 'local',
+        user: null,
+      });
+      expect(JSON.stringify(statusResponse.body)).not.toContain('rt-settings-risk-smoke');
+
+      const modelsResponse = await waitForAmrModels('remote');
+      expect(modelsResponse.status).toBe(200);
+      expect(modelsResponse.body.models.map((model) => model.id)).toContain('deepseek-v4-flash');
+      expect(modelsResponse.body.models.map((model) => model.id)).toContain('gpt-5.4');
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+
   it('reports loggedIn=true with the surfaced user fields when the active profile has a runtimeKey', async () => {
     seedLogin('local', {
       user: {
@@ -370,6 +413,28 @@ describe('POST /api/integrations/vela/login', () => {
     // attempt (which sets VELA_API_URL) succeeds.
     process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL =
       'start device authorization: API request failed with status 502: broken edge';
+
+    const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
+    expect(status).toBe(202);
+
+    await waitForFile(dumpPath);
+    const env = JSON.parse(readFileSync(dumpPath, 'utf8'));
+    expect(env.VELA_API_URL).toBe(`${baseUrl}/api/integrations/vela/api-proxy`);
+  });
+
+  it('falls back to the proxy when the direct attempt fails AFTER the startup grace', async () => {
+    // Regression (review on #4402): a direct device-authorization that survives
+    // the 250ms startup grace and only then errors out before printing an
+    // activation URL must still reach the proxy retry — returning 202 on the
+    // dead direct login would strand the broken-edge cohort. waitForActivation
+    // blocks for the steady state; OD_AMR_LOGIN_ACTIVATION_GRACE_MS keeps the
+    // wait short, and the direct failure is delayed past LOGIN_STARTUP_GRACE_MS.
+    const dumpPath = path.join(tmpHome, 'vela-env-fallback-after-grace.json');
+    process.env.FAKE_VELA_ENV_DUMP_PATH = dumpPath;
+    process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS = '2000';
+    process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL =
+      'start device authorization: API request failed with status 502: post-grace broken edge';
+    process.env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS = '450';
 
     const { status } = await postJson(`${baseUrl}/api/integrations/vela/login`);
     expect(status).toBe(202);

@@ -685,6 +685,27 @@
   cursor: pointer;
 }
 .designs-select-toggle:hover { border-color: var(--border-strong); }
+.designs-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  min-height: 31px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease-out), opacity 120ms var(--ease-out);
+}
+.designs-refresh-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.designs-refresh-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
 .designs-select-bar {
   display: inline-flex;
   align-items: center;

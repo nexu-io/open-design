@@ -40,6 +40,25 @@ function downloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusSnapshot
   };
 }
 
+function payloadDownloadedStatus(overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {}): OpenDesignHostUpdaterStatusSnapshot {
+  return downloadedStatus({
+    artifact: {
+      name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      platformKey: 'mac',
+      type: 'payload',
+      url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+    },
+    capabilities: {
+      canApplyInPlace: true,
+      canDownload: true,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+    ...overrides,
+  });
+}
+
 describe('web updater model', () => {
   let restoreHost: (() => void) | null = null;
 
@@ -64,6 +83,17 @@ describe('web updater model', () => {
     expect(model.canOpenInstaller).toBe(true);
     expect(model.shouldShowControl).toBe(true);
     expect(model.promptKey).toContain('1.2.3-beta.4');
+  });
+
+  it('derives a desktop prompt for payload updates without manual installer capability', () => {
+    const model = deriveUpdaterModel(payloadDownloadedStatus(), { hostAvailable: true });
+    expect(model.environment).toBe('desktop');
+    expect(model.updateKind).toBe('payload');
+    expect(model.canApplyInPlace).toBe(true);
+    expect(model.canOpenInstaller).toBe(false);
+    expect(model.requiresManualInstall).toBe(false);
+    expect(model.shouldPrompt).toBe(true);
+    expect(model.shouldShowControl).toBe(true);
   });
 
   it('keeps downloading progress internal without showing the updater control', () => {

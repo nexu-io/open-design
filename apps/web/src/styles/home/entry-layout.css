@@ -1843,28 +1843,6 @@
   line-height: 1.45;
 }
 
-.onboarding-view__ds-skip {
-  justify-self: start;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0 12px;
-  color: var(--text);
-  background: var(--bg-panel);
-  box-shadow: var(--shadow-xs);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.onboarding-view__ds-skip:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--accent) 4%);
-  transform: translateY(-1px);
-}
-
 .onboarding-view__panel-head {
   display: grid;
   gap: 7px;

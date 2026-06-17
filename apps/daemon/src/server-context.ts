@@ -17,6 +17,7 @@ export interface HttpDeps {
 export interface PathDeps {
   ARTIFACTS_DIR: string;
   BUNDLED_PETS_DIR: string;
+  CRAFT_DIR: string;
   DESIGN_SYSTEMS_DIR: string;
   // Bundled rendering catalogue (see specs/current/skills-and-design-templates.md).
   // Distinct from SKILLS_DIR so the EntryView Templates surface and the
@@ -37,6 +38,7 @@ export interface PathDeps {
 }
 
 export interface ResourceDeps {
+  FIRST_PARTY_ATOMS?: Array<any>;
   listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
   listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates

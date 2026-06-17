@@ -19,12 +19,7 @@
  */
 @font-face {
   font-family: 'Albert Sans';
-  /* woff2 first (≈50KB, all modern browsers); the variable .ttf (≈125KB)
-     stays as a fallback for ancient engines only. font-display:swap so text
-     paints immediately in the fallback face and never blocks render. */
-  src:
-    url('/skill-assets/AlbertSans-VariableFont_wght.woff2') format('woff2'),
-    url('/skill-assets/AlbertSans-VariableFont_wght.ttf') format('truetype');
+  src: url('/skill-assets/AlbertSans-VariableFont_wght.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -32,9 +27,7 @@
 
 @font-face {
   font-family: 'Albert Sans';
-  src:
-    url('/skill-assets/AlbertSans-Italic-VariableFont_wght.woff2') format('woff2'),
-    url('/skill-assets/AlbertSans-Italic-VariableFont_wght.ttf') format('truetype');
+  src: url('/skill-assets/AlbertSans-Italic-VariableFont_wght.woff2') format('woff2');
   font-weight: 100 900;
   font-style: italic;
   font-display: swap;
@@ -42,12 +35,7 @@
 
 @font-face {
   font-family: 'Remix Icon';
-  /* Subset to the 11 glyphs the site actually renders: 598KB .ttf → ≈1.3KB
-     woff2. font-display:swap (was `block`, which hid the icons — and any text
-     in the same paint — until the font downloaded). */
-  src:
-    url('/skill-assets/remixicon.subset.woff2') format('woff2'),
-    url('/skill-assets/remixicon.ttf') format('truetype');
+  src: url('/skill-assets/remixicon.subset.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -1324,7 +1312,8 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin: 0 auto 8px;
+  /* Shifted down 30px (top margin) to sit lower under the lead line. */
+  margin: 30px auto 8px;
   /* Frame hugs the text: shrink-wrap to the widest line (brand vs tagline) plus
      padding, instead of spanning the full hero column. Stays centred. */
   width: fit-content;
@@ -1333,7 +1322,9 @@ body::before {
   /* Blueprint-style selection frame around the brand title (reference comp):
      a thin accent border with a small filled square sitting on each corner. */
   position: relative;
-  padding: 28px 48px;
+  /* Fluid frame padding so the blueprint border hugs the title at every
+     width instead of pushing the oversized line off-screen on mobile. */
+  padding: clamp(16px, 3.2vw, 28px) clamp(18px, 5vw, 48px);
   border: 1px solid var(--coral);
 }
 /* Small filled squares centred on each corner of the title frame. */
@@ -1353,7 +1344,8 @@ body::before {
      below stays on the sans display face. */
   font-family: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
   font-weight: 800;
-  font-size: 54px;
+  /* Fluid: caps at 54px on desktop (≥900px), scales down on narrow screens. */
+  font-size: clamp(30px, 6vw, 54px);
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -1361,7 +1353,9 @@ body::before {
 .hero-title-sub {
   font-family: var(--sans);
   font-weight: 700;
-  font-size: 35px;
+  /* Fluid: caps at 35px on desktop (≥795px), scales down on narrow screens so
+     the CJK tagline stays inside the frame instead of clipping. */
+  font-size: clamp(20px, 4.4vw, 35px);
   line-height: 1.1;
   letter-spacing: -0.015em;
   color: var(--ink);
@@ -2032,7 +2026,10 @@ section.tight { padding: 90px 0; }
   position: relative;
   container-type: inline-size;
 }
-.about-panel-caption {
+/* Scoped under `.about-panel-img-captioned` (specificity 0,2,0) so the
+   container-query font-size wins over `.about-panel p` (0,1,1), which would
+   otherwise pin it to a fixed 16px and stop it scaling with the image. */
+.about-panel-img-captioned .about-panel-caption {
   position: absolute;
   left: 50%;
   top: 53.5%;
@@ -2041,7 +2038,9 @@ section.tight { padding: 90px 0; }
   margin: 0;
   text-align: center;
   font-family: var(--sans);
-  font-size: 2.7cqw;
+  /* Tuned so the long body line fits on a single line (no orphaned tail) while
+     scaling proportionally with the image at every width. */
+  font-size: 2.5cqw;
   line-height: 1.5;
   font-weight: 500;
   color: var(--ink);
@@ -2211,7 +2210,18 @@ section.tight { padding: 90px 0; }
   background: var(--paper);
   padding-top: 24px;
   padding-bottom: 6px;
+  /* Title + DONE mark sit on row 1; the lead is forced onto its own row
+     (flex-basis 100%) and ordered last. On mobile this flips to a column so
+     the mark drops below the lead — see the ≤880px override. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 14px;
 }
+.capabilities-head > h2 { margin: 0; }
+.capabilities-head > .lead { order: 1; flex-basis: 100%; margin-top: 0; }
+.capabilities-head > .cap-head-icon { margin-left: 0; }
 /* ===== Capabilities scrollytelling (left steps / right art) ===== */
 .cap-scrolly {
   position: relative;
@@ -2373,17 +2383,55 @@ section.tight { padding: 90px 0; }
   max-width: 42ch;
 }
 @media (max-width: 880px) {
-  /* Collapse to a single column: art on top, steps below, no pinning. */
+  /* No pinning on mobile. Flatten the head + row wrappers with `display:
+     contents` so the sticky GRID arranges every leaf element directly: title
+     and lead full-width, then the steps row and the DONE mark side-by-side
+     (steps left, mark right), and the art full-width below. */
   .cap-scrolly { height: auto; margin-top: 8px; }
   .cap-sticky {
     position: static;
     min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "title  title"
+      "lead   lead"
+      "steps  icon"
+      "visual visual";
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 16px;
   }
-  .cap-row {
-    grid-template-columns: 1fr;
-    gap: 20px;
+  .capabilities-head,
+  .cap-row { display: contents; }
+  .capabilities-head > h2 { grid-area: title; }
+  .capabilities-head > .lead { grid-area: lead; }
+  /* Height/margin are overridden after the base .cap-head-icon rule below
+     (which is later in the source) — see the trailing ≤880px block. */
+  .cap-head-icon {
+    grid-area: icon;
+    justify-self: end;
+    align-self: center;
   }
-  .cap-step { opacity: 1; }
+  .cap-visual { grid-area: visual; }
+  /* Steps sit in the left grid cell as a fixed two-up grid (01/02, then 03/04)
+     so every row holds exactly two, with the DONE mark beside them on the
+     right. */
+  .cap-steps {
+    grid-area: steps;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: center;
+  }
+  .cap-step {
+    opacity: 1;
+    justify-self: start;
+    padding: 10px 11px;
+    gap: 8px;
+  }
+  .cap-step-num,
+  .cap-step-label { font-size: 13px; }
 }
 /* Draggable "DONE 👌" mark, inline 20px after the heading text.
    On hover it casts a soft drop-shadow under just the icon (not the whole bar). */
@@ -2405,8 +2453,13 @@ section.tight { padding: 90px 0; }
   filter: drop-shadow(0 12px 14px rgba(38, 38, 38, 0.15));
 }
 .cap-head-icon.is-dragging { cursor: grabbing; }
+/* On mobile the head + row wrappers are flattened (display: contents) and the
+   DONE mark is placed beside the steps by the .cap-sticky grid (see the ≤880px
+   block above). This block sits AFTER the base rule so its smaller height wins
+   the cascade — the base 120px would otherwise leave a ~101px-wide mark that
+   starves the two-up steps grid. */
 @media (max-width: 880px) {
-  .cap-head-icon { height: 84px; margin-left: 14px; }
+  .cap-head-icon { height: 52px; margin: 0; }
 }
 
 .cards-stack {
@@ -2491,7 +2544,6 @@ section.tight { padding: 90px 0; }
   /* Override the staircase vars only; the shared top/min-height formula on
      .cards-stack .card adapts automatically and keeps `top + height` constant. */
   .cards-stack { max-width: 100%; --stack-top: 212px; --peek: 52px; --card-h: 260px; }
-  .capabilities-head { padding-top: 16px; }
   /* Drop the 238px breakout on narrow screens — fall back to the normal
      container width so the cards don't get squeezed. */
   .capabilities-grid { width: auto; margin-left: 0; }
@@ -2623,13 +2675,15 @@ section.tight { padding: 90px 0; }
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 4px;
+  /* Fluid gap/padding so the dock shrinks with the stage on phones instead of
+     overflowing it (caps at the desktop values above ~500px viewport). */
+  gap: clamp(2px, 1vw, 4px);
   width: fit-content;
   /* Centered as its own module beneath the Labs cards grid. Extra top
      margin clears the always-on active tooltip that pokes above the dock;
      bottom margin separates it from the next module. */
   margin: 48px auto 44px;
-  padding: 9px 13px;
+  padding: clamp(7px, 2vw, 9px) clamp(8px, 2.6vw, 13px);
   background: var(--bone);
   border: 1px solid var(--line);
   border-radius: 17px;
@@ -2638,8 +2692,10 @@ section.tight { padding: 90px 0; }
 .lab-dock-item {
   position: relative;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
+  /* Fluid tile so six tiles fit inside the stage on narrow screens; caps at
+     48px on desktop (≥~505px viewport). */
+  width: clamp(34px, 9.5vw, 48px);
+  height: clamp(34px, 9.5vw, 48px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2667,7 +2723,9 @@ section.tight { padding: 90px 0; }
    Selection reads from the lift plus the coral icon/colour alone — no outer
    ring stroke. */
 .lab-dock-item.active {
-  transform: translateY(-20px);
+  /* Lift scales down on small screens so the smaller tile doesn't fly far off
+     the dock; caps at -20px on desktop. */
+  transform: translateY(clamp(-20px, -4vw, -14px));
   /* Selected tile: black→grey gradient with the green (coral) glyph kept from
      the shared hover/active rule above, plus an elevation shadow. Colours are
      existing project tokens (--ink / --ink-soft). */
@@ -2676,7 +2734,7 @@ section.tight { padding: 90px 0; }
   box-shadow: 0 14px 24px -10px rgba(38, 38, 38, 0.45);
 }
 .lab-dock-icon {
-  font-size: 20px;
+  font-size: clamp(15px, 4.2vw, 20px);
   line-height: 1;
 }
 .lab-dock-icon::before {
@@ -2720,6 +2778,15 @@ section.tight { padding: 90px 0; }
 .lab-dock:hover .lab-dock-item.active:not(:hover) .lab-dock-label {
   opacity: 0;
   transform: translateX(-50%) translateY(6px);
+}
+/* On phones there's no hover to dismiss it, and the pinned bubble on an edge
+   tile clips against the stage's `overflow: hidden`. Keep the labels for
+   hover/focus only; the line icons read clearly on their own. */
+@media (max-width: 640px) {
+  .lab-dock-item.active .lab-dock-label {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
 }
 .labs-meta {
   display: flex;
@@ -2796,7 +2863,40 @@ section.tight { padding: 90px 0; }
   pointer-events: none;
 }
 @media (max-width: 880px) {
-  .lab-stage { width: auto; margin-left: 0; margin-right: 0; }
+  /* Two mobile bugs fixed here:
+     1) The full-bleed `width: calc(100.8vw - 282.24px)` / negative-margin trick
+        made the stage overflow its container on phones (the prior `width: auto`
+        override lost the cascade). `max-width: 100%` clamps the used width to the
+        container no matter which `width` rule wins, killing the horizontal spill.
+     2) The fixed 2262/1358 landscape ratio then leaves the stage too SHORT: the
+        artifact card (top: 36px, height scales with width) and the bottom-anchored
+        dock have fixed-pixel offsets that stop shrinking, so the dock rode up and
+        overlapped the card. A width-tracking min-height keeps the dock below the
+        card; the aspect-ratio still governs at wider widths. */
+  .lab-stage {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    min-height: calc(50vw + 168px);
+  }
+  /* Phones: enlarge the preview card and widen the dock (the painting `::before`
+     底图 is untouched). The bigger card + dock need a little more height, so the
+     min-height bump above keeps the dock clear of the card. */
+  /* Higher specificity (`.lab-stage .lab-artifact`) so these beat the base
+     widths regardless of source order. */
+  .lab-stage .lab-artifact { width: 80%; }
+  .lab-stage .lab-artifact-video,
+  .lab-stage .lab-artifact.is-wide { width: 89%; }
+  .lab-stage .lab-dock {
+    gap: clamp(4px, 1.3vw, 6px);
+    padding: clamp(8px, 2.2vw, 10px) clamp(11px, 2.9vw, 14px);
+  }
+  .lab-dock-item {
+    width: clamp(40px, 11vw, 52px);
+    height: clamp(40px, 11vw, 52px);
+  }
+  .lab-dock-icon { font-size: clamp(18px, 5vw, 23px); }
 }
 /* Floating artifact window, anchored 36px below the painting's top edge. The
    dock swaps its src and toggles `.is-visible` (see `enhanceLabSwitch`).
@@ -3815,10 +3915,13 @@ section.tight { padding: 90px 0; }
    Vertical overrides the generic `section { padding: 130px 0 }`; horizontal
    overrides `.container { padding: 0 64px }`. */
 .testimonial { padding: 120px 0; }
-.testimonial .container { max-width: none; padding: 0 238px; }
+/* Page safe area: 238px left/right, matching the work / faq / cta / newsletter /
+   footer modules so every block shares the same edge inset. Below 1024px the
+   inset eases down via clamp so the two-column copy/globe layout keeps room. */
+.testimonial .container { width: auto; max-width: none; padding: 0 238px; margin-inline: auto; }
 @media (max-width: 1024px) {
   .testimonial { padding: clamp(40px, 12vw, 120px) 0; }
-  .testimonial .container { padding: 0 clamp(20px, 9vw, 120px); }
+  .testimonial .container { padding: 0 clamp(20px, 9vw, 238px); }
 }
 .testimonial-grid {
   display: grid;
@@ -3827,25 +3930,50 @@ section.tight { padding: 90px 0; }
   align-items: center;
 }
 .testimonial-grid.with-globe {
-  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.9fr);
+  /* Copy track sizes to its (nowrap) content so the headline never gets squeezed
+     narrower than its two lines and spill under the globe; the globe takes the
+     remaining space (and yields, min 320px) instead of overlapping the text. */
+  grid-template-columns: auto minmax(320px, 1fr);
   gap: clamp(42px, 7vw, 96px);
 }
 .testimonial-grid.with-globe .testimonial-copy {
   max-width: 720px;
 }
+/* The 238px safe area plus the globe's 320px minimum leaves the headline column
+   too tight below ~1400px (the copy gets squeezed and the headline wraps to 4
+   lines that crowd the globe). Collapse to a single column there — headline
+   full-width on top, globe centred below — so the two-column split only renders
+   on wide displays (≥1400px) where the copy column keeps room to breathe. */
+@media (max-width: 1400px) {
+  .testimonial-grid.with-globe {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .testimonial-grid.with-globe .testimonial-copy { max-width: none; }
+}
 .testimonial-copy h2 {
   font-family: var(--sans);
-  font-size: 42px;
+  /* Fluid within the 238px safe area: caps at 42px on wide desktop, scales down
+     as the two-column copy track narrows so the headline fits without the
+     "Open Design" line wrapping awkwardly on small/medium screens. */
+  font-size: clamp(26px, 3vw, 42px);
   font-weight: 700;
   letter-spacing: -0.022em;
   line-height: 1.12;
   margin-bottom: 36px;
+  /* Keep each of the two lines (split by the <br>) on a single line at every
+     breakpoint — no extra wrapping. The copy grid track is content-sized so this
+     never overflows into / under the globe. */
+  white-space: nowrap;
 }
 .testimonial-copy h2 em {
   font-family: var(--serif);
   font-style: italic;
   font-weight: 500;
 }
+/* "正在一起构建 Open Design" stays on its own single line at every breakpoint
+   (the content-sized copy track guarantees room, so it no longer overflows). */
+.testimonial-copy h2 .testi-post { white-space: nowrap; }
 .author {
   display: flex;
   align-items: center;
@@ -4198,16 +4326,19 @@ section.tight { padding: 90px 0; }
 .cta-dance {
   position: relative;
   /* Match the condensed nav capsule width (1080px, centered) so the mural
-     lines up with the navbar. Aspect-ratio below keeps the proportions, so it's
-     just a narrower version of the same image. */
+     lines up with the navbar. */
   width: 100%;
   max-width: 1080px;
   margin: clamp(28px, 4vw, 56px) auto 0;
   border-radius: 24px;
   overflow: hidden;
-  /* Lock the block to the mural's ratio: height follows width, full painting
-     shown, no cropping. */
-  aspect-ratio: 2776 / 1660;
+  /* Copy on top, product window below IN FLOW — so the window can never overlap
+     the buttons regardless of how many lines the heading wraps to, and the gap
+     between them stays responsive (set on the window's margin-top). The block
+     height follows its content instead of a locked aspect-ratio. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 /* Mural background image for the CTA block, behind the copy. Because the box
    ratio equals the image ratio, `cover` paints the whole image with no crop. */
@@ -4221,28 +4352,34 @@ section.tight { padding: 90px 0; }
 /* Open Design Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
 .cta-window {
-  position: absolute;
-  left: 50%;
-  top: calc(46% - 50px);
-  transform: translateX(-50%);
-  width: 82.4%;
-  height: auto;
+  position: relative;
   z-index: 1;
-  border-radius: 14px;
+  /* The <img> is first in the DOM but must render BELOW the copy — order:1
+     places it after the (order:0) inner in the flex column. */
+  order: 1;
+  /* Responsive gap from the buttons above — scales with the block width and,
+     because the window is in flow, the buttons and window never overlap. */
+  margin-top: clamp(20px, 3.5vw, 52px);
+  width: 82.4%;
+  /* Peek effect: show the TOP of the app screenshot and crop the bottom, with
+     the window flush to the block's bottom edge so it bleeds off (the mural
+     stays visible to its left/right). Height scales with width. */
+  height: clamp(240px, 34vw, 480px);
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 14px 14px 0 0;
   box-shadow: 0 36px 70px -30px rgba(20, 20, 20, 0.5);
   pointer-events: none;
 }
-/* The product window rises up from below when the CTA scrolls into view.
-   `translate` (longhand) stacks with the centering `transform: translateX(-50%)`,
-   so the card stays centered while it animates vertically. */
+/* The product window rises up from below when the CTA scrolls into view. */
 .cta-window[data-reveal] {
   translate: 0 96px;
 }
 .cta-dance-inner {
   position: relative;
   z-index: 2;
-  /* Smaller top padding shifts the whole block up; content is centered. */
-  padding: clamp(14px, 2.4vw, 32px) clamp(28px, 5vw, 64px) clamp(32px, 5vw, 72px);
+  /* No bottom padding — the gap to the window is the window's margin-top. */
+  padding: clamp(14px, 2.4vw, 32px) clamp(28px, 5vw, 64px) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4875,7 +5012,11 @@ footer .container {
 
 @media (max-width: 720px) {
   .sub-footer .sub-footer-inner { padding-inline: 24px; }
-  .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
+  /* Each section spans the full width and lays its links out horizontally
+     (wrapping) instead of a tall single-file column — the footer reads as
+     compact horizontal rows rather than long vertical stacks. */
+  .sub-footer-grid { grid-template-columns: 1fr; gap: 24px; }
+  .sub-footer-col ul { flex-direction: row; flex-wrap: wrap; gap: 10px 22px; }
   .sub-footer { padding: 40px 0 24px; }
   /* Clear the page-bottom GradualBlur band (4rem) so the wordmark
      reads crisp at final scroll on phones. */
@@ -5013,7 +5154,10 @@ footer .container {
     top: 100%;
     left: 0;
     right: 0;
-    margin: 0;
+    /* Drop below the bar and span the full capsule width. The panel is
+       positioned within `.nav` (which IS the condensed capsule), so left:0 /
+       right:0 with no side margins makes its edges line up with the bar. */
+    margin: 10px 0 0;
     padding: 0;
     pointer-events: none;
     opacity: 0;
@@ -5040,6 +5184,12 @@ footer .container {
     visibility: visible;
     transform: translateY(0);
   }
+  /* With the panel open, hide the page-level bottom GradualBlur band
+     (position:fixed, z-index above the panel) so it stops fogging the bottom
+     of the panel's scrollable list. It returns when the menu closes. */
+  body:has(.nav.is-open) .gradual-blur {
+    display: none;
+  }
   .nav-links {
     flex-direction: column;
     align-items: stretch;
@@ -5064,6 +5214,12 @@ footer .container {
   .nav-links li.has-dropdown { position: static; }
   .nav-links .dropdown-caret { display: none; }
   .nav-dropdown {
+    /* Two items per row so the flattened panel (esp. the long Agent list)
+       isn't an endless single column. Group labels span both columns below. */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 8px;
+    align-content: start;
     position: static;
     opacity: 1;
     visibility: visible;
@@ -5077,8 +5233,11 @@ footer .container {
     background: transparent;
     min-width: 0;
   }
+  /* Section group labels (Use cases / Roles) break the two-up flow. */
+  .nav-dropdown .nav-dropdown-group { grid-column: 1 / -1; }
   .nav-dropdown::before { display: none; }
   .nav-dropdown a { padding: 8px 8px; border-radius: 4px; }
+  .nav-dropdown .dropdown-name { font-size: 15px; }
   .nav-dropdown .dropdown-blurb { display: none; }
   /* Let the Solution panel flow naturally inside the flattened nav panel
      instead of scrolling within a capped box. */
@@ -5096,6 +5255,21 @@ footer .container {
 }
 @media (max-width: 880px) {
   .container { padding: 0 24px; }
+  /* ----------------------------------------------------------------
+     Unified mobile module rhythm: every major section uses the SAME
+     56px top/bottom padding, so the visible gap between any two
+     stacked modules is a consistent 112px. This overrides the
+     desktop-tuned per-section values (.capabilities 40, .testimonial
+     12vw clamp, section.tight 90, .newsletter 72, generic 130) that
+     otherwise made the mobile gaps jump between 80–170px. Hero keeps
+     its nav-clearance top padding but takes the same 56px bottom (see
+     its rule below) so hero→about matches the rest.
+     ---------------------------------------------------------------- */
+  section { padding: 56px 0; }
+  section.tight { padding: 56px 0; }
+  .capabilities { padding-top: 56px; padding-bottom: 56px; }
+  .testimonial { padding: 56px 0; }
+  .newsletter { padding: 56px 0; }
   /* stack two-column grids */
   .hero-grid, .about-grid, .capabilities-grid, .testimonial-grid, .cta-grid {
     grid-template-columns: 1fr;
@@ -5109,8 +5283,11 @@ footer .container {
   .pills { justify-content: flex-start; }
   .method-grid { grid-template-columns: repeat(2, 1fr); gap: 36px; }
   .method-grid::before { display: none; }
-  /* hero — copy first, art second; trim art height so the page isn't 200vh */
-  .hero { min-height: 0; padding: 32px 0 0; }
+  /* hero — copy first, art second; trim art height so the page isn't 200vh.
+     The nav bar is `position: fixed` (~71px tall on mobile) and floats over the
+     hero, so the top padding must clear it — otherwise the lead line tucks under
+     the bar. This drops the content below the bar with a comfortable gap. */
+  .hero { min-height: 0; padding: 92px 0 56px; }
   .hero::before { display: none; }
   .hero-grid { gap: 36px; }
   .hero-copy { padding: 18px 0 8px; }
@@ -5145,9 +5322,11 @@ footer .container {
   .method-step h4 { font-size: 24px; padding-right: 0; }
   .method-foot { flex-direction: column; align-items: flex-start; gap: 14px; padding-top: 18px; margin-top: 56px; }
   /* dark work card */
-  .work { margin: 0 12px; padding: 60px 24px; border-radius: 24px; }
+  /* Uniform inner padding (matches the desktop 40px intent) so the cards sit an
+     equal distance from every edge of the black panel; the grid gap matches it. */
+  .work { margin: 0 12px; padding: 24px; border-radius: 24px; }
   .work-grid { grid-template-columns: 1fr; gap: 36px; }
-  .work-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .work-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
   .work-stat-card { min-height: 190px; padding: 24px; transform: none; }
   .work-stat-card:hover { transform: translateY(-3px); }
   .work-arrows { position: static; margin-top: 32px; }
@@ -5160,11 +5339,38 @@ footer .container {
   .testimonial-globe { min-height: 360px; }
   .testimonial-art { max-width: 420px; margin: 0 auto; }
   .partners { grid-template-columns: repeat(3, 1fr); gap: 18px; }
-  /* cta */
+  /* cta — across the whole mobile range, drop the fixed 2776/1660 landscape
+     ratio (which reserved disproportionate empty painting below the buttons as
+     the block shrank) and hug the content as a flex column. An equal padding
+     frame makes the painting border identical on all four sides; the window's
+     own margin and the inner padding are zeroed so the frame is the single
+     source of the inset. Stack order is copy first (title → tag → buttons),
+     product window last — see the `order` declarations below. */
   .cta-art { max-width: 460px; margin: 0 auto; }
   .cta-art .ribbon { display: none; }
-  .cta-actions { flex-wrap: wrap; }
   .cta-foot { flex-wrap: wrap; gap: 14px 24px; }
+  .cta .container { padding: 0 16px; }
+  .cta-dance {
+    align-items: stretch;
+    gap: clamp(16px, 3.6vw, 24px);
+    padding: clamp(16px, 3.6vw, 24px);
+  }
+  .cta-window {
+    width: 100%;
+    margin: 0;
+    /* Full image (no crop) when stacked on a phone. */
+    height: auto;
+    object-fit: fill;
+    border-radius: 10px;
+  }
+  /* cancel the translate-up reveal so the static image isn't shifted */
+  .cta-window[data-reveal] { translate: 0 0; }
+  /* Copy block (title → tag → buttons) leads the stack; the window follows via
+     its base order:1 (inner stays at the default order:0). */
+  .cta-dance-inner { padding: 0; align-items: center; }
+  .cta-dance-inner .display { margin: 0 0 10px; }
+  .cta-dance-inner .lead { margin-bottom: 16px; }
+  .cta-actions { flex-wrap: wrap; justify-content: center; margin-bottom: 0; }
   /* footer */
   .foot-grid { gap: 32px 48px; }
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
@@ -5182,6 +5388,13 @@ footer .container {
   .hero-actions .btn { padding: 12px 18px; font-size: 13px; }
   .work-card h3 { font-size: clamp(24px, 6vw, 30px); }
   .foot-mega .word { font-size: clamp(54px, 18vw, 120px); }
+  /* Break .falling-text out of .method > .container's 64px side padding */
+  .falling-text { margin-inline: -64px; width: calc(100% + 128px); }
+  /* CTA mural compact layout lives in the ≤880 block; on small phones just
+     tighten the side margin and shrink the copy. */
+  .cta .container { padding: 0 14px; }
+  .cta-dance-inner .display { font-size: clamp(22px, 6vw, 30px); }
+  .cta-dance-inner .lead { font-size: 15px; }
 }
 @media (max-width: 560px) {
   .container { padding: 0 16px; }
@@ -5191,7 +5404,6 @@ footer .container {
   .capabilities-copy h2,
   .labs-head h2,
   .method-head h2,
-  .testimonial-copy h2,
   .cta h2,
   .section-header h2 { font-size: clamp(30px, 8.5vw, 44px); }
   .about h2.about-statement { font-size: clamp(26px, 6vw, 38px); }
@@ -5200,7 +5412,8 @@ footer .container {
   .method-grid { grid-template-columns: 1fr; gap: 28px; }
   .method-step .num { font-size: 48px; }
   .method-step h4 { font-size: 22px; }
-  section { padding: 80px 0; }
+  /* section vertical rhythm is unified to 56px in the ≤880px block above;
+     no separate ≤560px value so small phones stay consistent with large ones. */
   .topbar-inner { font-size: 9px; gap: 10px; }
   .topbar-inner .right { gap: 10px; }
   .locale-trigger { gap: 4px; }
@@ -5209,7 +5422,8 @@ footer .container {
   .locale-menu { min-width: 208px; }
   .partners { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .foot-grid { flex-direction: column; align-items: center; text-align: center; gap: 24px; }
-  .work { margin: 0 8px; padding: 48px 20px; border-radius: 20px; }
+  .work { margin: 0 8px; padding: 20px; border-radius: 20px; }
+  .work-stats-grid { gap: 20px; }
   .hero-actions { width: 100%; margin-top: 90px; }
   .hero-actions .btn { flex: 1 1 auto; justify-content: center; }
   .cta-actions { width: 100%; }
@@ -5242,6 +5456,19 @@ footer .container {
   .work-stats-grid { grid-template-columns: 1fr; }
   .work-stat-card { min-height: 168px; padding: 22px; }
   .work-stat-card h3 { font-size: clamp(32px, 13vw, 48px); }
+}
+/* Phone mode: match these section headings to the testimonial headline size
+   (`clamp(26px, 3vw, 42px)` — 26px on phones). Placed after the other mobile
+   blocks so it overrides their larger clamps and the base `.labs-head h2` /
+   `.work-stats-title` sizes; on desktop (>880px) the headings keep their large
+   display sizes. */
+@media (max-width: 880px) {
+  .work-stats-title,
+  .method-head h2,
+  .labs-head h2,
+  .capabilities-copy h2,
+  .newsletter-title,
+  .faq-head .display.faq-title-zh { font-size: clamp(26px, 3vw, 42px); }
 }
 
 /* ====== Plugin registry pages ====== */

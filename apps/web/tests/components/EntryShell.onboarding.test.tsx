@@ -79,7 +79,35 @@ function renderOnboarding(
   overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
 ) {
   window.history.replaceState(null, '', '/onboarding');
-  const props: React.ComponentProps<typeof EntryShell> = {
+  const props = onboardingProps(overrides);
+
+  function Harness() {
+    const [config, setConfig] = useState(props.config);
+    return (
+      <I18nProvider initial="en">
+        <EntryShell
+          {...props}
+          config={config}
+          onConfigPersist={(next) => {
+            props.onConfigPersist(next);
+            setConfig(next as AppConfig);
+          }}
+        />
+      </I18nProvider>
+    );
+  }
+
+  render(
+    <Harness />,
+  );
+
+  return props;
+}
+
+function onboardingProps(
+  overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
+): React.ComponentProps<typeof EntryShell> {
+  return {
     skills: [],
     designTemplates: [],
     designSystems: [],
@@ -113,28 +141,6 @@ function renderOnboarding(
     onCompleteOnboarding: vi.fn(),
     ...overrides,
   };
-
-  function Harness() {
-    const [config, setConfig] = useState(props.config);
-    return (
-      <I18nProvider initial="en">
-        <EntryShell
-          {...props}
-          config={config}
-          onConfigPersist={(next) => {
-            props.onConfigPersist(next);
-            setConfig(next as AppConfig);
-          }}
-        />
-      </I18nProvider>
-    );
-  }
-
-  render(
-    <Harness />,
-  );
-
-  return props;
 }
 
 function renderHome(
@@ -247,8 +253,8 @@ describe('EntryShell settings menu', () => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url.endsWith('/api/community/discord')) {
         return jsonResponse({
-          inviteCode: 'mHAjSMV6gz',
-          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          inviteCode: '9ptkbbqRu',
+          inviteUrl: 'https://discord.gg/9ptkbbqRu',
           onlineCount: 1234,
           memberCount: 4321,
           fetchedAt: Date.now(),
@@ -344,6 +350,117 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     const localPanel = screen.getByText('Local CLI').closest('.onboarding-view__setup-panel');
     expect(localPanel?.textContent).toContain('Claude Code');
     expect(localPanel?.textContent).not.toContain('AMR');
+  });
+
+  it('reuses cached available CLI agents without refreshing and reports the preserved selection', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    const refreshAgents = vi.fn(() => {
+      throw new Error('refresh should not run for cached agents');
+    });
+    const cursorAgent = cliAgent({
+      id: 'cursor-agent',
+      name: 'Cursor Agent',
+      bin: 'cursor-agent',
+    });
+    const props = renderOnboarding({
+      config: baseConfig({ agentId: 'cursor-agent' }),
+      agents: [
+        amrAgent(),
+        cliAgent({ id: 'codex', name: 'Codex CLI', bin: 'codex' }),
+        cursorAgent,
+      ],
+      onRefreshAgents: refreshAgents,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+
+    await waitFor(() => {
+      expect(trackedEvents('onboarding_runtime_scan_result')).toHaveLength(1);
+    });
+    expect(refreshAgents).not.toHaveBeenCalled();
+    expect(props.onAgentChange).not.toHaveBeenCalledWith('codex');
+    expect(latestTrackedEvent('onboarding_runtime_scan_result')).toMatchObject({
+      result: 'success',
+      detected_cli_count: 3,
+      available_cli_count: 2,
+      selected_cli_id: 'cursor_agent',
+    });
+  });
+
+  it('resolves cached CLI reuse through the loading effect without duplicate scan telemetry', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    const refreshAgents = vi.fn(() => {
+      throw new Error('refresh should not run while cached agents are still loading');
+    });
+    const props = onboardingProps({
+      agents: [amrAgent()],
+      agentsLoading: true,
+      onRefreshAgents: refreshAgents,
+    });
+    const view = render(
+      <I18nProvider initial="en">
+        <EntryShell {...props} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+    expect(refreshAgents).not.toHaveBeenCalled();
+    expect(trackedEvents('onboarding_runtime_scan_result')).toHaveLength(0);
+
+    view.rerender(
+      <I18nProvider initial="en">
+        <EntryShell
+          {...props}
+          agents={[amrAgent(), cliAgent({ id: 'codex', name: 'Codex CLI', bin: 'codex' })]}
+          agentsLoading={false}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(trackedEvents('onboarding_runtime_scan_result')).toHaveLength(1);
+    });
+    expect(refreshAgents).not.toHaveBeenCalled();
+    expect(latestTrackedEvent('onboarding_runtime_scan_result')).toMatchObject({
+      result: 'success',
+      detected_cli_count: 2,
+      available_cli_count: 1,
+      selected_cli_id: 'codex_cli',
+    });
+  });
+
+  it('refreshes exactly once when the cached CLI list is empty', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' }),
+    ) as typeof fetch;
+    const refreshAgents = vi.fn(() => [
+      amrAgent(),
+      cliAgent({ id: 'codex', name: 'Codex CLI', bin: 'codex' }),
+    ]);
+    renderOnboarding({
+      agents: [amrAgent()],
+      agentsLoading: false,
+      onRefreshAgents: refreshAgents,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await act(async () => {});
+
+    await waitFor(() => {
+      expect(trackedEvents('onboarding_runtime_scan_result')).toHaveLength(1);
+    });
+    expect(refreshAgents).toHaveBeenCalledTimes(1);
+    expect(latestTrackedEvent('onboarding_runtime_scan_result')).toMatchObject({
+      result: 'success',
+      detected_cli_count: 2,
+      available_cli_count: 1,
+      selected_cli_id: 'codex_cli',
+    });
   });
 
   it('keeps AMR login pending while device authorization is waiting', async () => {

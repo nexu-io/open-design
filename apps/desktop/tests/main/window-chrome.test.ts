@@ -39,4 +39,11 @@ describe("desktop BrowserWindow chrome options", () => {
   test("keeps the visible renderer responsive when Chromium misclassifies visibility", () => {
     expect(mainAppWindowOptions()).toContain("backgroundThrottling: false");
   });
+
+  test("keeps packaged update status wired into the runtime instead of falling back to 0.0.0", () => {
+    expect(runtimeSource).toContain("currentVersion: \"0.0.0\"");
+    expect(runtimeSource).toContain("options.updater?.snapshot() ?? unavailableUpdaterStatus()");
+    expect(runtimeSource).toContain("options.updater?.status() ?? unavailableUpdaterStatus()");
+    expect(runtimeSource).toContain("sendUpdaterStatus()");
+  });
 });

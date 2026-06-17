@@ -1279,16 +1279,24 @@
 .agent-card-name--amr {
   align-items: center;
   gap: 8px;
+  row-gap: 5px;
+  flex-wrap: wrap;
+  white-space: normal;
+  overflow: visible;
 }
-.agent-card-name--amr .agent-card-title {
+.agent-card-name.agent-card-name--amr .agent-card-title {
   flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
-  min-width: 0;
-  overflow: hidden;
+  min-width: min(100%, 220px);
+  overflow: visible;
 }
 .agent-card-benefit {
   display: inline-flex;
@@ -1400,8 +1408,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  gap: 8px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 10px;
 }
 .agent-card-amr-auth .amr-account-control__status {
   display: inline-flex;
@@ -1425,24 +1433,39 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0 18px;
+  min-height: 32px;
+  padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-panel));
   color: var(--text);
-  font-size: 13px;
-  font-weight: 680;
+  font-size: 12px;
+  font-weight: 650;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.agent-card-amr-auth .amr-account-control__action--icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border-soft));
+  background: color-mix(in srgb, var(--bg-panel) 88%, var(--accent-tint) 12%);
+  color: var(--text-muted);
 }
 .agent-card-amr-auth .amr-account-control__action:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   background: color-mix(in srgb, var(--accent-tint) 76%, var(--bg-panel));
   color: var(--accent-strong);
   transform: translateY(-1px);
+}
+.agent-card-amr-auth .amr-account-control__action--icon:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 78%, var(--accent-tint) 22%);
+  color: var(--text);
 }
 .agent-card-amr-auth .amr-account-control__action:disabled {
   cursor: default;
@@ -1464,6 +1487,87 @@
   line-height: 1.25;
   overflow-wrap: anywhere;
   text-align: left;
+}
+/* Device-authorization fallback shown while signing in to AMR. Surfaced from
+   vela login's stdout so the user can finish even when the browser did not
+   auto-open. Unscoped so it renders consistently in Settings, onboarding, and
+   the chat auth surfaces; takes a full row inside the wrapping flex pill. */
+/* The pill's base layout is a single non-wrapping flex row; let it wrap so the
+   full-width activation block drops onto its own line below the status. Scoped
+   by :has so only the signing-in-with-activation case is affected. */
+.amr-account-control--signing-in:has(.amr-login-activation) {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.amr-login-activation {
+  flex: 1 1 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  text-align: left;
+}
+.amr-login-activation__hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted, #6b7280);
+}
+.amr-login-activation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.amr-login-activation__open {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.amr-login-activation__open:hover {
+  background: var(--accent-strong, var(--accent));
+}
+.amr-login-activation__code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.amr-login-activation__code:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.amr-login-activation__code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: inherit;
+}
+.amr-login-activation__code-action {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-strong, var(--accent));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .agent-card-amr-auth .amr-login-pill-badge {
   flex: 0 0 auto;

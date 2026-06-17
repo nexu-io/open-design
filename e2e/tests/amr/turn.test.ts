@@ -36,7 +36,7 @@ import { describe, expect, test } from 'vitest';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
 import { startRun, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 type ProjectResponse = {
   conversationId: string;
@@ -88,8 +88,8 @@ if (argv[2] === 'login') {
       [profile]: {
         runtimeKey: 'fake-runtime-key-0000000000000000000000',
         controlKey: 'fake-control-key-0000000000000000000000',
-        apiUrl: 'http://localhost:18080',
-        linkUrl: 'http://localhost:18081',
+        apiUrl: env.FAKE_VELA_API_URL || 'http://localhost:18080',
+        linkUrl: env.FAKE_VELA_LINK_URL || 'http://localhost:18081',
         user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
       },
     },
@@ -217,8 +217,8 @@ describe('AMR chat-run end-to-end', () => {
               local: {
                 runtimeKey: 'fake-runtime-key',
                 controlKey: 'fake-control-key',
-                apiUrl: 'http://localhost:18080',
-                linkUrl: 'http://localhost:18081',
+                apiUrl: suite.amr.apiUrl,
+                linkUrl: suite.amr.linkUrl,
                 user: { id: 'fake-user-id', email: 'e2e@example.com', plan: 'free' },
               },
             },
@@ -235,9 +235,10 @@ describe('AMR chat-run end-to-end', () => {
         body: {
           agentCliEnv: {
             amr: {
+              FAKE_VELA_API_URL: suite.amr.apiUrl,
+              FAKE_VELA_LINK_URL: suite.amr.linkUrl,
               VELA_BIN: velaBin,
-              VELA_LINK_URL: 'http://localhost:18081',
-              VELA_RUNTIME_KEY: 'fake-runtime-key',
+              ...suite.amr.runtimeEnv(),
             },
           },
           agentId: 'amr',

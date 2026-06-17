@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { isToolsDevPortConflict } from '@/vitest/tools-dev';
+import { isToolsDevPortConflict } from '@/tools-dev/cli';
 
 describe('tools-dev startup conflict detection', () => {
   test('classifies port and namespace startup collisions as retryable', () => {

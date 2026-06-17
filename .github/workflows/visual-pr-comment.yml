@@ -2,12 +2,12 @@ name: visual-pr-comment
 
 on:
   workflow_run:
-    workflows: [visual-pr-capture]
+    workflows: [ci]
     types: [completed]
   workflow_dispatch:
     inputs:
       capture_run_id:
-        description: GitHub Actions run id for the Visual PR capture workflow to comment on.
+        description: GitHub Actions run id for the CI workflow that uploaded visual PR capture artifacts.
         required: true
         type: string
       pr_number:
@@ -30,7 +30,17 @@ jobs:
     # Fork PR capture artifacts are untrusted. Always validate the live PR state
     # and only execute trusted base-repository code before publishing comments
     # or reports.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.event == 'pull_request' &&
+          (
+            github.event.workflow_run.conclusion == 'success' ||
+            github.event.workflow_run.conclusion == 'failure'
+          )
+        )
+      }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -54,15 +64,51 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      - name: Download PR visual artifact
+      - name: Resolve PR visual artifacts
+        id: artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
+          WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          artifacts_json="$RUNNER_TEMP/artifacts.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$WORKFLOW_RUN_ID/artifacts" > "$artifacts_json"
+          if [ -n "$WORKFLOW_PR_NUMBER" ]; then
+            name_prefix="visual-pr-capture-${WORKFLOW_PR_NUMBER}-${WORKFLOW_RUN_ID}-"
+          else
+            name_prefix="visual-pr-capture-"
+          fi
+          artifact_names="$(jq -r --arg prefix "$name_prefix" '.artifacts[]? | select(.expired == false and (.name | startswith($prefix))) | .name' "$artifacts_json")"
+          artifact_count="$(printf '%s\n' "$artifact_names" | sed '/^$/d' | wc -l | tr -d ' ')"
+          if [ "$artifact_count" = "0" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "No visual PR artifacts found for run $WORKFLOW_RUN_ID." >&2
+              exit 1
+            fi
+            echo "No visual PR artifacts found for run $WORKFLOW_RUN_ID; skipping visual comment."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "pattern=${name_prefix}*"
+            echo "count=$artifact_count"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download PR visual artifacts
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
         uses: actions/download-artifact@v8
         with:
+          pattern: ${{ steps.artifacts.outputs.pattern }}
           run-id: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
-          path: ${{ runner.temp }}/visual-artifact
-          merge-multiple: true
+          path: ${{ runner.temp }}/visual-artifacts
+          merge-multiple: false
           github-token: ${{ github.token }}
 
       - name: Read capture manifest
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
         id: manifest
         shell: bash
         env:
@@ -74,20 +120,71 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
         run: |
           set -euo pipefail
-          artifact_dir="$RUNNER_TEMP/visual-artifact"
-          manifest="$artifact_dir/visual-report/manifest.json"
-          if [ ! -f "$manifest" ]; then
-            manifest="$artifact_dir/manifest.json"
+          artifacts_dir="$RUNNER_TEMP/visual-artifacts"
+          combined_dir="$RUNNER_TEMP/visual-combined"
+          screenshots_dir="$combined_dir/visual-screenshots"
+          mkdir -p "$screenshots_dir"
+          mapfile -t manifests < <(find "$artifacts_dir" -type f -path '*/visual-report/manifest.json' | sort)
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            mapfile -t manifests < <(find "$artifacts_dir" -type f -name manifest.json | sort)
           fi
-          if [ ! -f "$manifest" ]; then
-            echo "Capture manifest not found" >&2
-            find "$artifact_dir" -maxdepth 4 -type f >&2
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            echo "Capture manifests not found" >&2
+            find "$artifacts_dir" -maxdepth 5 -type f >&2
             exit 1
           fi
-          manifest_pr_number="$(jq -r '.pr_number' "$manifest")"
-          base_sha="$(jq -r '.base_sha' "$manifest")"
-          run_id="$(jq -r '.run_id' "$manifest")"
-          capture_outcome="$(jq -r '.capture_outcome // "success"' "$manifest")"
+          manifest="${manifests[0]}"
+          manifest_pr_number=""
+          base_sha=""
+          run_id=""
+          manifest_head=""
+          capture_outcome="success"
+          for current_manifest in "${manifests[@]}"; do
+            current_pr_number="$(jq -r '.pr_number' "$current_manifest")"
+            current_base_sha="$(jq -r '.base_sha' "$current_manifest")"
+            current_run_id="$(jq -r '.run_id' "$current_manifest")"
+            current_head_sha="$(jq -r '.head_sha' "$current_manifest")"
+            current_outcome="$(jq -r '.capture_outcome // "success"' "$current_manifest")"
+            if [ -z "$manifest_pr_number" ]; then
+              manifest_pr_number="$current_pr_number"
+              base_sha="$current_base_sha"
+              run_id="$current_run_id"
+              manifest_head="$current_head_sha"
+            else
+              if [ "$current_pr_number" != "$manifest_pr_number" ]; then
+                echo "Mismatched visual manifest PR numbers: $current_pr_number vs $manifest_pr_number" >&2
+                exit 1
+              fi
+              if [ "$current_base_sha" != "$base_sha" ]; then
+                echo "Mismatched visual manifest base SHAs: $current_base_sha vs $base_sha" >&2
+                exit 1
+              fi
+              if [ "$current_run_id" != "$run_id" ]; then
+                echo "Mismatched visual manifest run IDs: $current_run_id vs $run_id" >&2
+                exit 1
+              fi
+              if [ "$current_head_sha" != "$manifest_head" ]; then
+                echo "Mismatched visual manifest head SHAs: $current_head_sha vs $manifest_head" >&2
+                exit 1
+              fi
+            fi
+            if ! [[ "$current_outcome" =~ ^(success|failure|cancelled|skipped)$ ]]; then
+              echo "Invalid manifest capture_outcome: $current_outcome" >&2
+              exit 1
+            fi
+            if [ "$current_outcome" != "success" ]; then
+              capture_outcome="failure"
+            fi
+            manifest_dir="$(dirname "$current_manifest")"
+            if [ "$(basename "$manifest_dir")" = "visual-report" ]; then
+              artifact_root="$(dirname "$manifest_dir")"
+            else
+              artifact_root="$manifest_dir"
+            fi
+            if [ -d "$artifact_root/visual-screenshots" ]; then
+              find "$artifact_root/visual-screenshots" -type f -name '*.png' -exec cp '{}' "$screenshots_dir/" \;
+            fi
+          done
           if ! [[ "$manifest_pr_number" =~ ^[0-9]+$ ]]; then
             echo "Invalid manifest pr_number: $manifest_pr_number" >&2
             exit 1
@@ -98,10 +195,6 @@ jobs:
           fi
           if [ "$run_id" != "$WORKFLOW_RUN_ID" ]; then
             echo "Artifact run_id ($run_id) does not match workflow_run id ($WORKFLOW_RUN_ID)." >&2
-            exit 1
-          fi
-          if ! [[ "$capture_outcome" =~ ^(success|failure|cancelled|skipped)$ ]]; then
-            echo "Invalid manifest capture_outcome: $capture_outcome" >&2
             exit 1
           fi
           source_head_sha="$WORKFLOW_HEAD_SHA"
@@ -119,7 +212,6 @@ jobs:
               source_head_branch="$(jq -r '.head_branch // empty' <<< "$run_json")"
             fi
           fi
-          manifest_head="$(jq -r '.head_sha' "$manifest")"
           if ! [[ "$manifest_head" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Invalid manifest head_sha: $manifest_head" >&2
             exit 1
@@ -180,11 +272,13 @@ jobs:
             echo "base_sha=$base_sha"
             echo "run_id=$run_id"
             echo "capture_outcome=$capture_outcome"
+            echo "screenshots_dir=$screenshots_dir"
             echo "source_head_repository=$source_head_repository"
             echo "source_head_branch=$source_head_branch"
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate live PR state for trusted checkout
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
         id: trusted-pr
         shell: bash
         env:
@@ -243,7 +337,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout trusted base revision
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name != github.repository) }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.head_repository.full_name != github.repository) }}
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
@@ -251,24 +345,24 @@ jobs:
           ref: ${{ steps.trusted-pr.outputs.base_sha }}
 
       - name: Resolve pnpm store path
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
         id: pnpm-store
         shell: bash
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Restore pnpm store cache
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
         uses: actions/cache/restore@v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
         run: pnpm install --frozen-lockfile
 
       - name: Stop stale visual runs
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
         id: stale
         env:
           GH_TOKEN: ${{ github.token }}
@@ -305,7 +399,7 @@ jobs:
           echo "stale=false" >> "$GITHUB_OUTPUT"
 
       - name: Build visual diff report
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -324,12 +418,12 @@ jobs:
             --head-sha "${{ steps.manifest.outputs.head_sha }}" \
             --base-sha "${{ steps.manifest.outputs.base_sha }}" \
             --capture-outcome "${{ steps.manifest.outputs.capture_outcome }}" \
-            --screenshots "$RUNNER_TEMP/visual-artifact/visual-screenshots" \
+            --screenshots "${{ steps.manifest.outputs.screenshots_dir }}" \
             --comment-out ui/reports/visual-report/comment.md \
             --manifest-out ui/reports/visual-report/report-manifest.json
 
       - name: Upsert PR comment
-        if: ${{ steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
+        if: ${{ steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
@@ -369,7 +463,7 @@ jobs:
           fi
 
       - name: Upload visual report artifact
-        if: ${{ always() && steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
+        if: ${{ always() && steps.artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' && steps.stale.outputs.stale != 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: visual-pr-report-${{ steps.manifest.outputs.pr_number }}-${{ steps.manifest.outputs.run_id }}

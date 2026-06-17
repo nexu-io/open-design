@@ -14,7 +14,7 @@ import {
 import { requestJson, requestText } from '@/vitest/http';
 import { listMessages, saveMessage } from '@/vitest/messages';
 import { startRun, readRunEvents, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';

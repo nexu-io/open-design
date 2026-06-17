@@ -28,6 +28,7 @@
  * either URL shape.
  */
 import type { LandingLocaleCode } from '../i18n';
+import { pluginDetailL10n } from './plugin-detail-l10n';
 const DEFAULT_LOCALE: LandingLocaleCode = 'en';
 
 export interface PluginCategoryCopy {
@@ -69,8 +70,50 @@ export interface PluginsCopy {
   systemsMetaDescription: string;
   systemsAboutHead: string;
   systemsAboutBody: string;
+  /**
+   * "Every system is a DESIGN.md file" explainer — targets the emerging
+   * DESIGN.md / design.md keyword cluster (open markdown design-system
+   * format). English baseline; untranslated locales fall back via getPluginsCopy.
+   */
+  systemsMdHead: string;
+  systemsMdBody: ReadonlyArray<string>;
+  systemsMdSnippet: string;
+  systemsMdSnippetCaption: string;
+  systemsMdSteps: ReadonlyArray<{ title: string; body: string }>;
+  systemsMdSpecNote: string;
+  /** FAQ block + FAQPage schema on /plugins/systems/. */
+  systemsFaqHead: string;
+  systemsFaq: (n: number) => ReadonlyArray<{ q: string; a: string }>;
+  /**
+   * Design-token spec panel on a design-system detail page — renders the
+   * system's structured `design-tokens.json` (the canonical TOKEN_SCHEMA
+   * contract). `tokenGroupLabels` is keyed by the TokenGroupId ids from
+   * `_lib/system-tokens.ts` and deep-merged in getPluginsCopy for per-key
+   * fallback.
+   */
+  tokensHead: string;
+  tokensLead: (n: number) => string;
+  tokenGroupLabels: Record<string, string>;
+  /** In-page anchor-nav labels on a design-system detail page. */
+  detailTocLabel: string;
+  detailTocPreview: string;
+  detailTocTokens: string;
+  detailTocGuide: string;
+  detailTocRelated: string;
+  /**
+   * "See it in context" scenario showcase — the system's tokens applied to
+   * different artifact kinds (web / app / slides / poster). `scenarioLabels`
+   * is keyed by scenario id and deep-merged in getPluginsCopy.
+   */
+  scenariosHead: string;
+  scenariosLead: string;
+  scenarioLabels: Record<string, string>;
   /** Lowercase category suffix appended to design-system detail titles/H1 (e.g. "design system"). */
   detailSystemLabel: string;
+  /** Localized tail of the design-system detail <title> (after "<Brand> design system — "). */
+  detailSystemTitleSuffix: string;
+  /** Localized meta keywords for a design-system detail page. */
+  detailSystemKeywords: (name: string) => string;
   /** Placeholder for the client-side catalog filter on templates / systems. */
   searchPlaceholder: string;
   /** Shown when a catalog filter matches nothing. */
@@ -211,7 +254,106 @@ const en: PluginsCopy = {
   systemsAboutHead: 'What is a design system?',
   systemsAboutBody:
     'A design system is a reusable set of brand foundations — color palette, typography, spacing, motion and voice — that keeps every screen consistent. In Open Design each design system is a plugin: snap a project to one and your coding agent inherits the palette, type, motion and voice automatically, so everything it generates stays on-brand.',
+  systemsMdHead: 'Every system is a DESIGN.md file',
+  systemsMdBody: [
+    'Each design system here is a single DESIGN.md — a human- and agent-readable markdown spec that captures the brand’s visual theme, color roles, typography scale, and interaction language. It lives in your repo, versions in git, and travels with your project.',
+    'Point Claude Code, Cursor, or any coding agent at the file and every component, page, and asset it generates inherits the same identity. DESIGN.md is an open, Apache-2.0 format; Open Design is the open-source, local-first library and tooling built around it.',
+  ],
+  systemsMdSnippet: `# Design System Inspired by Linear
+
+> Category: Productivity
+> Focused, low-chrome workspace. Inter, tight grid, restrained color.
+
+## 1. Visual Theme & Atmosphere
+A calm, dense product surface where typography and spacing
+carry the hierarchy and color is used sparingly for intent.
+
+## 2. Color Palette & Roles
+### Primary
+- **Ink** (\`#0d0e10\`): Primary text and dark surfaces.
+- **Violet** (\`#5e6ad2\`): Action and focus accent.
+- **Surface** (\`#f4f5f8\`): Light canvas for content blocks.`,
+  systemsMdSnippetCaption: 'A DESIGN.md excerpt',
+  systemsMdSteps: [
+    {
+      title: 'Pick a system',
+      body: 'Browse the library above and open any system to read its full DESIGN.md — palette, type, motion, and voice.',
+    },
+    {
+      title: 'Drop it in your project',
+      body: 'Save the DESIGN.md to your repo root. It’s plain markdown — no build step, no account, no export.',
+    },
+    {
+      title: 'Point your agent at it',
+      body: 'Tell Claude Code or Cursor to follow DESIGN.md, and every output stays consistent with the brand.',
+    },
+  ],
+  systemsMdSpecNote:
+    'DESIGN.md is an open format (Apache-2.0). Open Design’s systems are free to read, fork, and contribute to on GitHub.',
+  systemsFaqHead: 'Frequently asked questions',
+  systemsFaq: (n) => [
+    {
+      q: 'What is a design system?',
+      a: 'A design system is a single source of truth for a brand’s visual language — palette, typography, spacing, motion, and tone — so every screen and asset feels like one coherent product.',
+    },
+    {
+      q: 'What is a DESIGN.md file?',
+      a: 'DESIGN.md is an open, markdown-based format for describing a design system in a way both people and AI coding agents can read. It captures color roles, type scale, and interaction patterns as plain text you keep in your repo.',
+    },
+    {
+      q: 'How do I use a DESIGN.md with Claude Code or Cursor?',
+      a: 'Save the file to your project root and tell your agent to follow it. Open Design can also snap a project to a system so every plugin output inherits the same identity automatically.',
+    },
+    {
+      q: 'Are these design systems free?',
+      a: 'Yes. Every system here is open source and free to read, download, fork, and contribute to. Open Design itself is Apache-2.0 and local-first.',
+    },
+    {
+      q: 'How many design systems are there?',
+      a: `${n} and counting, spanning consumer tech, editorial, and experimental styles. New systems land regularly, and you can contribute your own on GitHub.`,
+    },
+    {
+      q: 'Can I create my own DESIGN.md?',
+      a: 'Yes — author a DESIGN.md by hand, or let Open Design generate one from a reference site, then reuse it across every project and agent.',
+    },
+  ],
+  tokensHead: 'Design tokens',
+  tokensLead: (n) =>
+    `${n} tokens conforming to the Open Design token contract — the same structured palette, type, spacing, and motion values your agent reads to theme any artifact.`,
+  tokenGroupLabels: {
+    surface: 'Surface',
+    text: 'Text',
+    border: 'Border',
+    accent: 'Accent',
+    semantic: 'Semantic',
+    fonts: 'Typography',
+    type: 'Type scale',
+    spacing: 'Spacing',
+    radius: 'Radius',
+    elevation: 'Elevation',
+    focus: 'Focus',
+    motion: 'Motion',
+    layout: 'Layout',
+    other: 'Other',
+  },
+  detailTocLabel: 'On this page',
+  detailTocPreview: 'In context',
+  detailTocTokens: 'Design tokens',
+  detailTocGuide: 'DESIGN.md guide',
+  detailTocRelated: 'Related',
+  scenariosHead: 'See it in context',
+  scenariosLead:
+    'The same design tokens applied across artifact kinds — a website, an app, a slide, a poster. Original mocks re-skinned with this system, not screenshots.',
+  scenarioLabels: {
+    web: 'Website',
+    app: 'App',
+    slides: 'Slides',
+    poster: 'Poster',
+  },
   detailSystemLabel: 'design system',
+  detailSystemTitleSuffix: 'palette, typography & tokens for your agent · Open Design',
+  detailSystemKeywords: (name) =>
+    `${name} design system, ${name} DESIGN.md, ${name} design tokens, design system example, open-source design system`,
   searchPlaceholder: 'Search by name or keyword…',
   searchNoResults: 'No matches. Try a different keyword.',
   systemPreviewCaption: (name) =>
@@ -2927,13 +3069,19 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
  */
 export function getPluginsCopy(locale: LandingLocaleCode): PluginsCopy {
   if (locale === DEFAULT_LOCALE) return en;
-  const partial = overrides[locale];
-  if (!partial) return en;
+  const base = overrides[locale];
+  const detail = pluginDetailL10n[locale];
+  if (!base && !detail) return en;
+  // Detail-page chrome (plugin-detail-l10n) wins over the original overrides
+  // when both define a key; English (en) fills anything neither provides.
+  const partial = { ...(base ?? {}), ...(detail ?? {}) };
   return {
     ...en,
     ...partial,
     category: { ...en.category, ...(partial.category ?? {}) },
     subcategory: { ...en.subcategory, ...(partial.subcategory ?? {}) },
     detailBucketLabel: { ...en.detailBucketLabel, ...(partial.detailBucketLabel ?? {}) },
+    tokenGroupLabels: { ...en.tokenGroupLabels, ...(partial.tokenGroupLabels ?? {}) },
+    scenarioLabels: { ...en.scenarioLabels, ...(partial.scenarioLabels ?? {}) },
   };
 }

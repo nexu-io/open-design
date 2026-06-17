@@ -16,7 +16,11 @@ vi.mock('../src/integrations/vela-errors.js', () => ({
 vi.mock('../src/runtimes/auth.js', () => ({
   classifyAgentServiceFailure(text: string) {
     const value = String(text || '').toLowerCase();
-    if (value.includes('authentication required') || value.includes('not authenticated')) {
+    if (
+      value.includes('authentication required') ||
+      value.includes('not authenticated') ||
+      value.includes('invalid_api_key')
+    ) {
       return 'AGENT_AUTH_REQUIRED' as const;
     }
     if (value.includes('http 429') || value.includes('too many requests') || value.includes('session limit')) {
@@ -381,6 +385,24 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: true,
       user_action: 'retry',
+    });
+  });
+
+  it('maps AMR model catalog credential failures to auth instead of retryable routing', () => {
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        [
+          'json-rpc id 2: AMR model catalog is unavailable.',
+          'Error: list Link models: API request failed with status 401: invalid_api_key',
+        ].join('\n'),
+      ),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'auth_required',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
     });
   });
 

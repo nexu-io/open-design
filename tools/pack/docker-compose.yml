@@ -11,7 +11,7 @@
 #
 # Or pull a published tag:
 #
-#   docker pull ghcr.io/open-design/od:edge
+#   docker pull ghcr.io/nexu-io/od:latest
 #
 # Then `docker compose -f tools/pack/docker-compose.yml up -d`.
 
@@ -20,9 +20,9 @@ version: "3.9"
 services:
   od:
     # The image tag the operator wants. Spec §15.5 expects multi-arch
-    # ghcr.io/open-design/od:<tag>; the build path above produces
+    # ghcr.io/nexu-io/od:<tag>; the build path above produces
     # `open-design/od:dev` locally.
-    image: ${OD_IMAGE:-ghcr.io/open-design/od:edge}
+    image: ${OD_IMAGE:-ghcr.io/nexu-io/od:latest}
     container_name: od
 
     # Spec §15.3 — every dimension the daemon respects in headless
