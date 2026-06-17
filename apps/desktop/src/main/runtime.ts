@@ -796,6 +796,8 @@ const MAC_WINDOW_CHROME_CSS = `
 // the main window is ready. The clip is embedded as a base64 data URL so it
 // renders identically in dev and in packaged builds (see `splash-video.ts`).
 function createPendingHtml(): string {
+  const start = splashStagePayload("starting");
+  const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
@@ -821,6 +823,55 @@ function createPendingHtml(): string {
         max-width: 100%;
         width: auto;
       }
+      .boot-stage {
+        bottom: 56px;
+        color: #7a838a;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 13px;
+        left: 0;
+        letter-spacing: 0.02em;
+        position: fixed;
+        right: 0;
+        text-align: center;
+        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+        user-select: none;
+      }
+      .boot-stage-swapping {
+        opacity: 0;
+        transition-duration: 140ms;
+      }
+      .boot-stage-step {
+        color: #9aa2a8;
+        font-variant-numeric: tabular-nums;
+        margin-right: 7px;
+      }
+      .boot-progress {
+        background: rgba(122, 131, 138, 0.18);
+        border-radius: 999px;
+        bottom: 84px;
+        height: 3px;
+        left: 50%;
+        overflow: hidden;
+        position: fixed;
+        transform: translateX(-50%);
+        width: 200px;
+      }
+      .boot-progress-fill {
+        background: #7a838a;
+        border-radius: 999px;
+        height: 100%;
+        transition: width 320ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .boot-dots .dot {
+        animation: boot-dot 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+        display: inline-block;
+      }
+      .boot-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+      .boot-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes boot-dot {
+        0%, 60%, 100% { opacity: 0.25; }
+        30% { opacity: 1; }
+      }
     </style>
   </head>
   <body>
@@ -832,6 +883,12 @@ function createPendingHtml(): string {
       disablepictureinpicture
       src="${SPLASH_VIDEO_DATA_URL}"
     ></video>
+    <div class="boot-progress" aria-hidden="true">
+      <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
+    </div>
+    <div class="boot-stage" id="boot-stage" aria-live="polite">
+      <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+    </div>
     <script>
       (function () {
         var video = document.getElementById("splash");
@@ -844,9 +901,172 @@ function createPendingHtml(): string {
         video.addEventListener("loadeddata", play);
         play();
       })();
+      // Accepts the structured { step, total, label } payload (and tolerates a
+      // bare label string for back-compat). The step counter + progress bar give
+      // a slow cold boot a sense of how far along it is; the bar only ever grows
+      // so a re-asserted earlier stage cannot make it lurch backwards.
+      window.__odSplashSetStage = function (info) {
+        var data = (typeof info === "string") ? { label: info } : (info || {});
+        var wrap = document.getElementById("boot-stage");
+        var text = document.getElementById("boot-stage-text");
+        var stepEl = document.getElementById("boot-stage-step");
+        var fill = document.getElementById("boot-progress-fill");
+        if (!wrap || !text) return;
+        var step = (typeof data.step === "number") ? data.step : null;
+        var total = (typeof data.total === "number" && data.total > 0) ? data.total : null;
+        if (fill && step != null && total != null) {
+          var pct = Math.max(0, Math.min(100, Math.round((step / total) * 100)));
+          var prev = parseFloat(fill.getAttribute("data-pct")) || 0;
+          if (pct >= prev) {
+            fill.style.width = pct + "%";
+            fill.setAttribute("data-pct", String(pct));
+          }
+        }
+        var label = (typeof data.label === "string") ? data.label : null;
+        var stepText = (step != null && total != null) ? (step + "/" + total) : null;
+        var labelSame = (label == null) || text.textContent === label;
+        var stepSame = (stepText == null) || !stepEl || stepEl.textContent === stepText;
+        if (labelSame && stepSame) return;
+        wrap.classList.add("boot-stage-swapping");
+        setTimeout(function () {
+          if (label != null) text.textContent = label;
+          if (stepEl && stepText != null) stepEl.textContent = stepText;
+          wrap.classList.remove("boot-stage-swapping");
+        }, 140);
+      };
     </script>
   </body>
 </html>`)}`;
+}
+
+/**
+ * Boot phases surfaced as a muted status line under the splash logo. The cold
+ * boot on a slow machine can hold the splash's settled final frame for many
+ * seconds; the stage text, the step counter ("3/7"), the filling progress bar,
+ * and the continuously pulsing dots are what tell the user the app is working,
+ * not hung. Stage transitions follow the repo animation philosophy: 140ms
+ * ease-out fade out, 200ms ease-out fade in.
+ *
+ * The set is intentionally fine-grained: a slow first run spends most of its
+ * time in the two long native waits (daemon coming online, web server coming
+ * online), so we mark BOTH the "starting X" edge and the "X ready" edge of each
+ * so the counter visibly advances right after each long wait clears. More steps
+ * = the wait reads as forward motion instead of one frozen label.
+ */
+export type SplashBootStage =
+  | "starting"
+  | "engine"
+  | "engineReady"
+  | "interface"
+  | "interfaceReady"
+  | "workspace"
+  | "finishing";
+
+/**
+ * Canonical boot order. The index in this array drives the "N/total" step
+ * counter and the progress-bar fill, so keep it in the real chronological order
+ * the stages fire. `setSplashStage` clamps progress so a re-asserted earlier
+ * stage (e.g. the idempotent "workspace" re-fire at the reveal gate) can never
+ * make the bar jump backwards.
+ */
+const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
+  "starting",
+  "engine",
+  "engineReady",
+  "interface",
+  "interfaceReady",
+  "workspace",
+  "finishing",
+];
+
+const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
+  starting: "Starting Open Design",
+  engine: "Starting the local engine",
+  engineReady: "Local engine ready",
+  interface: "Preparing the interface",
+  interfaceReady: "Interface ready",
+  workspace: "Opening your workspace",
+  finishing: "Almost ready",
+};
+
+const SPLASH_STAGE_TOTAL = SPLASH_STAGE_SEQUENCE.length;
+
+/** Step/label payload handed to the renderer's `__odSplashSetStage`. */
+function splashStagePayload(stage: SplashBootStage): { step: number; total: number; label: string } {
+  const index = SPLASH_STAGE_SEQUENCE.indexOf(stage);
+  return {
+    step: index < 0 ? 1 : index + 1,
+    total: SPLASH_STAGE_TOTAL,
+    label: SPLASH_STAGE_LABELS[stage],
+  };
+}
+
+/**
+ * Narrow view of the splash window that the stage updater needs. A real
+ * `BrowserWindow` satisfies this structurally; tests pass a mock so the
+ * load-ready/replay logic is exercisable without a live Electron renderer.
+ */
+export type SplashStageSurface = {
+  isDestroyed(): boolean;
+  webContents: {
+    executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
+    once(event: "did-finish-load", listener: () => void): void;
+  };
+};
+
+type SplashStageState = { ready: boolean; pending: SplashBootStage | null };
+
+// Per-splash readiness + the latest stage requested before the page finished
+// loading. Keyed weakly so a closed splash is collected without bookkeeping.
+const splashStageState = new WeakMap<SplashStageSurface, SplashStageState>();
+
+function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): void {
+  void splash.webContents
+    .executeJavaScript(
+      `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
+      true,
+    )
+    .catch(() => undefined);
+}
+
+/**
+ * Arm load-ready tracking for a freshly created splash. MUST be called before
+ * `loadURL` so the `did-finish-load` listener cannot miss the event. Until the
+ * splash data-URL has loaded (and defined `window.__odSplashSetStage`), stage
+ * updates are stashed rather than executed against a renderer that has no
+ * setter yet — otherwise the first update (the daemon phase, fired right after
+ * window creation on a cold boot) is silently dropped. The latest stashed
+ * stage is replayed once the page reports it has loaded.
+ */
+export function registerSplashStageTracking(splash: SplashStageSurface): void {
+  const state: SplashStageState = { ready: false, pending: null };
+  splashStageState.set(splash, state);
+  splash.webContents.once("did-finish-load", () => {
+    state.ready = true;
+    if (state.pending != null) {
+      const stage = state.pending;
+      state.pending = null;
+      applySplashStage(splash, stage);
+    }
+  });
+}
+
+/**
+ * Update the splash status line. Safe to call with a destroyed/absent window
+ * and idempotent for repeated stages, so callers can fire-and-forget at each
+ * boot phase boundary (packaged sidecar spawns, runtime reveal gate). Stage
+ * updates that arrive before the splash page has loaded are deferred and
+ * replayed on load (see `registerSplashStageTracking`); a window with no
+ * tracking registered (e.g. an unmanaged test surface) applies immediately.
+ */
+export function setSplashStage(splash: SplashStageSurface | null, stage: SplashBootStage): void {
+  if (splash == null || splash.isDestroyed()) return;
+  const state = splashStageState.get(splash);
+  if (state == null || state.ready) {
+    applySplashStage(splash, stage);
+    return;
+  }
+  state.pending = stage;
 }
 
 export type SplashWindowHandle = {
@@ -888,6 +1108,10 @@ export function createSplashWindow(): SplashWindowHandle {
       sandbox: true,
     },
   });
+  // Arm stage tracking before loadURL so a stage update fired before the
+  // page loads is deferred and replayed rather than dropped (see
+  // `registerSplashStageTracking`).
+  registerSplashStageTracking(splash);
   void splash.loadURL(createPendingHtml());
   return { startedAt, window: splash };
 }
@@ -1879,6 +2103,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const revealWhenReady = async (): Promise<void> => {
     if (revealing || revealed) return;
     revealing = true;
+    // The web bundle is loading in the hidden main window from here on; let
+    // the splash status line reflect that final phase while we poll for mount.
+    setSplashStage(splash, "workspace");
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
       const mounted = await window.webContents
@@ -1887,6 +2114,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       if (mounted === true) break;
       await delay(WEB_MOUNT_POLL_MS);
     }
+    // The real UI has mounted behind the splash; the only thing left is the
+    // minimum-hold so the brand clip plays through. Advance the counter to its
+    // final step so the user sees the boot reach completion, not stall at
+    // "Opening your workspace".
+    setSplashStage(splash, "finishing");
     const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();

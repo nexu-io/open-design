@@ -52,7 +52,11 @@ export {
   isAllowedChildWindowUrl,
   isAllowedEmbeddedBrowserUrl,
   isHttpUrl,
+  registerSplashStageTracking,
   resolveDesktopStatusUrl,
+  setSplashStage,
+  type SplashBootStage,
+  type SplashStageSurface,
 } from "./runtime.js";
 
 // Re-export the path-validation helpers for the same reason (#974).
