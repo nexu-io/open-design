@@ -11,6 +11,7 @@ export default defineConfig({
     fileParallelism: true,
     include: ['tests/**/*.test.{ts,tsx,js,mjs,cjs}'],
     maxWorkers,
+    pool: 'forks',
     setupFiles: ['tests/setup.ts'],
     testTimeout: 20_000,
   },

@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest';
 
 import { requestJson, requestText } from '@/vitest/http';
 import { createMockOpenAiServer } from '@/vitest/mock-openai';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 type HealthResponse = {
   ok?: unknown;

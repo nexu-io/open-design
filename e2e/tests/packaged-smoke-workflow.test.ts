@@ -114,7 +114,7 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const blobGuard = sectionBetween(workflow, "  blob_guard:", "  nix_validation:");
+    const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
 
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
     expect(blobGuard).toContain("git merge-base origin/main HEAD");

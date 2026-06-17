@@ -8,25 +8,23 @@ import { writeFakeVelaBin } from '@/amr';
 import { createAmrProject, putAmrAppConfig } from '@/vitest/amr';
 import { requestJson } from '@/vitest/http';
 import { readRunEvents, startRun, waitForRunStatus, waitForRunTerminal } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 describe('AMR logout state persistence', () => {
   test('a previously working AMR session stops working after local logout and requires re-login', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('amr-logout-state-persistence');
-    const previousProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
-    const previousHome = process.env.HOME;
     const homeDir = join(suite.scratchDir, 'home-logout-state');
-    process.env.OPEN_DESIGN_AMR_PROFILE = 'local';
-    process.env.HOME = homeDir;
 
-    try {
+    await suite.with.env({ HOME: homeDir, OPEN_DESIGN_AMR_PROFILE: 'local' }, async () => {
       await suite.with.toolsDev(async ({ webUrl }) => {
         const successVelaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-logout-success'), {
           assistantText: 'AMR logout persistence success',
+          endpoints: suite.amr,
           requireLoginConfig: false,
         });
         const strictVelaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-logout-strict'), {
           assistantText: 'AMR logout persistence strict',
+          endpoints: suite.amr,
         });
 
         await putAmrAppConfig(webUrl, {
@@ -35,8 +33,7 @@ describe('AMR logout state persistence', () => {
             amr: {
               VELA_BIN: successVelaBin,
               OPEN_DESIGN_AMR_PROFILE: 'local',
-              VELA_LINK_URL: 'http://localhost:18081',
-              VELA_RUNTIME_KEY: 'fake-runtime-key',
+              ...suite.amr.runtimeEnv(),
             },
           },
         });
@@ -87,11 +84,6 @@ describe('AMR logout state persistence', () => {
 
         await expect(readRunEvents(webUrl, secondRun.runId)).resolves.toMatch(/AMR_AUTH_REQUIRED/);
       });
-    } finally {
-      if (previousProfile === undefined) delete process.env.OPEN_DESIGN_AMR_PROFILE;
-      else process.env.OPEN_DESIGN_AMR_PROFILE = previousProfile;
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
-    }
+    });
   });
 });

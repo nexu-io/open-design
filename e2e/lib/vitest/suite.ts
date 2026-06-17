@@ -1,19 +1,26 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
+import { delimiter, dirname, join } from 'node:path';
 
 import { expect } from 'vitest';
 
-import { assertRelativeReportPath, createReport, type E2eReport } from './report.ts';
+import {
+  createToolsDevSuite,
+  e2eWorkspaceRoot as resolveE2eWorkspaceRoot,
+} from '../tools-dev/runtime.ts';
 import type {
   ToolsDevCheckResult,
   ToolsDevLogResult,
-  ToolsDevRuntime,
+  ToolsDevPortAllocation,
   ToolsDevStartResult,
   ToolsDevStatusResult,
-} from './tools-dev.ts';
+} from '../tools-dev/types.ts';
+import { assertRelativeReportPath, createReport, type E2eReport } from './report.ts';
+
+export { e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 
 export type SmokeSuite = {
+  amr: SmokeSuiteAmr;
   codexHomeDir: string;
   dataDir: string;
   namespace: string;
@@ -33,16 +40,26 @@ export type SmokeSuiteFinalizeInput = {
 };
 
 export type SmokeSuiteWith = {
+  env: <T>(patch: EnvPatch, run: () => Promise<T>) => Promise<T>;
+  pathEntry: <T>(entry: string, run: () => Promise<T>) => Promise<T>;
   toolsDev: (
     run: (context: ToolsDevSuiteContext) => Promise<void>,
     options?: ToolsDevSuiteOptions,
   ) => Promise<string>;
 };
 
+export type EnvPatch = Record<string, string | null | undefined>;
+
+export type SmokeSuiteAmr = {
+  apiUrl: string;
+  linkUrl: string;
+  runtimeEnv: (overrides?: EnvPatch) => Record<string, string>;
+};
+
 export type ToolsDevSuiteContext = {
   check: () => Promise<ToolsDevCheckResult>;
   logs: () => Promise<Record<string, ToolsDevLogResult>>;
-  runtime: ToolsDevRuntime;
+  runtime: ToolsDevPortAllocation;
   start: ToolsDevStartResult;
   status: ToolsDevStatusResult;
   webUrl: string;
@@ -58,12 +75,7 @@ export type ToolsDevSuiteOptions = {
   skipFatalLogCheck?: boolean;
 };
 
-const e2eRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const workspaceRoot = dirname(e2eRoot);
-
-export function e2eWorkspaceRoot(): string {
-  return workspaceRoot;
-}
+const workspaceRoot = resolveE2eWorkspaceRoot();
 
 export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
   const namespace = `e2e-${sanitizeSegment(name)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -73,6 +85,7 @@ export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
   const codexHomeDir = join(scratchDir, 'codex-home');
   const toolsDevRoot = join(scratchDir, 'tools-dev');
   const dataDir = join(scratchDir, 'data');
+  const [amrApiPort, amrLinkPort] = await allocateDistinctPorts(2);
 
   await mkdir(reportDir, { recursive: true });
   await mkdir(scratchDir, { recursive: true });
@@ -87,6 +100,17 @@ export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
   }
 
   const suite: SmokeSuite = {
+    amr: {
+      apiUrl: `http://127.0.0.1:${amrApiPort}`,
+      linkUrl: `http://127.0.0.1:${amrLinkPort}`,
+      runtimeEnv(overrides = {}) {
+        return normalizeDefinedEnv({
+          VELA_LINK_URL: `http://127.0.0.1:${amrLinkPort}`,
+          VELA_RUNTIME_KEY: 'fake-runtime-key',
+          ...overrides,
+        });
+      },
+    },
     codexHomeDir,
     dataDir,
     namespace,
@@ -95,6 +119,8 @@ export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
     scratchDir,
     toolsDevRoot,
     with: {
+      env: withEnv,
+      pathEntry: (entry, run) => withEnv({ PATH: prependPathEntry(entry, process.env.PATH) }, run),
       toolsDev: (run, options) => runToolsDevSuite(suite, run, options),
     },
     writeScratchJson: (name, value) => writeJson(scratchDir, name, value),
@@ -123,39 +149,113 @@ export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
   return suite;
 }
 
+async function allocateDistinctPorts(count: number): Promise<number[]> {
+  const ports = new Set<number>();
+  while (ports.size < count) {
+    ports.add(await reserveFreePort());
+  }
+  return [...ports];
+}
+
+async function reserveFreePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(0, '127.0.0.1', () => resolveListen());
+  });
+  const address = server.address();
+  await new Promise<void>((resolveClose, rejectClose) => {
+    server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+  });
+  if (address == null || typeof address === 'string') {
+    throw new Error('failed to allocate a local TCP port');
+  }
+  return address.port;
+}
+
+export type PackagedSmokePlatform = 'linux' | 'mac' | 'win';
+
+export function resolvePackagedSmokeNamespace(
+  platform: PackagedSmokePlatform,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  if (env.OD_PACKAGED_E2E_NAMESPACE != null && env.OD_PACKAGED_E2E_NAMESPACE.trim() !== '') {
+    return env.OD_PACKAGED_E2E_NAMESPACE;
+  }
+  switch (platform) {
+    case 'linux':
+      return 'ci-pr-linux';
+    case 'mac':
+      return 'release-beta';
+    case 'win':
+      return 'release-beta-win';
+  }
+}
+
+async function withEnv<T>(patch: EnvPatch, run: () => Promise<T>): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+  }
+  applyEnvPatch(process.env, patch);
+  try {
+    return await run();
+  } finally {
+    const restorePatch: EnvPatch = {};
+    for (const [key, value] of previous) {
+      restorePatch[key] = value;
+    }
+    applyEnvPatch(process.env, restorePatch);
+  }
+}
+
+function applyEnvPatch(target: NodeJS.ProcessEnv, patch: EnvPatch): void {
+  for (const [key, value] of Object.entries(patch)) {
+    if (value == null) delete target[key];
+    else target[key] = value;
+  }
+}
+
+function prependPathEntry(entry: string, currentPath: string | undefined): string {
+  return currentPath == null || currentPath === ''
+    ? entry
+    : `${entry}${delimiter}${currentPath}`;
+}
+
+function normalizeDefinedEnv(patch: EnvPatch): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(patch).filter((entry): entry is [string, string] => entry[1] != null),
+  );
+}
+
 async function runToolsDevSuite(
   suite: SmokeSuite,
   run: (context: ToolsDevSuiteContext) => Promise<void>,
   options: ToolsDevSuiteOptions = {},
 ): Promise<string> {
-  const toolsDev = await import('./tools-dev.ts');
-  let runtime = await toolsDev.allocateToolsDevRuntime();
+  const toolsDev = createToolsDevSuite({
+    codexHomeDir: suite.codexHomeDir,
+    dataDir: suite.dataDir,
+    namespace: suite.namespace,
+    root: suite.root,
+    toolsDevRoot: suite.toolsDevRoot,
+  });
   let context: ToolsDevSuiteContext | null = null;
   let diagnostics: unknown = null;
   let caughtError: unknown = null;
   let success = false;
 
   try {
-    let start: ToolsDevStartResult | null = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        start = await toolsDev.startToolsDevWeb(suite, runtime, options.env);
-        break;
-      } catch (error) {
-        if (attempt === 3 || !toolsDev.isToolsDevPortConflict(error)) throw error;
-        await runtime.release().catch(() => {});
-        await toolsDev.stopToolsDevWeb(suite, options.env).catch(() => {});
-        runtime = await toolsDev.allocateToolsDevRuntime();
-      }
-    }
-    if (start == null) throw new Error('tools-dev start did not return a result');
+    const start = await toolsDev.startWeb(options.env);
+    const runtime = toolsDev.portAllocation;
+    if (runtime == null) throw new Error('tools-dev did not expose its allocated ports');
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
-    const status = await toolsDev.inspectToolsDevStatus(suite, options.env);
+    const status = await toolsDev.status(options.env);
     assertToolsDevStatus(suite, status);
 
     context = {
-      check: () => toolsDev.inspectToolsDevCheck(suite, options.env),
-      logs: () => toolsDev.readToolsDevLogs(suite, options.env),
+      check: () => toolsDev.check(options.env),
+      logs: () => toolsDev.logs(options.env),
       runtime,
       start,
       status,
@@ -169,7 +269,7 @@ async function runToolsDevSuite(
     success = true;
   } catch (error) {
     caughtError = error;
-    diagnostics = await toolsDev.inspectToolsDevCheck(suite, options.env).catch((diagnosticError: unknown) => ({
+    diagnostics = await toolsDev.check(options.env).catch((diagnosticError: unknown) => ({
       error: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
     }));
     await options.onFailure?.({ context, error, suite }).catch((failureHookError: unknown) => {
@@ -180,12 +280,12 @@ async function runToolsDevSuite(
     });
     throw error;
   } finally {
-    // startToolsDevWeb may have spawned namespace processes even if it threw before
+    // tools-dev may have spawned namespace processes even if startWeb threw before
     // resolving, so cleanup must run unconditionally — otherwise orphans poison the
     // next smoke run on a shared CI runner.
     let stopError: unknown = null;
     try {
-      await toolsDev.stopToolsDevWeb(suite, options.env);
+      await toolsDev.stopWeb(options.env);
     } catch (error) {
       stopError = error;
     }

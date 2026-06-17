@@ -3,9 +3,15 @@ import { dirname, join } from 'node:path';
 
 export type FakeVelaOptions = {
   assistantText?: string;
+  endpoints?: VelaEndpoints;
   failAuthAtPrompt?: boolean;
   failBalanceAtPrompt?: boolean;
   requireLoginConfig?: boolean;
+};
+
+export type VelaEndpoints = {
+  apiUrl: string;
+  linkUrl: string;
 };
 
 const DEFAULT_ASSISTANT_TEXT = 'Hello from the e2e fake vela.';
@@ -33,6 +39,7 @@ export async function writeFakeVelaBin(root: string, options: FakeVelaOptions = 
 export async function seedVelaLoginConfig(
   homeDir: string,
   options: {
+    endpoints?: VelaEndpoints;
     profile?: string;
     email?: string;
     runtimeKey?: string;
@@ -40,6 +47,7 @@ export async function seedVelaLoginConfig(
   } = {},
 ): Promise<string> {
   const profile = options.profile ?? 'local';
+  const endpoints = options.endpoints ?? defaultVelaEndpoints();
   const configDir = join(homeDir, '.amr');
   const file = join(configDir, 'config.json');
   await mkdir(configDir, { recursive: true });
@@ -51,8 +59,8 @@ export async function seedVelaLoginConfig(
           [profile]: {
             runtimeKey: options.runtimeKey ?? 'fake-runtime-key',
             controlKey: options.controlKey ?? 'fake-control-key',
-            apiUrl: 'http://localhost:18080',
-            linkUrl: 'http://localhost:18081',
+            apiUrl: endpoints.apiUrl,
+            linkUrl: endpoints.linkUrl,
             user: {
               id: 'fake-user-id',
               email: options.email ?? 'e2e@example.com',
@@ -74,6 +82,7 @@ export async function clearVelaLoginConfig(homeDir: string): Promise<void> {
 }
 
 function renderFakeVelaScript(options: FakeVelaOptions): string {
+  const endpoints = options.endpoints ?? defaultVelaEndpoints();
   return `#!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -125,8 +134,8 @@ if (argv[2] === 'login') {
       [profile]: {
         runtimeKey: 'fake-runtime-key-0000000000000000000000',
         controlKey: 'fake-control-key-0000000000000000000000',
-        apiUrl: 'http://localhost:18080',
-        linkUrl: 'http://localhost:18081',
+        apiUrl: ${JSON.stringify(endpoints.apiUrl)},
+        linkUrl: ${JSON.stringify(endpoints.linkUrl)},
         user: { id: 'fake-user-id', email: env.FAKE_VELA_LOGIN_USER_EMAIL || 'e2e@example.com', plan: 'free' },
       },
     },
@@ -236,4 +245,11 @@ function handle(msg) {
   }
 }
 `;
+}
+
+function defaultVelaEndpoints(): VelaEndpoints {
+  return {
+    apiUrl: 'http://localhost:18080',
+    linkUrl: 'http://localhost:18081',
+  };
 }

@@ -9,7 +9,7 @@ import { createFakeAgentRuntimes } from '@/fake-agents';
 import { requestJson } from '@/vitest/http';
 import { listMessages } from '@/vitest/messages';
 import { readRunEvents, startRun, waitForRunTerminal } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 type ProjectResponse = {
   conversationId: string;

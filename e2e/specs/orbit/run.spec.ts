@@ -8,7 +8,7 @@ import { createFakeAgentRuntimes } from '@/fake-agents';
 import { listLiveArtifacts, readLiveArtifactPreview } from '@/vitest/live-artifacts';
 import { readOrbitStatus, startOrbitRun, waitForOrbitSummary } from '@/vitest/orbit';
 import { readRun, waitForRunStatus } from '@/vitest/runs';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 import { requestJson } from '@/vitest/http';
 
 type ProjectResponse = {

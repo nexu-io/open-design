@@ -11,7 +11,7 @@ import { T } from '@/timeouts';
 import type { ProjectFile } from '@/vitest/artifacts';
 import { requestJson, requestText } from '@/vitest/http';
 import { listMessages, type E2eChatMessage } from '@/vitest/messages';
-import { createSmokeSuite } from '@/vitest/smoke-suite';
+import { createSmokeSuite } from '@/vitest/suite';
 
 const PROMPT = 'Create a deterministic smoke artifact';
 const FILE_NAME = 'real-daemon-smoke.html';
