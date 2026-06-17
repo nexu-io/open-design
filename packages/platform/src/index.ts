@@ -640,10 +640,16 @@ export function createPackageManagerInvocation(args: string[], env: NodeJS.Proce
     }
     return createCommandInvocation({ args, command: execPath, env });
   }
+  // No `npm_execpath` — common on Corepack-only setups (e.g. native Windows
+  // PowerShell where `corepack pnpm` works but no standalone `pnpm` lives on
+  // PATH). Route nested invocations through `corepack pnpm …` instead of
+  // assuming a global `pnpm` binary: `corepack pnpm …` runs the repo-pinned
+  // package manager out of the box, while a bare `pnpm` only resolves when a
+  // separate global install or a `corepack enable` shim is present. See #2438.
   if (process.platform === "win32") {
-    return buildCmdShimInvocation("pnpm", args, env);
+    return buildCmdShimInvocation("corepack", ["pnpm", ...args], env);
   }
-  return { args, command: "pnpm" };
+  return { args: ["pnpm", ...args], command: "corepack" };
 }
 
 function createLoggedStdio(logFd?: number | null): StdioOptions {
