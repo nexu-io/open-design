@@ -166,9 +166,10 @@ function createLocalAgentDef(
   const versionArgs = normalizeStringList(profile.versionArgs);
   const helpArgs = normalizeStringList(profile.helpArgs);
   const defaultModel = normalizeDefaultModel(profile.defaultModel);
+  const { authProbe: baseAuthProbe, ...baseWithoutAuthProbe } = base;
 
   return {
-    ...base,
+    ...baseWithoutAuthProbe,
     id,
     name,
     bin,
@@ -176,6 +177,7 @@ function createLocalAgentDef(
     ...(helpArgs.length > 0 ? { helpArgs } : {}),
     fallbackModels,
     env,
+    ...(prefixArgs.length === 0 && baseAuthProbe ? { authProbe: baseAuthProbe } : {}),
     buildArgs: (prompt, imagePaths, extraAllowedDirs, options, runtimeContext) => [
       ...prefixArgs,
       ...base.buildArgs(

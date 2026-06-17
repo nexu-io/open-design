@@ -3356,6 +3356,18 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
       await withFakeCodex(
         `
 const fs = require('node:fs');
+if (process.argv[2] === '--version') {
+  console.log('codex-cli 9.9.9');
+  process.exit(0);
+}
+if (process.argv[2] === 'debug' && process.argv[3] === 'models') {
+  console.log(JSON.stringify({ models: [] }));
+  process.exit(0);
+}
+if (process.argv[2] === 'login' && process.argv[3] === 'status') {
+  console.log('Logged in using ChatGPT');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on('SIGTERM', () => {
   fs.writeFileSync(${JSON.stringify(termFile)}, 'term');

@@ -670,7 +670,12 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'privacyDecisionAt',
 ]);
 
-const AGENT_CLI_SECRET_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'CODEX_API_KEY', 'OPENAI_API_KEY']);
+const AGENT_CLI_SECRET_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CODEX_API_KEY',
+  'OPENAI_API_KEY',
+]);
 
 function sanitizeAgentCliEnv(agentCliEnv: AppConfig['agentCliEnv']): AppConfig['agentCliEnv'] {
   if (!agentCliEnv) return agentCliEnv;

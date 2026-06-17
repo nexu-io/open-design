@@ -52,6 +52,9 @@ const ANTIGRAVITY_QUOTA_GUIDANCE =
 const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
+const CLAUDE_AUTH_GUIDANCE =
+  'Claude Code is installed but is not authenticated. Run `claude auth login` or open `claude` and complete login in a terminal, then rescan. If Open Design was launched outside an interactive shell, your shell rc files (e.g. ~/.zshrc) may not be loaded into its environment.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
 }
@@ -70,6 +73,10 @@ export function antigravityQuotaGuidance(): string {
 
 export function reasonixAuthGuidance(): string {
   return REASONIX_AUTH_GUIDANCE;
+}
+
+export function claudeAuthGuidance(): string {
+  return CLAUDE_AUTH_GUIDANCE;
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -130,10 +137,40 @@ export function isReasonixAuthFailureText(text: string): boolean {
   );
 }
 
+export function isClaudeAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  try {
+    const parsed = JSON.parse(value) as { authenticated?: unknown; loggedIn?: unknown };
+    if (parsed.authenticated === true || parsed.loggedIn === true) return false;
+    if (parsed.authenticated === false || parsed.loggedIn === false) return true;
+  } catch {
+    // Fall through to text matching below.
+  }
+  if (/"authenticated"\s*:\s*true/i.test(value) || /"loggedIn"\s*:\s*true/i.test(value)) {
+    return false;
+  }
+  return (
+    /"authenticated"\s*:\s*false/i.test(value) ||
+    /"loggedIn"\s*:\s*false/i.test(value) ||
+    /not authenticated/i.test(value) ||
+    /not logged[ _-]?in/i.test(value) ||
+    /authentication required/i.test(value) ||
+    /please (?:sign|log)[ _-]?in/i.test(value)
+  );
+}
+
 export function classifyAgentAuthFailure(
   agentId: string,
   text: string,
 ): AgentAuthProbeResult | null {
+  if (agentId === 'claude') {
+    if (!isClaudeAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: claudeAuthGuidance(),
+    };
+  }
   if (agentId === 'cursor-agent') {
     if (!isCursorAuthFailureText(text)) return null;
     return {
@@ -268,11 +305,32 @@ function genericAuthGuidance(agentName: string): string {
 // ways the generic matcher would misread). The generic classifier is only a
 // fallback for adapters with no tailored classifier of their own.
 const TAILORED_AUTH_AGENTS = new Set([
+  'claude',
   'cursor-agent',
   'deepseek',
   'antigravity',
   'reasonix',
 ]);
+
+function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
+  return keys.some((key) => {
+    const value = env[key];
+    return typeof value === 'string' && value.trim().length > 0;
+  });
+}
+
+function hasProbeSatisfyingApiKey(
+  def: Pick<RuntimeAgentDef, 'id'>,
+  env: RuntimeEnv,
+): boolean {
+  if (def.id === 'codex') {
+    return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
+  }
+  if (def.id === 'claude') {
+    return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+  }
+  return false;
+}
 
 // Classify an auth-probe's combined output into a missing-auth result, or
 // null when the output does not look like an auth failure. Agents with a
@@ -304,6 +362,7 @@ export async function probeAgentAuthStatus(
 ): Promise<AgentAuthProbeResult | null> {
   const probe = def.authProbe;
   if (!probe) return null;
+  if (hasProbeSatisfyingApiKey(def, env)) return { status: 'ok' };
   try {
     const { stdout, stderr } = await execAgentFile(resolvedBin, probe.args, {
       env,

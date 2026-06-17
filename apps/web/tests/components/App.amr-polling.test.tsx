@@ -28,7 +28,7 @@ vi.mock('../../src/components/EntryView', () => ({
     config,
     onOpenSettings,
   }: {
-    agents: Array<{ id: string; models?: Array<{ id: string }> }>;
+    agents: Array<{ id: string; models?: Array<{ id: string }>; authStatus?: string }>;
     config: AppConfig;
     onOpenSettings: () => void;
   }) => (
@@ -41,6 +41,9 @@ vi.mock('../../src/components/EntryView', () => ({
       </div>
       <div data-testid="amr-profile">
         {config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE ?? 'none'}
+      </div>
+      <div data-testid="codex-auth">
+        {agents.find((agent) => agent.id === 'codex')?.authStatus ?? 'none'}
       </div>
       <button onClick={() => onOpenSettings()}>open settings</button>
     </>
@@ -304,6 +307,60 @@ describe('App AMR polling', () => {
     await waitFor(() => {
       expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
     });
+  });
+
+  it('rescans agents on window focus so external CLI auth changes are detected', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
+    mockedFetchAmrModels.mockReset();
+    mockedFetchAmrModels.mockResolvedValue({
+      source: 'preset',
+      refreshing: false,
+      models: [{ id: 'preset-a', label: 'preset-a' }],
+    });
+    mockedFetchAgentsStream
+      .mockResolvedValueOnce([
+        {
+          id: 'codex',
+          name: 'Codex CLI',
+          bin: 'codex',
+          available: true,
+          version: 'codex-cli 9.9.9',
+          authStatus: 'missing',
+          models: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'codex',
+          name: 'Codex CLI',
+          bin: 'codex',
+          available: true,
+          version: 'codex-cli 9.9.9',
+          authStatus: 'ok',
+          models: [],
+        },
+      ]);
+
+    try {
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('codex-auth').textContent).toBe('missing');
+      });
+
+      fireEvent(window, new Event('focus'));
+      expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(10_001);
+      fireEvent(window, new Event('focus'));
+
+      await waitFor(() => {
+        expect(mockedFetchAgentsStream).toHaveBeenCalledTimes(2);
+        expect(screen.getByTestId('codex-auth').textContent).toBe('ok');
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', {

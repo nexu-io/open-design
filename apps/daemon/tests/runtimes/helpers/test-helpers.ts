@@ -71,6 +71,7 @@ export function minimalAgentDef(
 }
 
 export const amp = requireAgent('amp');
+export const claude = requireAgent('claude');
 export const codex = requireAgent('codex');
 export const hermes = requireAgent('hermes');
 export const kimi = requireAgent('kimi');
@@ -79,7 +80,6 @@ export const cursorAgent = requireAgent('cursor-agent');
 export const kiro = requireAgent('kiro');
 export const kilo = requireAgent('kilo');
 export const vibe = requireAgent('vibe');
-export const claude = requireAgent('claude');
 export const devin = requireAgent('devin');
 export const pi = requireAgent('pi');
 export const deepseek = requireAgent('deepseek');

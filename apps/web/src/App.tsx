@@ -120,6 +120,7 @@ import type {
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
 const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
+const AGENT_FOCUS_REFRESH_THROTTLE_MS = 10_000;
 
 export function shouldSyncMediaProvidersOnSave(
   mediaProviders: AppConfig['mediaProviders'],
@@ -369,6 +370,7 @@ function AppInner() {
   const amrModelsRef = useRef<AmrModelsResponse | null>(null);
   const amrPollGenerationRef = useRef(0);
   const agentStreamRequestSeqRef = useRef(0);
+  const agentFocusRefreshLastRunRef = useRef(Date.now());
   const [amrPollRestartToken, setAmrPollRestartToken] = useState(0);
   const [providerModelsCache, setProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
@@ -1278,6 +1280,29 @@ function AppInner() {
   );
 
   useEffect(() => {
+    if (!daemonLive || agentsLoading) return;
+
+    const refreshIfDue = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - agentFocusRefreshLastRunRef.current < AGENT_FOCUS_REFRESH_THROTTLE_MS) return;
+      agentFocusRefreshLastRunRef.current = now;
+      void refreshAgents();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshIfDue();
+    };
+
+    window.addEventListener('focus', refreshIfDue);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refreshIfDue);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [agentsLoading, daemonLive, refreshAgents]);
+
+  useEffect(() => {
     const handleAppConfigChanged = () => {
       void fetchDaemonConfig().then((daemonConfig) => {
         const next = clearStaleAmrModelChoiceOnProfileChange(
@@ -1784,17 +1809,30 @@ function AppInner() {
     });
   }, []);
 
-  const activeProject =
+  const loadedActiveProject =
     route.kind === 'project'
       ? (projects.find((p) => p.id === route.projectId) ?? null)
       : null;
+  const routeProjectPlaceholder = useMemo<Project | null>(() => {
+    if (route.kind !== 'project') return null;
+    const now = Date.now();
+    return {
+      id: route.projectId,
+      name: 'Untitled',
+      skillId: null,
+      designSystemId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }, [route]);
+  const activeProject = loadedActiveProject ?? routeProjectPlaceholder;
 
   // Deep-linked route to a project we don't have yet (e.g. after a refresh
   // that finishes after the project list comes back). Fetch it in the
   // background so the view can render rather than bouncing to home.
   useEffect(() => {
     if (route.kind !== 'project') return;
-    if (activeProject) return;
+    if (loadedActiveProject) return;
     if (!projects.length && !daemonLive) return;
     if (projects.some((p) => p.id === route.projectId)) return;
     let cancelled = false;
@@ -1829,7 +1867,7 @@ function AppInner() {
     return () => {
       cancelled = true;
     };
-  }, [route, activeProject, projects, daemonLive, beginProjectListRequest, reconcileFetchedProjects]);
+  }, [route, loadedActiveProject, projects, daemonLive, beginProjectListRequest, reconcileFetchedProjects]);
 
   const openSettings = useCallback((
     section: SettingsSection = 'execution',

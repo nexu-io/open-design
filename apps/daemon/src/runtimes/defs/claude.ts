@@ -23,6 +23,10 @@ export const claudeAgentDef = {
     // — issue #235) get auto-detected without writing wrapper scripts.
     fallbackBins: ['openclaude'],
     versionArgs: ['--version'],
+    authProbe: {
+      args: ['auth', 'status'],
+      timeoutMs: 5000,
+    },
     helpArgs: ['-p', '--help'],
     capabilityFlags: {
       // Flag string -> capability key. After probing `--help`, we set

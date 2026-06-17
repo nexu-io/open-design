@@ -70,6 +70,10 @@ export const codexAgentDef = {
       parse: parseCodexDebugModels,
       timeoutMs: 5000,
     },
+    authProbe: {
+      args: ['login', 'status'],
+      timeoutMs: 5000,
+    },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'gpt-5.5', label: 'gpt-5.5' },
