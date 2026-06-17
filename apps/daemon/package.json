@@ -60,7 +60,7 @@
     "@types/better-sqlite3": "7.6.13",
     "@types/express": "5.0.6",
     "@types/multer": "2.1.0",
-    "@types/node": "20.19.39",
+    "@types/node": "24.12.2",
     "typescript": "5.9.3",
     "vitest": "4.1.6"
   },

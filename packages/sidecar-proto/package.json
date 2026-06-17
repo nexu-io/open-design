@@ -22,7 +22,7 @@
   "devDependencies": {
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "typescript": "6.0.3",
+    "typescript": "5.9.3",
     "vitest": "4.1.6"
   },
   "engines": {

@@ -32,7 +32,7 @@
     "@open-design/tools-dev": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
-    "@types/node": "20.19.39",
+    "@types/node": "24.12.2",
     "tsx": "4.22.3",
     "typescript": "5.9.3"
   },
