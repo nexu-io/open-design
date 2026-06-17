@@ -1,0 +1,51 @@
+name: dependency-audit
+
+# Fails when production dependencies carry known high/critical advisories.
+# This closes the gap where the pnpm.overrides security pins could silently
+# drift out of date with no signal. Runs on dependency-graph changes, on a
+# weekly schedule to catch newly disclosed advisories, and on demand.
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/package.json'
+      - '.github/workflows/dependency-audit.yml'
+  schedule:
+    # Weekly, Monday 06:00 UTC — surfaces advisories disclosed since the last
+    # dependency change even when no PR touches the lockfile.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit production dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      # Gate on high/critical only. Moderate/low advisories are tracked but do
+      # not block, so the gate stays actionable instead of perpetually red on
+      # un-patchable transitive lows. Raise to `moderate` once the moderate
+      # backlog is cleared.
+      - name: pnpm audit (high+)
+        run: pnpm audit --prod --audit-level high
+
+      - name: pnpm audit summary (all levels, non-blocking)
+        if: ${{ always() }}
+        run: pnpm audit --prod || true

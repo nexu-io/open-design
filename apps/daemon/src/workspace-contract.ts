@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { OrchestratorWorkspace } from '@open-design/contracts';
 
 const ORCHESTRATOR_WORKSPACE_KIND = 'scratch';
