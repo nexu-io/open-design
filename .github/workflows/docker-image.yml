@@ -6,8 +6,27 @@ name: Docker image
 #   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to build when invoked as a reusable workflow."
+        required: false
+        type: string
+        default: ""
+      release_version:
+        description: "Stable Docker tag to publish when invoked from release automation."
+        required: false
+        type: string
+        default: ""
+      publish_latest:
+        description: "Whether to also publish :latest when invoked from release automation."
+        required: false
+        type: boolean
+        default: false
   push:
+    branches: [main]
     tags: ['v*.*.*']
+  pull_request:
 
 jobs:
   build-and-push:
@@ -19,6 +38,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -42,15 +63,17 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/od
           # spec §15.1 tag scheme:
-          #   - main           → :edge + :sha-<short>
-          #   - vX.Y.Z         → :X.Y.Z + :latest
-          #   - any branch     → :branch-<name>
+          #   - main                    → :edge + :sha-<short>
+          #   - vX.Y.Z push             → :X.Y.Z + :latest
+          #   - workflow_call (stable)  → :<release_version> + optional :latest
+          #   - pull_request            → metadata only, no push
           tags: |
-            type=ref,event=branch,suffix=-{{date 'YYYYMMDD-HHmmss' tz='UTC'}}
-            type=ref,event=tag
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=raw,value=${{ inputs.release_version }},enable=${{ inputs.release_version != '' }}
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' && inputs.release_version == '' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ inputs.publish_latest == true }}
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/main' && inputs.release_version == '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6

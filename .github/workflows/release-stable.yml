@@ -104,6 +104,7 @@ on:
 permissions:
   actions: write
   contents: write
+  packages: write
 
 concurrency:
   group: open-design-release-stable-${{ inputs.channel }}-${{ inputs.dry_run && 'dry-run' || 'publish' }}
@@ -1010,6 +1011,31 @@ jobs:
           name: open-design-release-linux-release-assets
           path: ${{ runner.temp }}/release-assets
           retention-days: 1
+
+  publish_docker_image:
+    name: Publish stable Docker image
+    needs:
+      - metadata
+      - publish
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.outputs.dry_run != 'true' &&
+        needs.metadata.outputs.github_release_enabled == 'true' &&
+        needs.metadata.result == 'success' &&
+        needs.publish.result == 'success'
+      }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/docker-image.yml
+    secrets: inherit
+    with:
+      ref: ${{ needs.metadata.outputs.commit }}
+      release_version: ${{ needs.metadata.outputs.stable_version }}
+      publish_latest: true
 
   publish:
     name: Publish ${{ needs.metadata.outputs.channel }} release
