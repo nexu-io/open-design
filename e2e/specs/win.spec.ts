@@ -2,7 +2,6 @@
 
 import { execFile } from 'node:child_process';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -296,25 +295,6 @@ type DirectInstallerResult = {
   nsisLogTail: string[];
 };
 
-type InstalledPackagedConfig = {
-  namespaceBaseRoot?: unknown;
-};
-
-type InstalledRuntimeConfig = {
-  active?: {
-    entry?: {
-      cwd?: unknown;
-    };
-    root?: unknown;
-  };
-};
-
-type InstalledAppPackage = {
-  name?: unknown;
-  productName?: unknown;
-  version?: unknown;
-};
-
 const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
 const winDescribe = shouldRunPackagedWinSmoke ? describe : describe.skip;
 
@@ -369,7 +349,7 @@ winDescribe('packaged windows runtime smoke', () => {
         );
       }
 
-      await seedPackagedOnboardingComplete(install.installDir);
+      await seedPackagedOnboardingComplete();
 
       const startDesktop = async (step: string): Promise<WinStartResult> => {
         const nextStart = await measureSmokeStep(timings, step, async () => runToolsPackJson<WinStartResult>('start'));
@@ -1090,86 +1070,26 @@ async function readTiming(filePath: string): Promise<TimingResult> {
   return JSON.parse(await readFile(filePath, 'utf8')) as TimingResult;
 }
 
-async function seedPackagedOnboardingComplete(installDir: string): Promise<void> {
-  const configPath = join(await resolveExpectedDataRoot(installDir), 'app-config.json');
+async function seedPackagedOnboardingComplete(): Promise<void> {
+  // Pre-mark first-run onboarding as complete so the packaged app boots
+  // straight to the home shell. Since #4389 the Connect onboarding step is
+  // required and has no Skip affordance, so the only way past it on a fresh
+  // install is an `onboardingCompleted: true` config the daemon reads on boot.
+  //
+  // Write to the SAME data dir the running daemon actually reads —
+  // `<runtimeNamespaceRoot>/data` — not a path derived from the installed
+  // app's baked config. `tools-pack win start` rewrites the launch config's
+  // `namespaceBaseRoot` to the tools-pack runtime root (see
+  // writeInstalledLaunchPackagedConfig in tools/pack/src/win/lifecycle.ts) and
+  // hands it to the runtime via OD_PACKAGED_CONFIG_PATH, so the live daemon's
+  // RUNTIME_DATA_DIR is always under runtimeNamespaceRoot regardless of what
+  // the installer baked. Deriving the path from the installed manifest landed
+  // the seed elsewhere (the AppData fallback), so the daemon never saw it and
+  // the app stuck on onboarding once the Skip button was removed. This mirrors
+  // the macOS smoke's seed, which already writes under runtimeNamespaceRoot.
+  const configPath = join(runtimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
-}
-
-async function resolveExpectedDataRoot(installDir: string): Promise<string> {
-  return join(await resolveExpectedNamespaceRoot(installDir), 'data');
-}
-
-async function resolveExpectedNamespaceRoot(installDir: string): Promise<string> {
-  const installedConfig = JSON.parse(
-    await readFile(await resolveInstalledPackagedConfigPath(installDir), 'utf8'),
-  ) as InstalledPackagedConfig;
-  const configuredNamespaceBaseRoot =
-    typeof installedConfig.namespaceBaseRoot === 'string' && installedConfig.namespaceBaseRoot.length > 0
-      ? installedConfig.namespaceBaseRoot
-      : null;
-  const namespaceBaseRoot =
-    configuredNamespaceBaseRoot ?? join(defaultWindowsAppDataRoot(await readInstalledAppName(installDir)), 'namespaces');
-  return join(resolve(namespaceBaseRoot), namespace);
-}
-
-async function readInstalledAppName(installDir: string): Promise<string> {
-  const appPackage = JSON.parse(
-    await readFile(
-      join(await resolveInstalledPayloadRoot(installDir), 'resources', 'app', 'package.json'),
-      'utf8',
-    ),
-  ) as InstalledAppPackage;
-  if (typeof appPackage.productName === 'string' && appPackage.productName.length > 0) return appPackage.productName;
-  if (typeof appPackage.name === 'string' && appPackage.name.length > 0) return appPackage.name;
-  return 'Open Design';
-}
-
-async function resolveInstalledPackagedConfigPath(installDir: string): Promise<string> {
-  return join(await resolveInstalledPayloadRoot(installDir), 'resources', 'open-design-config.json');
-}
-
-async function resolveInstalledPayloadRoot(installDir: string): Promise<string> {
-  const runtimePath = join(installDir, 'runtime.json');
-  const runtimeRaw = await readFile(runtimePath, 'utf8').catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') return null;
-    throw error;
-  });
-  if (runtimeRaw == null) return installDir;
-
-  const runtime = JSON.parse(runtimeRaw) as InstalledRuntimeConfig;
-  const activeRoot = safeLauncherRelativePath(runtime.active?.root);
-  const activeCwd = safeLauncherRelativePath(runtime.active?.entry?.cwd);
-  if (activeRoot == null || activeCwd == null) {
-    throw new Error(`installed runtime.json does not describe an active payload root: ${runtimePath}`);
-  }
-
-  const payloadRoot = resolve(installDir, activeRoot, activeCwd);
-  if (!isPathInside(payloadRoot, installDir)) {
-    throw new Error(`installed runtime active payload root escapes install dir: ${payloadRoot}`);
-  }
-  return payloadRoot;
-}
-
-function safeLauncherRelativePath(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length === 0 || isAbsolute(value)) return null;
-  const segments = value.split(/[\\/]+/);
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) return null;
-  return join(...segments);
-}
-
-function defaultWindowsAppDataRoot(appName: string): string {
-  return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), appName);
-}
-
-function isPathInside(filePath: string, expectedRoot: string): boolean {
-  const normalizedPath = normalizePathForComparison(resolve(filePath));
-  const normalizedRoot = normalizePathForComparison(resolve(expectedRoot));
-  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`);
-}
-
-function normalizePathForComparison(filePath: string): string {
-  return process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 }
 
 function resolveFromWorkspace(filePath: string): string {
