@@ -57,7 +57,7 @@ export interface MemoryChangeEvent {
   // pass. Lets the toast say "Memory updated (3 new)" instead of three
   // separate toasts.
   count?: number;
-  source?: 'heuristic' | 'llm' | 'manual';
+  source?: 'heuristic' | 'llm' | 'manual' | 'connector';
   enabled?: boolean;
   at: number;
 }
@@ -110,7 +110,7 @@ interface UpsertMemoryInput {
 
 interface UpsertOptions {
   silent?: boolean;
-  source?: 'heuristic' | 'llm' | 'manual';
+  source?: 'heuristic' | 'llm' | 'manual' | 'connector';
 }
 
 interface MemoryTreeNode {

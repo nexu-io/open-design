@@ -25,13 +25,13 @@
 import { randomUUID } from 'node:crypto';
 import { memoryEvents } from './memory.js';
 
-type ExtractionKind = 'llm' | 'heuristic';
+type ExtractionKind = 'llm' | 'heuristic' | 'connector';
 type ExtractionPhase = 'running' | 'success' | 'skipped' | 'failed';
 
 interface ExtractionProvider {
   kind: string;
   model: string;
-  credentialSource: string;
+  credentialSource: string | null;
 }
 
 interface ExtractionRecord {
