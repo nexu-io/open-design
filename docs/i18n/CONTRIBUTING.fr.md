@@ -454,7 +454,7 @@ dans les [Discussions][discussions] / sur [Discord][discord], et le reste
 se fait tout seul.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/qhbcCH8Am4
+[discord]: https://discord.gg/9ptkbbqRu
 
 ---
 

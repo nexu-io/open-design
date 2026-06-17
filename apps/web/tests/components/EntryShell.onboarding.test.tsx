@@ -253,8 +253,8 @@ describe('EntryShell settings menu', () => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       if (url.endsWith('/api/community/discord')) {
         return jsonResponse({
-          inviteCode: 'mHAjSMV6gz',
-          inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+          inviteCode: '9ptkbbqRu',
+          inviteUrl: 'https://discord.gg/9ptkbbqRu',
           onlineCount: 1234,
           memberCount: 4321,
           fetchedAt: Date.now(),

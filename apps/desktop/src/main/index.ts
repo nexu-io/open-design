@@ -472,7 +472,7 @@ function installDesktopMenu(
           {
             label: "Join Discord",
             click() {
-              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
+              void shell.openExternal("https://discord.gg/9ptkbbqRu");
             },
           },
           { type: "separator" },

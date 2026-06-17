@@ -433,7 +433,7 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/mHAjSMV6gz',
+    'https://discord.gg/9ptkbbqRu',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();

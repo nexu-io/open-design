@@ -303,10 +303,10 @@ Some badges in the README can be localized by changing the badge URL:
 
 ```markdown
 <!-- English -->
-<a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+<a href="https://discord.gg/9ptkbbqRu"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
 
 <!-- Italian -->
-<a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-unisciti-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
+<a href="https://discord.gg/9ptkbbqRu"><img alt="Discord" src="https://img.shields.io/badge/discord-unisciti-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
 ```
 
 **Translate these badge labels:**
@@ -880,7 +880,7 @@ If yes to all, it's good enough!
 
 - **Questions?** Open a [GitHub Discussion](https://github.com/nexu-io/open-design/discussions)
 - **Found an issue?** Open a [GitHub Issue](https://github.com/nexu-io/open-design/issues)
-- **Want to chat?** Join our [Discord](https://discord.gg/qhbcCH8Am4)
+- **Want to chat?** Join our [Discord](https://discord.gg/9ptkbbqRu)
 - **Need a review?** Tag `@nexu-io/maintainers` in your PR
 
 ---

@@ -28,7 +28,7 @@ import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPres
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
 
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
+const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
 const X_URL = 'https://x.com/nexudotio';
 
 export type EntrySettingsSection =
