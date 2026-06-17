@@ -82,7 +82,7 @@ for arg in "$@"; do
     --keep-data)       KEEP_DATA=1 ;;
     --help|-h)
       echo "Usage: uninstall.sh [options]"
-      echo "  --keep-data         Preserve the open_design_data volume"
+      echo "  --keep-data         Preserve the open_design_data and open_design_home volumes"
       echo "  --non-interactive   Skip confirmation prompts"
       exit 0
       ;;
@@ -202,6 +202,41 @@ fi
 if [ "$KEEP_DATA" = "0" ] && [ -n "$DATA_VOLUME" ]; then
   step "Removing data volume ${DATA_VOLUME}..."
   $RUNTIME volume rm "$DATA_VOLUME" >/dev/null 2>&1 || true
+fi
+
+# Remove home volume (unless --keep-data)
+HOME_VOLUME=""
+for _vol in "${PROJECT_NAME}_open_design_home" "open_design_home"; do
+  if $RUNTIME volume inspect "$_vol" >/dev/null 2>&1; then
+    HOME_VOLUME="$_vol"
+    break
+  fi
+done
+if [ "$KEEP_DATA" = "0" ] && [ -n "$HOME_VOLUME" ]; then
+  step "Removing home volume ${HOME_VOLUME}..."
+  $RUNTIME volume rm "$HOME_VOLUME" >/dev/null 2>&1 || true
+fi
+
+# Best-effort remove legacy per-CLI volumes (pre-consolidation layout)
+if [ "$KEEP_DATA" = "0" ]; then
+  LEGACY_CLI_VOLUMES=(
+    open_design_claude open_design_codex open_design_gemini
+    open_design_devin open_design_copilot open_design_cursor
+    open_design_opencode open_design_openclaw open_design_deepseek
+    open_design_qoder open_design_pi open_design_kiro
+    open_design_kilo open_design_vibe open_design_trae
+    open_design_kimi open_design_qwen open_design_aider
+    open_design_grok open_design_reasonix open_design_hermes
+  )
+  for _cli_vol in "${LEGACY_CLI_VOLUMES[@]}"; do
+    for _vol in "${PROJECT_NAME}_${_cli_vol}" "${_cli_vol}"; do
+      if $RUNTIME volume inspect "$_vol" >/dev/null 2>&1; then
+        step "Removing legacy volume ${_vol}..."
+        $RUNTIME volume rm "$_vol" >/dev/null 2>&1 || true
+        break
+      fi
+    done
+  done
 fi
 
 # Remove systemd unit (Linux)
