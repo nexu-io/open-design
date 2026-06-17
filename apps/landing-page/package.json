@@ -28,7 +28,7 @@
   "devDependencies": {
     "@astrojs/check": "0.9.9",
     "@types/matter-js": "0.19.8",
-    "@types/node": "20.19.39",
+    "@types/node": "24.12.2",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "playwright": "1.60.0",
