@@ -2226,14 +2226,17 @@ export function ChatPane({
             {/* Always mounted so the CSS transition can play in both
                 directions; the `chat-jump-btn-active` class flips the
                 slide + opacity, and `aria-hidden` + `tabIndex={-1}`
-                keep it out of the a11y tree when it's not visible. */}
+                keep it out of the a11y tree when it's not visible.
+                Also suppressed while the conversation-history dropdown is
+                open: the dropdown sits in a separate stacking context, so
+                without this the button bleeds through it (#4123). */}
             <button
               type="button"
-              className={`chat-jump-btn${scrolledFromBottom ? ' chat-jump-btn-active' : ''}`}
+              className={`chat-jump-btn${scrolledFromBottom && !showConvList ? ' chat-jump-btn-active' : ''}`}
               onClick={jumpToBottom}
               title={t('chat.scrollToLatest')}
-              aria-hidden={!scrolledFromBottom}
-              tabIndex={scrolledFromBottom ? 0 : -1}
+              aria-hidden={!scrolledFromBottom || showConvList}
+              tabIndex={scrolledFromBottom && !showConvList ? 0 : -1}
             >
               <Icon name="arrow-up" size={12} style={{ transform: 'rotate(180deg)' }} />
               <span>{t('chat.jumpToLatest')}</span>
