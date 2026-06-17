@@ -13,6 +13,9 @@ const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
+const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
+const nixHashAutofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "nix-hash-autofix.yml");
+const visualPrCommentWorkflowPath = join(workspaceRoot, ".github", "workflows", "visual-pr-comment.yml");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
@@ -152,6 +155,33 @@ describe("packaged smoke workflow", () => {
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
     expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
     expect(blobGuard).toContain("select(.status != \"removed\") | .filename");
+  });
+
+  it("[P2] keeps merge queue as the authoritative post-PR validation path", async () => {
+    const [ciWorkflow, dockerWorkflow, visualCommentWorkflow, nixAutofixWorkflow] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(dockerImageWorkflowPath, "utf8"),
+      readFile(visualPrCommentWorkflowPath, "utf8"),
+      readFile(nixHashAutofixWorkflowPath, "utf8"),
+    ]);
+
+    const ciTrigger = sectionBetween(ciWorkflow, "on:", "\npermissions:");
+    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  nix_validation:");
+    const dockerTrigger = sectionBetween(dockerWorkflow, "on:", "\njobs:");
+    const visualCommentJob = sectionBetween(visualCommentWorkflow, "  comment:", "\n    runs-on:");
+
+    expect(ciTrigger).toContain("pull_request:");
+    expect(ciTrigger).toContain("merge_group:");
+    expect(ciTrigger).toContain("workflow_dispatch:");
+    expect(ciTrigger).not.toContain("push:");
+    expect(ciBlobGuard).not.toContain('${{ github.event_name }}" = "push"');
+    expect(dockerTrigger).toContain("workflow_call:");
+    expect(dockerTrigger).toContain("tags: ['v*.*.*']");
+    expect(dockerTrigger).not.toContain("branches: [main]");
+    expect(dockerTrigger).not.toContain("- main");
+    expect(visualCommentJob).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(nixAutofixWorkflow).toContain("workflows: [ci]");
+    expect(nixAutofixWorkflow).not.toContain("ci-nix");
   });
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {

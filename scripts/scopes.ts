@@ -91,17 +91,6 @@ function createScopePlan(): ScopePlan {
       applyChangedFile(file, outputs);
       if (allScopeOutputsTrue(outputs)) break;
     }
-  } else if (eventName === "push") {
-    outputs.daemon_tests_required = true;
-    outputs.web_tests_required = true;
-    outputs.tools_dev_tests_required = true;
-    outputs.tools_pack_tests_required = true;
-    // Main already runs .github/workflows/nix-check.yml, so keep this workflow's
-    // push path focused on the non-Nix workspace signal.
-    outputs.nix_validation_required = false;
-    // Main Docker publishing stays owned by .github/workflows/docker-image.yml.
-    outputs.docker_validation_required = false;
-    outputs.workspace_validation_required = true;
   } else {
     outputs.daemon_tests_required = true;
     outputs.web_tests_required = true;
@@ -116,7 +105,7 @@ function createScopePlan(): ScopePlan {
 
   return {
     ...outputs,
-    ...createRunPlan(outputs, ciMode, eventName),
+    ...createRunPlan(outputs, ciMode),
     ui_p0_matrix: JSON.stringify(uiP0CiMatrix),
     visual_matrix: JSON.stringify(visualCiMatrix),
   };
@@ -136,16 +125,14 @@ function resolveCiMode(eventName: string): CiMode {
 function createRunPlan(
   outputs: ScopeOutputs,
   ciMode: CiMode,
-  eventName: string,
 ): Omit<ScopePlan, keyof ScopeOutputs | "ui_p0_matrix" | "visual_matrix"> {
   const isFull = ciMode === "full";
-  const isMainPush = eventName === "push";
 
   return {
     ci_mode: ciMode,
-    run_docker_build: (isFull && !isMainPush) || outputs.docker_validation_required,
+    run_docker_build: isFull || outputs.docker_validation_required,
     run_e2e_vitest: isFull || outputs.web_tests_required || outputs.ui_p0_validation_required,
-    run_nix_validation: (isFull && !isMainPush) || outputs.nix_validation_required,
+    run_nix_validation: isFull || outputs.nix_validation_required,
     run_playwright_critical: isFull || (outputs.workspace_validation_required && !outputs.ui_p0_validation_required),
     run_playwright_visual: isFull || outputs.visual_validation_required,
     run_preflight: true,
@@ -363,7 +350,6 @@ function isNixRelevantFile(file: string): boolean {
       "flake.nix",
       "flake.lock",
       ".github/workflows/ci.yml",
-      ".github/workflows/nix-check.yml",
       ".github/workflows/nix-hash-autofix.yml",
       "scripts/update-nix-pnpm-deps-hash.ts",
     ].includes(file) ||
@@ -382,7 +368,6 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
     [
       "flake.nix",
       "flake.lock",
-      ".github/workflows/nix-check.yml",
       ".github/workflows/landing-page-ci.yml",
       ".github/workflows/landing-page-staging.yml",
       ".github/workflows/landing-page-production.yml",

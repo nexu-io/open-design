@@ -2,7 +2,7 @@ name: nix-hash-autofix
 
 on:
   workflow_run:
-    workflows: [ci-nix]
+    workflows: [ci]
     types: [completed]
 
 permissions:
@@ -183,7 +183,7 @@ jobs:
             printf '%s\n' "$marker"
             if [ "${HASH_REFRESH_STATUS}" = 'patch-generated' ]; then
               printf "A generated Nix hash refresh is available for this PR.\n\n"
-              printf "Apply the patch from the \`nix-hash-refresh\` artifact attached to the failed \`ci-nix\` run, or paste the diff below into \`git apply\`:\n\n"
+              printf "Apply the patch from the \`nix-hash-refresh\` artifact attached to the failed \`ci\` run, or paste the diff below into \`git apply\`:\n\n"
               printf '```diff\n'
               if [ -f "$patch_file" ]; then
                 cat "$patch_file"
@@ -192,7 +192,7 @@ jobs:
               fi
               printf '\n```\n'
             else
-              printf "The failed \`ci-nix\` run attempted to refresh \`nix/pnpm-deps.nix\`, but it could not produce a hash-only patch.\n\n"
+              printf "The failed \`ci\` run attempted to refresh \`nix/pnpm-deps.nix\`, but it could not produce a hash-only patch.\n\n"
               printf "Download the \`nix-hash-refresh\` artifact from that run and inspect \`update.log\` for details.\n"
             fi
           } > "$body_file"

@@ -241,15 +241,11 @@ installing the workspace.
 
 ## CI
 
-`.github/workflows/nix-check.yml` runs `nix flake check` on pushes to
-`main` and can also be started manually with `workflow_dispatch`.
-
-Pull requests that touch Nix inputs, daemon/web Nix build closures, or the
-generated hash maintenance workflows are validated earlier in
-`.github/workflows/ci.yml` via the required `Validate workspace` gate.
-That PR path runs `nix flake check` for `flake.*`, `nix/**`, root lock and
-workspace manifests, and files that are actually in the daemon/web Nix
-closures. The flake also filters each derivation down to only the workspace
+`.github/workflows/ci.yml` owns Nix validation through the required
+`Validate workspace` gate. Pull requests run `nix flake check` only when they
+touch Nix inputs, daemon/web Nix build closures, or generated hash maintenance
+workflows. Merge queue and manual full CI runs execute the full Nix path before
+merge. The flake also filters each derivation down to only the workspace
 packages it actually installs, so unrelated package/tool changes stay off the
 slower Nix path and do not churn the other derivation's pnpm store hash.
 

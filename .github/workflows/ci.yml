@@ -3,15 +3,6 @@ name: ci
 on:
   pull_request:
   merge_group:
-  # Release validation is owned by the release workflows rather than this CI
-  # workflow: `release-stable` has a verify job before publishing, and
-  # `release-beta` builds from its selected release commit. Keep this trigger
-  # focused on PRs, main, and manual reruns instead of duplicating tag/release
-  # events that would run after those release workflows have already selected
-  # or validated their commit.
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       ci_mode:
@@ -123,16 +114,6 @@ jobs:
             gh api --paginate \
               "repos/${{ github.repository }}/compare/${{ github.event.merge_group.base_sha }}...${{ github.event.merge_group.head_sha }}" \
               --jq '(.files // [])[] | select(.status != "removed") | .filename' > "$changed_files"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            before="${{ github.event.before }}"
-            after="${{ github.sha }}"
-            if [[ "$before" =~ ^0+$ ]]; then
-              git ls-files > "$changed_files"
-            else
-              gh api --paginate \
-                "repos/${{ github.repository }}/compare/${before}...${after}" \
-                --jq '(.files // [])[] | select(.status != "removed") | .filename' > "$changed_files"
-            fi
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             gh api --paginate \
               "repos/${{ github.repository }}/compare/main...${{ github.sha }}" \
