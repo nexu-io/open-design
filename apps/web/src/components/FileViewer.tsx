@@ -18073,8 +18073,8 @@ function HtmlViewer({
             <div className="deploy-flow-modal__scroll">
               <div className="modal-head">
                 <div className="kicker">{t('socialShare.projectSection')}</div>
-                <h2>{t('fileViewer.shareLabel')}</h2>
-                <p className="subtitle">{t('fileViewer.shareLinkPublishGuide')}</p>
+                <h2>{t('socialShare.publishPageTitle')}</h2>
+                <p className="subtitle">{t('socialShare.publishPageSubtitle')}</p>
               </div>
               <div className="deploy-form" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {deployCopyLinks.length > 1 ? (
@@ -18236,11 +18236,21 @@ function HtmlViewer({
             <div className="modal-foot">
               <button
                 type="button"
-                className="viewer-action secondary"
+                className="ghost-link button-like"
                 onClick={closeSocialShareModal}
-                style={{ width: '100%', justifyContent: 'center' }}
               >
                 {t('common.close') || 'Close'}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                onClick={() => {
+                  const targetProviderId = activeSocialShareProviderId || latestShareDeploymentDefault?.providerId || deployCopyLinks[0]?.providerId;
+                  setSocialShareModalOpen(false);
+                  void openDeployModal(targetProviderId, 'social-share', { fallbackToExisting: true });
+                }}
+              >
+                {t('socialShare.publishPageTitle')}
               </button>
             </div>
           </div>
