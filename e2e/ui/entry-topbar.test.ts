@@ -109,7 +109,7 @@ test('[P2] home topbar shows the new entry chips and links', async ({ page }) =>
 
   const discord = page.getByTestId('entry-discord-badge');
   await expect(discord).toBeVisible();
-  await expect(discord).toHaveAttribute('href', 'https://discord.gg/mHAjSMV6gz');
+  await expect(discord).toHaveAttribute('href', 'https://discord.gg/9ptkbbqRu');
   await expect(discord).toContainText('Join Discord');
 
   await expect(page.getByTestId('inline-model-switcher-chip')).toBeVisible();
@@ -147,7 +147,7 @@ test('[P2] home topbar star and discord badges expose the current external-link 
   await expect(star).toHaveAttribute('rel', /noopener/);
 
   const discord = page.getByTestId('entry-discord-badge');
-  await expect(discord).toHaveAttribute('href', 'https://discord.gg/mHAjSMV6gz');
+  await expect(discord).toHaveAttribute('href', 'https://discord.gg/9ptkbbqRu');
   await expect(discord).toHaveAttribute('title', /Join the Open Design Discord/i);
   await expect(discord).toHaveAttribute('aria-label', /Join the Open Design Discord/i);
 });

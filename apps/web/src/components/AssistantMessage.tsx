@@ -76,7 +76,7 @@ export type QuestionFormOpenRequest = {
   submittedAnswers?: Record<string, string | string[]>;
 };
 
-const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+const DISCORD_INVITE_URL = "https://discord.gg/9ptkbbqRu";
 
 interface ActionNotice {
   message: string;
