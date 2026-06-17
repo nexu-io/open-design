@@ -13,6 +13,14 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      ci_mode:
+        description: Validation strength for this manual run
+        type: choice
+        options:
+          - full
+          - hot
+        default: full
 
 permissions:
   actions: read
@@ -34,15 +42,26 @@ jobs:
     name: Detect validation scopes
     runs-on: ubuntu-latest
     outputs:
+      ci_mode: ${{ steps.detect.outputs.ci_mode }}
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
       nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
-      ui_p0_pr_required: ${{ steps.detect.outputs.ui_p0_pr_required }}
+      ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}
       visual_validation_required: ${{ steps.detect.outputs.visual_validation_required }}
       docker_validation_required: ${{ steps.detect.outputs.docker_validation_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
+      run_docker_build: ${{ steps.detect.outputs.run_docker_build }}
+      run_e2e_vitest: ${{ steps.detect.outputs.run_e2e_vitest }}
+      run_nix_validation: ${{ steps.detect.outputs.run_nix_validation }}
+      run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
+      run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
+      run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
+      run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
+      run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
+      run_workspace_unit_tests: ${{ steps.detect.outputs.run_workspace_unit_tests }}
       ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}
       visual_matrix: ${{ steps.detect.outputs.visual_matrix }}
 
@@ -154,7 +173,7 @@ jobs:
   nix_validation:
     name: Validate Nix flake
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.nix_validation_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
     permissions:
@@ -265,7 +284,7 @@ jobs:
   preflight:
     name: Preflight
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.workspace_validation_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 45
 
@@ -311,7 +330,7 @@ jobs:
   workspace_unit_tests:
     name: Workspace unit tests
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.workspace_validation_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
 
@@ -359,7 +378,7 @@ jobs:
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.tools_pack_tests_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -376,7 +395,7 @@ jobs:
   web_workspace_tests:
     name: Web workspace tests
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.web_tests_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
 
@@ -396,7 +415,7 @@ jobs:
   e2e_vitest:
     name: E2E Vitest
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.workspace_validation_required == 'true' }}
+    if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
 
@@ -425,7 +444,7 @@ jobs:
   playwright_critical:
     name: Playwright critical (${{ matrix.group }})
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.workspace_validation_required == 'true' && (github.event_name != 'pull_request' || needs.scopes.outputs.ui_p0_pr_required != 'true') }}
+    if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -468,7 +487,7 @@ jobs:
   ui_p0_smoke:
     name: UI P0 smoke
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.ui_p0_pr_required == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) }}
+    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
 
@@ -515,7 +534,7 @@ jobs:
   ui_p0:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.ui_p0_pr_required == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) }}
+    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 45
     strategy:
@@ -566,7 +585,7 @@ jobs:
   playwright_visual:
     name: Playwright visual (${{ matrix.name }})
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.visual_validation_required == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) }}
+    if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     strategy:
@@ -651,7 +670,7 @@ jobs:
   docker_pr:
     name: Docker image build
     needs: [scopes]
-    if: ${{ needs.scopes.outputs.docker_validation_required == 'true' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
@@ -672,6 +691,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/od
           tags: |
             type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ github.event_name == 'pull_request' }}
+            type=sha,prefix=queue-sha-,format=short,enable=${{ github.event_name == 'merge_group' }}
             type=sha,prefix=manual-sha-,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build Docker image
@@ -716,6 +736,32 @@ jobs:
           if [ -n "$failures" ]; then
             echo "Workspace validation failed:"
             echo "$failures"
+            exit 1
+          fi
+
+          required_misses="$(echo "$NEEDS_JSON" | jq -r '
+            . as $needs |
+            ($needs.scopes.outputs // {}) as $out |
+            def when($condition; $jobs): if $condition then $jobs else [] end;
+            (
+              ["scopes", "static_gate"]
+              + when($out.run_preflight == "true"; ["preflight"])
+              + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
+              + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
+              + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
+              + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
+              + when($out.run_playwright_critical == "true"; ["playwright_critical"])
+              + when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])
+              + when($out.run_playwright_visual == "true"; ["playwright_visual"])
+              + when($out.run_nix_validation == "true"; ["nix_validation"])
+              + when($out.run_docker_build == "true"; ["docker_pr"])
+            )[]
+            | select(($needs[.].result // "missing") != "success")
+            | "\(.)=\($needs[.].result // "missing")"
+          ')"
+          if [ -n "$required_misses" ]; then
+            echo "Required validation jobs did not succeed:"
+            echo "$required_misses"
             exit 1
           fi
 

@@ -3,19 +3,32 @@ import { appendFileSync, readFileSync } from "node:fs";
 
 import { uiP0CiMatrix, visualCiMatrix } from "../e2e/lib/playwright/suites.ts";
 
+type CiMode = "hot" | "full";
+
 type ScopeOutputs = {
   daemon_tests_required: boolean;
   web_tests_required: boolean;
   tools_dev_tests_required: boolean;
   tools_pack_tests_required: boolean;
   nix_validation_required: boolean;
-  ui_p0_pr_required: boolean;
+  ui_p0_validation_required: boolean;
   visual_validation_required: boolean;
   docker_validation_required: boolean;
   workspace_validation_required: boolean;
 };
 
 type ScopePlan = ScopeOutputs & {
+  ci_mode: CiMode;
+  run_docker_build: boolean;
+  run_e2e_vitest: boolean;
+  run_nix_validation: boolean;
+  run_playwright_critical: boolean;
+  run_playwright_visual: boolean;
+  run_preflight: boolean;
+  run_ui_p0: boolean;
+  run_web_workspace_tests: boolean;
+  run_windows_tools_pack_payload_tests: boolean;
+  run_workspace_unit_tests: boolean;
   ui_p0_matrix: string;
   visual_matrix: string;
 };
@@ -23,6 +36,9 @@ type ScopePlan = ScopeOutputs & {
 type GitHubEvent = {
   pull_request?: {
     number?: number;
+  };
+  inputs?: {
+    ci_mode?: string;
   };
 };
 
@@ -47,13 +63,14 @@ function createScopePlan(): ScopePlan {
     tools_dev_tests_required: false,
     tools_pack_tests_required: false,
     nix_validation_required: false,
-    ui_p0_pr_required: false,
+    ui_p0_validation_required: false,
     visual_validation_required: false,
     docker_validation_required: false,
     workspace_validation_required: false,
   };
 
   const eventName = requiredEnv("GITHUB_EVENT_NAME");
+  const ciMode = resolveCiMode(eventName);
 
   if (eventName === "pull_request") {
     for (const file of changedPullRequestFiles()) {
@@ -68,6 +85,11 @@ function createScopePlan(): ScopePlan {
       outputs.tools_pack_tests_required
     ) {
       outputs.workspace_validation_required = true;
+    }
+  } else if (eventName === "workflow_dispatch" && ciMode === "hot") {
+    for (const file of changedManualFiles()) {
+      applyChangedFile(file, outputs);
+      if (allScopeOutputsTrue(outputs)) break;
     }
   } else if (eventName === "push") {
     outputs.daemon_tests_required = true;
@@ -86,9 +108,7 @@ function createScopePlan(): ScopePlan {
     outputs.tools_dev_tests_required = true;
     outputs.tools_pack_tests_required = true;
     outputs.nix_validation_required = true;
-    if (eventName === "workflow_dispatch") {
-      outputs.ui_p0_pr_required = true;
-    }
+    outputs.ui_p0_validation_required = true;
     outputs.visual_validation_required = true;
     outputs.docker_validation_required = true;
     outputs.workspace_validation_required = true;
@@ -96,8 +116,43 @@ function createScopePlan(): ScopePlan {
 
   return {
     ...outputs,
+    ...createRunPlan(outputs, ciMode, eventName),
     ui_p0_matrix: JSON.stringify(uiP0CiMatrix),
     visual_matrix: JSON.stringify(visualCiMatrix),
+  };
+}
+
+function resolveCiMode(eventName: string): CiMode {
+  if (eventName === "pull_request") return "hot";
+  if (eventName === "workflow_dispatch") {
+    const event = JSON.parse(readFileSync(requiredEnv("GITHUB_EVENT_PATH"), "utf8")) as GitHubEvent;
+    const input = event.inputs?.ci_mode ?? "full";
+    if (input === "hot" || input === "full") return input;
+    throw new Error(`Unsupported workflow_dispatch ci_mode: ${input}`);
+  }
+  return "full";
+}
+
+function createRunPlan(
+  outputs: ScopeOutputs,
+  ciMode: CiMode,
+  eventName: string,
+): Omit<ScopePlan, keyof ScopeOutputs | "ui_p0_matrix" | "visual_matrix"> {
+  const isFull = ciMode === "full";
+  const isMainPush = eventName === "push";
+
+  return {
+    ci_mode: ciMode,
+    run_docker_build: (isFull && !isMainPush) || outputs.docker_validation_required,
+    run_e2e_vitest: isFull || outputs.web_tests_required || outputs.ui_p0_validation_required,
+    run_nix_validation: (isFull && !isMainPush) || outputs.nix_validation_required,
+    run_playwright_critical: isFull || (outputs.workspace_validation_required && !outputs.ui_p0_validation_required),
+    run_playwright_visual: isFull || outputs.visual_validation_required,
+    run_preflight: true,
+    run_ui_p0: isFull || outputs.ui_p0_validation_required,
+    run_web_workspace_tests: isFull || outputs.web_tests_required,
+    run_windows_tools_pack_payload_tests: isFull || outputs.tools_pack_tests_required,
+    run_workspace_unit_tests: true,
   };
 }
 
@@ -113,6 +168,23 @@ function changedPullRequestFiles(): string[] {
   const stdout = execFileSync(
     "gh",
     ["api", "--paginate", `repos/${repository}/pulls/${prNumber}/files`, "--jq", ".[].filename"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  );
+  return stdout.split(/\r?\n/).filter(Boolean);
+}
+
+function changedManualFiles(): string[] {
+  const repository = requiredEnv("GITHUB_REPOSITORY");
+  const sha = requiredEnv("GITHUB_SHA");
+  const stdout = execFileSync(
+    "gh",
+    [
+      "api",
+      "--paginate",
+      `repos/${repository}/compare/main...${sha}`,
+      "--jq",
+      '(.files // [])[] | select(.status != "removed") | .filename',
+    ],
     { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
   );
   return stdout.split(/\r?\n/).filter(Boolean);
@@ -177,7 +249,7 @@ function applyChangedFile(file: string, target: ScopeOutputs): void {
   }
 
   if (isUiP0RelevantFile(file)) {
-    target.ui_p0_pr_required = true;
+    target.ui_p0_validation_required = true;
   }
 
   if (isVisualRelevantFile(file)) {
@@ -266,18 +338,6 @@ function isDockerRelevantFile(file: string): boolean {
   return (
     startsWithAny(file, [
       "deploy/",
-      "apps/daemon/",
-      "apps/web/",
-      "apps/packaged/",
-      "packages/",
-      "tools/",
-      "assets/",
-      "plugins/",
-      "skills/",
-      "design-systems/",
-      "design-templates/",
-      "craft/",
-      "prompt-templates/",
     ]) ||
     [
       "package.json",
@@ -286,7 +346,8 @@ function isDockerRelevantFile(file: string): boolean {
       ".dockerignore",
       ".github/workflows/ci.yml",
       ".github/workflows/docker-image.yml",
-    ].includes(file)
+    ].includes(file) ||
+    isWorkspaceManifestOrCiFile(file)
   );
 }
 
@@ -294,25 +355,6 @@ function isNixRelevantFile(file: string): boolean {
   return (
     startsWithAny(file, [
       "nix/",
-      "apps/daemon/",
-      "apps/web/",
-      "packages/components/",
-      "packages/contracts/",
-      "packages/registry-protocol/",
-      "packages/agui-adapter/",
-      "packages/plugin-runtime/",
-      "packages/sidecar-proto/",
-      "packages/sidecar/",
-      "packages/platform/",
-      "packages/diagnostics/",
-      "packages/host/",
-      "assets/",
-      "plugins/",
-      "skills/",
-      "design-systems/",
-      "design-templates/",
-      "craft/",
-      "prompt-templates/",
     ]) ||
     [
       "package.json",
@@ -324,7 +366,8 @@ function isNixRelevantFile(file: string): boolean {
       ".github/workflows/nix-check.yml",
       ".github/workflows/nix-hash-autofix.yml",
       "scripts/update-nix-pnpm-deps-hash.ts",
-    ].includes(file)
+    ].includes(file) ||
+    isWorkspaceManifestOrCiFile(file)
   );
 }
 

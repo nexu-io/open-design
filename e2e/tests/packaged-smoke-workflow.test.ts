@@ -19,6 +19,7 @@ const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "scripts", "release-beta.ts");
+const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
@@ -69,6 +70,38 @@ async function runReleaseStableForFailure(env: Record<string, string>): Promise<
   throw new Error("release-stable script unexpectedly succeeded");
 }
 
+async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
+  const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
+  const eventPath = join(tempDir, "event.json");
+  const ghPath = join(tempDir, "gh");
+  await writeFile(eventPath, JSON.stringify(eventPayload));
+  await writeFile(
+    ghPath,
+    `#!/usr/bin/env node
+process.stdout.write(${JSON.stringify(changedFiles.join("\n"))});
+if (${JSON.stringify(changedFiles.length > 0)}) process.stdout.write("\\n");
+`,
+  );
+  await chmod(ghPath, 0o755);
+
+  try {
+    const { stdout } = await execFileAsync(process.execPath, ["--experimental-strip-types", scopesScriptPath, "print"], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: eventName,
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+    return JSON.parse(stdout) as Record<string, unknown>;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function writeFakeGhBin(binDir: string, releases: unknown[]): Promise<void> {
   const ghPath = join(binDir, "gh");
   await writeFile(
@@ -107,7 +140,7 @@ describe("packaged smoke workflow", () => {
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("runs-on: windows-latest");
-    expect(job).toContain("needs.scopes.outputs.tools_pack_tests_required == 'true'");
+    expect(job).toContain("needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true'");
     expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
@@ -119,6 +152,39 @@ describe("packaged smoke workflow", () => {
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
     expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
     expect(blobGuard).toContain("select(.status != \"removed\") | .filename");
+  });
+
+  it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+
+    expect(workflow).toContain("ci_mode:");
+    expect(scopes).toContain("ci_mode: ${{ steps.detect.outputs.ci_mode }}");
+    expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
+    expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
+    expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
+    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])');
+
+    await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
+      ci_mode: "hot",
+      run_ui_p0: true,
+      run_nix_validation: false,
+    });
+    await expect(runScopesPrint("workflow_dispatch", { inputs: {} })).resolves.toMatchObject({
+      ci_mode: "full",
+      ui_p0_validation_required: true,
+      run_docker_build: true,
+      run_nix_validation: true,
+      run_ui_p0: true,
+    });
+    await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
+      ci_mode: "full",
+      ui_p0_validation_required: true,
+      run_docker_build: true,
+      run_nix_validation: true,
+      run_ui_p0: true,
+    });
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
