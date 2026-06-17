@@ -119,6 +119,8 @@ describe('OpenAI-compatible media providers', () => {
     options: {
       expectedConfigIncludes?: string;
       expectedConfigExcludes?: string;
+      expectedArgsIncludes?: string;
+      expectedArgsExcludes?: string;
     } = {},
   ) {
     const codexBin = path.join(root, `${threadId}.mjs`);
@@ -129,6 +131,8 @@ import path from 'node:path';
 const pngBase64 = '${PNG_BASE64}';
 const expectedConfigIncludes = ${JSON.stringify(options.expectedConfigIncludes ?? '')};
 const expectedConfigExcludes = ${JSON.stringify(options.expectedConfigExcludes ?? '')};
+const expectedArgsIncludes = ${JSON.stringify(options.expectedArgsIncludes ?? '')};
+const expectedArgsExcludes = ${JSON.stringify(options.expectedArgsExcludes ?? '')};
 const args = process.argv.slice(2);
 const addDirIndex = args.indexOf('--add-dir');
 const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
@@ -146,6 +150,14 @@ process.stdin.on('end', () => {
       process.stderr.write('expected normalized config to exclude ' + expectedConfigExcludes);
       process.exit(9);
     }
+  }
+  if (expectedArgsIncludes && !args.includes(expectedArgsIncludes)) {
+    process.stderr.write('expected args to include ' + expectedArgsIncludes);
+    process.exit(10);
+  }
+  if (expectedArgsExcludes && args.includes(expectedArgsExcludes)) {
+    process.stderr.write('expected args to exclude ' + expectedArgsExcludes);
+    process.exit(11);
   }
   if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
   const outDir = path.join(generatedRoot, '${threadId}');
@@ -559,6 +571,8 @@ process.stdin.on('end', () => {
     await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
       expectedConfigIncludes: 'service_tier = "fast"',
       expectedConfigExcludes: 'service_tier = "default"',
+      expectedArgsIncludes: 'permissions.default_permissions=":workspace"',
+      expectedArgsExcludes: 'default_permissions=":workspace"',
     });
 
     const result = await generateMedia({
