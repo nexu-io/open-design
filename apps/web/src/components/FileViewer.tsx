@@ -13823,7 +13823,6 @@ function HtmlViewer({
     options?: { fallbackToExisting?: boolean },
   ) {
     setDeployMenuOpen(false);
-    setShareMenuOpen(false);
     setDeployModalOpen(true);
     setDeployModalIntent(intent);
     setDeployError(null);
@@ -13833,6 +13832,17 @@ function HtmlViewer({
     await loadDeployProvider(nextProviderId, options);
   }
 
+  async function openSocialShareFlow() {
+    setDeployMenuOpen(false);
+    const hasDeployments = DEPLOY_PROVIDER_OPTIONS.some(
+      (option) => deploymentsByProvider[option.id]?.url?.trim(),
+    );
+    if (hasDeployments) {
+      setSocialShareModalOpen(true);
+    } else {
+      await openDeployModal(deployProviderId, 'social-share');
+    }
+  }
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
     if (nextProviderId === deployProviderId) return;
     setDeployError(null);

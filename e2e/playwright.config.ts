@@ -13,6 +13,16 @@ function parseWorkerCount(value: string | undefined): number {
   return parsed;
 }
 
+const daemonPort = Number(process.env.OD_PORT) || 17_456;
+const webPort = Number(process.env.OD_WEB_PORT) || 17_573;
+const baseURL = `http://127.0.0.1:${webPort}`;
+const namespace = process.env.OD_E2E_NAMESPACE || `playwright-${process.pid}`;
+const dataDir = process.env.OD_E2E_DATA_DIR || `e2e/ui/.od-data/${namespace}`;
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export default defineConfig({
   testDir: './ui',
   // This is the functional config. Strict-visual specs (`visual-*.test.ts`)
@@ -29,8 +39,11 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  fullyParallel: process.env.OD_PLAYWRIGHT_FULLY_PARALLEL === '1',
-  workers: parseWorkerCount(process.env.OD_PLAYWRIGHT_WORKERS),
+  // The webServer owns one daemon and one OD_DATA_DIR for the entire UI suite.
+  // Keep backend-mutating UI tests serialized until the harness can boot an
+  // isolated daemon/data directory per worker.
+  fullyParallel: false,
+  workers: 1,
   reporter: process.env.CI
     ? [
         ['github'],
@@ -46,8 +59,17 @@ export default defineConfig({
         ['junit', { outputFile: './ui/reports/junit.xml' }],
       ],
   use: {
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+  },
+  webServer: {
+    command: process.platform === 'win32'
+      ? `set "OD_DATA_DIR=${dataDir}" && pnpm --dir .. tools-dev run web --namespace ${namespace} --daemon-port ${daemonPort} --web-port ${webPort}`
+      : `OD_DATA_DIR=${shellQuote(dataDir)} pnpm --dir .. tools-dev run web --namespace ${shellQuote(namespace)} --daemon-port ${daemonPort} --web-port ${webPort}`,
+    url: baseURL,
+    reuseExistingServer: false,
+    timeout: 120_000,
   },
   projects: [
     {
