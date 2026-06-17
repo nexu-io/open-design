@@ -330,7 +330,7 @@ docker compose up -d
 
 ### 🚀 Deploy on Sealos
 
-[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://template.sealos.io/deploy?templateName=opendesign)
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://template.sealos.io/deploy?templateName=open-design)
 
 The Sealos template runs the published Open Design Docker image with persistent workspace storage. Configure access control for any public or shared deployment, matching the Docker deployment guidance above.
 
