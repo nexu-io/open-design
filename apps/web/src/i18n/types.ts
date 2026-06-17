@@ -283,6 +283,12 @@ export interface Dict {
   'settings.amrSignedIn': string;
   'settings.amrNotSignedIn': string;
   'settings.amrSigningIn': string;
+  'settings.amrActivationHint': string;
+  'settings.amrActivationBrowserFailed': string;
+  'settings.amrActivationOpen': string;
+  'settings.amrActivationCopyCode': string;
+  'settings.amrActivationCopy': string;
+  'settings.amrActivationCopied': string;
   'settings.amrCancelSignIn': string;
   'settings.amrAccountStatus': string;
   'settings.amrConsole': string;

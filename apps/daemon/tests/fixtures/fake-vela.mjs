@@ -297,6 +297,18 @@ function loginAndExit() {
     env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL &&
     !(env.VELA_API_URL ?? '').trim()
   ) {
+    // FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS models a direct attempt that
+    // survives the daemon's 250ms startup grace and only then errors out before
+    // printing an activation URL — the pre-activation failure the proxy fallback
+    // must still catch.
+    const failDelayMs = Number(env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL_DELAY_MS) || 0;
+    if (failDelayMs > 0) {
+      setTimeout(() => {
+        stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
+        exit(1);
+      }, failDelayMs);
+      return;
+    }
     stderr.write(`${env.FAKE_VELA_LOGIN_FAIL_WITHOUT_API_URL}\n`);
     exit(1);
   }
@@ -337,6 +349,12 @@ function loginAndExit() {
     stdout.write(`Login successful for ${userEmail}.\n`);
     exit(0);
   };
+  // Print the device-auth activation block first (what real `vela login` emits
+  // and what the daemon's waitForActivation keys off to detect steady state),
+  // then write config after the optional delay so the in-flight window is real.
+  stdout.write('Open this URL to continue:\n');
+  stdout.write('https://fake-vela.example/cli/activate?deviceId=fake-device\n\n');
+  stdout.write('Code: FAKE-CODE\n');
   if (delayMs > 0) setTimeout(finish, delayMs);
   else finish();
 }

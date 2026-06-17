@@ -173,6 +173,50 @@ export interface VelaLoginStatus {
   profile: string;
   user: VelaUser | null;
   configPath: string;
+  /**
+   * Device-authorization URL parsed from `vela login` stdout, surfaced so the
+   * user can complete sign-in manually when the browser did not auto-open.
+   * Present only while a login is in flight and after vela has printed it.
+   */
+  activationUrl?: string;
+  /** Device-authorization user code printed alongside the activation URL. */
+  userCode?: string;
+  /** True when vela warned it could not open the browser automatically. */
+  browserOpenFailed?: boolean;
+}
+
+export interface VelaLoginActivation {
+  activationUrl: string | null;
+  userCode: string | null;
+  browserOpenFailed: boolean;
+}
+
+// `vela login` is a device-authorization flow. Before it best-effort opens the
+// browser it prints, to stdout, the exact lines:
+//
+//   Open this URL to continue:
+//   <activation-url>
+//
+//   Code: <user-code>
+//
+// and, when the auto-open fails, warns on stderr "could not open browser
+// automatically: …" (see apps/cli/internal/commands/login.go in the vela repo).
+// The daemon spawns vela login headless, so this parser recovers the URL/code/
+// warning from the captured streams to surface them to the user. Pure so the
+// extraction rules stay unit-testable against vela's literal output format.
+export function parseVelaLoginActivation(
+  stdout: string,
+  stderr: string,
+): VelaLoginActivation {
+  const urlMatch = /Open this URL to continue:\s*\r?\n\s*(\S+)/i.exec(stdout);
+  // Anchor on a line start so a `user_code=` query param inside the URL is not
+  // mistaken for the dedicated `Code:` line.
+  const codeMatch = /^[^\S\r\n]*Code:\s*(\S+)/im.exec(stdout);
+  return {
+    activationUrl: urlMatch?.[1] ?? null,
+    userCode: codeMatch?.[1] ?? null,
+    browserOpenFailed: /could not open browser automatically/i.test(stderr),
+  };
 }
 
 export interface VelaCredentialRevision {
@@ -235,6 +279,22 @@ export function readVelaLoginStatus(
   const profile = resolveAmrProfile(mergedEnv);
   const configPath = amrConfigPath();
   const loginInFlight = isVelaLoginInFlight();
+  // Only meaningful while signing in (loggedIn becomes true once vela writes the
+  // runtime key); empty otherwise so completed sessions don't echo a stale URL.
+  const activationFields: Partial<VelaLoginStatus> =
+    loginInFlight && activeLoginActivation
+      ? {
+          ...(activeLoginActivation.activationUrl
+            ? { activationUrl: activeLoginActivation.activationUrl }
+            : {}),
+          ...(activeLoginActivation.userCode
+            ? { userCode: activeLoginActivation.userCode }
+            : {}),
+          ...(activeLoginActivation.browserOpenFailed
+            ? { browserOpenFailed: true }
+            : {}),
+        }
+      : {};
   const runtimeKey = mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '';
   const linkUrl = mergedEnv.VELA_LINK_URL?.trim() ?? '';
   if (runtimeKey && linkUrl) {
@@ -244,7 +304,14 @@ export function readVelaLoginStatus(
   const stored = file?.profiles?.[profile];
   const storedRuntimeKey = stored?.runtimeKey?.trim() ?? '';
   if (!storedRuntimeKey) {
-    return { loggedIn: false, loginInFlight, profile, user: null, configPath };
+    return {
+      loggedIn: false,
+      loginInFlight,
+      profile,
+      user: null,
+      configPath,
+      ...activationFields,
+    };
   }
   const rawUser = stored?.user ?? null;
   const user: VelaUser | null = rawUser
@@ -309,7 +376,70 @@ export interface SpawnedVelaLogin {
 
 const activeLoginProcs = new Map<number, ChildProcess>();
 const LOGIN_STARTUP_GRACE_MS = 250;
+const LOGIN_ACTIVATION_GRACE_MS = 10_000;
 const LOGIN_CANCEL_KILL_GRACE_MS = 2000;
+
+// How long the login request blocks waiting for the direct attempt's activation
+// URL before returning and letting the UI poll /status. Overridable so tests can
+// exercise the slow-direct path without a multi-second wait. Never used to kill
+// the direct attempt — see waitForLoginActivationSteadyState.
+function resolveLoginActivationGraceMs(baseEnv: NodeJS.ProcessEnv): number {
+  const raw = Number(baseEnv.OD_AMR_LOGIN_ACTIVATION_GRACE_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : LOGIN_ACTIVATION_GRACE_MS;
+}
+// Cap the captured buffers: the activation URL + code land in the first handful
+// of stdout lines, so a few KB is plenty and bounds memory if vela stays chatty.
+const LOGIN_CAPTURE_LIMIT_BYTES = 8192;
+
+// Activation details captured from the in-flight `vela login` child. Reset on
+// each spawn (one interactive login at a time); `readVelaLoginStatus` only
+// surfaces it while a login is actually in flight.
+let activeLoginActivation: VelaLoginActivation | null = null;
+
+interface VelaLoginActivationCapture {
+  activation: VelaLoginActivation;
+  stdout: string;
+  stderr: string;
+}
+
+// Attach lifetime listeners that accumulate the child's stdout/stderr and keep
+// re-parsing the activation URL/code/warning as output streams in. Unlike
+// `waitForImmediateLoginFailure` (which only reads the first 250ms), this lives
+// for the whole login so a slow CreateDeviceAuthorization round-trip — common on
+// constrained networks, exactly where the browser handoff also tends to fail —
+// still surfaces the URL once it finally prints.
+function beginLoginActivationCapture(child: ChildProcess): VelaLoginActivationCapture {
+  const activation: VelaLoginActivation = {
+    activationUrl: null,
+    userCode: null,
+    browserOpenFailed: false,
+  };
+  const capture: VelaLoginActivationCapture = {
+    activation,
+    stdout: '',
+    stderr: '',
+  };
+  activeLoginActivation = activation;
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk) => {
+    if (capture.stdout.length < LOGIN_CAPTURE_LIMIT_BYTES) {
+      capture.stdout += String(chunk);
+    }
+    const parsed = parseVelaLoginActivation(capture.stdout, capture.stderr);
+    if (parsed.activationUrl) activation.activationUrl = parsed.activationUrl;
+    if (parsed.userCode) activation.userCode = parsed.userCode;
+  });
+  child.stderr?.on('data', (chunk) => {
+    if (capture.stderr.length < LOGIN_CAPTURE_LIMIT_BYTES) {
+      capture.stderr += String(chunk);
+    }
+    if (parseVelaLoginActivation('', capture.stderr).browserOpenFailed) {
+      activation.browserOpenFailed = true;
+    }
+  });
+  return capture;
+}
 
 function isChildRunning(child: ChildProcess): boolean {
   return child.exitCode === null && child.signalCode === null;
@@ -359,6 +489,11 @@ export interface SpawnVelaLoginDeps {
   baseEnv?: NodeJS.ProcessEnv;
   attribution?: AmrEntryAttribution | null;
   defaultApiUrl?: string | null;
+  // When set, block until the direct attempt reaches device-auth steady state
+  // (prints its activation URL) or exits/errors before that, so the login route
+  // can fall back to the IPv4 proxy on a real pre-activation failure rather than
+  // only on a sub-250ms startup crash. See waitForLoginActivationSteadyState.
+  waitForActivation?: boolean;
 }
 
 async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> {
@@ -410,6 +545,78 @@ async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> 
   );
 }
 
+// Wait for the direct `vela login` attempt to either print its device-auth
+// activation URL (healthy — the direct path works even on the transparent-proxy
+// networks this fix targets, just possibly slowly) or exit/error BEFORE printing
+// it (a real failure the caller can retry through the IPv4 proxy). Crucially, a
+// merely slow-but-still-running direct login is NOT killed: once the grace
+// elapses we simply stop blocking the request and let it keep running (the UI
+// polls /status). Killing a slow-healthy direct login and re-routing it through
+// the proxy is exactly the regression this avoids — on a corporate transparent
+// proxy the proxy hop loses the client IP and the upstream 502s. Only an
+// explicit pre-activation exit/error triggers the proxy fallback.
+async function waitForLoginActivationSteadyState(
+  child: ChildProcess,
+  capture: VelaLoginActivationCapture,
+  graceMs: number,
+): Promise<void> {
+  if (capture.activation.activationUrl) return;
+  if (!isChildRunning(child)) {
+    if (child.exitCode === 0) return;
+    const detail = (capture.stderr || capture.stdout).trim();
+    throw new Error(
+      detail ||
+        `vela login exited before device authorization started (code ${child.exitCode ?? 'null'}, signal ${child.signalCode ?? 'null'})`,
+    );
+  }
+
+  const result = await new Promise<
+    | { kind: 'activated' }
+    | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
+    | { kind: 'error'; error: Error }
+    | { kind: 'still-running' }
+  >((resolve) => {
+    let settled = false;
+    let poll: NodeJS.Timeout | null = null;
+    let timer: NodeJS.Timeout | null = null;
+    const finish = (
+      value:
+        | { kind: 'activated' }
+        | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
+        | { kind: 'error'; error: Error }
+        | { kind: 'still-running' },
+    ) => {
+      if (settled) return;
+      settled = true;
+      if (poll) clearInterval(poll);
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+    poll = setInterval(() => {
+      if (capture.activation.activationUrl) finish({ kind: 'activated' });
+    }, 50);
+    timer = setTimeout(() => finish({ kind: 'still-running' }), graceMs);
+    timer.unref?.();
+    child.once('exit', (code, signal) => finish({ kind: 'exit', code, signal }));
+    child.once('error', (error) => finish({ kind: 'error', error }));
+    if (capture.activation.activationUrl) finish({ kind: 'activated' });
+  });
+
+  if (result.kind === 'activated') return;
+  // Slow but still alive: leave the direct attempt running and let the request
+  // return — do NOT kill it or fall back to the proxy.
+  if (result.kind === 'still-running') return;
+  if (result.kind === 'error') {
+    throw new Error(`vela login failed to start: ${result.error.message}`);
+  }
+  if (result.code === 0) return;
+  const detail = (capture.stderr || capture.stdout).trim();
+  throw new Error(
+    detail ||
+      `vela login exited before device authorization started (code ${result.code ?? 'null'}, signal ${result.signal ?? 'null'})`,
+  );
+}
+
 export async function spawnVelaLogin(
   deps: SpawnVelaLoginDeps = {},
 ): Promise<SpawnedVelaLogin> {
@@ -451,13 +658,27 @@ export async function spawnVelaLogin(
   activeLoginProcs.set(child.pid, child);
   const cleanup = () => {
     if (typeof child.pid === 'number') activeLoginProcs.delete(child.pid);
+    activeLoginActivation = null;
   };
   child.once('exit', cleanup);
   child.once('error', cleanup);
+  // Capture the activation URL/code/warning for the whole login (not just the
+  // 250ms startup race) so readVelaLoginStatus can surface them. Start before
+  // the grace wait so no early stdout is missed.
+  const activationCapture = beginLoginActivationCapture(child);
   await waitForImmediateLoginFailure(child);
-  // We don't surface URL/code in this API — vela CLI opens the browser itself
-  // (via OpenBrowser in apps/cli/internal/commands/login.go). Callers poll
-  // readVelaLoginStatus() to detect completion.
+  if (deps.waitForActivation) {
+    await waitForLoginActivationSteadyState(
+      child,
+      activationCapture,
+      resolveLoginActivationGraceMs(baseEnv),
+    );
+  }
+  // vela opens the browser itself (OpenBrowser in apps/cli/.../login.go), but it
+  // also prints the activation URL + code to stdout first and warns on stderr if
+  // the auto-open failed. We capture those above and expose them via
+  // readVelaLoginStatus() so the UI can offer a manual link when the browser
+  // never opened. Callers still poll readVelaLoginStatus() to detect completion.
   return {
     pid: child.pid,
     startedAt: new Date().toISOString(),

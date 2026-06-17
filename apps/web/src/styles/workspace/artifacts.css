@@ -1465,6 +1465,87 @@
   overflow-wrap: anywhere;
   text-align: left;
 }
+/* Device-authorization fallback shown while signing in to AMR. Surfaced from
+   vela login's stdout so the user can finish even when the browser did not
+   auto-open. Unscoped so it renders consistently in Settings, onboarding, and
+   the chat auth surfaces; takes a full row inside the wrapping flex pill. */
+/* The pill's base layout is a single non-wrapping flex row; let it wrap so the
+   full-width activation block drops onto its own line below the status. Scoped
+   by :has so only the signing-in-with-activation case is affected. */
+.amr-account-control--signing-in:has(.amr-login-activation) {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.amr-login-activation {
+  flex: 1 1 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  text-align: left;
+}
+.amr-login-activation__hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted, #6b7280);
+}
+.amr-login-activation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.amr-login-activation__open {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.amr-login-activation__open:hover {
+  background: var(--accent-strong, var(--accent));
+}
+.amr-login-activation__code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.amr-login-activation__code:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.amr-login-activation__code-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: inherit;
+}
+.amr-login-activation__code-action {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-strong, var(--accent));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .agent-card-amr-auth .amr-login-pill-badge {
   flex: 0 0 auto;
   padding: 1px 5px;

@@ -90,8 +90,9 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
     );
 });
 
-test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR authorization controls', async ({ page }) => {
+test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', async ({ page }) => {
   let loggedIn = false;
+  let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
@@ -114,6 +115,7 @@ test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR auth
     });
   });
   await page.route('**/api/integrations/vela/login', async (route) => {
+    loginRequested = true;
     loggedIn = true;
     await route.fulfill({
       status: 202,
@@ -134,18 +136,29 @@ test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR auth
   await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
   await authorizeAndRetry.click();
 
-  const settings = page.getByRole('dialog');
-  await expect(settings).toBeVisible({ timeout: 10_000 });
-  const authorize = settings.getByRole('button', { name: /^Authorize$|^授权$/i });
-  await expect(authorize).toBeVisible();
-  await authorize.click();
-
-  await expect(settings.getByRole('button', { name: /^Sign out$|^退出登录$/i })).toBeVisible({
-    timeout: 10_000,
-  });
+  // New inline flow: clicking Authorize & retry starts vela login in place (it
+  // POSTs /login directly) instead of bouncing the user out to the Settings
+  // dialog. The run then auto-retries once /status reports signed in.
+  await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
+  // AMR_AUTH_REQUIRED means the AMR session is invalid, so /status reports
+  // signed-out — the inline auth card then offers the Authorize & retry action.
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: false,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: null,
+      }),
+    });
+  });
+
   const amr = await setupAmrWorkspace(page, { failAuthAtPrompt: true, selectedAgentId: 'amr' });
 
   await gotoProject(page, amr.projectId);

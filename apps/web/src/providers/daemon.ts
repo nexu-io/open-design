@@ -747,6 +747,12 @@ export interface VelaLoginStatus {
   profile: string;
   user: VelaUser | null;
   configPath: string;
+  // Device-authorization details parsed from `vela login` output while a login
+  // is in flight, so the UI can offer a manual sign-in link when the browser
+  // did not auto-open. See parseVelaLoginActivation in the daemon's vela.ts.
+  activationUrl?: string;
+  userCode?: string;
+  browserOpenFailed?: boolean;
 }
 
 // AMR (vela) login surfaces three thin endpoints on the daemon:
