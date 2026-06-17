@@ -10,25 +10,25 @@ name: Docker image
 on:
   push:
     branches: [main]
-    tags: ['v*.*.*']
+    tags: ["v*.*.*"]
   pull_request:
     paths:
-      - '.github/workflows/docker-image.yml'
-      - 'deploy/**'
-      - 'apps/**'
-      - 'packages/**'
-      - 'tools/**'
-      - 'scripts/**'
-      - 'e2e/**'
-      - 'skills/**'
-      - 'design-systems/**'
-      - 'craft/**'
-      - 'prompt-templates/**'
-      - 'assets/**'
-      - 'plugins/_official/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
+      - ".github/workflows/docker-image.yml"
+      - "deploy/**"
+      - "apps/**"
+      - "packages/**"
+      - "tools/**"
+      - "scripts/**"
+      - "e2e/**"
+      - "skills/**"
+      - "design-systems/**"
+      - "craft/**"
+      - "prompt-templates/**"
+      - "assets/**"
+      - "plugins/_official/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
 
 jobs:
   build-and-push:

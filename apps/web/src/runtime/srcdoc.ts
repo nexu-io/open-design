@@ -15,34 +15,31 @@
  * after every navigation so the host can render its own counter / dots.
  */
 import {
-  buildManualEditBridge,
-  buildManualEditBridgeStyle,
-  MANUAL_EDIT_DISCOVERY_SELECTOR,
-  MANUAL_EDIT_SOURCE_PATH_ATTR,
-} from '../edit-mode/bridge';
+	buildManualEditBridge,
+	buildManualEditBridgeStyle,
+	MANUAL_EDIT_DISCOVERY_SELECTOR,
+	MANUAL_EDIT_SOURCE_PATH_ATTR,
+} from "../edit-mode/bridge";
 
 export type SrcdocOptions = {
-  deck?: boolean;
-  baseHref?: string;
-  initialSlideIndex?: number;
-  commentBridge?: boolean;
-  inspectBridge?: boolean;
-  selectionBridge?: boolean;
-  editBridge?: boolean;
-  paletteBridge?: boolean;
-  initialPalette?: string | null;
-  previewFocusGuard?: boolean;
+	deck?: boolean;
+	baseHref?: string;
+	initialSlideIndex?: number;
+	commentBridge?: boolean;
+	inspectBridge?: boolean;
+	selectionBridge?: boolean;
+	editBridge?: boolean;
+	paletteBridge?: boolean;
+	initialPalette?: string | null;
+	previewFocusGuard?: boolean;
 };
 
-export function buildSrcdoc(
-  html: string,
-  options: SrcdocOptions = {}
-): string {
-  const head = html.trimStart().slice(0, 64).toLowerCase();
-  const isFullDoc = head.startsWith("<!doctype") || head.startsWith("<html");
-  const wrapped = isFullDoc
-    ? html
-    : `<!doctype html>
+export function buildSrcdoc(html: string, options: SrcdocOptions = {}): string {
+	const head = html.trimStart().slice(0, 64).toLowerCase();
+	const isFullDoc = head.startsWith("<!doctype") || head.startsWith("<html");
+	const wrapped = isFullDoc
+		? html
+		: `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -50,36 +47,51 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withOdIds = annotateMissingOdIds(wrapped);
-  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
-  const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
-  const withShim = injectSandboxShim(withBase);
-  const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
-  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
-  // Comment + Inspect share an element-selection bridge: both pick a
-  // [data-od-id] / [data-screen-label] node and route the host's reply
-  // to either the comment popover (annotate) or the inspect panel
-  // (live-style overrides). Inject once when either mode is on. Pass the
-  // requested modes through so the bridge boots with picking already
-  // active — without that initial seed there is a window after each
-  // srcdoc rebuild where the host's `od:*-mode` postMessage races the
-  // bridge's own listener install and the iframe ignores clicks.
-  const withSelection = options.selectionBridge || options.commentBridge || options.inspectBridge
-    ? injectSelectionBridge(withDeck, {
-        initialCommentMode: !!options.commentBridge,
-        initialInspectMode: !!options.inspectBridge,
-      })
-    : withDeck;
-  const withPalette = options.paletteBridge
-    ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
-    : withSelection;
-  const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
-  // The tweaks bridge is always injected — it's a passive listener that
-  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
-  // it to a per-call option would force iframe srcdoc regeneration (and a
-  // visible flash) every time the host toggle flips.
-  const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+	const withOdIds = annotateMissingOdIds(wrapped);
+	const withSourcePaths = options.editBridge
+		? annotateManualEditSourcePaths(withOdIds)
+		: withOdIds;
+	const withBase = options.baseHref
+		? injectBaseHref(withSourcePaths, options.baseHref)
+		: withSourcePaths;
+	const withShim = injectSandboxShim(withBase);
+	const withFocusGuard = options.previewFocusGuard
+		? injectPreviewFocusGuard(withShim)
+		: withShim;
+	const withDeck = options.deck
+		? injectDeckBridge(withFocusGuard, options.initialSlideIndex)
+		: withFocusGuard;
+	// Comment + Inspect share an element-selection bridge: both pick a
+	// [data-od-id] / [data-screen-label] node and route the host's reply
+	// to either the comment popover (annotate) or the inspect panel
+	// (live-style overrides). Inject once when either mode is on. Pass the
+	// requested modes through so the bridge boots with picking already
+	// active — without that initial seed there is a window after each
+	// srcdoc rebuild where the host's `od:*-mode` postMessage races the
+	// bridge's own listener install and the iframe ignores clicks.
+	const withSelection =
+		options.selectionBridge || options.commentBridge || options.inspectBridge
+			? injectSelectionBridge(withDeck, {
+					initialCommentMode: !!options.commentBridge,
+					initialInspectMode: !!options.inspectBridge,
+				})
+			: withDeck;
+	const withPalette = options.paletteBridge
+		? injectPaletteBridge(withSelection, {
+				initialPalette: options.initialPalette ?? null,
+			})
+		: withSelection;
+	const withEdit = options.editBridge
+		? injectManualEditBridge(withPalette)
+		: withPalette;
+	// The tweaks bridge is always injected — it's a passive listener that
+	// toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+	// it to a per-call option would force iframe srcdoc regeneration (and a
+	// visible flash) every time the host toggle flips.
+	const withTweaks = injectTweaksBridge(withEdit);
+	return injectSrcdocTransportActivationBridge(
+		injectSnapshotBridge(withTweaks),
+	);
 }
 
 /**
@@ -96,7 +108,7 @@ export function buildSrcdoc(
  *      iframe stays stuck on the empty shell. See #2253.
  */
 export function buildLazySrcdocTransport(): string {
-  return `<!doctype html>
+	return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -121,16 +133,16 @@ export function buildLazySrcdocTransport(): string {
 }
 
 export interface SrcDocActivationInputs {
-  /** The real artifact HTML the host wants to inject into the shell. */
-  srcDoc: string;
-  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
-  useUrlLoadPreview: boolean;
-  /** Host's render pipeline is routing through the lazy transport shell. */
-  useLazySrcDocTransport: boolean;
-  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
-  shellReady: boolean;
-  /** Which artifact HTML has already been pushed into this shell (dedupe). */
-  activatedHtml: string | null;
+	/** The real artifact HTML the host wants to inject into the shell. */
+	srcDoc: string;
+	/** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+	useUrlLoadPreview: boolean;
+	/** Host's render pipeline is routing through the lazy transport shell. */
+	useLazySrcDocTransport: boolean;
+	/** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+	shellReady: boolean;
+	/** Which artifact HTML has already been pushed into this shell (dedupe). */
+	activatedHtml: string | null;
 }
 
 /**
@@ -144,17 +156,19 @@ export interface SrcDocActivationInputs {
  * on its empty 536-byte body, and the dedupe check then suppresses the
  * follow-up activation from the iframe's onLoad path.
  */
-export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
-  if (!state.srcDoc) return false;
-  if (state.useUrlLoadPreview) return false;
-  if (!state.useLazySrcDocTransport) return false;
-  if (!state.shellReady) return false;
-  if (state.activatedHtml === state.srcDoc) return false;
-  return true;
+export function canActivateSrcDocTransport(
+	state: SrcDocActivationInputs,
+): boolean {
+	if (!state.srcDoc) return false;
+	if (state.useUrlLoadPreview) return false;
+	if (!state.useLazySrcDocTransport) return false;
+	if (!state.shellReady) return false;
+	if (state.activatedHtml === state.srcDoc) return false;
+	return true;
 }
 
 function injectSrcdocTransportActivationBridge(doc: string): string {
-  const script = `<script data-od-srcdoc-transport-activation>(function(){
+	const script = `<script data-od-srcdoc-transport-activation>(function(){
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
@@ -163,11 +177,11 @@ function injectSrcdocTransportActivationBridge(doc: string): string {
     document.close();
   });
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+	return injectBeforeBodyEnd(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {
-  const script = `<script data-od-snapshot-bridge>(function(){
+	const script = `<script data-od-snapshot-bridge>(function(){
   var SNAPSHOT_STYLE_PROPS = [
     'display','position','box-sizing','width','height','min-width','max-width','min-height','max-height',
     'margin','margin-top','margin-right','margin-bottom','margin-left',
@@ -355,7 +369,7 @@ function injectSnapshotBridge(doc: string): string {
     waitForImages().then(function(){ renderSnapshot(String(data.id)); });
   });
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+	return injectBeforeBodyEnd(doc, script);
 }
 
 // Palette bridge: re-skin the page on host postMessage. Generated pages
@@ -365,13 +379,13 @@ function injectSnapshotBridge(doc: string): string {
 // lightness — pale tints stay pale, bold CTAs stay bold, just in the
 // new color family. Mono-noir desaturates instead of shifting.
 function injectPaletteBridge(
-  doc: string,
-  options: { initialPalette: string | null } = { initialPalette: null },
+	doc: string,
+	options: { initialPalette: string | null } = { initialPalette: null },
 ): string {
-  const initial = options.initialPalette
-    ? JSON.stringify(String(options.initialPalette))
-    : 'null';
-  const script = `<script data-od-palette-bridge>(function(){
+	const initial = options.initialPalette
+		? JSON.stringify(String(options.initialPalette))
+		: "null";
+	const script = `<script data-od-palette-bridge>(function(){
   var PALETTES = {
     'coral':       { hue: 10,  satFloor: 0.55, mono: false },
     'electric':    { hue: 262, satFloor: 0.55, mono: false },
@@ -557,39 +571,41 @@ function injectPaletteBridge(
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+	return injectBeforeBodyEnd(doc, script);
 }
 
 function annotateManualEditSourcePaths(doc: string): string {
-  if (typeof DOMParser === 'undefined') return doc;
-  try {
-    const parsed = new DOMParser().parseFromString(doc, 'text/html');
-    parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
-      if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
-      const path = sourcePathForElement(el);
-      if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
-    });
-    return serializeHtmlDocument(parsed);
-  } catch {
-    return doc;
-  }
+	if (typeof DOMParser === "undefined") return doc;
+	try {
+		const parsed = new DOMParser().parseFromString(doc, "text/html");
+		parsed.body
+			.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR)
+			.forEach((el) => {
+				if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
+				const path = sourcePathForElement(el);
+				if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
+			});
+		return serializeHtmlDocument(parsed);
+	} catch {
+		return doc;
+	}
 }
 
 function sourcePathForElement(el: Element): string {
-  const parts: number[] = [];
-  let node: Element | null = el;
-  while (node && node !== node.ownerDocument.body) {
-    const parent: Element | null = node.parentElement;
-    if (!parent) break;
-    parts.unshift(Array.prototype.indexOf.call(parent.children, node));
-    node = parent;
-  }
-  return parts.length ? `path-${parts.join('-')}` : '';
+	const parts: number[] = [];
+	let node: Element | null = el;
+	while (node && node !== node.ownerDocument.body) {
+		const parent: Element | null = node.parentElement;
+		if (!parent) break;
+		parts.unshift(Array.prototype.indexOf.call(parent.children, node));
+		node = parent;
+	}
+	return parts.length ? `path-${parts.join("-")}` : "";
 }
 
 function serializeHtmlDocument(doc: Document): string {
-  const doctype = doc.doctype ? '<!doctype html>\n' : '';
-  return `${doctype}${doc.documentElement.outerHTML}`;
+	const doctype = doc.doctype ? "<!doctype html>\n" : "";
+	return `${doctype}${doc.documentElement.outerHTML}`;
 }
 
 /**
@@ -600,107 +616,143 @@ function serializeHtmlDocument(doc: Document): string {
  * annotations.
  */
 function annotateMissingOdIds(doc: string): string {
-  if (typeof DOMParser === 'undefined') return doc;
-  try {
-    const parsed = new DOMParser().parseFromString(doc, 'text/html');
-    // Only target divs that are direct children of semantic containers or body;
-    // deeply nested layout divs (e.g. flex/grid wrappers) create noise in the
-    // selection bridge without adding meaningful pickable targets.
-    const selector = [
-      'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
-      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'button', 'a', '[id]',
-      'body > div[class]', 'body > div[id]',
-      'section > div[class]', 'section > div[id]',
-      'article > div[class]', 'article > div[id]',
-      'main > div[class]', 'main > div[id]',
-      'header > div[class]', 'header > div[id]',
-      'footer > div[class]', 'footer > div[id]',
-      'nav > div[class]', 'nav > div[id]',
-      'aside > div[class]', 'aside > div[id]',
-      '[id] > div[class]', '[id] > div[id]',
-    ].join(', ');
-    const skipTags = new Set(['script', 'style', 'template', 'noscript', 'iframe', 'object', 'embed']);
-    let fallbackIndex = 0;
-    parsed.body.querySelectorAll(selector).forEach((el) => {
-      if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
-      const tag = el.tagName.toLowerCase();
-      if (skipTags.has(tag)) return;
-      const path = sourcePathForElement(el);
-      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
-    });
-    return serializeHtmlDocument(parsed);
-  } catch {
-    return doc;
-  }
+	if (typeof DOMParser === "undefined") return doc;
+	try {
+		const parsed = new DOMParser().parseFromString(doc, "text/html");
+		// Only target divs that are direct children of semantic containers or body;
+		// deeply nested layout divs (e.g. flex/grid wrappers) create noise in the
+		// selection bridge without adding meaningful pickable targets.
+		const selector = [
+			"section",
+			"article",
+			"header",
+			"footer",
+			"nav",
+			"main",
+			"aside",
+			"h1",
+			"h2",
+			"h3",
+			"h4",
+			"h5",
+			"h6",
+			"button",
+			"a",
+			"[id]",
+			"body > div[class]",
+			"body > div[id]",
+			"section > div[class]",
+			"section > div[id]",
+			"article > div[class]",
+			"article > div[id]",
+			"main > div[class]",
+			"main > div[id]",
+			"header > div[class]",
+			"header > div[id]",
+			"footer > div[class]",
+			"footer > div[id]",
+			"nav > div[class]",
+			"nav > div[id]",
+			"aside > div[class]",
+			"aside > div[id]",
+			"[id] > div[class]",
+			"[id] > div[id]",
+		].join(", ");
+		const skipTags = new Set([
+			"script",
+			"style",
+			"template",
+			"noscript",
+			"iframe",
+			"object",
+			"embed",
+		]);
+		let fallbackIndex = 0;
+		parsed.body.querySelectorAll(selector).forEach((el) => {
+			if (el.hasAttribute("data-od-id") || el.hasAttribute("data-screen-label"))
+				return;
+			const tag = el.tagName.toLowerCase();
+			if (skipTags.has(tag)) return;
+			const path = sourcePathForElement(el);
+			el.setAttribute("data-od-id", path || `od-${tag}-${fallbackIndex++}`);
+		});
+		return serializeHtmlDocument(parsed);
+	} catch {
+		return doc;
+	}
 }
 
 function injectManualEditBridge(doc: string): string {
-  const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
-  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
+	const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
+	return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
-  // String-first: a plain splice before the real </head> (or after <head…>) is
-  // correct for well-formed documents and avoids a full DOMParser parse +
-  // re-serialize. Every bridge calls this, so the parse path was the dominant
-  // srcdoc-build cost; DOMParser is now only the fallback for head-less
-  // fragments where we can't locate an insertion point textually. Find the real
-  // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
-  const lower = doc.toLowerCase();
-  const bodyStart = lower.indexOf('<body');
-  const limit = bodyStart >= 0 ? bodyStart : lower.length;
-  const idx = lower.lastIndexOf('</head>', limit - 1);
-  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
-  if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
-  // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* fall through to prepend */ }
-  }
-  return payload + doc;
+	// String-first: a plain splice before the real </head> (or after <head…>) is
+	// correct for well-formed documents and avoids a full DOMParser parse +
+	// re-serialize. Every bridge calls this, so the parse path was the dominant
+	// srcdoc-build cost; DOMParser is now only the fallback for head-less
+	// fragments where we can't locate an insertion point textually. Find the real
+	// </head> (last one before <body>) to skip </head> literals in <script>/<style>.
+	const lower = doc.toLowerCase();
+	const bodyStart = lower.indexOf("<body");
+	const limit = bodyStart >= 0 ? bodyStart : lower.length;
+	const idx = lower.lastIndexOf("</head>", limit - 1);
+	if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+	if (/<head[^>]*>/i.test(doc))
+		return doc.replace(/<head[^>]*>/i, (m) => `${m}${payload}`);
+	// No recognizable <head>: let DOMParser normalize (it synthesizes a head).
+	if (typeof DOMParser !== "undefined") {
+		try {
+			const parsed = new DOMParser().parseFromString(doc, "text/html");
+			if (parsed.head) parsed.head.insertAdjacentHTML("beforeend", payload);
+			return serializeHtmlDocument(parsed);
+		} catch {
+			/* fall through to prepend */
+		}
+	}
+	return payload + doc;
 }
 
 function injectBeforeBodyEnd(doc: string, payload: string): string {
-  // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
-  // before </html>) to skip </body> literals inside <script>/<style>.
-  const lower = doc.toLowerCase();
-  const htmlEnd = lower.lastIndexOf('</html>');
-  const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
-  const idx = lower.lastIndexOf('</body>', limit - 1);
-  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
-  // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parsed = new DOMParser().parseFromString(doc, 'text/html');
-      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
-      return serializeHtmlDocument(parsed);
-    } catch { /* fall through to append */ }
-  }
-  return doc + payload;
+	// String-first (see injectBeforeHeadEnd). Find the real </body> (last one
+	// before </html>) to skip </body> literals inside <script>/<style>.
+	const lower = doc.toLowerCase();
+	const htmlEnd = lower.lastIndexOf("</html>");
+	const limit = htmlEnd >= 0 ? htmlEnd : lower.length;
+	const idx = lower.lastIndexOf("</body>", limit - 1);
+	if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+	// No recognizable </body>: let DOMParser normalize (it synthesizes a body).
+	if (typeof DOMParser !== "undefined") {
+		try {
+			const parsed = new DOMParser().parseFromString(doc, "text/html");
+			if (parsed.body) parsed.body.insertAdjacentHTML("beforeend", payload);
+			return serializeHtmlDocument(parsed);
+		} catch {
+			/* fall through to append */
+		}
+	}
+	return doc + payload;
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
-  const safeHref = escapeAttr(baseHref);
-  const tag = `<base href="${safeHref}">`;
-  if (/<head[^>]*>/i.test(doc)) {
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
-  }
-  if (/<html[^>]*>/i.test(doc)) {
-    return doc.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
-  }
-  return tag + doc;
+	const safeHref = escapeAttr(baseHref);
+	const tag = `<base href="${safeHref}">`;
+	if (/<head[^>]*>/i.test(doc)) {
+		return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
+	}
+	if (/<html[^>]*>/i.test(doc)) {
+		return doc.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
+	}
+	return tag + doc;
 }
 
 function escapeAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
 }
 
 // Sandboxed iframes (we use `sandbox="allow-scripts"`) without
@@ -711,12 +763,12 @@ function escapeAttr(value: string): string {
 // becomes a static, unnavigable preview. We install a same-origin
 // in-memory shim BEFORE any user script runs so those decks degrade
 // gracefully (position just doesn't persist across reloads).
-// allow-popups and allow-popups-to-escape-sandbox are needed for 
+// allow-popups and allow-popups-to-escape-sandbox are needed for
 // links with target="_blank" to work in the sandboxed preview.
 // Empty hrefs and hash only hrefs will be intercepted and ignored.
 // hrefs leading to an id on the page will be scrolled into view.
 function injectSandboxShim(doc: string): string {
-  const shim = `<script data-od-sandbox-shim>(function(){
+	const shim = `<script data-od-sandbox-shim>(function(){
   function makeStore(){
     var data = {};
     var api = {
@@ -774,15 +826,15 @@ function injectSandboxShim(doc: string): string {
     }
   });
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
-  return shim + doc;
+	if (/<head[^>]*>/i.test(doc))
+		return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
+	if (/<body[^>]*>/i.test(doc))
+		return doc.replace(/<body[^>]*>/i, (m) => `${m}${shim}`);
+	return shim + doc;
 }
 
 function injectPreviewFocusGuard(doc: string): string {
-  const script = `<script data-od-preview-focus-guard>(function(){
+	const script = `<script data-od-preview-focus-guard>(function(){
   var lastTrustedInputAt = 0;
   function userActivated(){
     return Date.now() - lastTrustedInputAt < 1000;
@@ -817,11 +869,11 @@ function injectPreviewFocusGuard(doc: string): string {
     });
   } catch (_) {}
 })();</script>`;
-  if (/<head[^>]*>/i.test(doc))
-    return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
-  if (/<body[^>]*>/i.test(doc))
-    return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
-  return script + doc;
+	if (/<head[^>]*>/i.test(doc))
+		return doc.replace(/<head[^>]*>/i, (m) => `${m}${script}`);
+	if (/<body[^>]*>/i.test(doc))
+		return doc.replace(/<body[^>]*>/i, (m) => `${m}${script}`);
+	return script + doc;
 }
 
 // Selection bridge: shared substrate for Comment mode and Inspect mode.
@@ -863,12 +915,12 @@ function injectPreviewFocusGuard(doc: string): string {
 // sandboxing + the prop allow-list / value sanitization below to contain
 // damage. Any parent able to postMessage here can already mount the iframe.
 function injectSelectionBridge(
-  doc: string,
-  options: { initialCommentMode?: boolean; initialInspectMode?: boolean } = {},
+	doc: string,
+	options: { initialCommentMode?: boolean; initialInspectMode?: boolean } = {},
 ): string {
-  const initialComment = options.initialCommentMode ? 'true' : 'false';
-  const initialInspect = options.initialInspectMode ? 'true' : 'false';
-  const script = `<script data-od-selection-bridge>(function(){
+	const initialComment = options.initialCommentMode ? "true" : "false";
+	const initialInspect = options.initialInspectMode ? "true" : "false";
+	const script = `<script data-od-selection-bridge>(function(){
   var commentEnabled = ${initialComment};
   var inspectEnabled = ${initialInspect};
   // Comment mode has two sub-tools (kept on the host side as boardTool):
@@ -1647,7 +1699,7 @@ function meaningfulDomFallbackTarget(el) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
   else setTimeout(postPreviewScroll, 0);
 })();</script>`;
-  const style = `<style data-od-selection-bridge-style>
+	const style = `<style data-od-selection-bridge-style>
 html[data-od-comment-mode] body * { cursor: crosshair !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
@@ -1657,7 +1709,7 @@ html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cel
 html[data-od-comment-mode] body iframe,
 html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 </style>`;
-  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
+	return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }
 
 // The deck bridge supports three deck conventions found across our skills
@@ -1694,16 +1746,16 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // black preview with a sliver of slide content in the top-left. Skip the
 // override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
-  const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
-    ? Math.max(0, Math.floor(initialSlideIndex))
-    : 0;
-  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
-  const styleFix = isFrameworkDeck
-    ? ''
-    : `<style data-od-deck-fix>
+	const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
+		? Math.max(0, Math.floor(initialSlideIndex))
+		: 0;
+	const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+	const styleFix = isFrameworkDeck
+		? ""
+		: `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
-  const script = `<script data-od-deck-bridge>(function(){
+	const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
   function slides(){
@@ -2137,7 +2189,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   observeSlides();
 })();</script>`;
-  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
+	return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
 }
 
 // The tweaks bridge lets the host toolbar toggle the visibility of the artifact's
@@ -2147,10 +2199,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
 // so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
 // host can disable the toggle on artifacts without a `.tw-panel`.
 function injectTweaksBridge(doc: string): string {
-  // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
-  // opacity) so the CSS transition plays in both directions. `.tw-restore` is
-  // kept permanently hidden — the host toolbar is the only entry point.
-  const style = `<style data-od-tweaks-bridge-style>
+	// Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
+	// opacity) so the CSS transition plays in both directions. `.tw-restore` is
+	// kept permanently hidden — the host toolbar is the only entry point.
+	const style = `<style data-od-tweaks-bridge-style>
 [data-od-tweaks-hidden] .tw-panel {
   transform: translateX(calc(100% + 32px)) !important;
   opacity: 0 !important;
@@ -2158,7 +2210,7 @@ function injectTweaksBridge(doc: string): string {
 }
 .tw-restore { display: none !important; }
 </style>`;
-  const script = `<script data-od-tweaks-bridge>(function(){
+	const script = `<script data-od-tweaks-bridge>(function(){
   // Synchronously hide BEFORE the artifact body parses so the panel never
   // flashes on initial paint. The host removes the attribute via postMessage
   // once it knows the desired state.
@@ -2247,14 +2299,16 @@ function injectTweaksBridge(doc: string): string {
     setPanelVisible(!!ev.data.visible);
   });
 })();</script>`;
-  const withStyle = /<\/head>/i.test(doc)
-    ? doc.replace(/<\/head>/i, style + '</head>')
-    : /<head[^>]*>/i.test(doc)
-      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
-      : style + doc;
-  // Inject the bridge as early as possible (inside <head>) so the synchronous
-  // attribute set runs before the artifact body parses.
-  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
-  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
-  return script + withStyle;
+	const withStyle = /<\/head>/i.test(doc)
+		? doc.replace(/<\/head>/i, style + "</head>")
+		: /<head[^>]*>/i.test(doc)
+			? doc.replace(/<head[^>]*>/i, (m) => m + style)
+			: style + doc;
+	// Inject the bridge as early as possible (inside <head>) so the synchronous
+	// attribute set runs before the artifact body parses.
+	if (/<\/head>/i.test(withStyle))
+		return withStyle.replace(/<\/head>/i, script + "</head>");
+	if (/<head[^>]*>/i.test(withStyle))
+		return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
+	return script + withStyle;
 }
