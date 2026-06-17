@@ -190,14 +190,42 @@ describe("backward compatibility", () => {
 		delete process.env.OD_TRUSTED_PROXY;
 	});
 
-	it("OD_BEHIND_PROXY=cloudflare enables trusted-proxy mode (deprecated)", async () => {
+	it("OD_BEHIND_PROXY=cloudflare is ignored (CF Access removed)", async () => {
 		delete process.env.OD_ACCESS_TOKEN;
 		delete process.env.OD_API_TOKEN;
+		delete process.env.OD_TRUSTED_PROXY;
 		process.env.OD_BEHIND_PROXY = "cloudflare";
-		// CF config is required for the old OD_BEHIND_PROXY path
 		process.env.OD_CF_ACCESS_TEAM_DOMAIN = "test.cloudflareaccess.com";
 		process.env.OD_CF_ACCESS_AUD = "test-aud";
 		process.env.OD_CF_ACCESS_UNSAFE_DOMAIN = "1";
+
+		// OD_BEHIND_PROXY is no longer an auth signal. Without OD_TRUSTED_PROXY
+		// or OD_ACCESS_TOKEN, mode resolves to 'none' — loopback only.
+		const started = (await startServer({
+			port: 0,
+			host: "127.0.0.1",
+			returnServer: true,
+		})) as {
+			url: string;
+			server: http.Server;
+			shutdown?: () => Promise<void> | void;
+		};
+		server = started.server;
+		shutdown = started.shutdown;
+		baseUrl = started.url;
+
+		// Loopback bypass returns 200 — no CF middleware is installed
+		const resp = await fetch(`${baseUrl}/api/plugins`);
+		expect(resp.status).toBe(200);
+	});
+
+	it("OD_CF_ACCESS_* vars alone do not activate any auth mode", async () => {
+		delete process.env.OD_ACCESS_TOKEN;
+		delete process.env.OD_API_TOKEN;
+		delete process.env.OD_TRUSTED_PROXY;
+		delete process.env.OD_BEHIND_PROXY;
+		process.env.OD_CF_ACCESS_TEAM_DOMAIN = "test.cloudflareaccess.com";
+		process.env.OD_CF_ACCESS_AUD = "test-aud";
 
 		const started = (await startServer({
 			port: 0,
@@ -212,19 +240,9 @@ describe("backward compatibility", () => {
 		shutdown = started.shutdown;
 		baseUrl = started.url;
 
-		// Should work — trusted-proxy mode via deprecated var
+		// Without OD_TRUSTED_PROXY or OD_ACCESS_TOKEN, mode is 'none'
 		const resp = await fetch(`${baseUrl}/api/plugins`);
-		expect(resp.status).toBe(401); // CF JWT required (no assertion header)
-	});
-
-	it("OD_BEHIND_PROXY=cloudflare throws when CF config is missing (preserves old strict behavior)", async () => {
-		delete process.env.OD_CF_ACCESS_TEAM_DOMAIN;
-		delete process.env.OD_CF_ACCESS_AUD;
-		process.env.OD_BEHIND_PROXY = "cloudflare";
-
-		await expect(
-			startServer({ port: 0, host: "127.0.0.1", returnServer: true }),
-		).rejects.toThrow(/OD_BEHIND_PROXY/);
+		expect(resp.status).toBe(200);
 	});
 
 	it("OD_API_TOKEN enables access-token mode (deprecated)", async () => {
