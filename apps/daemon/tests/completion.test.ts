@@ -249,6 +249,19 @@ describe('computeCompletions — per-command flag overrides', () => {
     const out = computeCompletions({ words: ['config'], current: '--' });
     expect(out).toEqual(['--daemon-url', '--help', '--json']);
   });
+
+  // `od research` (dispatches only `search`) and `od media` (generate/wait)
+  // parse flag sets in cli.ts that omit --json, so completion must not
+  // advertise it for them. Pins the COMMAND_SPEC override and the resolver.
+  for (const command of ['research', 'media'] as const) {
+    it(`does not suggest --json for \`od ${command} --<TAB>\``, () => {
+      expect(COMMAND_SPEC[command]?.flags).toEqual(['--help', '--daemon-url']);
+      const out = computeCompletions({ words: [command], current: '--' });
+      expect(out).not.toContain('--json');
+      expect(out).toContain('--help');
+      expect(out).toContain('--daemon-url');
+    });
+  }
 });
 
 // Fixture pinning the known second-level surface for command families that

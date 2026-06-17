@@ -64,9 +64,14 @@ const VALUE_FLAGS = new Set(['--daemon-url']);
 // user who types either gets completion.
 export const COMMAND_SPEC: Record<string, CommandSpec> = {
   artifacts: { subcommands: [] },
-  media: { subcommands: ['generate', 'wait'] },
+  // `media generate`/`media wait` parse only MEDIA_GENERATE_*_FLAGS in cli.ts,
+  // which omit --json (output is plain text / streamed). Advertising the
+  // global --json here would suggest a flag the parser rejects.
+  media: { subcommands: ['generate', 'wait'], flags: ['--help', '--daemon-url'] },
   mcp: { subcommands: ['install'] },
-  research: { subcommands: ['search'] },
+  // `od research` only dispatches `search`, which parses RESEARCH_SEARCH_*_FLAGS
+  // (no --json — its output is JSON-only by design). Restrict accordingly.
+  research: { subcommands: ['search'], flags: ['--help', '--daemon-url'] },
   plugin: {
     subcommands: [
       'apply', 'candidates', 'canon', 'diff', 'doctor', 'events', 'export',
