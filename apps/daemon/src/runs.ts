@@ -1,5 +1,5 @@
-// @ts-nocheck
 import { randomUUID } from 'node:crypto';
+import type { ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeMediaExecutionPolicyForRun } from './media-policy.js';
@@ -9,15 +9,93 @@ import {
 } from './run-tool-bundle.js';
 import { projectWorkspaceProvenance } from './workspace-contract.js';
 
+interface SseClient {
+  send(event: string, data: unknown, id: number): void;
+  end(): void;
+  cleanup(): void;
+}
+
+interface RunEvent {
+  id: number;
+  event: string;
+  data: unknown;
+  timestamp: number;
+}
+
+interface CreateRunMeta {
+  projectId?: unknown;
+  conversationId?: unknown;
+  assistantMessageId?: unknown;
+  clientRequestId?: unknown;
+  agentId?: unknown;
+  projectMetadata?: unknown;
+  appliedPluginSnapshotId?: unknown;
+  pluginId?: unknown;
+  mediaExecution?: unknown;
+  toolBundle?: unknown;
+  browserUse?: unknown;
+}
+
+interface RunState {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  assistantMessageId: string | null;
+  clientRequestId: string | null;
+  agentId: string | null;
+  projectMetadata: unknown;
+  appliedPluginSnapshotId: string | null;
+  pluginId: string | null;
+  mediaExecution: ReturnType<typeof normalizeMediaExecutionPolicyForRun>;
+  toolBundle: ReturnType<typeof normalizeRunToolBundleForRun>;
+  browserUse: unknown;
+  status: string;
+  createdAt: number;
+  updatedAt: number;
+  events: RunEvent[];
+  nextEventId: number;
+  clients: Set<SseClient>;
+  waiters: Set<(status: unknown) => void>;
+  child: ChildProcess | null;
+  acpSession: { abort?: () => void } | null;
+  childPid: number | null;
+  processGroupId: number | null;
+  childExitObservedAt: number | null;
+  exitCode: number | null;
+  signal: string | null;
+  error: string | null;
+  errorCode: string | null;
+  cancelRequested: boolean;
+  eventsLogPath: string | null;
+  eventsLogStream: fs.WriteStream | null;
+  resumable?: boolean;
+  analyticsTelemetry?: Record<string, unknown>;
+}
+
+interface ChatRunServiceConfig {
+  createSseResponse: (res: unknown) => SseClient;
+  createSseErrorPayload: (code: string, message: string, init?: unknown) => unknown;
+  maxEvents?: number;
+  ttlMs?: number;
+  shutdownGraceMs?: number;
+  runsLogDir?: string | null;
+}
+
+interface RunListFilter {
+  projectId?: unknown;
+  conversationId?: unknown;
+  status?: unknown;
+}
+
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
-function readString(value) {
+function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function extractErrorDetails(data) {
-  const payload = data && typeof data === 'object' ? data : {};
-  const nested = payload.error && typeof payload.error === 'object' ? payload.error : {};
+function extractErrorDetails(data: unknown): { error: string | null; errorCode: string | null } {
+  const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  const nested = (payload.error && typeof payload.error === 'object' ? payload.error : {}) as Record<string, unknown>;
   return {
     error: readString(nested.message) ?? readString(payload.message),
     errorCode: readString(nested.code) ?? readString(payload.code),
@@ -37,13 +115,13 @@ export function createChatRunService({
   // external coding agent can `tail` the file in its own shell during
   // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
-}) {
-  const runs = new Map();
+}: ChatRunServiceConfig) {
+  const runs = new Map<string, RunState>();
 
-  const create = (meta = {}) => {
+  const create = (meta: CreateRunMeta = {}): RunState => {
     const now = Date.now();
     const id = randomUUID();
-    const run = {
+    const run: RunState = {
       id,
       projectId: typeof meta.projectId === 'string' && meta.projectId ? meta.projectId : null,
       conversationId: typeof meta.conversationId === 'string' && meta.conversationId ? meta.conversationId : null,
@@ -93,9 +171,9 @@ export function createChatRunService({
     return run;
   };
 
-  const get = (id) => runs.get(id) ?? null;
+  const get = (id: string) => runs.get(id) ?? null;
 
-  const scheduleCleanup = (run) => {
+  const scheduleCleanup = (run: RunState) => {
     setTimeout(() => {
       if (TERMINAL_RUN_STATUSES.has(run.status)) runs.delete(run.id);
     }, ttlMs).unref?.();
@@ -105,7 +183,7 @@ export function createChatRunService({
   // not exist yet; mkdir is recursive so it's safe to call repeatedly.
   // Disk failures are best-effort — if we can't write, the run still
   // proceeds (SSE clients keep getting events from memory).
-  const ensureLogStream = (run) => {
+  const ensureLogStream = (run: RunState) => {
     if (!run.eventsLogPath) return null;
     if (run.eventsLogStream) return run.eventsLogStream;
     try {
@@ -123,7 +201,7 @@ export function createChatRunService({
     }
   };
 
-  const emit = (run, event, data) => {
+  const emit = (run: RunState, event: string, data: unknown) => {
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
@@ -147,7 +225,7 @@ export function createChatRunService({
     return record;
   };
 
-  const statusBody = (run) => ({
+  const statusBody = (run: RunState) => ({
     id: run.id,
     projectId: run.projectId,
     conversationId: run.conversationId,
@@ -175,7 +253,7 @@ export function createChatRunService({
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 
-  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
+  const finish = (run: RunState, status: string, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     run.status = status;
     run.exitCode = code;
@@ -193,12 +271,12 @@ export function createChatRunService({
     scheduleCleanup(run);
   };
 
-  const fail = (run, code, message, init = {}) => {
+  const fail = (run: RunState, code: string, message: string, init: unknown = {}) => {
     emit(run, 'error', createSseErrorPayload(code, message, init));
     finish(run, 'failed', 1, null);
   };
 
-  const start = (run, starter) => {
+  const start = (run: RunState, starter: (run: RunState) => Promise<unknown>) => {
     run.analyticsTelemetry = {
       ...(run.analyticsTelemetry ?? {}),
       startRequestedAt: Date.now(),
@@ -209,7 +287,11 @@ export function createChatRunService({
     return run;
   };
 
-  const stream = (run, req, res) => {
+  const stream = (
+    run: RunState,
+    req: { get(name: string): string | undefined; query: Record<string, unknown> },
+    res: { on(event: string, listener: () => void): void },
+  ) => {
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     let sent = 0;
@@ -225,7 +307,7 @@ export function createChatRunService({
       // stream ends silently and the client falls back to status-only fetch.
       if (sent === 0 && run.events.length > 0) {
         const last = run.events[run.events.length - 1];
-        sse.send(last.event, last.data, last.id);
+        if (last) sse.send(last.event, last.data, last.id);
       }
       sse.end();
       return;
@@ -237,7 +319,7 @@ export function createChatRunService({
     });
   };
 
-  const list = ({ projectId, conversationId, status } = {}) => Array.from(runs.values()).filter((run) => {
+  const list = ({ projectId, conversationId, status }: RunListFilter = {}) => Array.from(runs.values()).filter((run) => {
     if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
     if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
     if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
@@ -245,18 +327,18 @@ export function createChatRunService({
     return true;
   });
 
-  const childHasExited = (child) => !child || child.exitCode !== null || child.signalCode !== null;
+  const childHasExited = (child: ChildProcess | null) => !child || child.exitCode !== null || child.signalCode !== null;
 
-  const recordChildExitObserved = (run) => {
+  const recordChildExitObserved = (run: RunState) => {
     if (!run.childExitObservedAt) run.childExitObservedAt = Date.now();
   };
 
-  const waitForChildExit = (child, timeoutMs) => {
+  const waitForChildExit = (child: ChildProcess | null, timeoutMs: number): Promise<boolean> => {
     if (!child) return Promise.resolve(true);
     if (childHasExited(child)) return Promise.resolve(true);
-    return new Promise((resolve) => {
+    return new Promise<boolean>((resolve) => {
       let settled = false;
-      const done = (exited) => {
+      const done = (exited: boolean) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -277,14 +359,14 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
-  const killChild = (run, signal) => {
+  const killChild = (run: RunState, signal: NodeJS.Signals | number) => {
     if (!run.child || childHasExited(run.child)) return false;
     if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
       try {
-        process.kill(-run.processGroupId, signal);
+        process.kill(-(run.processGroupId as number), signal);
         return true;
       } catch (err) {
-        if (err?.code !== 'ESRCH') {
+        if ((err as NodeJS.ErrnoException)?.code !== 'ESRCH') {
           // Fall through to the direct child signal path below. This keeps
           // cancellation working if the child was not spawned as a process
           // group leader for any reason.
@@ -303,7 +385,7 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 3000;
   };
 
-  const finishCanceledFromChildState = (run, fallbackSignal = 'SIGTERM') => {
+  const finishCanceledFromChildState = (run: RunState, fallbackSignal: NodeJS.Signals = 'SIGTERM') => {
     const child = run.child;
     if (childHasExited(child)) recordChildExitObserved(run);
     finish(
@@ -315,7 +397,7 @@ export function createChatRunService({
     return statusBody(run);
   };
 
-  const cancel = async (run) => {
+  const cancel = async (run: RunState) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
     run.cancelRequested = true;
     run.updatedAt = Date.now();
@@ -355,7 +437,7 @@ export function createChatRunService({
     return finishCanceledFromChildState(run, 'SIGKILL');
   };
 
-  const shutdownActive = async ({ graceMs = shutdownGraceMs } = {}) => {
+  const shutdownActive = async ({ graceMs = shutdownGraceMs }: { graceMs?: number } = {}) => {
     const activeRuns = Array.from(runs.values()).filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
     await Promise.all(activeRuns.map(async (run) => {
       run.cancelRequested = true;
@@ -376,7 +458,7 @@ export function createChatRunService({
     }));
   };
 
-  const wait = (run) => {
+  const wait = (run: RunState): Promise<unknown> => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return Promise.resolve(statusBody(run));
     return new Promise((resolve) => run.waiters.add(resolve));
   };
@@ -387,7 +469,7 @@ export function createChatRunService({
   // the create without surfacing the run via `/api/runs`. Only valid before
   // the run reaches a terminal status — terminal runs use scheduleCleanup
   // and would already have notified any subscribers.
-  const drop = (run) => {
+  const drop = (run: RunState | null) => {
     if (!run) return;
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     runs.delete(run.id);
@@ -419,7 +501,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     statusBody,
-    isTerminal(status) {
+    isTerminal(status: string) {
       return TERMINAL_RUN_STATUSES.has(status);
     },
   };
