@@ -2601,6 +2601,80 @@ process.stdin.on('end', () => {
       },
     );
   });
+
+  it('keeps requested design systems separate from missing injected design systems', async () => {
+    const missingDesignSystemId = `missing-ds-${randomUUID()}`;
+    const projectId = `project-missing-ds-${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Missing project DS fixture',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.ok).toBe(true);
+
+    const conversationId = `conv-${randomUUID()}`;
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Active design system') ? 'has-active-design-system' : 'missing-active-design-system',
+    prompt.includes('Treat the following DESIGN.md as authoritative') ? 'has-design-system-contract' : 'missing-design-system-contract',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            conversationId,
+            designSystemId: missingDesignSystemId,
+            message: 'draft a branded artifact',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('missing-design-system-contract');
+        expect(body).not.toContain('has-design-system-contract');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = await runsResponse.json() as {
+          runs: Array<{
+            designSystemId: string | null;
+            designSystemRequestedId: string | null;
+            designSystemSelectionSource: string | null;
+            designSystemDigest: string | null;
+          }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          designSystemId: null,
+          designSystemRequestedId: missingDesignSystemId,
+          designSystemSelectionSource: 'none',
+          designSystemDigest: null,
+        });
+      },
+    );
+  });
 });
 
 describe('daemon run creation during shutdown', () => {

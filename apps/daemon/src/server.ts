@@ -11059,10 +11059,9 @@ export async function startServer({
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
-            design_system_id: run.designSystemId ?? baseProps.design_system_id,
+            design_system_id: run.designSystemId ?? undefined,
             design_system_digest: run.designSystemDigest ?? undefined,
-            design_system_selection_source:
-              run.designSystemSelectionSource ?? baseProps.design_system_selection_source,
+            design_system_selection_source: run.designSystemSelectionSource ?? 'none',
             stable_prompt_hash: run.promptCache?.stablePromptHash,
             stable_prompt_cache_hit: run.promptCache?.hit,
             stable_prompt_cache_miss_reason: run.promptCache?.missReason,
