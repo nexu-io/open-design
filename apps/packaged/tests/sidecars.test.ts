@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPackagedDaemonSpawnEnv,
+  reclaimStaleNamespaceSidecars,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedElectronNodeCommand,
@@ -30,6 +31,51 @@ import {
   waitForStatus,
 } from '../src/sidecars.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
+  type AppKey,
+  type SidecarStamp,
+} from '@open-design/sidecar-proto';
+import { resolveAppIpcPath } from '@open-design/sidecar';
+import { createProcessStampArgs, type ProcessSnapshot } from '@open-design/platform';
+
+/**
+ * Build a runtime sidecar stamp for a given app + namespace, mirroring
+ * what `spawnSidecarChild` stamps onto packaged sidecar children.
+ */
+function packagedSidecarStamp(app: AppKey, namespace: string): SidecarStamp {
+  return {
+    app,
+    ipc: resolveAppIpcPath({ app, contract: OPEN_DESIGN_SIDECAR_CONTRACT, namespace }),
+    mode: SIDECAR_MODES.RUNTIME,
+    namespace,
+    source: SIDECAR_SOURCES.PACKAGED,
+  } satisfies SidecarStamp;
+}
+
+/**
+ * Render a process command line that carries the OD process stamp flags,
+ * so `matchesStampedProcess` can recover the stamp the same way it would
+ * from a real `ps`/`wmic` snapshot.
+ */
+function stampedProcessSnapshot(
+  pid: number,
+  ppid: number,
+  stamp: SidecarStamp,
+): ProcessSnapshot {
+  return {
+    pid,
+    ppid,
+    command: [
+      '/opt/node',
+      'sidecar.js',
+      ...createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+    ].join(' '),
+  };
+}
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the default 35-second budget for normal cold boots', () => {
@@ -499,5 +545,122 @@ describe('waitForStatus child-exit fast-fail', () => {
     expect((captured as Error).message).toMatch(/daemon exited before reporting status/);
     expect((captured as Error).message).toContain('code=2');
     expect(elapsed).toBeLessThan(2_000);
+  });
+});
+
+describe('reclaimStaleNamespaceSidecars', () => {
+  // Issue #4441: an older packaged runtime can leave a still-alive daemon
+  // or web sidecar bound to /tmp/open-design/ipc/<namespace>/<app>.sock.
+  // Because the leftover process answers a probe connection, the new
+  // sidecar's stale-socket check treats it as healthy and never unlinks,
+  // so the new sidecar dies with EADDRINUSE. The launcher must reclaim
+  // the namespace by stopping the leftover same-namespace sidecars (and
+  // clearing their sockets) before spawning new ones.
+
+  it('stops leftover same-namespace daemon and web sidecars and clears their sockets', async () => {
+    const namespace = 'release-nightly';
+    const processes: ProcessSnapshot[] = [
+      stampedProcessSnapshot(4002, 1, packagedSidecarStamp(APP_KEYS.WEB, namespace)),
+      stampedProcessSnapshot(4001, 1, packagedSidecarStamp(APP_KEYS.DAEMON, namespace)),
+      { pid: 999, ppid: 1, command: '/usr/bin/node some-unrelated-server.js' },
+    ];
+    const stopped: number[][] = [];
+    let cleanups = 0;
+
+    const result = await reclaimStaleNamespaceSidecars(namespace, {
+      selfPid: 1234,
+      listProcesses: async () => processes,
+      stop: async (pids) => {
+        stopped.push(pids);
+      },
+      cleanupSockets: async () => {
+        cleanups += 1;
+      },
+    });
+
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0]).toEqual(expect.arrayContaining([4001, 4002]));
+    expect(stopped[0]).not.toContain(999);
+    expect(cleanups).toBe(1);
+    expect(result.reclaimedPids).toEqual(expect.arrayContaining([4001, 4002]));
+    expect(result.reclaimedPids).toHaveLength(2);
+  });
+
+  it('ignores sidecars stamped for a different namespace', async () => {
+    const processes: ProcessSnapshot[] = [
+      stampedProcessSnapshot(5001, 1, packagedSidecarStamp(APP_KEYS.WEB, 'release-beta')),
+    ];
+    const stopped: number[][] = [];
+    let cleanups = 0;
+
+    const result = await reclaimStaleNamespaceSidecars('release-nightly', {
+      selfPid: 1234,
+      listProcesses: async () => processes,
+      stop: async (pids) => {
+        stopped.push(pids);
+      },
+      cleanupSockets: async () => {
+        cleanups += 1;
+      },
+    });
+
+    expect(stopped).toHaveLength(0);
+    expect(cleanups).toBe(0);
+    expect(result.reclaimedPids).toHaveLength(0);
+  });
+
+  it('never stops the current process or its descendants', async () => {
+    const namespace = 'release-nightly';
+    const processes: ProcessSnapshot[] = [
+      // The current desktop process and a sidecar it just spawned both
+      // carry the same namespace stamp; reclaim must not target them.
+      stampedProcessSnapshot(7000, 1, packagedSidecarStamp(APP_KEYS.DESKTOP, namespace)),
+      stampedProcessSnapshot(7001, 7000, packagedSidecarStamp(APP_KEYS.DAEMON, namespace)),
+    ];
+    const stopped: number[][] = [];
+
+    const result = await reclaimStaleNamespaceSidecars(namespace, {
+      selfPid: 7000,
+      listProcesses: async () => processes,
+      stop: async (pids) => {
+        stopped.push(pids);
+      },
+      cleanupSockets: async () => undefined,
+    });
+
+    expect(stopped).toHaveLength(0);
+    expect(result.reclaimedPids).toHaveLength(0);
+  });
+});
+
+describe('waitForStatus app label', () => {
+  // Issue #4441: the web sidecar's waitForStatus call previously passed no
+  // child watch and the error text was hardcoded to "daemon", so a web
+  // sidecar that died on EADDRINUSE surfaced as a generic 35s timeout that
+  // named the wrong process. The exit error must name the failing app.
+
+  it('names the web sidecar when its child exits before reporting status', async () => {
+    const child = fakeChild();
+    const logPath = '/tmp/od-test-web.log';
+
+    const promise = waitForStatus<{ url: string | null }>(
+      '/tmp/od-test-no-such-ipc-web-' + Date.now(),
+      (status) => status.url != null,
+      30 * 60 * 1000,
+      { child, logPath },
+      'web',
+    );
+    setTimeout(() => child.fireExit(1, null), 50);
+
+    let captured: unknown;
+    try {
+      await promise;
+    } catch (err) {
+      captured = err;
+    }
+
+    expect(captured).toBeInstanceOf(Error);
+    expect((captured as Error).message).toMatch(/web exited before reporting status/);
+    expect((captured as Error).message).toContain(logPath);
   });
 });

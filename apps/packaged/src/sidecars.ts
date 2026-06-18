@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, appendFile, mkdir, open, type FileHandle } from "node:fs/promises";
+import { access, appendFile, mkdir, open, rm, type FileHandle } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -10,6 +10,7 @@ import {
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
+  SIDECAR_SOURCES,
   type AppKey,
   type DaemonStatusSnapshot,
   type SidecarStamp,
@@ -22,12 +23,16 @@ import {
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import {
+  collectProcessTreePids,
   createProcessStampArgs,
+  listProcessSnapshots,
+  matchesStampedProcess,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
   stopProcesses,
   waitForProcessExit,
   wellKnownUserToolchainBins,
+  type ProcessSnapshot,
 } from "@open-design/platform";
 
 import type { PackagedWebOutputMode } from "./config.js";
@@ -181,6 +186,7 @@ export async function waitForStatus<T>(
   isReady: (status: T) => boolean,
   timeoutMs = DAEMON_STATUS_TIMEOUT_MS,
   watch: { child: { exitCode: number | null; signalCode: NodeJS.Signals | null; once: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void; off: (event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void) => void }; logPath: string } | null = null,
+  appLabel = "daemon",
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -202,7 +208,7 @@ export async function waitForStatus<T>(
     while (Date.now() - startedAt < timeoutMs) {
       if (childExited !== null) {
         throw new Error(
-          `daemon exited before reporting status (code=${childExited.code}, signal=${childExited.signal ?? 'none'}); see ${watch?.logPath ?? '<no log path>'} for details`,
+          `${appLabel} exited before reporting status (code=${childExited.code}, signal=${childExited.signal ?? 'none'}); see ${watch?.logPath ?? '<no log path>'} for details`,
         );
       }
       try {
@@ -231,6 +237,89 @@ export async function waitForStatus<T>(
 function extractPort(url: string): string {
   const parsed = new URL(url);
   return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+}
+
+/**
+ * Remove every POSIX IPC socket file under a namespace's
+ * `/tmp/open-design/ipc/<namespace>` directory. Windows named pipes have
+ * no filesystem entry to clean, so this is a no-op there.
+ */
+async function removeNamespaceIpcSockets(namespace: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const webIpcPath = resolveAppIpcPath({
+    app: APP_KEYS.WEB,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace,
+  });
+  await rm(dirname(webIpcPath), { recursive: true, force: true });
+}
+
+export type ReclaimStaleNamespaceSidecarsDeps = {
+  listProcesses?: () => Promise<ProcessSnapshot[]>;
+  stop?: (pids: number[]) => Promise<void>;
+  cleanupSockets?: () => Promise<void>;
+  selfPid?: number;
+};
+
+/**
+ * Reclaim a packaged runtime namespace before starting fresh sidecars.
+ *
+ * Issue #4441: a still-alive daemon or web sidecar from an older packaged
+ * runtime keeps its `/tmp/open-design/ipc/<namespace>/<app>.sock` bound and
+ * answers the new sidecar's stale-socket probe, so the probe judges the
+ * socket healthy, never unlinks it, and the new sidecar dies with
+ * EADDRINUSE while the launcher times out waiting for status.
+ *
+ * The launcher owns the namespace, so the correct upgrade semantics are to
+ * stop leftover same-namespace sidecars (and clear their sockets) before
+ * spawning, regardless of whether the old process still answers a probe.
+ * Once the old process is gone, the new sidecar's own stale-socket check in
+ * `prepareIpcPath` can unlink the dead socket cleanly.
+ *
+ * Only daemon/web sidecars are reclaimed — a leftover desktop process is
+ * handled by the single-instance lock, not here. The current process tree
+ * is always excluded so a just-spawned child can never be torn down.
+ */
+export async function reclaimStaleNamespaceSidecars(
+  namespace: string,
+  deps: ReclaimStaleNamespaceSidecarsDeps = {},
+): Promise<{ reclaimedPids: number[] }> {
+  const listProcesses = deps.listProcesses ?? listProcessSnapshots;
+  const stop =
+    deps.stop ??
+    (async (pids: number[]): Promise<void> => {
+      await stopProcesses(pids);
+    });
+  const cleanupSockets =
+    deps.cleanupSockets ?? (async (): Promise<void> => removeNamespaceIpcSockets(namespace));
+  const selfPid = deps.selfPid ?? process.pid;
+
+  const processes = await listProcesses();
+  const protectedPids = new Set(collectProcessTreePids(processes, [selfPid]));
+  const reclaimApps: AppKey[] = [APP_KEYS.DAEMON, APP_KEYS.WEB];
+  const reclaimedPids = processes
+    .filter((processInfo) => !protectedPids.has(processInfo.pid))
+    .filter((processInfo) =>
+      reclaimApps.some((app) =>
+        matchesStampedProcess(
+          processInfo,
+          {
+            app,
+            mode: SIDECAR_MODES.RUNTIME,
+            namespace,
+            source: SIDECAR_SOURCES.PACKAGED,
+          },
+          OPEN_DESIGN_SIDECAR_CONTRACT,
+        ),
+      ),
+    )
+    .map((processInfo) => processInfo.pid);
+
+  if (reclaimedPids.length === 0) return { reclaimedPids: [] };
+
+  await stop(reclaimedPids);
+  await cleanupSockets();
+  return { reclaimedPids };
 }
 
 // Hardcoded POSIX system bins the packaged daemon must always be able to
@@ -478,6 +567,15 @@ export async function startPackagedSidecars(
   await mkdir(paths.electronUserDataRoot, { recursive: true });
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 
+  // Issue #4441: stop any still-alive sidecar from an older packaged
+  // runtime that still owns this namespace's IPC sockets, otherwise the
+  // new web/daemon sidecar dies with EADDRINUSE on a socket the probe
+  // mistook for healthy. Best-effort: a discovery/stop failure must not
+  // block the launch we are about to attempt.
+  await reclaimStaleNamespaceSidecars(runtime.namespace).catch((error: unknown) => {
+    console.error("failed to reclaim stale namespace sidecars", error);
+  });
+
   const children: ManagedSidecarChild[] = [];
 
   try {
@@ -533,6 +631,13 @@ export async function startPackagedSidecars(
     const webStatus = await waitForStatus<WebStatusSnapshot>(
       web.ipcPath,
       (status) => status.url != null,
+      DAEMON_STATUS_TIMEOUT_MS,
+      // Race the web child's exit too: a web sidecar that dies on
+      // EADDRINUSE (issue #4441) must surface its real failure and log
+      // path immediately instead of timing out after 35s while pointing
+      // at the wrong process.
+      { child: web.child, logPath: logPathFor(paths, APP_KEYS.WEB) },
+      "web",
     );
     if (webStatus.url == null) throw new Error("web did not report a URL");
     options.onPhase?.("web-ready");
