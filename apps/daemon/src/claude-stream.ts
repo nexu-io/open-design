@@ -489,7 +489,10 @@ export function createClaudeStreamHandler(
         usage: obj.usage ?? null,
         costUsd: obj.total_cost_usd ?? null,
         durationMs: obj.duration_ms ?? null,
-        stopReason: obj.stop_reason ?? null,
+        stopReason:
+          (typeof obj.stop_reason === 'string' && obj.stop_reason) ||
+          (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
+          null,
       });
       return;
     }

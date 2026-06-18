@@ -2487,6 +2487,173 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('accepts Claude smoke tests that completed cleanly before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when a successful result is followed by a different termination', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(137);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(137);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when assistant end_turn is followed by exit 1 without a result frame', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result frame reports an error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result subtype reports an execution error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
   it('preserves ANTHROPIC_API_KEY when Claude adapter launches the OpenClaude fallback', async () => {
     const envFile = path.join(os.tmpdir(), `od-openclaude-env-${Date.now()}-${Math.random()}.json`);
     const previousKey = process.env.ANTHROPIC_API_KEY;
