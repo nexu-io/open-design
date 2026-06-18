@@ -851,11 +851,12 @@ export function attachAcpSession({
   let dsmlArtifactSuppressorArmedAfterText = false;
   let dsmlArtifactSuppressorSawIncrementalProse = false;
   const acpArtifactWriteToolCallIds = new Set<string>();
-  // Tracks artifact-write tool calls we have mirrored into canonical
-  // tool_use/tool_result events. `'open'` = tool_use emitted, awaiting a
-  // terminal status; `'resolved'` = tool_result already emitted (guards
-  // against duplicate results when ACP sends several tool_call_update frames).
-  const acpArtifactRunEventState = new Map<string, 'open' | 'resolved'>();
+  // Per artifact-write tool call, accumulate the best concrete file path seen
+  // across its frames and whether we have already mirrored it into canonical
+  // tool_use/tool_result events. Emission is deferred to the terminal frame so
+  // a `locations`/`rawInput` path that ACP only sends on a later update is used
+  // for classification, instead of locking in a first-frame guess.
+  const acpArtifactRunEventState = new Map<string, { path: string | null; emitted: boolean }>();
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -1166,33 +1167,39 @@ export function attachAcpSession({
         // never the tool_use/tool_result pair the counter scans for.
         //
         // This path only feeds the NO-PROJECT fallback (project runs use the
-        // filesystem snapshot). `countNewArtifacts` keeps a write only when
-        // `isArtifactPath()` accepts its path, so the emitted file_path MUST
-        // carry an artifact extension. We use the real path when ACP provides
-        // one (`acpArtifactWritePath`); when it does not — the common pathless
-        // shape where the title is just "edit" — a bare `toolCallId` would be
-        // rejected by the extension check and silently drop to 0. Since we have
-        // already classified this call as an artifact write, we fall back to a
-        // synthetic `.html` path keyed on toolCallId so the write stays
-        // countable (deduped per tool-call; an over-count on multi-edit is, per
-        // run-artifacts' contract, harmless for the boolean "did this run
-        // produce an artifact?" funnel, whereas under-counting was the bug).
+        // filesystem snapshot). Two correctness rules, both learned the hard
+        // way in review:
+        //   1. Defer emission to the TERMINAL frame and accumulate the best
+        //      concrete path across frames — ACP often sends `locations` only
+        //      on the completing update, and emitting on the first frame would
+        //      lock in a wrong/empty guess that a later path can't correct.
+        //   2. Never fabricate an artifact extension. `isArtifactPath` is what
+        //      decides whether a write counts; feeding it a real path lets it
+        //      correctly EXCLUDE non-artifact edits (`config.json`, `README.md`)
+        //      and INCLUDE real artifacts. A write that never carries a concrete
+        //      path stays keyed on its (extension-less) toolCallId, so it is
+        //      simply not counted rather than inflating the metric with a
+        //      synthetic `.html` — under-counting a truly opaque write is
+        //      acceptable; a false-positive artifact is not.
         if (toolCallId) {
           const isWriteCall =
             isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
-          if (isWriteCall && !acpArtifactRunEventState.has(toolCallId)) {
-            acpArtifactRunEventState.set(toolCallId, 'open');
-            send('agent', {
-              type: 'tool_use',
-              id: toolCallId,
-              name: 'Write',
-              input: { file_path: acpArtifactWritePath(update) ?? `acp-write/${toolCallId}.html` },
-            });
-          }
-          if (acpArtifactRunEventState.get(toolCallId) === 'open') {
+          if (isWriteCall) {
+            let st = acpArtifactRunEventState.get(toolCallId);
+            if (!st) {
+              st = { path: null, emitted: false };
+              acpArtifactRunEventState.set(toolCallId, st);
+            }
+            if (!st.path) st.path = acpArtifactWritePath(update);
             const failed = isAcpTerminalFailureStatus(update);
-            if (failed || isAcpCompletedStatus(update)) {
-              acpArtifactRunEventState.set(toolCallId, 'resolved');
+            if (!st.emitted && (failed || isAcpCompletedStatus(update))) {
+              st.emitted = true;
+              send('agent', {
+                type: 'tool_use',
+                id: toolCallId,
+                name: 'Write',
+                input: { file_path: st.path ?? toolCallId },
+              });
               send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
             }
           }

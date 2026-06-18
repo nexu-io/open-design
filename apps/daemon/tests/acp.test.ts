@@ -499,11 +499,11 @@ test('attachAcpSession mirrors artifact-write tool calls into countable tool_use
   assert.equal(countNewArtifacts(runEvents), 1);
 });
 
-test('a PATHLESS ACP write (title only, no locations) is still counted', () => {
-  // Regression for the no-project fallback: many ACP agents emit a write
-  // tool call whose only label is "edit" — no `locations`, no path. A bare
-  // toolCallId fails `isArtifactPath`, so without a synthetic artifact path the
-  // write silently drops to artifact_count: 0 for no-project runs.
+test('a truly PATHLESS ACP write is NOT coerced into an artifact (no false positive)', () => {
+  // A write tool call whose only label is "edit" — no locations, no path, ever.
+  // We must not fabricate an artifact extension: without a concrete path the
+  // call carries no evidence it touched an artifact, so it stays uncounted
+  // rather than inflating artifact_count for ordinary non-artifact edits.
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];
 
@@ -518,17 +518,8 @@ test('a PATHLESS ACP write (title only, no locations) is still counted', () => {
 
   writeAcpResult(child, 1, {});
   writeAcpResult(child, 2, { sessionId: 'session-1' });
-  writeAcpUpdate(child, {
-    sessionUpdate: 'tool_call',
-    toolCallId: 'edit-1',
-    title: 'edit', // no filename, no locations, no rawInput
-    status: 'pending',
-  });
-  writeAcpUpdate(child, {
-    sessionUpdate: 'tool_call_update',
-    toolCallId: 'edit-1',
-    status: 'completed',
-  });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call', toolCallId: 'edit-1', title: 'edit', status: 'pending' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call_update', toolCallId: 'edit-1', status: 'completed' });
   writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
 
   const runEvents = events
@@ -536,10 +527,43 @@ test('a PATHLESS ACP write (title only, no locations) is still counted', () => {
     .map((e) => ({ event: 'agent', data: e.payload }));
 
   const toolUse = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_use');
-  assert.ok(toolUse, 'pathless write should still surface a tool_use');
-  const filePath = (toolUse.data as { input?: { file_path?: string } }).input?.file_path ?? '';
-  assert.match(filePath, /\.html$/, 'fallback path must carry an artifact extension');
+  const filePath = (toolUse?.data as { input?: { file_path?: string } } | undefined)?.input?.file_path ?? '';
+  assert.doesNotMatch(filePath, /\.html$/, 'must not fabricate a synthetic .html extension');
+  assert.equal(countNewArtifacts(runEvents), 0);
+});
 
+test('an ACP artifact path arriving only on the completing frame is still counted', () => {
+  // ACP frequently sends `locations` only on the terminal update. Emission is
+  // deferred to the terminal frame so that late path is used for classification
+  // (emitting on the first/pending frame would have missed it).
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call', toolCallId: 'w-2', title: 'write', status: 'pending' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'w-2',
+    status: 'completed',
+    locations: [{ path: 'landing.html' }], // path only appears here
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const runEvents = events
+    .filter((e) => e.event === 'agent')
+    .map((e) => ({ event: 'agent', data: e.payload }));
+  const toolUse = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_use');
+  assert.equal((toolUse?.data as { input?: { file_path?: string } } | undefined)?.input?.file_path, 'landing.html');
   assert.equal(countNewArtifacts(runEvents), 1);
 });
 
