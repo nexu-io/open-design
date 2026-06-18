@@ -27,6 +27,7 @@ import {
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
 import { resolveProjectRoot } from './project-root.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -4434,7 +4435,6 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
-  app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — bearer-token middleware.
@@ -4794,6 +4794,15 @@ export async function startServer({
     }
     next();
   });
+
+  // better-auth must mount before express.json — it owns its own body parsing.
+  const openDesignAuth = await registerAuthRoutes(app, {
+    dataDir: RUNTIME_DATA_DIR,
+    env: process.env,
+  });
+
+  app.use(express.json({ limit: '4mb' }));
+
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
   const pluginInstallation = createPluginInstallationHelpers({
     db,
@@ -11635,6 +11644,7 @@ export async function startServer({
       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
       await terminalService.shutdownActive();
       await design.analytics.shutdown();
+      await openDesignAuth?.shutdown();
     };
     let server;
     try {

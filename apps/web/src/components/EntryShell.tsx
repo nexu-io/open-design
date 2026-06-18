@@ -109,6 +109,7 @@ import {
   EntrySettingsMenu,
   type EntrySettingsSection,
 } from './EntrySettingsMenu';
+import { AuthAccountMenu } from './AuthAccountMenu';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
@@ -790,6 +791,7 @@ export function EntryShell({
               </button>
             </div>
             <UpdaterPopup />
+            <AuthAccountMenu />
             {avatarMenu}
           </div>
           <div

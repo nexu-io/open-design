@@ -166,6 +166,7 @@ import { filterImplicitProducedFiles } from '../produced-files';
 import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
 import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
+import { AuthAccountMenu } from './AuthAccountMenu';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
 import { DesignSystemPicker } from './DesignSystemPicker';
@@ -6322,6 +6323,7 @@ export function ProjectView({
                 metricsConsent={config.telemetry?.metrics === true}
                 installationId={config.installationId}
               />
+              <AuthAccountMenu />
               <EntrySettingsMenu
                 config={config}
                 onThemeChange={handleThemeChange}
