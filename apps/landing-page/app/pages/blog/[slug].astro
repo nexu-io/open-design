@@ -18,6 +18,7 @@ import SiteFooter from '../../_components/site-footer.astro';
 import BlogToc from '../../_components/blog-toc.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import { getBlogAuthor } from '../../_lib/blog-authors';
 import {
   injectTocIntoHtml,
   tocFromHeadings,
@@ -112,8 +113,21 @@ const coverSrc = `/blog/${post.id}-cover.webp`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 const category = post.data.category.toLowerCase();
+// Optional per-post override: `ctaKind: download-app` in frontmatter points the
+// primary CTA at the desktop client download page (/download); Discord stays the
+// secondary button. Falls back to the category-based default when unset, so the
+// existing posts are unaffected.
+const ctaKind = (post.data as { ctaKind?: string }).ctaKind;
 const bottomCta =
-  category.includes('announcement') || category.includes('product')
+  ctaKind === 'download-app'
+    ? {
+        title: ui.blog.cta.downloadTitle,
+        body: ui.blog.cta.downloadBody,
+        href: '/download/',
+        label: ui.blog.cta.downloadLabel,
+        external: false,
+      }
+    : category.includes('announcement') || category.includes('product')
     ? {
         title: ui.blog.cta.downloadTitle,
         body: ui.blog.cta.downloadBody,
@@ -173,6 +187,10 @@ const fmtDate = (d: Date) =>
     month: 'long',
     day: 'numeric',
   });
+
+// Optional team-persona byline (avatar + name + role). Posts without an
+// `author` frontmatter id render no byline, unchanged.
+const author = getBlogAuthor((post.data as { author?: string }).author);
 ---
 
 <!doctype html>
@@ -218,6 +236,23 @@ const fmtDate = (d: Date) =>
               <span>{post.data.readingTime} {ui.blog.minRead}</span>
               <span>{localizedPostField('category')}</span>
             </div>
+
+            {author && (
+              <div class='post-author'>
+                <img
+                  class='post-author-avatar'
+                  src={author.avatar}
+                  alt={author.name}
+                  width='44'
+                  height='44'
+                  loading='lazy'
+                />
+                <span class='post-author-text'>
+                  <span class='post-author-name'>{author.name}</span>
+                  <span class='post-author-role'>{author.role}</span>
+                </span>
+              </div>
+            )}
 
             <figure class='post-cover'>
               <img
@@ -405,6 +440,34 @@ const fmtDate = (d: Date) =>
         margin-right: 10px;
         vertical-align: middle;
         background: var(--line);
+      }
+      .post-author {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .post-author-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        background: var(--paper-warm);
+      }
+      .post-author-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.3;
+      }
+      .post-author-name {
+        font-weight: 600;
+        color: var(--ink);
+        font-size: 15px;
+      }
+      .post-author-role {
+        font-size: 13px;
+        color: var(--ink-faint);
       }
       .post-cover {
         margin: 8px 0 28px;
