@@ -153,12 +153,17 @@ export function diffRunArtifacts(
         prior.mtimeMs !== fingerprint.mtimeMs ||
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
-    if (isArtifactPath(filePath)) {
+    // Snapshot keys are native paths (`path.join` → backslashes on Windows),
+    // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
+    // only. Normalize separators so the design-system / preview signals work on
+    // Windows project runs, not just POSIX.
+    const classifyPath = filePath.replace(/\\/g, '/');
+    if (isArtifactPath(classifyPath)) {
       if (isNew) created += 1;
       else modified += 1;
     }
-    if (isPreviewModulePath(filePath)) previewModuleCount += 1;
-    if (isDesignSystemFile(filePath)) designSystemCreated = true;
+    if (isPreviewModulePath(classifyPath)) previewModuleCount += 1;
+    if (isDesignSystemFile(classifyPath)) designSystemCreated = true;
   }
   return { created, modified, touched: created + modified, designSystemCreated, previewModuleCount };
 }

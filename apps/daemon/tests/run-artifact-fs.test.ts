@@ -127,6 +127,26 @@ test('a same-size rewrite with a preserved mtime is still detected (content hash
   assert.equal(diff.touched, 1);
 });
 
+test('Windows-style backslash paths still classify preview modules and DESIGN.md', () => {
+  // On Windows, snapshot keys come back with backslashes (path.join). The diff
+  // must normalize separators before the slash-only preview / design-system
+  // helpers, or those signals silently report false on Windows project runs.
+  // (Built by hand because the test host is POSIX and can't produce \\ keys.)
+  const fp = { size: 10, mtimeMs: 1, hash: 'h' };
+  const before = new Map();
+  const after = new Map([
+    ['C:\\proj\\DESIGN.md', { ...fp }],
+    ['C:\\proj\\preview\\colors.html', { ...fp }],
+    ['C:\\proj\\index.html', { ...fp }],
+  ]);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.designSystemCreated, true, 'DESIGN.md must be detected on Windows paths');
+  assert.equal(diff.previewModuleCount, 1, 'preview/*.html must be detected on Windows paths');
+  // index.html + preview/colors.html are artifacts; DESIGN.md is not.
+  assert.equal(diff.created, 2);
+});
+
 test('contended same-cwd runs are flagged so the caller skips the whole-tree diff', () => {
   // The daemon allows overlapping runs; a whole-tree snapshot diff cannot tell
   // which concurrent run wrote a file. The registry must mark BOTH overlapping
