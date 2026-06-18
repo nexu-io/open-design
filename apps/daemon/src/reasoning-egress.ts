@@ -18,7 +18,23 @@ export interface ReasoningEgressRequest {
   model?: string;
 }
 
-export interface ReasoningEgressDenial {
+export type ReasoningEgressDenial =
+  | ReasoningEgressInvalidPolicyDenial
+  | ReasoningEgressPolicyDenial;
+
+export interface ReasoningEgressInvalidPolicyDenial {
+  status: 400;
+  code: 'reasoning_execution_invalid_policy';
+  message: string;
+  data: {
+    routeKind: ReasoningEgressRouteKind;
+    provider: string;
+    resolvedBaseUrl?: string;
+    model?: string;
+  };
+}
+
+export interface ReasoningEgressPolicyDenial {
   status: 403;
   code: 'reasoning_execution_disabled' | 'reasoning_execution_not_allowlisted';
   message: string;
@@ -35,11 +51,12 @@ function isReasoningPolicy(value: unknown): value is Partial<ReasoningExecutionP
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function policyMode(policy: unknown): ReasoningExecutionMode {
-  if (!isReasoningPolicy(policy)) return 'enabled';
+function policyMode(policy: unknown): ReasoningExecutionMode | 'invalid' {
+  if (policy === undefined) return 'enabled';
+  if (!isReasoningPolicy(policy)) return 'invalid';
   return policy.mode === 'enabled' || policy.mode === 'disabled' || policy.mode === 'allowlist'
     ? policy.mode
-    : 'disabled';
+    : 'invalid';
 }
 
 export function normalizeReasoningBaseUrl(value: string): string | null {
@@ -52,6 +69,20 @@ export function normalizeReasoningBaseUrl(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function invalidPolicyDenial(args: ReasoningEgressRequest): ReasoningEgressInvalidPolicyDenial {
+  return {
+    status: 400,
+    code: 'reasoning_execution_invalid_policy',
+    message: 'reasoningExecution.mode must be one of enabled, disabled, or allowlist.',
+    data: {
+      routeKind: args.routeKind,
+      provider: args.provider,
+      ...(args.resolvedBaseUrl ? { resolvedBaseUrl: args.resolvedBaseUrl } : {}),
+      ...(args.model ? { model: args.model } : {}),
+    },
+  };
 }
 
 function disabledDenial(args: ReasoningEgressRequest): ReasoningEgressDenial {
@@ -114,6 +145,7 @@ function allowedModelSet(policy: Partial<ReasoningExecutionPolicy>): Set<string>
 export function authorizeReasoningEgress(args: ReasoningEgressRequest): ReasoningEgressDenial | null {
   const mode = policyMode(args.policy);
   if (mode === 'enabled') return null;
+  if (mode === 'invalid') return invalidPolicyDenial(args);
   if (mode === 'disabled') return disabledDenial(args);
 
   const policy = isReasoningPolicy(args.policy) ? args.policy : {};

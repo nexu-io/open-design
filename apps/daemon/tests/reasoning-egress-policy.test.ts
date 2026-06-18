@@ -57,11 +57,11 @@ describe('reasoningExecution egress policy', () => {
   async function expectReasoningDenied(
     path: string,
     body: Record<string, unknown>,
-    expected: { routeKind: string; provider: string; code?: string },
+    expected: { routeKind: string; provider: string; code?: string; status?: number },
   ) {
     const fetchMock = stubUnexpectedUpstreamFetch();
     const res = await postJson(path, body);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(expected.status ?? 403);
     const payload = await res.json() as {
       error: {
         code: string;
@@ -80,6 +80,30 @@ describe('reasoningExecution egress policy', () => {
   }
 
   const disabledPolicy = { mode: 'disabled' };
+
+  it.each([
+    { label: 'missing mode object', reasoningExecution: {} },
+    { label: 'invalid mode object', reasoningExecution: { mode: 'off' } },
+    { label: 'null value', reasoningExecution: null },
+    { label: 'array value', reasoningExecution: [] },
+  ])('rejects malformed reasoningExecution before upstream fetch: $label', async ({ reasoningExecution }) => {
+    await expectReasoningDenied(
+      '/api/proxy/openai/stream',
+      {
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-openai',
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: 'hello' }],
+        reasoningExecution,
+      },
+      {
+        status: 400,
+        routeKind: 'proxy',
+        provider: 'openai',
+        code: 'reasoning_execution_invalid_policy',
+      },
+    );
+  });
 
   it.each([
     {
