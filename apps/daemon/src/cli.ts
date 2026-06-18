@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { readFileSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { basename, join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
@@ -220,6 +221,18 @@ const SHARE_STRING_FLAGS = new Set([
 const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+const AUTH_STRING_FLAGS = new Set([
+  'daemon-url', 'email', 'password', 'password-file', 'name',
+]);
+const AUTH_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json',
+]);
+// Hoisted next to the flag sets: `runAuth` is reachable through the
+// top-of-file SUBCOMMAND_MAP dispatch, which runs during module evaluation —
+// a `const` declared down in the auth section would still be in TDZ when
+// `captureAuthSessionCookie` reads it. Same reason the automation/share
+// dispatch-touched constants live up here.
+const AUTH_SESSION_COOKIE = 'better-auth.session_token';
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -266,6 +279,7 @@ const SUBCOMMAND_MAP = {
   automation: runAutomation,
   automations: runAutomation,
   memory: runMemory,
+  auth: runAuth,
   run: runRun,
   files: runFiles,
   templates: runTemplates,
@@ -374,6 +388,10 @@ function printRootHelp() {
 
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
+
+  od auth <status|sign-in|sign-up|sign-out> [options]
+      Email/password account commands mirroring the web AuthAccountMenu.
+      Requires a daemon started with OPEN_DESIGN_DATABASE_URL set.
 
   od share <open-design|url> [options]
       Build localized social-share targets for the Open Design repo or a
@@ -7161,6 +7179,245 @@ async function runMemory(args) {
 
   console.error(`unknown subcommand: od memory tree ${action}`);
   printMemoryHelp();
+  process.exit(2);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od auth …
+//
+// Headless surface for the AuthAccountMenu sign-in/up UI. Dual-track contract:
+// the web menu and this CLI both drive the same better-auth endpoints under
+// /api/auth on the local daemon, so an external agent or shell can sign in,
+// check identity, and sign out without rendering a page.
+//
+// better-auth is cookie/session based, so sign-in/up persist the returned
+// session cookie to a client-side file (default ~/.open-design/auth-session,
+// override with OD_AUTH_SESSION_FILE); status and sign-out replay it.
+//
+// Auth only exists on a daemon started with OPEN_DESIGN_DATABASE_URL set; when
+// it is absent the /api/auth routes are unmounted and these commands report
+// that auth is disabled rather than failing opaquely.
+// ---------------------------------------------------------------------------
+
+function authSessionFile() {
+  const override = (process.env.OD_AUTH_SESSION_FILE ?? '').trim();
+  if (override) return override;
+  return join(homedir(), '.open-design', 'auth-session');
+}
+
+function readStoredAuthCookie() {
+  try {
+    const raw = readFileSync(authSessionFile(), 'utf8').trim();
+    return raw.length > 0 ? raw : null;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+function writeStoredAuthCookie(cookie) {
+  const file = authSessionFile();
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${cookie}\n`, { mode: 0o600 });
+}
+
+function clearStoredAuthCookie() {
+  try {
+    rmSync(authSessionFile());
+  } catch (err) {
+    if (!(err && err.code === 'ENOENT')) throw err;
+  }
+}
+
+// Pull the `better-auth.session_token=...` pair out of a response's Set-Cookie
+// headers. Returns the `name=value` string to replay as a Cookie header, or
+// null when the response carried no (or a cleared) session cookie.
+function captureAuthSessionCookie(resp) {
+  const setCookies =
+    typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : [];
+  for (const raw of setCookies) {
+    const pair = raw.split(';')[0]?.trim();
+    if (pair && pair.startsWith(`${AUTH_SESSION_COOKIE}=`)) {
+      const value = pair.slice(AUTH_SESSION_COOKIE.length + 1);
+      return value.length > 0 ? pair : null;
+    }
+  }
+  return null;
+}
+
+async function readAuthPasswordFromFlags(flags) {
+  if (typeof flags['password-file'] === 'string') {
+    const p = flags['password-file'];
+    let raw;
+    if (p === '-') {
+      raw = '';
+      for await (const chunk of process.stdin) raw += chunk;
+    } else {
+      const { readFile } = await import('node:fs/promises');
+      raw = await readFile(p, 'utf8');
+    }
+    return raw.replace(/\r?\n$/, '');
+  }
+  if (typeof flags.password === 'string') return flags.password;
+  return null;
+}
+
+function printAuthHelp() {
+  console.log(`Usage: od auth <command> [options]
+
+Email/password account commands. Mirrors the web AuthAccountMenu against the
+local daemon's /api/auth endpoints.
+
+Commands:
+  status               Show the current signed-in user (alias: whoami)
+  sign-in              Sign in with email + password (alias: login)
+  sign-up              Create an account and sign in (alias: register)
+  sign-out             Sign out and clear the stored session (alias: logout)
+
+Options:
+  --email <addr>       Account email (sign-in, sign-up)
+  --password <pw>      Account password (sign-in, sign-up)
+  --password-file <p>  Read the password from a file, or '-' for stdin
+  --name <name>        Display name (sign-up; defaults to the email)
+  --json               Machine-readable output
+  --daemon-url <url>   Local daemon HTTP base (default OD_DAEMON_URL,
+                       OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456)
+
+Session cookie is stored at ~/.open-design/auth-session
+(override with OD_AUTH_SESSION_FILE). Auth must be enabled on the daemon
+(started with OPEN_DESIGN_DATABASE_URL set).`);
+}
+
+// Surface the auth-disabled case (no /api/auth route mounted) distinctly from
+// genuine credential failures, then defer to the shared structured failure.
+async function authHttpFailure(resp) {
+  if (resp.status === 404) {
+    exitWithStructuredError({
+      code: 'auth-not-enabled',
+      message:
+        'Auth is not enabled on this daemon. Start it with OPEN_DESIGN_DATABASE_URL set to a Postgres URL.',
+    });
+  }
+  return structuredHttpFailure(resp, 'auth-request-failed');
+}
+
+async function runAuth(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printAuthHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+
+  const aliases = {
+    login: 'sign-in',
+    signin: 'sign-in',
+    register: 'sign-up',
+    signup: 'sign-up',
+    logout: 'sign-out',
+    signout: 'sign-out',
+    whoami: 'status',
+  };
+  const raw = args[0];
+  const action = aliases[raw] ?? raw;
+  const rest = args.slice(1);
+
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: AUTH_STRING_FLAGS, boolean: AUTH_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+  const writeJson = (data) => process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+
+  // better-auth rejects state-changing requests that look like browser CORS
+  // calls (undici's fetch auto-sends `sec-fetch-mode: cors`) unless they carry
+  // a trusted Origin. The web AuthAccountMenu gets this for free from the
+  // browser; the CLI must send the daemon's own origin so the request is
+  // treated as same-origin.
+  const post = async (path, body, { cookie } = {}) => {
+    const headers = { 'content-type': 'application/json', origin: base };
+    if (cookie) headers.cookie = cookie;
+    try {
+      return await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body ?? {}),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+  };
+
+  if (action === 'status') {
+    const cookie = readStoredAuthCookie();
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/auth/get-session`, {
+        headers: { origin: base, ...(cookie ? { cookie } : {}) },
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return authHttpFailure(resp);
+    const data = await resp.json().catch(() => null);
+    const user = data?.user ?? null;
+    if (flags.json) return writeJson({ signedIn: Boolean(user), user, session: data?.session ?? null });
+    if (!user) {
+      console.log('Not signed in.');
+      return;
+    }
+    console.log(`Signed in as ${user.name ?? user.email}${user.email ? ` <${user.email}>` : ''}`);
+    return;
+  }
+
+  if (action === 'sign-in' || action === 'sign-up') {
+    const email = typeof flags.email === 'string' ? flags.email.trim() : '';
+    const password = await readAuthPasswordFromFlags(flags);
+    if (!email || !password) {
+      console.error(`Usage: od auth ${action} --email <addr> --password <pw>|--password-file <path|->`);
+      process.exit(2);
+    }
+    const path = action === 'sign-up' ? '/api/auth/sign-up/email' : '/api/auth/sign-in/email';
+    const body =
+      action === 'sign-up'
+        ? { email, password, name: (typeof flags.name === 'string' && flags.name.trim()) || email }
+        : { email, password };
+    const resp = await post(path, body);
+    if (!resp.ok) return authHttpFailure(resp);
+    const data = await resp.json().catch(() => null);
+    const cookie = captureAuthSessionCookie(resp);
+    if (cookie) writeStoredAuthCookie(cookie);
+    const user = data?.user ?? null;
+    if (flags.json) return writeJson({ ok: true, persisted: Boolean(cookie), user });
+    const who = user ? `${user.name ?? user.email}${user.email ? ` <${user.email}>` : ''}` : email;
+    console.log(`${action === 'sign-up' ? 'Created account and signed in' : 'Signed in'} as ${who}.`);
+    if (!cookie) {
+      console.error('warning: no session cookie returned; `od auth status` may show signed out.');
+    }
+    return;
+  }
+
+  if (action === 'sign-out') {
+    const cookie = readStoredAuthCookie();
+    if (!cookie) {
+      if (flags.json) return writeJson({ ok: true, alreadySignedOut: true });
+      console.log('Already signed out.');
+      return;
+    }
+    const resp = await post('/api/auth/sign-out', {}, { cookie });
+    if (!resp.ok && resp.status !== 404) return authHttpFailure(resp);
+    clearStoredAuthCookie();
+    if (flags.json) return writeJson({ ok: true });
+    console.log('Signed out.');
+    return;
+  }
+
+  console.error(`unknown subcommand: od auth ${raw}`);
+  printAuthHelp();
   process.exit(2);
 }
 
