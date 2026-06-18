@@ -32,6 +32,7 @@ import {
   inspectPackedLinuxApp,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
@@ -610,6 +611,16 @@ MimeType=x-scheme-handler/od;
       iconName: "open-design-ns",
     });
     expect(out).toContain("MimeType=x-scheme-handler/od;");
+  });
+});
+
+describe("renderLinuxPackagedMainEntry", () => {
+  it("loads the ESM packaged entry without require or temporary keepalive handles", () => {
+    const out = renderLinuxPackagedMainEntry();
+
+    expect(out).toContain('import("@open-design/packaged")');
+    expect(out).not.toContain('require("@open-design/packaged")');
+    expect(out).not.toContain("setTimeout");
   });
 });
 
