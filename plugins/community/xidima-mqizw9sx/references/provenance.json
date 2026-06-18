@@ -1,0 +1,19 @@
+{
+  "candidateId": "7583a230-e72c-4f4f-977a-f341999e8bd9",
+  "projectId": "3aa8f911-8944-48ac-a873-af586c13d669",
+  "runId": "20921850-60bc-48de-9f89-753de0208ac3",
+  "conversationId": "fae59f5b-291d-49db-b9ca-90994bb06af4",
+  "provenance": {
+    "summary": "Detected from mqizuiye-gg.md after a successful run.",
+    "detectedAt": 1781756564982
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mqizuiye-gg.md",
+      "label": "mqizuiye-gg.md",
+      "size": 50213,
+      "copied": true
+    }
+  ]
+}
