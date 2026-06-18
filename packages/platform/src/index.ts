@@ -984,7 +984,7 @@ export function wellKnownUserToolchainBins(
   // When MISE_DATA_DIR is set we use the same root for consistency with shims.
   const miseInstalls = join(miseData, "installs");
   dirs.push(...existingMiseNpmPackageBinDirs(miseInstalls));
-  for (const installRoot of [
+  const nodeInstallRoots: Array<{ root: string; segments: string[] }> = [
     {
       root: join(miseInstalls, "node"),
       segments: ["bin"],
@@ -1001,7 +1001,23 @@ export function wellKnownUserToolchainBins(
       root: join(home, ".fnm", "node-versions"),
       segments: ["installation", "bin"],
     },
-  ]) {
+  ];
+  // Windows fnm keeps Node installs under %APPDATA%\fnm\node-versions\<ver>\
+  // installation, with node.exe directly in `installation` (no POSIX-style
+  // `bin` subdir). `FNM_DIR` overrides that root. A GUI-launched packaged
+  // app inherits a stripped PATH and reads no shell rc, so without an
+  // explicit probe fnm-managed Node — and every agent CLI it runs — is
+  // silently undetected on Windows. See issue #3517.
+  if (process.platform === "win32") {
+    const fnmDirOverride = typeof env.FNM_DIR === "string" ? env.FNM_DIR.trim() : "";
+    const appData = typeof env.APPDATA === "string" ? env.APPDATA.trim() : "";
+    const fnmRoot =
+      fnmDirOverride.length > 0 ? fnmDirOverride : appData.length > 0 ? join(appData, "fnm") : "";
+    if (fnmRoot.length > 0) {
+      nodeInstallRoots.push({ root: join(fnmRoot, "node-versions"), segments: ["installation"] });
+    }
+  }
+  for (const installRoot of nodeInstallRoots) {
     for (const dir of existingChildBinDirs(installRoot.root, installRoot.segments)) {
       dirs.push(dir);
     }
