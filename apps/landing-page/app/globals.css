@@ -4363,8 +4363,11 @@ section.tight { padding: 90px 0; }
   width: 82.4%;
   /* Peek effect: show the TOP of the app screenshot and crop the bottom, with
      the window flush to the block's bottom edge so it bleeds off (the mural
-     stays visible to its left/right). Height scales with width. */
-  height: clamp(240px, 34vw, 480px);
+     stays visible to its left/right). A fixed aspect-ratio (instead of a vw
+     height) makes the crop land at the SAME point — just below the Audio row —
+     at every desktop width; the height tracks the window width automatically. */
+  height: auto;
+  aspect-ratio: 2.47;
   object-fit: cover;
   object-position: top center;
   border-radius: 14px 14px 0 0;
@@ -4886,7 +4889,10 @@ footer .container {
   border-top: 1px solid var(--line);
   background: var(--paper);
   padding: 60px 0 32px;
-  margin-top: 96px;
+  /* No extra top margin (kept in sync with sub-pages.css): the border-top and
+     the preceding content's own bottom spacing separate the footer; the old
+     96px was off the skill scale and left a large hole above the footer. */
+  margin-top: 0;
 }
 .sub-footer .sub-footer-inner {
   max-width: none;
@@ -5006,6 +5012,10 @@ footer .container {
   /* Desktop keeps the single editorial line; the narrow-breakpoint rule below
      relaxes this to a no-clip wrap as a safety net. */
   white-space: nowrap;
+  /* Centered: once the font caps at 158px the glyphs stop filling the
+     full-width footer block (gap grows to ~535px at 1920), reading as
+     left-aligned. Center them so the wordmark stays balanced at any width. */
+  text-align: center;
 }
 .foot-masthead-accent { color: var(--coral); }
 .foot-masthead-period { color: var(--ink); }
@@ -5164,17 +5174,26 @@ footer .container {
     visibility: hidden;
     transform: translateY(-6px);
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
-    background: var(--paper);
-    border-top: 1px solid rgba(26, 26, 26, 0.08);
-    box-shadow: 0 12px 32px rgba(26, 26, 26, 0.06);
-    /* The flattened menu can be taller than the viewport. Cap it to the space
-     * below the (sticky) header bar and let the panel itself scroll — `100%`
-     * resolves to the header height here since `.nav` is the positioned
-     * containing block. `overscroll-behavior: contain` stops the scroll from
-     * chaining to the page behind once the list hits its top/bottom edge. */
-    max-height: calc(100vh - 100%);
-    max-height: calc(100dvh - 100%);
+    /* Solid white card (was translucent Liquid Glass): an opaque surface so
+       page content never shows through it, and no backdrop blur. Keeps the
+       hairline border, rounded corners, and a layered drop shadow for lift. */
+    background: #fff;
+    border: 1px solid rgba(21, 20, 15, 0.08);
+    border-radius: 22px;
+    box-shadow:
+      0 6px 24px rgba(17, 17, 26, 0.06),
+      0 12px 40px rgba(17, 17, 26, 0.05);
+    /* The flattened nav list is taller than the screen, so cap the card to the
+       space below the bar and let it scroll internally instead of spilling off
+       the bottom. The `100%` resolves to the header height (the card's
+       positioned containing block); subtract the 10px top gap + a bottom gap.
+       overflow-x:hidden locks the card so it can't be dragged left/right —
+       overflow-y:auto alone would compute overflow-x to `auto` and let any
+       sub-pixel overflow scroll horizontally. */
+    max-height: calc(100vh - 100% - 28px);
+    max-height: calc(100dvh - 100% - 28px);
     overflow-y: auto;
+    overflow-x: hidden;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
@@ -5336,6 +5355,14 @@ footer .container {
   .work-card.alt:hover { transform: translateY(-3px); }
   /* testimonial / partners */
   .testimonial-grid.with-globe { grid-template-columns: 1fr; }
+  /* The heading keeps each <br>-split line on ONE line on desktop
+     (`h2 { white-space: nowrap }` + the post span), which overflows a phone and
+     clipped it ("…329 co", "…toget"). Let both lines wrap on mobile, and let the
+     copy column shrink to 0 so nowrap content can't blow the grid track wider
+     than the screen. */
+  .testimonial-copy { min-width: 0; }
+  .testimonial-copy h2,
+  .testimonial-copy h2 .testi-post { white-space: normal; }
   .testimonial-globe { min-height: 360px; }
   .testimonial-art { max-width: 420px; margin: 0 auto; }
   .partners { grid-template-columns: repeat(3, 1fr); gap: 18px; }
@@ -5358,8 +5385,10 @@ footer .container {
   .cta-window {
     width: 100%;
     margin: 0;
-    /* Full image (no crop) when stacked on a phone. */
+    /* Full image (no crop) when stacked on a phone — reset the desktop
+       aspect-ratio crop so the whole screenshot shows. */
     height: auto;
+    aspect-ratio: auto;
     object-fit: fill;
     border-radius: 10px;
   }

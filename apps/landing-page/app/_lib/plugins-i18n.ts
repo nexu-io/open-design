@@ -118,6 +118,10 @@ export interface PluginsCopy {
   searchPlaceholder: string;
   /** Shown when a catalog filter matches nothing. */
   searchNoResults: string;
+  /** Label on the templates search toggle / submit button. */
+  searchLabel: string;
+  /** Aria-label on the templates search clear (×) button. */
+  searchClear: string;
   /** Caption under the design-system mock-UI live preview. */
   systemPreviewCaption: (name: string) => string;
   /** CTA on a system catalog card, drilling into the detail page. */
@@ -356,6 +360,8 @@ carry the hierarchy and color is used sparingly for intent.
     `${name} design system, ${name} DESIGN.md, ${name} design tokens, design system example, open-source design system`,
   searchPlaceholder: 'Search by name or keyword…',
   searchNoResults: 'No matches. Try a different keyword.',
+  searchLabel: 'Search',
+  searchClear: 'Clear',
   systemPreviewCaption: (name) =>
     `Mock UI styled entirely with ${name}'s design tokens — a live preview of the design system, not a screenshot.`,
   systemCardCta: 'View design system →',
@@ -567,6 +573,8 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     detailSystemLabel: '设计系统',
     searchPlaceholder: '按名称或关键词搜索…',
     searchNoResults: '没有匹配项，换个关键词试试。',
+    searchLabel: '搜索',
+    searchClear: '清除',
     systemPreviewCaption: (name) =>
       `用 ${name} 设计系统 token 渲染的示例界面 —— 设计效果实时预览，非截图。`,
     systemCardCta: '查看设计系统 →',
@@ -692,6 +700,8 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     detailSystemLabel: '設計系統',
     searchPlaceholder: '依名稱或關鍵字搜尋…',
     searchNoResults: '沒有相符項目，換個關鍵字試試。',
+    searchLabel: '搜尋',
+    searchClear: '清除',
     systemPreviewCaption: (name) =>
       `用 ${name} 設計系統 token 渲染的範例介面 —— 設計效果即時預覽，非截圖。`,
     systemCardCta: '檢視設計系統 →',

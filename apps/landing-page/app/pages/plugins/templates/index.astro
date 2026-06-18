@@ -141,10 +141,9 @@ const jsonLd = [
 
   <PluginContribute />
 
-  <section class="filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
-    <div class="filter-group">
-      <span class="filter-label">{pcopy.artifactKindLabel}</span>
-      <ul>
+  <section class="filter-strip tpl-filter-strip" id="filter-strip" aria-label={pcopy.artifactKindLabel}>
+    <div class="tpl-filter-row">
+      <ul class="tpl-chip-list">
         <li>
           <a class="chip chip-link is-active" href={href('/plugins/templates/#filter-strip')} aria-current="page">{pcopy.allChip}<span class="chip-num">{totalCount}</span></a>
         </li>
@@ -160,20 +159,36 @@ const jsonLd = [
           );
         })}
       </ul>
+
+      {/* Search widget — collapsed: pill button; expanded: inline input + submit */}
+      <div class="tpl-search-widget" data-tpl-search-widget>
+        <button class="tpl-search-btn" data-tpl-search-trigger aria-expanded="false" type="button">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="5.5" cy="5.5" r="4"/>
+            <line x1="8.5" y1="8.5" x2="12" y2="12"/>
+          </svg>
+          {pcopy.searchLabel}
+        </button>
+        <div class="tpl-search-expanded" data-tpl-search-expanded>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" class="tpl-search-icon">
+            <circle cx="5.5" cy="5.5" r="4"/>
+            <line x1="8.5" y1="8.5" x2="12" y2="12"/>
+          </svg>
+          <input
+            class="tpl-search-input"
+            type="text"
+            placeholder={pcopy.searchPlaceholder}
+            aria-label={pcopy.searchPlaceholder}
+            data-tpl-search-input
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="tpl-search-submit" data-tpl-search-submit type="button">{pcopy.searchLabel}</button>
+          <button class="tpl-search-close" data-tpl-search-close type="button" aria-label={pcopy.searchClear}>×</button>
+        </div>
+      </div>
     </div>
   </section>
-
-  <div class="catalog-search-wrap">
-    <input
-      type="search"
-      class="catalog-search"
-      data-catalog-search
-      placeholder={pcopy.searchPlaceholder}
-      aria-label={pcopy.searchPlaceholder}
-    />
-  </div>
-
-  <p class="catalog-no-results" data-catalog-empty hidden>{pcopy.searchNoResults}</p>
 
   <section class="tpl-grid" aria-label={pcopy.tileTemplates}>
     {templates.map((item, idx) => (
@@ -287,26 +302,150 @@ const jsonLd = [
       margin: 0 0.45em;
       opacity: 0.55;
     }
-    .catalog-search-wrap {
-      margin: 0 0 24px;
+
+    /* Remove top border from the filter strip on this page */
+    .tpl-filter-strip { border-top: 0; padding-top: 16px; }
+
+    /* Filter row: chips on the left, search button pinned to the right */
+    .tpl-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .catalog-search {
-      width: 100%;
-      max-width: 420px;
-      padding: 10px 14px;
-      font-size: 15px;
+    .tpl-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Search widget wrapper — pinned to the right of the chip rail */
+    .tpl-search-widget {
+      margin-left: auto;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    /* Collapsed pill button — same visual spec as .chip */
+    .tpl-search-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 0 var(--spacing-12, 12px);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--paper, #fafafa);
-      color: var(--ink, #262626);
+      border-radius: 999px;
+      font-family: var(--body);
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 125%;
+      color: var(--ink-soft);
+      background: var(--bone);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.16s, color 0.16s, background 0.16s;
     }
-    .catalog-search:focus {
+    .tpl-search-btn:hover {
+      border-color: var(--line-hover);
+      background: var(--paper-warm);
+      color: var(--ink);
+    }
+
+    /* Expanded inline: [🔍 input ........... | Search | ×] */
+    .tpl-search-expanded {
+      display: none;
+      align-items: center;
+      min-height: 36px;
+      width: 340px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--bone);
+    }
+    .tpl-search-widget[data-open] .tpl-search-btn { display: none; }
+    .tpl-search-widget[data-open] .tpl-search-expanded { display: flex; }
+
+    .tpl-search-icon {
+      flex-shrink: 0;
+      color: var(--ink-mute);
+      margin: 0 6px 0 12px;
+    }
+    .tpl-search-input {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: none;
       outline: none;
-      border-color: var(--ink-mute, #595959);
+      font-family: var(--body);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+      padding: 0 8px 0 0;
     }
-    .catalog-no-results {
-      margin: 24px 0;
-      color: var(--ink-mute, #595959);
+    .tpl-search-input::placeholder { color: var(--ink-mute); }
+
+    /* Submit pill — muted/disabled while the field is empty, dark + active
+       once there's a query. The widget gets `data-has-query` from the input
+       handler in initSearch(). */
+    .tpl-search-submit {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      padding: 0 14px;
+      margin-right: 4px;
+      background: var(--line);
+      color: var(--ink-faint);
+      border: none;
+      border-radius: 999px;
+      font-family: var(--body);
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: default;
+      flex-shrink: 0;
+      transition: background 0.14s, color 0.14s, opacity 0.14s;
+    }
+    .tpl-search-widget[data-has-query] .tpl-search-submit {
+      background: var(--ink);
+      color: #fff;
+      cursor: pointer;
+    }
+    .tpl-search-widget[data-has-query] .tpl-search-submit:hover { opacity: 0.82; }
+
+    /* Clear (×) — only shown once there's something to clear. */
+    .tpl-search-close {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      align-self: stretch;
+      width: 30px;
+      background: transparent;
+      border: none;
+      color: var(--ink-mute);
+      font-size: 18px;
+      cursor: pointer;
+      transition: color 0.12s;
+    }
+    .tpl-search-widget[data-has-query] .tpl-search-close { display: inline-flex; }
+    .tpl-search-close:hover { color: var(--ink); }
+
+    /* .tpl-card visibility is toggled via JS style.display (cross-component) */
+
+    /* Mobile: stack the filter strip — lift the search box ABOVE the chip rail
+       and keep it permanently expanded (full-width input) instead of the
+       right-pinned, collapsed pill that otherwise floated against the middle of
+       the multi-row chip block. `order:-1` moves the (DOM-last) search widget to
+       the top; forcing the expanded view shown + the trigger pill hidden keeps it
+       open without needing the JS toggle. */
+    @media (max-width: 900px) {
+      .tpl-filter-row { flex-direction: column; align-items: stretch; gap: 12px; }
+      .tpl-search-widget { order: -1; margin-left: 0; width: 100%; }
+      .tpl-search-btn { display: none; }
+      .tpl-search-expanded { display: flex; width: 100%; }
     }
   </style>
 </Layout>
@@ -429,31 +568,73 @@ const jsonLd = [
         });
       });
 
-    // 3) Client-side filter for the card grid — typing narrows the
-    //    visible templates by name/keyword so users don't scroll the
-    //    whole catalogue to find one.
-    const search = document.querySelector<HTMLInputElement>('[data-catalog-search]');
-    if (search && !search.dataset.bound) {
-      search.dataset.bound = '1';
-      const cards = Array.from(document.querySelectorAll<HTMLElement>('.tpl-grid > *'));
-      const empty = document.querySelector<HTMLElement>('[data-catalog-empty]');
-      search.addEventListener('input', () => {
-        const q = search.value.trim().toLowerCase();
-        let shown = 0;
-        cards.forEach((el) => {
-          const match = !q || (el.textContent || '').toLowerCase().includes(q);
-          el.hidden = !match;
-          if (match) shown += 1;
-        });
-        if (empty) empty.hidden = shown !== 0;
-      });
-    }
+  };
+
+  // 3) Search widget — expands inline on click; filters on submit / Enter.
+  const initSearch = () => {
+    const widget = document.querySelector<HTMLElement>('[data-tpl-search-widget]');
+    if (!widget || widget.hasAttribute('data-search-bound')) return;
+    widget.setAttribute('data-search-bound', '1');
+
+    const trigger = widget.querySelector<HTMLButtonElement>('[data-tpl-search-trigger]');
+    const input   = widget.querySelector<HTMLInputElement>('[data-tpl-search-input]');
+    const submit  = widget.querySelector<HTMLButtonElement>('[data-tpl-search-submit]');
+    const close   = widget.querySelector<HTMLButtonElement>('[data-tpl-search-close]');
+    if (!trigger || !input) return;
+
+    // Reflect whether the field has content onto the widget, so the submit
+    // pill activates and the clear (×) appears only when there's a query.
+    const sync = () => {
+      widget.toggleAttribute('data-has-query', input.value.trim().length > 0);
+    };
+
+    const runSearch = () => {
+      const q = input.value.toLowerCase().trim();
+      for (const card of document.querySelectorAll<HTMLElement>('.tpl-card')) {
+        const text = card.textContent?.toLowerCase() ?? '';
+        card.style.display = (q && !text.includes(q)) ? 'none' : '';
+      }
+    };
+
+    const open = () => {
+      widget.setAttribute('data-open', '');
+      trigger.setAttribute('aria-expanded', 'true');
+      input.focus();
+      sync();
+    };
+
+    const reset = () => {
+      widget.removeAttribute('data-open');
+      trigger.setAttribute('aria-expanded', 'false');
+      input.value = '';
+      sync();
+      for (const card of document.querySelectorAll<HTMLElement>('.tpl-card')) {
+        card.style.display = '';
+      }
+    };
+
+    trigger.addEventListener('click', open);
+    submit?.addEventListener('click', () => { if (input.value.trim()) runSearch(); });
+    input.addEventListener('input', sync);
+    input.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') runSearch();
+      if (e.key === 'Escape') reset();
+    });
+    close?.addEventListener('click', reset);
+    // The × is hidden while empty, so on desktop an open-but-empty widget can
+    // still be dismissed by clicking outside it (mobile stays expanded — it
+    // never gets `data-open`, so this is a no-op there).
+    document.addEventListener('pointerdown', (e) => {
+      if (widget.hasAttribute('data-open') && !widget.contains(e.target as Node)) reset();
+    });
+    sync();
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initTemplatesPage);
+    document.addEventListener('DOMContentLoaded', () => { initTemplatesPage(); initSearch(); });
   } else {
     initTemplatesPage();
+    initSearch();
   }
-  document.addEventListener('astro:page-load', initTemplatesPage);
+  document.addEventListener('astro:page-load', () => { initTemplatesPage(); initSearch(); });
 </script>

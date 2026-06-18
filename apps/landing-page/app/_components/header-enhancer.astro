@@ -42,11 +42,17 @@
         const blur = 11;
         const blend = 'difference';
         const inset = Math.min(w, h) * (borderRatio * 0.5);
+        // Gradient stops are opaque black (#000), NOT transparent (#0000): a
+        // transparent->red stop interpolates with straight alpha, so composited
+        // over black the R channel comes out quadratic (255*t^2) — its 0.5
+        // neutral point lands at ~29% instead of 50%, which shifts the
+        // refraction off to one side. Opaque stops give a linear ramp whose
+        // neutral point is centered, so the caustics stay symmetric.
         const svg =
           '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
             '<defs>' +
-              '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
-              '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
+              '<linearGradient id="red" x1="100%" y1="0%" x2="0%" y2="0%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="red"/></linearGradient>' +
+              '<linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="blue"/></linearGradient>' +
             '</defs>' +
             '<rect x="0" y="0" width="' + w + '" height="' + h + '" fill="black"/>' +
             '<rect x="0" y="0" width="' + w + '" height="' + h + '" rx="' + radius + '" fill="url(#red)"/>' +
