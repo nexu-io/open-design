@@ -409,6 +409,7 @@ function isAcpArtifactWriteUpdate(update: JsonObject, writeToolCallIds: Set<stri
 // Returns null when no concrete path is present; the caller then falls back to
 // the toolCallId as a dedup key.
 function acpArtifactWritePath(update: JsonObject): string | null {
+  // 1. ACP `locations: [{ path }]` and `content: [{ path }]` (diff entries).
   for (const field of [update.locations, update.content]) {
     if (!Array.isArray(field)) continue;
     for (const entry of field) {
@@ -416,6 +417,18 @@ function acpArtifactWritePath(update: JsonObject): string | null {
       if (typeof path === 'string' && path.trim()) return path.trim();
     }
   }
+  // 2. Tool input echoed by some agents as `rawInput.{path,file_path,filename}`.
+  const rawInput = asObject(update.rawInput);
+  for (const key of ['path', 'file_path', 'filename']) {
+    const value = rawInput?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  // 3. A filename token embedded in the human title, e.g. "Write index.html".
+  // Keeping the real extension lets `isArtifactPath` correctly EXCLUDE
+  // non-artifact writes (e.g. "edit config.json"), matching the claude path.
+  const title = typeof update.title === 'string' ? update.title : '';
+  const match = title.match(/[\w./-]+\.[A-Za-z0-9]+/);
+  if (match?.[0]) return match[0];
   return null;
 }
 
@@ -1150,12 +1163,20 @@ export function attachAcpSession({
         // agent (AMR, Hermes, Kilo, Kiro, Devin, Vibe, …) reported
         // run_finished.artifact_count: 0 even when the run wrote artifacts,
         // because the ACP adapter emitted only text/status/thinking events and
-        // never the tool_use/tool_result pair the counter scans for. ACP gives
-        // no reliable file path (often just a `title` like "edit"), so when no
-        // concrete path is present we key on toolCallId: each distinct write
-        // tool-call counts once. A file edited by several tool-calls
-        // over-counts, which run-artifacts treats as harmless for the boolean
-        // "did this run produce an artifact?" funnel; under-counting was not.
+        // never the tool_use/tool_result pair the counter scans for.
+        //
+        // This path only feeds the NO-PROJECT fallback (project runs use the
+        // filesystem snapshot). `countNewArtifacts` keeps a write only when
+        // `isArtifactPath()` accepts its path, so the emitted file_path MUST
+        // carry an artifact extension. We use the real path when ACP provides
+        // one (`acpArtifactWritePath`); when it does not — the common pathless
+        // shape where the title is just "edit" — a bare `toolCallId` would be
+        // rejected by the extension check and silently drop to 0. Since we have
+        // already classified this call as an artifact write, we fall back to a
+        // synthetic `.html` path keyed on toolCallId so the write stays
+        // countable (deduped per tool-call; an over-count on multi-edit is, per
+        // run-artifacts' contract, harmless for the boolean "did this run
+        // produce an artifact?" funnel, whereas under-counting was the bug).
         if (toolCallId) {
           const isWriteCall =
             isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
@@ -1165,7 +1186,7 @@ export function attachAcpSession({
               type: 'tool_use',
               id: toolCallId,
               name: 'Write',
-              input: { file_path: acpArtifactWritePath(update) ?? toolCallId },
+              input: { file_path: acpArtifactWritePath(update) ?? `acp-write/${toolCallId}.html` },
             });
           }
           if (acpArtifactRunEventState.get(toolCallId) === 'open') {
