@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Masuk',
+  'auth.create': 'Buat',
+  'auth.createAccount': 'Buat akun',
+  'auth.signOut': 'Keluar',
+  'auth.signingOut': 'Keluar…',
+  'auth.working': 'Memproses…',
+  'auth.account': 'Akun',
+  'auth.accountLabel': 'Akun: {name}',
+  'auth.name': 'Nama',
+  'auth.email': 'Email',
+  'auth.password': 'Kata sandi',
+  'auth.modeLabel': 'Mode autentikasi',
+  'auth.failed': 'Autentikasi gagal',
+  'auth.signOutFailed': 'Gagal keluar',
   'chat.amrCard.switchTitle': 'Panggilan model gagal — proses ini dijeda',
   'chat.amrCard.switchBody': 'Beralih ke layanan model AMR resmi Open Design — tanpa perlu mengatur API Key. Setelah masuk, otorisasi, dan isi ulang, proses ini akan dicoba ulang otomatis.',
   'chat.amrCard.chipOfficial': 'Hosting resmi',

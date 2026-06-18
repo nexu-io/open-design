@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Giriş yap',
+  'auth.create': 'Oluştur',
+  'auth.createAccount': 'Hesap oluştur',
+  'auth.signOut': 'Çıkış yap',
+  'auth.signingOut': 'Çıkış yapılıyor…',
+  'auth.working': 'İşleniyor…',
+  'auth.account': 'Hesap',
+  'auth.accountLabel': 'Hesap: {name}',
+  'auth.name': 'Ad',
+  'auth.email': 'E-posta',
+  'auth.password': 'Parola',
+  'auth.modeLabel': 'Kimlik doğrulama modu',
+  'auth.failed': 'Kimlik doğrulama başarısız',
+  'auth.signOutFailed': 'Çıkış yapılamadı',
   'chat.amrCard.switchTitle': 'Model çağrısı başarısız oldu — bu çalıştırma duraklatıldı',
   'chat.amrCard.switchBody': 'Open Design\'ın resmi AMR model hizmetine geçin — API anahtarı yapılandırması gerekmez. Oturum açma, yetkilendirme ve bakiye yükleme sonrası bu çalıştırma otomatik olarak yeniden denenir.',
   'chat.amrCard.chipOfficial': 'Resmi hizmet',

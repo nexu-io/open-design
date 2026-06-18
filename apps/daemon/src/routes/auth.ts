@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
+import { configuredAllowedOrigins, isLoopbackOrPrivateLanHost } from '../origin-validation.js';
 
 const AUTH_SECRET_FILE = 'auth-secret';
 
@@ -51,18 +52,48 @@ export async function createOpenDesignAuth(options: {
   const pool = new Pool({ connectionString: databaseUrl });
   await ensureBetterAuthPostgresSchema(pool);
 
+  // Deploy topology (Cloudflare tunnel → Traefik → daemon): the daemon
+  // terminates plain HTTP behind a TLS proxy, so better-auth cannot derive its
+  // public origin from the incoming request. Anchor it to the same allow-list
+  // the daemon's own origin guard uses (OD_ALLOWED_ORIGINS), preferring an
+  // explicit BETTER_AUTH_URL. When neither is set (pure localhost dev) we leave
+  // baseURL unset and better-auth derives it per request.
+  const allowedOrigins = configuredAllowedOrigins(env);
+  const baseURL =
+    (env.BETTER_AUTH_URL ?? '').trim() ||
+    allowedOrigins.find((origin) => origin.startsWith('https://')) ||
+    allowedOrigins[0] ||
+    undefined;
+  const useSecureCookies = baseURL ? baseURL.startsWith('https://') : undefined;
+
   const auth = betterAuth({
     appName: 'Open Design',
     basePath: '/api/auth',
+    ...(baseURL ? { baseURL } : {}),
     database: pool,
     emailAndPassword: {
       enabled: true,
     },
     secret: resolveAuthSecret(options.dataDir, env),
+    // CSRF: public origins must be explicitly allow-listed via
+    // OD_ALLOWED_ORIGINS — never blanket-echo the request Origin. Loopback /
+    // private-LAN origins are trusted unconditionally so the local web UI and
+    // the `od` CLI (dynamic ports) work without per-port config; the daemon's
+    // own origin guard already gates those.
     trustedOrigins: (request) => {
       const origin = request?.headers.get('origin');
-      return [origin].filter((value): value is string => Boolean(value));
+      if (!origin) return allowedOrigins;
+      try {
+        const parsed = new URL(origin);
+        if (isLoopbackOrPrivateLanHost(parsed.hostname)) {
+          return [...allowedOrigins, parsed.origin];
+        }
+      } catch {
+        return allowedOrigins;
+      }
+      return allowedOrigins;
     },
+    ...(useSecureCookies === undefined ? {} : { advanced: { useSecureCookies } }),
   });
   const nodeHandler = toNodeHandler(auth);
 

@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const zhTW: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': '登入',
+  'auth.create': '建立',
+  'auth.createAccount': '建立帳戶',
+  'auth.signOut': '登出',
+  'auth.signingOut': '正在登出…',
+  'auth.working': '處理中…',
+  'auth.account': '帳戶',
+  'auth.accountLabel': '帳戶：{name}',
+  'auth.name': '姓名',
+  'auth.email': '電子郵件',
+  'auth.password': '密碼',
+  'auth.modeLabel': '驗證方式',
+  'auth.failed': '驗證失敗',
+  'auth.signOutFailed': '登出失敗',
   'chat.amrCard.switchTitle': '模型呼叫失敗，目前任務已暫停',
   'chat.amrCard.switchBody': '可切換到 Open Design 官方 AMR 模型服務，無需設定 API Key。完成登入、授權與儲值後，將自動重試目前任務。',
   'chat.amrCard.chipOfficial': '官方代管',

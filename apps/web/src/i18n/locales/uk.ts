@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Увійти',
+  'auth.create': 'Створити',
+  'auth.createAccount': 'Створити обліковий запис',
+  'auth.signOut': 'Вийти',
+  'auth.signingOut': 'Вихід…',
+  'auth.working': 'Обробка…',
+  'auth.account': 'Обліковий запис',
+  'auth.accountLabel': 'Обліковий запис: {name}',
+  'auth.name': 'Ім\'я',
+  'auth.email': 'Електронна пошта',
+  'auth.password': 'Пароль',
+  'auth.modeLabel': 'Режим автентифікації',
+  'auth.failed': 'Помилка автентифікації',
+  'auth.signOutFailed': 'Не вдалося вийти',
   'chat.amrCard.switchTitle': 'Не вдалося викликати модель — це виконання призупинено',
   'chat.amrCard.switchBody': 'Перейдіть на офіційний сервіс моделей AMR від Open Design — без налаштування API-ключа. Після входу, авторизації та поповнення це виконання буде повторено автоматично.',
   'chat.amrCard.chipOfficial': 'Офіційний хостинг',

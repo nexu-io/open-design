@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Button } from '@open-design/components';
 import { authClient } from '../auth-client';
+import { useT } from '../i18n';
 import { RemixIcon } from './RemixIcon';
+import styles from './AuthAccountMenu.module.css';
 
 type AuthMode = 'sign-in' | 'sign-up';
 
@@ -9,12 +12,17 @@ function displayInitial(name: string | null | undefined, email: string | null | 
   return source.charAt(0).toUpperCase();
 }
 
-function displayName(name: string | null | undefined, email: string | null | undefined): string {
-  const source = (name || email || 'Account').trim();
-  return source.length > 0 ? source : 'Account';
+function displayName(
+  name: string | null | undefined,
+  email: string | null | undefined,
+  fallback: string,
+): string {
+  const source = (name || email || fallback).trim();
+  return source.length > 0 ? source : fallback;
 }
 
 export function AuthAccountMenu() {
+  const t = useT();
   const session = authClient.useSession();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AuthMode>('sign-in');
@@ -62,14 +70,14 @@ export function AuthAccountMenu() {
             name: name.trim() || email.trim(),
           });
       if (result.error) {
-        setError(result.error.message || 'Authentication failed');
+        setError(result.error.message || t('auth.failed'));
         return;
       }
       await session.refetch();
       setPassword('');
       setOpen(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Authentication failed');
+      setError(caught instanceof Error ? caught.message : t('auth.failed'));
     } finally {
       setPending(false);
     }
@@ -81,27 +89,26 @@ export function AuthAccountMenu() {
     try {
       const result = await authClient.signOut();
       if (result.error) {
-        setError(result.error.message || 'Sign out failed');
+        setError(result.error.message || t('auth.signOutFailed'));
         return;
       }
       await session.refetch();
       setOpen(false);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Sign out failed');
+      setError(caught instanceof Error ? caught.message : t('auth.signOutFailed'));
     } finally {
       setPending(false);
     }
   }
 
-  const triggerLabel = signedIn
-    ? `Account: ${displayName(user?.name, user?.email)}`
-    : 'Sign in';
+  const accountName = displayName(user?.name, user?.email, t('auth.account'));
+  const triggerLabel = signedIn ? t('auth.accountLabel', { name: accountName }) : t('auth.signIn');
 
   return (
-    <div className="auth-account-menu" ref={rootRef}>
+    <div className={styles.root} ref={rootRef}>
       <button
         type="button"
-        className="auth-account-menu__trigger od-tooltip"
+        className={`${styles.trigger} od-tooltip`}
         aria-label={triggerLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -110,7 +117,7 @@ export function AuthAccountMenu() {
         onClick={() => setOpen((value) => !value)}
       >
         {signedIn ? (
-          <span className="auth-account-menu__initial" aria-hidden>
+          <span className={styles.initial} aria-hidden>
             {displayInitial(user?.name, user?.email)}
           </span>
         ) : (
@@ -118,34 +125,33 @@ export function AuthAccountMenu() {
         )}
       </button>
       {open ? (
-        <div className="auth-account-menu__popover" role="dialog" aria-label="Account">
+        <div className={styles.popover} role="dialog" aria-label={t('auth.account')}>
           {signedIn ? (
             <>
-              <div className="auth-account-menu__identity">
-                <span className="auth-account-menu__avatar" aria-hidden>
+              <div className={styles.identity}>
+                <span className={styles.avatar} aria-hidden>
                   {displayInitial(user?.name, user?.email)}
                 </span>
-                <div className="auth-account-menu__identity-text">
-                  <strong>{displayName(user?.name, user?.email)}</strong>
+                <div className={styles.identityText}>
+                  <strong>{accountName}</strong>
                   {user?.email ? <span>{user.email}</span> : null}
                 </div>
               </div>
-              {error ? <p className="auth-account-menu__error">{error}</p> : null}
-              <button
-                type="button"
-                className="auth-account-menu__submit"
+              {error ? <p className={styles.error}>{error}</p> : null}
+              <Button
+                className={styles.submit}
                 disabled={pending}
                 onClick={() => void handleSignOut()}
               >
-                {pending ? 'Signing out...' : 'Sign out'}
-              </button>
+                {pending ? t('auth.signingOut') : t('auth.signOut')}
+              </Button>
             </>
           ) : (
-            <form className="auth-account-menu__form" onSubmit={(event) => void handleSubmit(event)}>
-              <div className="auth-account-menu__modes" role="tablist" aria-label="Authentication mode">
+            <form className={styles.form} onSubmit={(event) => void handleSubmit(event)}>
+              <div className={styles.modes} role="tablist" aria-label={t('auth.modeLabel')}>
                 <button
                   type="button"
-                  className={mode === 'sign-in' ? 'is-active' : ''}
+                  className={mode === 'sign-in' ? `${styles.modeButton} ${styles.modeButtonActive}` : styles.modeButton}
                   role="tab"
                   aria-selected={mode === 'sign-in'}
                   onClick={() => {
@@ -153,11 +159,11 @@ export function AuthAccountMenu() {
                     setError(null);
                   }}
                 >
-                  Sign in
+                  {t('auth.signIn')}
                 </button>
                 <button
                   type="button"
-                  className={mode === 'sign-up' ? 'is-active' : ''}
+                  className={mode === 'sign-up' ? `${styles.modeButton} ${styles.modeButtonActive}` : styles.modeButton}
                   role="tab"
                   aria-selected={mode === 'sign-up'}
                   onClick={() => {
@@ -165,12 +171,12 @@ export function AuthAccountMenu() {
                     setError(null);
                   }}
                 >
-                  Create
+                  {t('auth.create')}
                 </button>
               </div>
               {mode === 'sign-up' ? (
-                <label className="auth-account-menu__field">
-                  <span>Name</span>
+                <label className={styles.field}>
+                  <span>{t('auth.name')}</span>
                   <input
                     autoComplete="name"
                     value={name}
@@ -178,8 +184,8 @@ export function AuthAccountMenu() {
                   />
                 </label>
               ) : null}
-              <label className="auth-account-menu__field">
-                <span>Email</span>
+              <label className={styles.field}>
+                <span>{t('auth.email')}</span>
                 <input
                   autoComplete="email"
                   inputMode="email"
@@ -189,8 +195,8 @@ export function AuthAccountMenu() {
                   onChange={(event) => setEmail(event.currentTarget.value)}
                 />
               </label>
-              <label className="auth-account-menu__field">
-                <span>Password</span>
+              <label className={styles.field}>
+                <span>{t('auth.password')}</span>
                 <input
                   autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
                   minLength={8}
@@ -200,10 +206,10 @@ export function AuthAccountMenu() {
                   onChange={(event) => setPassword(event.currentTarget.value)}
                 />
               </label>
-              {error ? <p className="auth-account-menu__error">{error}</p> : null}
-              <button type="submit" className="auth-account-menu__submit" disabled={pending}>
-                {pending ? 'Working...' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
-              </button>
+              {error ? <p className={styles.error}>{error}</p> : null}
+              <Button type="submit" className={styles.submit} disabled={pending}>
+                {pending ? t('auth.working') : mode === 'sign-in' ? t('auth.signIn') : t('auth.createAccount')}
+              </Button>
             </form>
           )}
         </div>

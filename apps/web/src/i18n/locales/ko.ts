@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': '로그인',
+  'auth.create': '만들기',
+  'auth.createAccount': '계정 만들기',
+  'auth.signOut': '로그아웃',
+  'auth.signingOut': '로그아웃 중…',
+  'auth.working': '처리 중…',
+  'auth.account': '계정',
+  'auth.accountLabel': '계정: {name}',
+  'auth.name': '이름',
+  'auth.email': '이메일',
+  'auth.password': '비밀번호',
+  'auth.modeLabel': '인증 모드',
+  'auth.failed': '인증 실패',
+  'auth.signOutFailed': '로그아웃 실패',
   'chat.amrCard.switchTitle': '모델 호출 실패 — 이 작업이 일시중지되었습니다',
   'chat.amrCard.switchBody': 'Open Design 공식 AMR 모델 서비스로 전환하세요 — API 키 설정이 필요 없습니다. 로그인・인증・충전이 완료되면 이 작업이 자동으로 재시도됩니다.',
   'chat.amrCard.chipOfficial': '공식 호스팅',

@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const esES: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Iniciar sesión',
+  'auth.create': 'Crear',
+  'auth.createAccount': 'Crear cuenta',
+  'auth.signOut': 'Cerrar sesión',
+  'auth.signingOut': 'Cerrando sesión…',
+  'auth.working': 'Procesando…',
+  'auth.account': 'Cuenta',
+  'auth.accountLabel': 'Cuenta: {name}',
+  'auth.name': 'Nombre',
+  'auth.email': 'Correo electrónico',
+  'auth.password': 'Contraseña',
+  'auth.modeLabel': 'Modo de autenticación',
+  'auth.failed': 'Error de autenticación',
+  'auth.signOutFailed': 'Error al cerrar sesión',
   'chat.amrCard.switchTitle': 'Falló la llamada al modelo — esta ejecución está en pausa',
   'chat.amrCard.switchBody': 'Cambia al servicio oficial de modelos AMR de Open Design — sin configurar API Key. Tras iniciar sesión, autorizar y recargar, esta ejecución se reintentará automáticamente.',
   'chat.amrCard.chipOfficial': 'Alojamiento oficial',

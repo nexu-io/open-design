@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const th: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'เข้าสู่ระบบ',
+  'auth.create': 'สร้าง',
+  'auth.createAccount': 'สร้างบัญชี',
+  'auth.signOut': 'ออกจากระบบ',
+  'auth.signingOut': 'กำลังออกจากระบบ…',
+  'auth.working': 'กำลังดำเนินการ…',
+  'auth.account': 'บัญชี',
+  'auth.accountLabel': 'บัญชี: {name}',
+  'auth.name': 'ชื่อ',
+  'auth.email': 'อีเมล',
+  'auth.password': 'รหัสผ่าน',
+  'auth.modeLabel': 'โหมดการตรวจสอบสิทธิ์',
+  'auth.failed': 'การตรวจสอบสิทธิ์ล้มเหลว',
+  'auth.signOutFailed': 'ออกจากระบบไม่สำเร็จ',
   'chat.amrCard.switchTitle': 'เรียกใช้โมเดลล้มเหลว — งานนี้ถูกหยุดชั่วคราว',
   'chat.amrCard.switchBody': 'สลับไปยังบริการโมเดล AMR อย่างเป็นทางการของ Open Design — ไม่ต้องตั้งค่า API Key หลังจากเข้าสู่ระบบ ให้สิทธิ์ และเติมเงินแล้ว งานนี้จะถูกลองใหม่โดยอัตโนมัติ',
   'chat.amrCard.chipOfficial': 'โฮสติ้งอย่างเป็นทางการ',

@@ -43,7 +43,7 @@ interface StubServer {
 
 /** Stub of better-auth's email/password surface. When `enabled` is false it
  *  404s every /api/auth route, mimicking a daemon with auth unmounted. */
-async function startStubServer(enabled = true): Promise<StubServer> {
+async function startStubServer(enabled = true, cookieName = SESSION_COOKIE): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -65,7 +65,7 @@ async function startStubServer(enabled = true): Promise<StubServer> {
       if (url.startsWith('/api/auth/sign-in/email') || url.startsWith('/api/auth/sign-up/email')) {
         const parsed = raw ? JSON.parse(raw) : {};
         res.statusCode = 200;
-        res.setHeader('set-cookie', `${SESSION_COOKIE}=${SESSION_VALUE}; Path=/; HttpOnly; SameSite=Lax`);
+        res.setHeader('set-cookie', `${cookieName}=${SESSION_VALUE}; Path=/; HttpOnly; SameSite=Lax`);
         res.setHeader('content-type', 'application/json');
         res.end(
           JSON.stringify({
@@ -77,7 +77,7 @@ async function startStubServer(enabled = true): Promise<StubServer> {
       }
 
       if (url.startsWith('/api/auth/get-session')) {
-        const hasSession = (cookie ?? '').includes(`${SESSION_COOKIE}=${SESSION_VALUE}`);
+        const hasSession = (cookie ?? '').includes(`${cookieName}=${SESSION_VALUE}`);
         res.statusCode = 200;
         res.setHeader('content-type', 'application/json');
         res.end(
@@ -219,6 +219,29 @@ describe('od auth', () => {
       const signinReq = stub.requests.find((r) => r.url.startsWith('/api/auth/sign-in/email'));
       // Trailing newline is stripped before sending.
       expect(JSON.parse(signinReq!.body).password).toBe('secretFromStdin');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('persists a __Secure- prefixed session cookie (HTTPS deploy)', async () => {
+    // When the daemon runs with secure cookies, better-auth names the session
+    // cookie `__Secure-better-auth.session_token`. The CLI must still capture
+    // and replay it so status/sign-out keep working behind a TLS proxy.
+    const stub = await startStubServer(true, `__Secure-${SESSION_COOKIE}`);
+    sessionFile = join(scratchDir, 'sess-secure');
+    try {
+      const signIn = await runCli(
+        ['auth', 'sign-in', '--email', 'a@b.co', '--password', 'hunter2hunter', '--daemon-url', stub.baseUrl],
+        { sessionFile },
+      );
+      expect(signIn.code).toBe(0);
+      expect(readFileSync(sessionFile, 'utf8')).toContain(`__Secure-${SESSION_COOKIE}=${SESSION_VALUE}`);
+
+      const status = await runCli(['auth', 'status', '--json', '--daemon-url', stub.baseUrl], { sessionFile });
+      expect(JSON.parse(status.stdout).signedIn).toBe(true);
+      const sessionReq = stub.requests.find((r) => r.url.startsWith('/api/auth/get-session'));
+      expect(sessionReq?.cookie).toContain(`__Secure-${SESSION_COOKIE}=${SESSION_VALUE}`);
     } finally {
       await stub.close();
     }

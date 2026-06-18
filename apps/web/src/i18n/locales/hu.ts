@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Bejelentkezés',
+  'auth.create': 'Létrehozás',
+  'auth.createAccount': 'Fiók létrehozása',
+  'auth.signOut': 'Kijelentkezés',
+  'auth.signingOut': 'Kijelentkezés…',
+  'auth.working': 'Feldolgozás…',
+  'auth.account': 'Fiók',
+  'auth.accountLabel': 'Fiók: {name}',
+  'auth.name': 'Név',
+  'auth.email': 'E-mail',
+  'auth.password': 'Jelszó',
+  'auth.modeLabel': 'Hitelesítési mód',
+  'auth.failed': 'A hitelesítés sikertelen',
+  'auth.signOutFailed': 'A kijelentkezés sikertelen',
   'chat.amrCard.switchTitle': 'Sikertelen modellhívás — ez a futtatás szünetel',
   'chat.amrCard.switchBody': 'Válts az Open Design hivatalos AMR modellszolgáltatására — nincs szükség API-kulcs beállítására. Bejelentkezés, engedélyezés és feltöltés után ez a futtatás automatikusan újraindul.',
   'chat.amrCard.chipOfficial': 'Hivatalos szolgáltatás',

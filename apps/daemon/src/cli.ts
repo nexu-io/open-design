@@ -7229,17 +7229,27 @@ function clearStoredAuthCookie() {
   }
 }
 
-// Pull the `better-auth.session_token=...` pair out of a response's Set-Cookie
+// Pull the better-auth session-cookie pair out of a response's Set-Cookie
 // headers. Returns the `name=value` string to replay as a Cookie header, or
 // null when the response carried no (or a cleared) session cookie.
+//
+// The cookie name is `better-auth.session_token`, OR `__Secure-`/`__Host-`
+// prefixed when the daemon runs with secure cookies (HTTPS deploy). Match the
+// suffix so both the localhost (plain) and deployed (prefixed) forms persist.
+function isSessionCookieName(name) {
+  return name === AUTH_SESSION_COOKIE || name.endsWith(`-${AUTH_SESSION_COOKIE}`);
+}
+
 function captureAuthSessionCookie(resp) {
   const setCookies =
     typeof resp.headers.getSetCookie === 'function' ? resp.headers.getSetCookie() : [];
   for (const raw of setCookies) {
     const pair = raw.split(';')[0]?.trim();
-    if (pair && pair.startsWith(`${AUTH_SESSION_COOKIE}=`)) {
-      const value = pair.slice(AUTH_SESSION_COOKIE.length + 1);
-      return value.length > 0 ? pair : null;
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    if (eq < 0) continue;
+    if (isSessionCookieName(pair.slice(0, eq))) {
+      return pair.slice(eq + 1).length > 0 ? pair : null;
     }
   }
   return null;

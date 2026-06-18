@@ -30,6 +30,21 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': string;
+  'auth.create': string;
+  'auth.createAccount': string;
+  'auth.signOut': string;
+  'auth.signingOut': string;
+  'auth.working': string;
+  'auth.account': string;
+  'auth.accountLabel': string;
+  'auth.name': string;
+  'auth.email': string;
+  'auth.password': string;
+  'auth.modeLabel': string;
+  'auth.failed': string;
+  'auth.signOutFailed': string;
   // Common
   'common.cancel': string;
   'common.save': string;

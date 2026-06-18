@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const zhCN: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': '登录',
+  'auth.create': '创建',
+  'auth.createAccount': '创建账户',
+  'auth.signOut': '退出登录',
+  'auth.signingOut': '正在退出…',
+  'auth.working': '处理中…',
+  'auth.account': '账户',
+  'auth.accountLabel': '账户：{name}',
+  'auth.name': '姓名',
+  'auth.email': '邮箱',
+  'auth.password': '密码',
+  'auth.modeLabel': '认证方式',
+  'auth.failed': '认证失败',
+  'auth.signOutFailed': '退出登录失败',
   'chat.amrCard.switchTitle': '模型调用失败，当前任务已暂停',
   'chat.amrCard.switchBody': '可切换到 Open Design 官方 AMR 模型服务，无需配置 API Key。完成登录、授权和充值后，将自动重试当前任务。',
   'chat.amrCard.chipOfficial': '官方托管',

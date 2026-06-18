@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const de: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'Anmelden',
+  'auth.create': 'Registrieren',
+  'auth.createAccount': 'Konto erstellen',
+  'auth.signOut': 'Abmelden',
+  'auth.signingOut': 'Abmeldung…',
+  'auth.working': 'Wird ausgeführt…',
+  'auth.account': 'Konto',
+  'auth.accountLabel': 'Konto: {name}',
+  'auth.name': 'Name',
+  'auth.email': 'E-Mail',
+  'auth.password': 'Passwort',
+  'auth.modeLabel': 'Authentifizierungsmodus',
+  'auth.failed': 'Authentifizierung fehlgeschlagen',
+  'auth.signOutFailed': 'Abmeldung fehlgeschlagen',
   'chat.amrCard.switchTitle': 'Modellaufruf fehlgeschlagen — dieser Lauf ist pausiert',
   'chat.amrCard.switchBody': 'Wechsle zum offiziellen AMR-Modelldienst von Open Design — kein API-Key-Setup nötig. Nach Anmeldung, Autorisierung und Aufladung wird dieser Lauf automatisch wiederholt.',
   'chat.amrCard.chipOfficial': 'Offizielles Hosting',

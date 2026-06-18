@@ -1,6 +1,21 @@
 import type { Dict } from '../types';
 
 export const fa: Dict = {
+  // Auth (AuthAccountMenu)
+  'auth.signIn': 'ورود',
+  'auth.create': 'ایجاد',
+  'auth.createAccount': 'ایجاد حساب',
+  'auth.signOut': 'خروج',
+  'auth.signingOut': 'در حال خروج…',
+  'auth.working': 'در حال پردازش…',
+  'auth.account': 'حساب',
+  'auth.accountLabel': 'حساب: {name}',
+  'auth.name': 'نام',
+  'auth.email': 'ایمیل',
+  'auth.password': 'رمز عبور',
+  'auth.modeLabel': 'حالت احراز هویت',
+  'auth.failed': 'احراز هویت ناموفق بود',
+  'auth.signOutFailed': 'خروج ناموفق بود',
   'chat.amrCard.switchTitle': 'فراخوانی مدل ناموفق بود — این اجرا متوقف شد',
   'chat.amrCard.switchBody': 'به سرویس رسمی مدل AMR از Open Design سوئیچ کنید — بدون نیاز به تنظیم کلید API. پس از ورود، اعطای دسترسی و شارژ، این اجرا به‌طور خودکار دوباره انجام می‌شود.',
   'chat.amrCard.chipOfficial': 'میزبانی رسمی',
