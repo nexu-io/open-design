@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "agents.md-odi-operational-rules-mqjkfmeb",
+  "title": "AGENTS.md — Odi Operational Rules",
+  "version": "0.1.0",
+  "description": "**⚠️ ADMIN-CONTROLLED: Solo administradores pueden editar este archivo.**",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

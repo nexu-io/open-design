@@ -1,0 +1,40 @@
+{
+  "candidateId": "dacd3ef6-8d7e-4bb5-a5f1-24b3e09c4165",
+  "projectId": "e64596f9-f729-427c-9514-22de1998e701",
+  "runId": "fc41fedd-7d65-4d54-a973-0064ed04e8d7",
+  "conversationId": "a140b5c4-dac9-4a13-b4e7-97c29f9922fa",
+  "provenance": {
+    "summary": "Detected from openclaw/workspace/AGENTS.md, docs/architecture/governed-read-gateway.md, docs/architecture/governed-write-gateway.md, openclaw/workspace/skills/odoo-query/SKILL.md after a successful run.",
+    "detectedAt": 1781790812949
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "openclaw/workspace/AGENTS.md",
+      "label": "openclaw/workspace/AGENTS.md",
+      "size": 11609,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "docs/architecture/governed-read-gateway.md",
+      "label": "docs/architecture/governed-read-gateway.md",
+      "size": 7447,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "docs/architecture/governed-write-gateway.md",
+      "label": "docs/architecture/governed-write-gateway.md",
+      "size": 4570,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "openclaw/workspace/skills/odoo-query/SKILL.md",
+      "label": "openclaw/workspace/skills/odoo-query/SKILL.md",
+      "size": 11547,
+      "copied": true
+    }
+  ]
+}
