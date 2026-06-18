@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "xidima-mqizz4vx",
+  "title": "XIDIMA",
+  "version": "0.1.0",
+  "description": "A Tunisian marketplace platform connecting people with trusted professionals and service providers, launching from Sfax.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
