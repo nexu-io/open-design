@@ -144,11 +144,12 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     const showAuthorizeAction = failedAssistant?.agentId === 'amr' && errorCode === 'AMR_AUTH_REQUIRED';
     const showLaunchTerminalAction =
       failedAssistant?.agentId === 'antigravity'
-      && (errorCode === 'AGENT_AUTH_REQUIRED' || errorCode === 'RATE_LIMITED');
+      && errorCode === 'RATE_LIMITED';
     const showSwitchToAmrPromotion =
-      failedAssistant?.agentId !== 'amr'
-      && failedAssistant?.agentId !== 'antigravity'
-      && (errorCode === 'AGENT_AUTH_REQUIRED' || errorCode === 'UNAUTHORIZED' || errorCode === 'RATE_LIMITED');
+      Boolean(failedAssistant)
+      && failedAssistant?.agentId !== 'amr'
+      && !showLaunchTerminalAction
+      && errorCode !== 'AGENT_CONNECTION_DROPPED';
     const showRetryAction = Boolean(
       failedAssistant && onRetry && (
         errorCode == null
@@ -1745,7 +1746,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('routes workspace retry and terminal launch recovery for antigravity auth failures', async () => {
+  it('routes workspace retry and official-agent recovery for antigravity auth failures', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1786,11 +1787,9 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId('workspace-launch-terminal')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('workspace-switch-amr')).toBeTruthy());
     await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
-
-    fireEvent.click(screen.getByTestId('workspace-launch-terminal'));
-    await waitFor(() => expect(launchAntigravityOauth).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('workspace-launch-terminal')).toBeNull();
 
     fireEvent.click(screen.getByTestId('workspace-retry'));
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
@@ -1847,7 +1846,7 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
   });
 
-  it('does not promote switching to AMR for upstream outages', async () => {
+  it('promotes switching to AMR for upstream outages', async () => {
     conversationAMessages = [];
     fetchChatRunStatus.mockResolvedValue(null);
     streamViaDaemon.mockImplementation(
@@ -1889,7 +1888,7 @@ describe('ProjectView conversation run isolation', () => {
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('workspace-retry')).toBeTruthy());
-    expect(screen.queryByTestId('workspace-switch-amr')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('workspace-switch-amr')).toBeTruthy());
     expect(screen.queryByTestId('workspace-authorize')).toBeNull();
     expect(screen.queryByTestId('workspace-launch-terminal')).toBeNull();
   });

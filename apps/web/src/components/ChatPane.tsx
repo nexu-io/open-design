@@ -16,7 +16,12 @@ import {
 import { createPortal } from 'react-dom';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
-import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
+import {
+  trackChatPanelClick,
+  trackMessageQueueClick,
+  trackRunFailedToastGoAmrClick,
+  trackRunFailedToastSurfaceView,
+} from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
 import { useT } from '../i18n';
 import {
@@ -39,16 +44,17 @@ import {
 import { isTodoWriteToolName, latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, Project, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { exactDateTime, messageTime, shortTime } from '../utils/chatTime';
-import { agentDisplayName } from '../utils/agentLabels';
 import { commentTargetDisplayName, commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage, type QuestionFormOpenRequest } from './AssistantMessage';
-import { AmrGuidance } from './AmrGuidance';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
 } from './amrLoginPolling';
-import { amrRechargeUrlForProfile, resolveRunFailureUi } from '../runtime/amr-guidance';
+import {
+  amrRechargeUrlForProfile,
+  resolveRunFailureUi,
+} from '../runtime/amr-guidance';
 import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
@@ -531,11 +537,7 @@ interface Props {
   onSwitchToLocalCli?: () => void;
   onOpenAmrSettings?: () => void;
   onSwitchToAmrAndRetry?: (failedAssistant: ChatMessage) => void;
-  // PR #3157: Antigravity's `agy -p` can't complete OAuth on its own,
-  // so the auth banner offers a "Sign in via terminal" button that
-  // POSTs to /api/agents/antigravity/oauth-launch. Handler resolves
-  // after the daemon kicks off `osascript`/`x-terminal-emulator`/
-  // `cmd /c start` so the UI can disable the button while in flight.
+  // Antigravity quota recovery opens its TUI so the user can switch models.
   onLaunchAntigravityOauth?: () => Promise<void>;
   // Same dialog, but landing on the External MCP tab. Forwarded to the
   // composer's `/mcp` slash and MCP picker button.
@@ -632,6 +634,7 @@ interface RunErrorDiagnosticInput {
   conversationId?: string | null;
   assistantMessageId?: string;
   agentId?: string;
+  model?: string | null;
 }
 
 interface QueuedSendItem {
@@ -895,6 +898,20 @@ export function ChatPane({
     }
     return null;
   })();
+  const failedRunModel = (() => {
+    const evs = retryAssistant?.events ?? [];
+    for (let i = evs.length - 1; i >= 0; i--) {
+      const ev = evs[i];
+      if (ev?.kind !== 'status') continue;
+      const structuredModel = typeof ev.model === 'string' ? ev.model.trim() : '';
+      if (structuredModel) return structuredModel;
+      if (ev.label === 'model' && typeof ev.detail === 'string') {
+        const detailModel = ev.detail.trim();
+        if (detailModel) return detailModel;
+      }
+    }
+    return null;
+  })();
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
   const runFailureUi = retryAssistant
@@ -954,18 +971,20 @@ export function ChatPane({
     !!retryAssistant?.resumable &&
     !!retryAssistant?.agentId &&
     retryAssistant.agentId === config?.agentId;
-  // Prefer a case-specific message (AMR auth / balance) over the raw upstream
-  // string; fall back to the live global error (also covers conversation-load
-  // / audio errors) then the persisted run error so a reload still shows it.
+  // Prefer a case-specific repair explanation over the raw upstream string.
+  // The raw source is still retained below in the expandable diagnostic row.
   const rawError = error ?? failedRunErrorEvent?.detail ?? null;
-  // Friendly agent name for {agent} interpolation in failure copy (e.g. the
-  // sign-in messages). Falls back to a neutral word when unreadable, never null.
-  const failedAgentLabel =
-    agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
-    t('chat.runError.agentFallback');
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey)
     : rawError;
+  const runFailureTitle = runFailureUi
+    ? t(runFailureUi.titleKey)
+    : t('chat.runError.title.generic');
+  const rawErrorSource =
+    rawError ??
+    failedRunErrorEvent?.code ??
+    displayError ??
+    t('chat.runError.description.generic');
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
         message: displayError,
@@ -976,28 +995,21 @@ export function ChatPane({
         conversationId: activeConversationId,
         assistantMessageId: retryAssistant?.id,
         agentId: retryAssistant?.agentId,
+        model: failedRunModel,
       })
     : null;
-  // First non-empty line of the diagnostics — shown as the one-line peek when
-  // the error-source area is collapsed.
-  const errorSourcePeek =
-    errorDiagnosticText?.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
-  // Status-dot tone for the unified card. Brand (accent) for AMR sign-in/top-up
-  // — the commercial recovery path; warn (amber) for the self-healing
-  // connection drop; error (red) for everything else. Purely visual.
-  const runErrorTone: 'error' | 'warn' | 'brand' =
-    runFailureUi?.primaryAction === 'authorize' || runFailureUi?.primaryAction === 'recharge'
+  const runErrorTone: 'error' | 'brand' =
+    runFailureUi?.primaryAction === 'authorize' ||
+    runFailureUi?.primaryAction === 'recharge'
       ? 'brand'
-      : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
-        ? 'warn'
-        : 'error';
+      : 'error';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
-  // Collapsed by default: the error source area shows one line until expanded.
-  const [errorSourceOpen, setErrorSourceOpen] = useState(false);
+  const [runErrorRawExpanded, setRunErrorRawExpanded] = useState(false);
   const errorDiagnosticCopyTimerRef = useRef<number | null>(null);
   const copyErrorDiagnostic = useCallback(async () => {
-    if (!errorDiagnosticText) return;
-    const ok = await copyToClipboard(errorDiagnosticText);
+    const text = errorDiagnosticText ?? rawErrorSource;
+    if (!text) return;
+    const ok = await copyToClipboard(text);
     if (!ok) return;
     if (errorDiagnosticCopyTimerRef.current != null) {
       window.clearTimeout(errorDiagnosticCopyTimerRef.current);
@@ -1007,7 +1019,10 @@ export function ChatPane({
       errorDiagnosticCopyTimerRef.current = null;
       setCopiedErrorDiagnostic(false);
     }, 1600);
-  }, [errorDiagnosticText]);
+  }, [errorDiagnosticText, rawErrorSource]);
+  useEffect(() => {
+    setRunErrorRawExpanded(false);
+  }, [failedRunErrorEvent?.code, rawErrorSource, retryAssistant?.id]);
   useEffect(() => () => {
     if (errorDiagnosticCopyTimerRef.current != null) {
       window.clearTimeout(errorDiagnosticCopyTimerRef.current);
@@ -1020,31 +1035,30 @@ export function ChatPane({
   // this no longer the last assistant — keep their pill so the error survives.
   const errorCardOwnerId =
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
-  // AMR promotion card payload (only the non-AMR model/auth/quota case).
-  const amrSwitchPayload =
-    runFailureUi?.showSwitchCard
-    && failedRunErrorEvent?.code !== 'UPSTREAM_UNAVAILABLE'
-    && retryAssistant
-    && failedRunErrorEvent?.code
-      ? {
-          errorCode: failedRunErrorEvent.code,
-          projectId: projectId ?? '',
-          projectKind: projectKindForTracking,
-          conversationId: activeConversationId,
-          assistantMessageId: retryAssistant.id,
-          runId: retryAssistant.runId ?? null,
-        }
-      : null;
   const showByokRecoveryCta = showByokRecoveryAction && Boolean(onSwitchToLocalCli);
-  const showErrorActions =
-    showByokRecoveryCta || Boolean(retryAssistant && onRetry && runFailureUi);
+  const handleSwitchToOfficialAgent = useCallback(() => {
+    trackRunFailedToastGoAmrClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'chat_panel',
+      element: 'go_amr',
+    });
+    recordAmrEntry(analytics.track, 'chat_error_switch_retry_card', new Date(), {
+      metricsConsent: config?.telemetry?.metrics === true,
+    });
+    if (retryAssistant && onSwitchToAmrAndRetry) {
+      onSwitchToAmrAndRetry(retryAssistant);
+    } else {
+      onOpenAmrSettings?.();
+    }
+  }, [
+    analytics.track,
+    config?.telemetry?.metrics,
+    onOpenAmrSettings,
+    onSwitchToAmrAndRetry,
+    retryAssistant,
+  ]);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
-    // The hosted-AMR nudge owns this same surface_view when it renders below
-    // the error card. For all other failed-run guidance (AMR auth/balance,
-    // Antigravity auth/quota, upstream outage, generic retry), the chat error
-    // card itself is the visible run_failed_toast surface.
-    if (amrSwitchPayload) return;
 
     const key = [
       projectId ?? '',
@@ -1070,7 +1084,6 @@ export function ChatPane({
   }, [
     activeConversationId,
     analytics.track,
-    amrSwitchPayload,
     displayError,
     failedRunErrorEvent?.code,
     projectId,
@@ -2069,219 +2082,164 @@ export function ChatPane({
                 scrollContainerRef={logRef}
               />
               {displayError ? (
-                <div className="run-error" data-tone={runErrorTone}>
-                  {/* ① type title + ② detail */}
-                  <div className="run-error__main">
-                    <span className="run-error__icon" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
-                        <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <div className="run-error__copy">
-                      {runFailureUi ? (
-                        <p className="run-error__title">{t(runFailureUi.titleKey)}</p>
-                      ) : null}
-                      <p className="run-error__desc">{displayError}</p>
-                    </div>
-                  </div>
-                  {/* ④ collapsible error source */}
-                  {errorDiagnosticText ? (
-                    <div className={`run-error__source${errorSourceOpen ? ' is-open' : ''}`}>
-                      <div className="run-error__source-head">
+                <RunFailurePanel
+                  title={runFailureTitle}
+                  description={displayError}
+                  rawError={errorDiagnosticText ?? rawErrorSource}
+                  rawLabel={t('chat.runError.rawLabel')}
+                  expandLabel={t('chat.runError.rawExpand')}
+                  collapseLabel={t('chat.runError.rawCollapse')}
+                  copyLabel={t('chat.copyErrorDiagnostic')}
+                  copiedLabel={t('chat.copyDone')}
+                  tone={runErrorTone}
+                  copied={copiedErrorDiagnostic}
+                  rawExpanded={runErrorRawExpanded}
+                  onRawExpandedChange={setRunErrorRawExpanded}
+                  onCopy={() => void copyErrorDiagnostic()}
+                >
+                  {retryAssistant && onRetry && runFailureUi ? (
+                    <>
+                      {canResumeFailedRun ? (
+                        // Resumable failure: continue the agent's existing
+                        // CLI session instead of restarting from scratch, so
+                        // partial work is kept. Replaces the from-scratch
+                        // Retry as the single primary recovery action.
                         <button
                           type="button"
-                          className="run-error__source-bar"
-                          aria-expanded={errorSourceOpen}
-                          aria-label={
-                            errorSourceOpen
-                              ? t('chat.runError.sourceCollapseAria')
-                              : t('chat.runError.sourceExpandAria')
+                          className="ghost chat-error-retry"
+                          onClick={() =>
+                            onResumeRun
+                              ? onResumeRun(retryAssistant)
+                              : onSend(RESUME_CONTINUE_PROMPT, [], [])
                           }
-                          onClick={() => setErrorSourceOpen((open) => !open)}
                         >
-                          <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
-                            <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                          <span className="run-error__source-label">{t('chat.runError.sourceLabel')}</span>
-                          {errorSourcePeek ? (
-                            <span className="run-error__source-peek">{errorSourcePeek}</span>
-                          ) : null}
+                          {t('chat.resumeRunCta')}
                         </button>
-                        <button
-                          type="button"
-                          className="run-error__source-copy"
-                          onClick={() => void copyErrorDiagnostic()}
-                          aria-label={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                          title={copiedErrorDiagnostic ? t('chat.copyDone') : t('chat.copyErrorDiagnostic')}
-                        >
-                          <Icon name={copiedErrorDiagnostic ? 'check' : 'copy'} size={13} />
-                        </button>
-                      </div>
-                      <div className="run-error__source-full">
-                        <pre>{errorDiagnosticText}</pre>
-                      </div>
-                    </div>
-                  ) : null}
-                  {/* ③ fix actions */}
-                  {showErrorActions || (retryAssistant && onRetry && runFailureUi) ? (
-                    <div className="run-error__actions">
-                      {showByokRecoveryCta ? (
+                      ) : runFailureUi.primaryAction === 'authorize' ? (
+                        // Sign in to AMR inline — the pill drives vela login,
+                        // surfaces the activation URL/code when the browser
+                        // doesn't auto-open, and on success we retry the run
+                        // without bouncing the user out to Settings.
+                        <AmrLoginPill
+                          className="chat-error-amr-login"
+                          signInLabel={t('chat.amrError.authorizeCta')}
+                          amrEntrySourceDetail="chat_error_authorize_retry"
+                          initialStatus={inlineAmrLoginStatus}
+                          metricsConsent={config?.telemetry?.metrics === true}
+                          installationId={config?.installationId}
+                          showActivationDetails
+                          hideSignedOutStatus
+                          revealPendingCancelAction
+                          onStatusChange={(loginStatus) => {
+                            // Retry only on a real signed-out -> signed-in
+                            // transition (see amrAuthPrevLoggedInRef).
+                            if (loginStatus?.loggedIn === true) {
+                              const wasSignedOut =
+                                amrAuthPrevLoggedInRef.current === false;
+                              amrAuthPrevLoggedInRef.current = true;
+                              if (
+                                wasSignedOut &&
+                                amrAuthRetriedRef.current !== retryAssistant.id
+                              ) {
+                                amrAuthRetriedRef.current = retryAssistant.id;
+                                onRetry(retryAssistant);
+                              }
+                            } else if (
+                              loginStatus &&
+                              loginStatus.loggedIn === false
+                            ) {
+                              amrAuthPrevLoggedInRef.current = false;
+                            }
+                          }}
+                        />
+                      ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
                         <button
                           type="button"
                           className="chat-error-action"
-                          onClick={onSwitchToLocalCli}
+                          onClick={() => {
+                            onLaunchAntigravityOauth?.();
+                          }}
                         >
-                          {t('avatar.useLocal')}
+                          {t('chat.antigravityError.launchSwitchModelCta')}
+                        </button>
+                      ) : runFailureUi.primaryAction === 'switch-to-amr' ? (
+                        <button
+                          type="button"
+                          className="chat-error-action"
+                          onClick={handleSwitchToOfficialAgent}
+                        >
+                          {t('chat.runError.useOfficialAgentCta')}
+                        </button>
+                      ) : runFailureUi.primaryAction === 'recharge' ? (
+                        <button
+                          type="button"
+                          className="chat-error-action"
+                          onClick={() => {
+                            const attribution = recordAmrEntry(
+                              analytics.track,
+                              'chat_error_recharge',
+                              new Date(),
+                              {
+                                metricsConsent:
+                                  config?.telemetry?.metrics === true,
+                              },
+                            );
+                            // Forward the canonical telemetry device id to
+                            // AMR only on metrics opt-in (see
+                            // amrHandoffDeviceId). Sourced from the current
+                            // config.installationId / resolved device id,
+                            // not the mount-time bootstrap UUID, so the join
+                            // key matches the telemetry identity even across
+                            // a Delete-my-data rotation.
+                            const deviceId = amrHandoffDeviceId({
+                              metricsConsent:
+                                config?.telemetry?.metrics === true,
+                              resolvedDeviceId: getResolvedDeviceId(),
+                              installationId: config?.installationId,
+                            });
+                            window.open(
+                              attributedAmrUrl(
+                                amrRechargeUrlForProfile(amrProfile),
+                                attribution,
+                                deviceId,
+                              ),
+                              '_blank',
+                              'noopener,noreferrer',
+                            );
+                          }}
+                        >
+                          {t('chat.amrError.rechargeCta')}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="chat-error-action"
+                          onClick={() => onRetry(retryAssistant)}
+                        >
+                          {t('promptTemplates.retry')}
+                        </button>
+                      )}
+                      {!canResumeFailedRun && runFailureUi.secondaryRetry ? (
+                        <button
+                          type="button"
+                          className="ghost chat-error-retry"
+                          onClick={() => onRetry(retryAssistant)}
+                        >
+                          {t('promptTemplates.retry')}
                         </button>
                       ) : null}
-                      {retryAssistant && onRetry && runFailureUi ? (
-                        <>
-                          {runFailureUi.primaryAction === 'authorize' ? (
-                            // Sign in to AMR inline — the pill drives vela login,
-                            // surfaces the activation URL/code when the browser
-                            // doesn't auto-open, and on success we retry the run
-                            // without bouncing the user out to Settings.
-                            <AmrLoginPill
-                              className="chat-error-amr-login"
-                              signInLabel={t('chat.amrError.authorizeCta')}
-                              amrEntrySourceDetail="chat_error_authorize_retry"
-                              initialStatus={inlineAmrLoginStatus}
-                              metricsConsent={config?.telemetry?.metrics === true}
-                              installationId={config?.installationId}
-                              showActivationDetails
-                              hideSignedOutStatus
-                              revealPendingCancelAction
-                              onStatusChange={(loginStatus) => {
-                                // Retry only on a real signed-out -> signed-in
-                                // transition (see amrAuthPrevLoggedInRef).
-                                if (loginStatus?.loggedIn === true) {
-                                  const wasSignedOut =
-                                    amrAuthPrevLoggedInRef.current === false;
-                                  amrAuthPrevLoggedInRef.current = true;
-                                  if (
-                                    wasSignedOut &&
-                                    amrAuthRetriedRef.current !== retryAssistant.id
-                                  ) {
-                                    amrAuthRetriedRef.current = retryAssistant.id;
-                                    onRetry(retryAssistant);
-                                  }
-                                } else if (
-                                  loginStatus &&
-                                  loginStatus.loggedIn === false
-                                ) {
-                                  amrAuthPrevLoggedInRef.current = false;
-                                }
-                              }}
-                            />
-                          ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
-                            <button
-                              type="button"
-                              className="chat-error-action"
-                              onClick={() => {
-                                onLaunchAntigravityOauth?.();
-                              }}
-                            >
-                              {t('chat.antigravityError.launchTerminalCta')}
-                            </button>
-                          ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
-                            <button
-                              type="button"
-                              className="chat-error-action"
-                              onClick={() => {
-                                onLaunchAntigravityOauth?.();
-                              }}
-                            >
-                              {t('chat.antigravityError.launchSwitchModelCta')}
-                            </button>
-                          ) : runFailureUi.primaryAction === 'recharge' ? (
-                            <button
-                              type="button"
-                              className="chat-error-action"
-                              onClick={() => {
-                                const attribution = recordAmrEntry(
-                                  analytics.track,
-                                  'chat_error_recharge',
-                                  new Date(),
-                                  {
-                                    metricsConsent:
-                                      config?.telemetry?.metrics === true,
-                                  },
-                                );
-                                // Forward the canonical telemetry device id to
-                                // AMR only on metrics opt-in (see
-                                // amrHandoffDeviceId). Sourced from the current
-                                // config.installationId / resolved device id,
-                                // not the mount-time bootstrap UUID, so the join
-                                // key matches the telemetry identity even across
-                                // a Delete-my-data rotation.
-                                const deviceId = amrHandoffDeviceId({
-                                  metricsConsent:
-                                    config?.telemetry?.metrics === true,
-                                  resolvedDeviceId: getResolvedDeviceId(),
-                                  installationId: config?.installationId,
-                                });
-                                window.open(
-                                  attributedAmrUrl(
-                                    amrRechargeUrlForProfile(amrProfile),
-                                    attribution,
-                                    deviceId,
-                                  ),
-                                  '_blank',
-                                  'noopener,noreferrer',
-                                );
-                              }}
-                            >
-                              {t('chat.amrError.rechargeCta')}
-                            </button>
-                          ) : null}
-                          {canResumeFailedRun ? (
-                            // Resumable failure: continue the agent's existing
-                            // CLI session instead of restarting from scratch, so
-                            // partial work is kept. Replaces the from-scratch
-                            // Retry as the single primary recovery action. Use
-                            // the wired resume handler when present, otherwise a
-                            // plain send of the continue prompt — never the
-                            // re-sending Retry path, which would resume + repeat.
-                            <button
-                              type="button"
-                              className="ghost chat-error-retry"
-                              onClick={() =>
-                                onResumeRun
-                                  ? onResumeRun(retryAssistant)
-                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
-                              }
-                            >
-                              {t('chat.resumeRunCta')}
-                            </button>
-                          ) : runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry ? (
-                            <button
-                              type="button"
-                              className="ghost chat-error-retry"
-                              onClick={() => onRetry(retryAssistant)}
-                            >
-                              {t('promptTemplates.retry')}
-                            </button>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
+                    </>
                   ) : null}
-                </div>
-              ) : null}
-              {amrSwitchPayload ? (
-                <AmrGuidance
-                  {...amrSwitchPayload}
-                  sourceDetail="chat_error_switch_retry_card"
-                  metricsConsent={config?.telemetry?.metrics === true}
-                  onActivate={() => {
-                    if (retryAssistant && onSwitchToAmrAndRetry) {
-                      onSwitchToAmrAndRetry(retryAssistant);
-                    } else {
-                      onOpenAmrSettings?.();
-                    }
-                  }}
-                />
+                  {showByokRecoveryCta ? (
+                    <button
+                      type="button"
+                      className="ghost chat-error-retry"
+                      onClick={onSwitchToLocalCli}
+                    >
+                      {t('avatar.useLocal')}
+                    </button>
+                  ) : null}
+                </RunFailurePanel>
               ) : null}
               {/* Dynamic spacer: when a turn is anchored to the top, this
                   grows just enough to let the user message reach the top of
@@ -3259,6 +3217,93 @@ function CommentSection({
   );
 }
 
+function RunFailurePanel({
+  title,
+  description,
+  rawError,
+  rawLabel,
+  expandLabel,
+  collapseLabel,
+  copyLabel,
+  copiedLabel,
+  tone = 'error',
+  copied,
+  rawExpanded,
+  onRawExpandedChange,
+  onCopy,
+  children,
+}: {
+  title: string;
+  description: string;
+  rawError: string;
+  rawLabel: string;
+  expandLabel: string;
+  collapseLabel: string;
+  copyLabel: string;
+  copiedLabel: string;
+  tone?: 'error' | 'brand';
+  copied: boolean;
+  rawExpanded: boolean;
+  onRawExpandedChange: (expanded: boolean) => void;
+  onCopy: () => void;
+  children?: ReactNode;
+}) {
+  const source = rawError.trim();
+  const sourcePeek = source.split('\n').find((line) => line.trim().length > 0)?.trim() ?? null;
+  const copyTitle = copied ? copiedLabel : copyLabel;
+
+  return (
+    <section className="run-error" data-tone={tone} aria-live="polite">
+      <div className="run-error__main">
+        <span className="run-error__icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 4.5v4M8 11h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </span>
+        <div className="run-error__copy">
+          <p className="run-error__title">{title}</p>
+          <p className="run-error__desc">{description}</p>
+          {children ? (
+            <div className="run-error__actions">{children}</div>
+          ) : null}
+        </div>
+      </div>
+      <div className={`run-error__source${rawExpanded ? ' is-open' : ''}`}>
+        <div className="run-error__source-head">
+          <button
+            type="button"
+            className="run-error__source-bar"
+            onClick={() => onRawExpandedChange(!rawExpanded)}
+            aria-expanded={rawExpanded}
+            aria-label={rawExpanded ? collapseLabel : expandLabel}
+          >
+            <svg className="run-error__source-chevron" viewBox="0 0 12 12" fill="none">
+              <path d="M4.5 2.5 8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="run-error__source-label">{rawLabel}</span>
+            {sourcePeek ? (
+              <span className="run-error__source-peek">{sourcePeek}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className="run-error__source-copy"
+            onClick={onCopy}
+            aria-label={copyTitle}
+            title={copyTitle}
+          >
+            <Icon name={copied ? 'check' : 'copy'} size={13} />
+          </button>
+        </div>
+        <div className="run-error__source-full">
+          <pre>{source}</pre>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
 }
@@ -3296,25 +3341,18 @@ export function isAssistantMessageStreaming(
 }
 
 export function buildRunErrorDiagnosticText(input: RunErrorDiagnosticInput): string {
+  const raw = input.rawMessage?.trim();
+  const visible = input.message.trim();
   const lines = [
-    'Open Design run error diagnostics',
+    raw || visible,
+    '',
+    'Error_Info',
     `trace_id: ${input.traceId ?? 'n/a'}`,
     `run_id: ${input.traceId ?? 'n/a'}`,
     `error_code: ${input.errorCode ?? 'n/a'}`,
-    `project_id: ${input.projectId ?? 'n/a'}`,
-    `conversation_id: ${input.conversationId ?? 'n/a'}`,
-    `assistant_message_id: ${input.assistantMessageId ?? 'n/a'}`,
     `agent_id: ${input.agentId ?? 'n/a'}`,
-    '',
-    'error:',
-    input.message.trim(),
+    `model: ${input.model ?? 'n/a'}`,
   ];
-
-  const raw = input.rawMessage?.trim();
-  if (raw && raw !== input.message.trim()) {
-    lines.push('', 'raw_error:', raw);
-  }
-
   return lines.join('\n');
 }
 

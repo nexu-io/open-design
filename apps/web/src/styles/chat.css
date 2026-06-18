@@ -732,11 +732,8 @@
 }
 /* =====================================================================
    Unified run-failure card  ·  .run-error
-   One shell for every task failure. Neutral surface; the failure is
-   signalled by a semantic status dot + a strong title, NOT a flooded red
-   background (keeps a column of failed turns calm). Four-part structure:
-   ① type title  ② detail message  ③ 1–2 fix CTAs  ④ collapsible source.
-   data-tone re-tints only the status dot (error / warn / brand).
+   One shell for every task failure. Neutral surface; the failure is signalled
+   by a semantic status dot + strong title instead of a flooded red panel.
    ===================================================================== */
 .run-error {
   border: 1px solid var(--border);
@@ -751,11 +748,13 @@
 }
 @keyframes run-error-in {
   from { opacity: 0; transform: translateY(4px) scale(0.99); }
-  to   { opacity: 1; transform: none; }
+  to { opacity: 1; transform: none; }
 }
-
-/* ① + ② — status dot, title, detail */
-.run-error__main { display: flex; gap: 11px; align-items: flex-start; }
+.run-error__main {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
 .run-error__icon {
   flex: 0 0 auto;
   width: 20px;
@@ -767,16 +766,18 @@
   background: color-mix(in srgb, var(--red) 12%, transparent);
   color: var(--red);
 }
-.run-error__icon svg { width: 13px; height: 13px; }
-.run-error[data-tone='warn'] .run-error__icon {
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
-  color: var(--amber);
+.run-error__icon svg {
+  width: 13px;
+  height: 13px;
 }
 .run-error[data-tone='brand'] .run-error__icon {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
-.run-error__copy { min-width: 0; flex: 1 1 auto; }
+.run-error__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .run-error__title {
   margin: 0;
   font-size: 13.5px;
@@ -792,16 +793,12 @@
   max-width: 64ch;
   overflow-wrap: anywhere;
 }
-
-/* ④ — collapsible error source (code-line styled, one line when collapsed) */
 .run-error__source {
   border: 1px solid var(--border-soft);
   background: var(--bg-subtle);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-/* Head row: the expand toggle (flex-grows) + a trailing copy button. They are
-   siblings, not nested — a button cannot contain another button. */
 .run-error__source-head {
   display: flex;
   align-items: stretch;
@@ -821,7 +818,6 @@
   padding: 7px 10px;
   color: var(--text-soft);
 }
-/* Copy diagnostics — sits at the right edge of the source head row. */
 .run-error__source-copy {
   flex: 0 0 auto;
   appearance: none;
@@ -846,7 +842,9 @@
   color: var(--text-faint);
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.run-error__source.is-open .run-error__source-chevron { transform: rotate(90deg); }
+.run-error__source.is-open .run-error__source-chevron {
+  transform: rotate(90deg);
+}
 .run-error__source-label {
   flex: 0 0 auto;
   font-size: 11px;
@@ -863,14 +861,17 @@
   font-size: 11.5px;
   color: var(--text-muted);
 }
-.run-error__source.is-open .run-error__source-peek { opacity: 0; }
-/* max-height accordion (robust where grid-rows:0fr leaks the first child line) */
+.run-error__source.is-open .run-error__source-peek {
+  opacity: 0;
+}
 .run-error__source-full {
   max-height: 0;
   overflow: hidden;
   transition: max-height 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.run-error__source.is-open .run-error__source-full { max-height: 240px; }
+.run-error__source.is-open .run-error__source-full {
+  max-height: 240px;
+}
 .run-error__source-full > pre {
   margin: 0;
   overflow: auto;
@@ -883,16 +884,14 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
-/* ③ — fix actions, anchored to the bottom-right of the card */
 .run-error__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
+  margin-top: 10px;
 }
-/* Primary contextual CTA (Authorize & retry / Top up / terminal launch). */
 .chat-error-action {
   flex: 0 0 auto;
   appearance: none;
@@ -907,16 +906,15 @@
   border-radius: var(--radius-sm);
   transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.chat-error-action:hover { background: var(--accent-hover, var(--accent)); }
-/* Secondary recovery (Retry / Continue) — ghost. */
+.chat-error-action:hover {
+  background: var(--accent-hover, var(--accent));
+}
 .chat-error-retry {
   flex: 0 0 auto;
   padding: 6px 14px;
 }
 
-/* Inline AMR sign-in inside the unified card. The pill's base layout is scoped
-   to Settings/onboarding, so it arrives unstyled here — give it its own full
-   row, wrap the long device-auth error, and match the accent CTA. */
+/* Inline AMR sign-in inside the unified card. */
 .chat-error-amr-login {
   flex: 1 1 100%;
   min-width: 0;
@@ -927,6 +925,10 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+}
+.chat-error-amr-login .amr-account-control--signed-out,
+.chat-error-amr-login .amr-account-control--error {
+  justify-content: flex-start;
 }
 .chat-error-amr-login .amr-account-control__status {
   color: var(--text-muted);
@@ -940,7 +942,6 @@
   font-weight: 600;
   line-height: 1.3;
 }
-/* Sign-in / authorize CTA — solid accent, matching .chat-error-action. */
 .chat-error-amr-login .amr-account-control--signed-out .amr-account-control__action,
 .chat-error-amr-login .amr-account-control--error .amr-account-control__action {
   appearance: none;
@@ -958,8 +959,6 @@
 .chat-error-amr-login .amr-account-control--error .amr-account-control__action:hover {
   background: var(--accent-hover, var(--accent));
 }
-/* Cancel during signing-in stays subtle — the activation block below carries
-   the primary accent CTA (Open sign-in page). */
 .chat-error-amr-login .amr-account-control--signing-in .amr-account-control__action {
   appearance: none;
   cursor: pointer;
@@ -971,22 +970,24 @@
   padding: 4px 10px;
   border-radius: var(--radius-sm);
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .run-error { animation: none; }
+  .run-error {
+    animation: none;
+  }
   .run-error__source-full,
-  .run-error__source-chevron { transition: none; }
+  .run-error__source-chevron {
+    transition: none;
+  }
 }
 
-/* AMR guidance card under the unified run-error card. Shares the same shell
-   (1px border + elevated surface + radius-md) so the two stack as one visual
-   system; the accent dot/chips carry the brand tint. */
+/* AMR guidance card under the gray error card. Theme-color tinted; two
+   content variants (switch / recharge) share the shell. */
 .amr-card {
   margin-top: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  border: none;
+  background: var(--bg-fill-tertiary);
+  border-radius: var(--radius);
   display: flex;
   flex-direction: column;
   gap: 8px;

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +45,7 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
 });
 
 function resumableFailedMessage(): ChatMessage {
@@ -68,15 +69,37 @@ function resumableFailedMessage(): ChatMessage {
   };
 }
 
+function processExitFailedMessage(): ChatMessage {
+  return {
+    id: 'msg-process-exit',
+    role: 'assistant',
+    content: 'The run stopped before producing a final result.',
+    createdAt: 1,
+    runId: 'run-process-exit',
+    runStatus: 'failed',
+    agentId: 'claude',
+    events: [
+      {
+        kind: 'status',
+        label: 'error',
+        detail:
+          'Agent process exited with code 1 after stderr: fatal: model provider disconnected unexpectedly while rendering a very long diagnostic payload.',
+        code: 'AGENT_EXIT_1',
+      },
+    ],
+  };
+}
+
 function renderChat(opts: {
   onResumeRun?: (m: ChatMessage) => void;
   onRetry: (m: ChatMessage) => void;
   onSend?: (...args: unknown[]) => void;
   activeAgentId?: string;
+  message?: ChatMessage;
 }) {
   return render(
     <ChatPane
-      messages={[resumableFailedMessage()]}
+      messages={[opts.message ?? resumableFailedMessage()]}
       streaming={false}
       error={null}
       projectId="project-1"
@@ -143,5 +166,39 @@ describe('ChatPane resume-on-failure', () => {
 
     expect(screen.queryByText('chat.resumeRunCta')).toBeNull();
     expect(screen.getByText('promptTemplates.retry')).toBeTruthy();
+  });
+
+  it('renders the failure repair panel with expandable raw source and copy feedback', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const onRetry = vi.fn();
+    renderChat({ onRetry, activeAgentId: 'claude', message: processExitFailedMessage() });
+
+    expect(screen.getByText('chat.runError.title.generic')).toBeTruthy();
+    expect(screen.getByText('chat.runError.description.genericUseOfficialAgent')).toBeTruthy();
+    expect(screen.getByText('chat.runError.useOfficialAgentCta')).toBeTruthy();
+    expect(screen.getByText('promptTemplates.retry')).toBeTruthy();
+    expect(screen.getByText('chat.runError.rawLabel')).toBeTruthy();
+
+    const expandButton = screen.getByRole('button', { name: 'chat.runError.rawExpand' });
+    expect(expandButton.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(expandButton);
+    expect(screen.getByRole('button', { name: 'chat.runError.rawCollapse' })).toBeTruthy();
+
+    const rawSource = screen
+      .getAllByText(/Agent process exited with code 1/)
+      .find((element) => element.tagName.toLowerCase() === 'pre');
+    expect(rawSource).toBeTruthy();
+    expect(rawSource?.closest('.run-error__source')?.className).toContain('is-open');
+
+    fireEvent.click(screen.getByLabelText('chat.copyErrorDiagnostic'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]![0]).toContain('AGENT_EXIT_1');
+    expect(writeText.mock.calls[0]![0]).toContain('Agent process exited with code 1');
+    await waitFor(() => expect(screen.getByLabelText('chat.copyDone')).toBeTruthy());
   });
 });

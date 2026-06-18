@@ -4505,15 +4505,8 @@ export function ProjectView({
     },
     [currentConversationActionDisabled, onModeChange, onAgentChange, onOpenAmrSettings],
   );
-  // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
-  // so the auth banner offers a one-click "Sign in via terminal"
-  // button that POSTs to the daemon. The daemon opens a system
-  // Terminal running `agy` (osascript / x-terminal-emulator /
-  // `cmd /c start`); the user finishes Google sign-in there and then
-  // clicks Retry to redo the chat run. We don't auto-retry because
-  // the OAuth completion happens externally with no reliable signal
-  // back to the chat — the secondary Retry button on the same banner
-  // covers the manual case.
+  // Antigravity rate-limit recovery opens its TUI so the user can switch to a
+  // model with available quota, then use the secondary Retry action.
   const handleLaunchAntigravityOauth = useCallback(async () => {
     try {
       const { launchAntigravityOauth } = await import('../providers/daemon');
