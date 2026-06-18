@@ -518,6 +518,16 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     });
   }, [onboardingCompleted, onboardingActive]);
 
+  // Close the Search-tabs popover whenever onboarding becomes active. The
+  // trigger button is hidden during onboarding, so a popover left open across
+  // a route flip to /onboarding (e.g. browser back/forward, which bypasses
+  // activateTab/createNewTab) would otherwise float over the first-run flow
+  // with no visible control to dismiss it. The portal is also gated on
+  // !onboardingActive below so it never renders for the frame before this runs.
+  useEffect(() => {
+    if (onboardingActive) setTabsMenuOpen(false);
+  }, [onboardingActive]);
+
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
   // browser's scroll position whenever the active id flips — keeps the
@@ -1002,7 +1012,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           <Icon name="search" size={15} />
         </button>
         )}
-        {tabsMenuOpen && typeof document !== 'undefined'
+        {tabsMenuOpen && !onboardingActive && typeof document !== 'undefined'
           ? createPortal(
               <div
                 className="workspace-tabs-popover"
