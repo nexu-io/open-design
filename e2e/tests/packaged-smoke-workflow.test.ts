@@ -13,9 +13,11 @@ const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
+const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.yml");
+const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.yml");
+const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.yml");
 const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
-const nixHashAutofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "nix-hash-autofix.yml");
-const visualPrCommentWorkflowPath = join(workspaceRoot, ".github", "workflows", "visual-pr-comment.yml");
+const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
@@ -158,17 +160,17 @@ describe("packaged smoke workflow", () => {
   });
 
   it("[P2] keeps merge queue as the authoritative post-PR validation path", async () => {
-    const [ciWorkflow, dockerWorkflow, visualCommentWorkflow, nixAutofixWorkflow] = await Promise.all([
+    const [ciWorkflow, dockerWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow] = await Promise.all([
       readFile(ciWorkflowPath, "utf8"),
       readFile(dockerImageWorkflowPath, "utf8"),
-      readFile(visualPrCommentWorkflowPath, "utf8"),
-      readFile(nixHashAutofixWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+      readFile(autofixWorkflowPath, "utf8"),
+      readFile(reportWorkflowPath, "utf8"),
     ]);
 
     const ciTrigger = sectionBetween(ciWorkflow, "on:", "\npermissions:");
     const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  nix_validation:");
     const dockerTrigger = sectionBetween(dockerWorkflow, "on:", "\njobs:");
-    const visualCommentJob = sectionBetween(visualCommentWorkflow, "  comment:", "\n    runs-on:");
 
     expect(ciTrigger).toContain("pull_request:");
     expect(ciTrigger).toContain("merge_group:");
@@ -179,9 +181,13 @@ describe("packaged smoke workflow", () => {
     expect(dockerTrigger).toContain("tags: ['v*.*.*']");
     expect(dockerTrigger).not.toContain("branches: [main]");
     expect(dockerTrigger).not.toContain("- main");
-    expect(visualCommentJob).toContain("github.event.workflow_run.event == 'pull_request'");
-    expect(nixAutofixWorkflow).toContain("workflows: [ci]");
-    expect(nixAutofixWorkflow).not.toContain("ci-nix");
+    expect(commentWorkflow).toContain("workflows: [ci]");
+    expect(commentWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).toContain("workflows: [ci]");
+    expect(autofixWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).not.toContain("ci-nix");
+    expect(reportWorkflow).toContain("workflows: [ci]");
+    expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
   });
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
@@ -215,6 +221,56 @@ describe("packaged smoke workflow", () => {
       run_nix_validation: true,
       run_ui_p0: true,
     });
+  });
+
+  it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
+    const [ciWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow, handoffScript] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+      readFile(autofixWorkflowPath, "utf8"),
+      readFile(reportWorkflowPath, "utf8"),
+      readFile(handoffScriptPath, "utf8"),
+    ]);
+
+    expect(ciWorkflow).toContain("handoff.py dir comment");
+    expect(ciWorkflow).toContain("handoff.py dir autofix");
+    expect(ciWorkflow).toContain("handoff.py dir report");
+    expect(ciWorkflow).toContain("handoff-comment-");
+    expect(ciWorkflow).toContain("handoff-autofix-");
+    expect(ciWorkflow).toContain("handoff-report-");
+    expect(ciWorkflow).not.toContain("nix-hash-autofix");
+    expect(ciWorkflow).not.toContain("visual-pr-comment");
+    expect(commentWorkflow).toContain("artifact-pattern comment");
+    expect(commentWorkflow).toContain("merge-multiple: false");
+    expect(autofixWorkflow).toContain("artifact-pattern autofix");
+    expect(autofixWorkflow).toContain("allowed_paths");
+    expect(reportWorkflow).toContain("artifact-pattern report");
+    expect(reportWorkflow).toContain("scripts/visual-report.ts compare-pr");
+    expect(reportWorkflow).toContain("R2_ACCESS_KEY_ID");
+    expect(reportWorkflow).toContain("jq -n --rawfile body");
+    expect(reportWorkflow).toContain("--input");
+    expect(reportWorkflow).not.toContain("handoff.py dir comment");
+    expect(reportWorkflow).not.toContain("handoff-comment-");
+    expect(handoffScript).toContain("def self_check()");
+    expect(handoffScript).toContain('"report"');
+
+    for (const workflow of [commentWorkflow, autofixWorkflow]) {
+      expect(workflow).toContain("python3 .github/scripts/handoff.py self-check");
+      expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
+      expect(workflow).not.toContain("nix/pnpm-deps.nix");
+      expect(workflow).not.toContain("visual-report");
+    }
+    expect(reportWorkflow).toContain("python3 .github/scripts/handoff.py self-check");
+    expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+
+    expect(commentWorkflow).toContain("jq -n --rawfile body");
+    expect(commentWorkflow).toContain("--input");
+    for (const workflow of [commentWorkflow]) {
+      expect(workflow).toContain("jq -n --rawfile body");
+      expect(workflow).toContain("--input");
+      expect(workflow).not.toContain("--field body=\"$(cat");
+      expect(workflow).not.toContain("--field \"body=$(cat");
+    }
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {

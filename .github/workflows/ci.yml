@@ -71,6 +71,50 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node --experimental-strip-types scripts/scopes.ts github-output
 
+      - name: Create visual report handoff
+        id: visual_report_handoff
+        if: ${{ github.event_name == 'pull_request' && steps.detect.outputs.run_playwright_visual == 'true' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          handoff_id="visual-pr"
+          handoff_root="$RUNNER_TEMP/handoff-report-$handoff_id"
+          handoff_dir="$(python3 .github/scripts/handoff.py dir report "$handoff_id" --root "$handoff_root")"
+          mkdir -p "$handoff_dir"
+          jq -n \
+            --arg kind "report" \
+            --arg id "$handoff_id" \
+            --arg head "$HEAD_SHA" \
+            --arg base "$BASE_SHA" \
+            --arg report_type "visual-pr" \
+            --arg artifact_pattern "visual-pr-capture-$PR_NUMBER-$RUN_ID-*" \
+            --arg output_comment_id "visual-pr-report" \
+            --arg marker "<!-- visual-regression-bot -->" \
+            --argjson schema_version 1 \
+            --argjson pr_number "$PR_NUMBER" \
+            --argjson run_id "$RUN_ID" \
+            '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, report_type: $report_type, artifact_pattern: $artifact_pattern, output_comment_id: $output_comment_id, marker: $marker}' \
+            > "$handoff_dir/metadata.json"
+          python3 .github/scripts/handoff.py validate report "$handoff_dir" >/dev/null
+          {
+            echo "name=$(python3 .github/scripts/handoff.py artifact-name report "$handoff_id")"
+            echo "path=$handoff_root"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload visual report handoff
+        if: ${{ steps.visual_report_handoff.outputs.name != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.visual_report_handoff.outputs.name }}
+          path: ${{ steps.visual_report_handoff.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+
   static_gate:
     name: Static gate
     runs-on: ubuntu-latest
@@ -210,12 +254,107 @@ jobs:
 
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Nix hash refresh artifact
+      - name: Create Nix hash refresh handoffs
+        id: nix_handoff
         if: ${{ github.event_name == 'pull_request' && steps.flake_check.outcome == 'failure' && steps.hash_refresh.outputs.status != 'no-change' }}
+        env:
+          HASH_REFRESH_STATUS: ${{ steps.hash_refresh.outputs.status }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/nix-hash-refresh"
+          echo "comment_created=false" >> "$GITHUB_OUTPUT"
+          echo "autofix_created=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$HASH_REFRESH_STATUS" = "patch-generated" ] && [ "$HEAD_REPOSITORY" = "$REPOSITORY" ]; then
+            handoff_id="nix-pnpm-deps"
+            handoff_root="$RUNNER_TEMP/handoff-autofix-$handoff_id"
+            handoff_dir="$(python3 .github/scripts/handoff.py dir autofix "$handoff_id" --root "$handoff_root")"
+            mkdir -p "$handoff_dir"
+            cp "$source_dir/nix-pnpm-deps.patch" "$handoff_dir/patch.diff"
+            jq -n \
+              --arg kind "autofix" \
+              --arg id "$handoff_id" \
+              --arg head "$HEAD_SHA" \
+              --arg base "$BASE_SHA" \
+              --arg message "chore(nix): refresh pnpm deps hash" \
+              --argjson schema_version 1 \
+              --argjson pr_number "$PR_NUMBER" \
+              --argjson run_id "$RUN_ID" \
+              --argjson allowed_paths '["nix/pnpm-deps.nix"]' \
+              '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, allowed_paths: $allowed_paths, commit_message: $message}' \
+              > "$handoff_dir/metadata.json"
+            python3 .github/scripts/handoff.py validate autofix "$handoff_dir" >/dev/null
+            {
+              echo "autofix_created=true"
+              echo "autofix_name=$(python3 .github/scripts/handoff.py artifact-name autofix "$handoff_id")"
+              echo "autofix_path=$handoff_root"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$HASH_REFRESH_STATUS" != "patch-generated" ] || [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
+            handoff_id="nix-hash-refresh"
+            handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
+            handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
+            mkdir -p "$handoff_dir"
+            marker="<!-- nix-hash-refresh -->"
+            body_path="$handoff_dir/body.md"
+            {
+              printf '%s\n' "$marker"
+              if [ "$HASH_REFRESH_STATUS" = "patch-generated" ]; then
+                printf "A generated Nix hash refresh is available for this PR.\n\n"
+                printf "Apply the diff below with \`git apply\`:\n\n"
+                printf '```diff\n'
+                cat "$source_dir/nix-pnpm-deps.patch"
+                printf '\n```\n'
+              else
+                printf "The failed \`ci\` run attempted to refresh \`nix/pnpm-deps.nix\`, but it could not produce a hash-only patch.\n\n"
+                printf "Inspect the \`update.log\` file in the failed CI run artifacts for details.\n"
+              fi
+            } > "$body_path"
+            jq -n \
+              --arg kind "comment" \
+              --arg id "$handoff_id" \
+              --arg head "$HEAD_SHA" \
+              --arg base "$BASE_SHA" \
+              --arg marker "$marker" \
+              --argjson schema_version 1 \
+              --argjson pr_number "$PR_NUMBER" \
+              --argjson run_id "$RUN_ID" \
+              '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, marker: $marker}' \
+              > "$handoff_dir/metadata.json"
+            if [ -f "$source_dir/update.log" ]; then
+              cp "$source_dir/update.log" "$handoff_dir/update.log"
+            fi
+            python3 .github/scripts/handoff.py validate comment "$handoff_dir" >/dev/null
+            {
+              echo "comment_created=true"
+              echo "comment_name=$(python3 .github/scripts/handoff.py artifact-name comment "$handoff_id")"
+              echo "comment_path=$handoff_root"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Nix hash autofix handoff
+        if: ${{ steps.nix_handoff.outputs.autofix_created == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: nix-hash-refresh
-          path: ${{ runner.temp }}/nix-hash-refresh
+          name: ${{ steps.nix_handoff.outputs.autofix_name }}
+          path: ${{ steps.nix_handoff.outputs.autofix_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Nix hash comment handoff
+        if: ${{ steps.nix_handoff.outputs.comment_created == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.nix_handoff.outputs.comment_name }}
+          path: ${{ steps.nix_handoff.outputs.comment_path }}
           if-no-files-found: error
           retention-days: 14
 
@@ -231,12 +370,13 @@ jobs:
               cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Generated Nix hash refresh
 
-          CI regenerated a patch for `nix/pnpm-deps.nix` and uploaded it as the
-          `nix-hash-refresh` artifact for this run.
+          CI regenerated a hash-only patch for `nix/pnpm-deps.nix` and uploaded
+          it through the shared handoff contract.
 
-          - same-repo PRs: the follow-up `nix-hash-autofix` workflow will try to
-            push the hash-only patch back to the PR branch automatically;
-          - fork PRs: a PR comment will include the patch and artifact guidance.
+          - same-repo PRs: `autofix.yml` will try to push the patch back to the
+            PR branch automatically and will publish patch guidance only if the
+            trusted writer cannot complete the autofix;
+          - fork PRs: `comment.yml` will publish patch guidance on the PR.
           EOF
               ;;
             no-change)
@@ -253,7 +393,8 @@ jobs:
           ## Nix hash refresh failed
 
           `nix flake check` failed and the helper could not generate a hash-only
-          patch. See the `nix-hash-refresh` artifact for `update.log`.
+          patch. `comment.yml` will publish the generated guidance when a
+          comment handoff is available.
           EOF
               ;;
           esac
@@ -622,6 +763,7 @@ jobs:
           JSON
 
       - name: Upload PR visual artifact
+        id: upload_visual_artifact
         if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v7
         with:

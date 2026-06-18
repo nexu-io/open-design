@@ -314,9 +314,11 @@ function isVisualRelevantFile(file: string): boolean {
       "e2e/scripts/playwright.ts",
       "e2e/scripts/visual-report.ts",
       "pnpm-lock.yaml",
+      ".github/scripts/handoff.py",
       ".github/workflows/ci.yml",
+      ".github/workflows/comment.yml",
+      ".github/workflows/report.yml",
       ".github/workflows/visual-baseline.yml",
-      ".github/workflows/visual-pr-comment.yml",
     ].includes(file)
   );
 }
@@ -349,8 +351,10 @@ function isNixRelevantFile(file: string): boolean {
       "pnpm-workspace.yaml",
       "flake.nix",
       "flake.lock",
+      ".github/scripts/handoff.py",
+      ".github/workflows/autofix.yml",
       ".github/workflows/ci.yml",
-      ".github/workflows/nix-hash-autofix.yml",
+      ".github/workflows/comment.yml",
       "scripts/update-nix-pnpm-deps-hash.ts",
     ].includes(file) ||
     isWorkspaceManifestOrCiFile(file)
@@ -375,7 +379,9 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/blog-indexing-monitor.yml",
       ".github/workflows/blog-3day-report.yml",
       ".github/workflows/seo-daily-report.yml",
-      ".github/workflows/visual-pr-comment.yml",
+      ".github/workflows/autofix.yml",
+      ".github/workflows/comment.yml",
+      ".github/workflows/report.yml",
       ".github/workflows/docker-image.yml",
     ].includes(file)
   );

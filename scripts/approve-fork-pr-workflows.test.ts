@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -11,24 +10,6 @@ import {
   runTargetsPullRequest,
   waitForPendingApprovalRuns,
 } from "./approve-fork-pr-workflows.ts";
-
-test("visual-pr-comment resolves empty workflow_run.pull_requests from trusted repo/branch metadata and leaves stale SHA handling to trusted-pr", async () => {
-  const workflow = await readFile(new URL("../.github/workflows/visual-pr-comment.yml", import.meta.url), "utf8");
-  const manifestStep = workflow.match(/- name: Read capture manifest[\s\S]*?- name: Validate live PR state for trusted checkout/u)?.[0];
-  const trustedPrStep = workflow.match(/- name: Validate live PR state for trusted checkout[\s\S]*?- name: Checkout trusted base/u)?.[0];
-
-  assert.ok(manifestStep, "Expected Read capture manifest step block in workflow");
-  assert.ok(trustedPrStep, "Expected trusted-pr validation step block in workflow");
-  assert.match(manifestStep, /encoded_head=.*\$head\|@uri/u);
-  assert.match(manifestStep, /pulls\?state=open&head=\$encoded_head&per_page=100/);
-  assert.match(manifestStep, /jq -r --arg repo "\$source_head_repository"/u);
-  assert.doesNotMatch(manifestStep, /select\(\.head\.sha == \$sha/u);
-  assert.match(manifestStep, /match_count=.*wc -w/u);
-  assert.match(manifestStep, /if \[ "\$match_count" -gt 1 \]; then/u);
-  assert.match(manifestStep, /found \$match_count matches/);
-  assert.match(manifestStep, /pr_number="\$manifest_pr_number"/u);
-  assert.match(trustedPrStep, /Skipping stale visual artifact for \$ARTIFACT_HEAD_SHA; current PR head is \$current_head\./u);
-});
 
 test("isPendingApprovalRun matches approval-gated fork PR runs from GitHub's captured payload shape", () => {
   const pull = {
@@ -135,7 +116,7 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
         status: "completed",
         conclusion: "action_required",
         head_sha: "734076155c44e569304856590019cea54506fdab",
-        path: ".github/workflows/visual-pr-comment.yml@main",
+        path: ".github/workflows/comment.yml@main",
         pull_requests: [],
       },
       pull,
