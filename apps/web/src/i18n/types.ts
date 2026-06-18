@@ -136,6 +136,10 @@ export interface Dict {
   'settings.onboardingNewsletterBody': string;
   'settings.onboardingConnectTitle': string;
   'settings.onboardingConnectBody': string;
+  'settings.onboardingGateTooltipNoRuntime': string;
+  'settings.onboardingGateTooltipAmr': string;
+  'settings.onboardingGateTooltipLocal': string;
+  'settings.onboardingGateTooltipByok': string;
   'settings.onboardingRecommended': string;
   'settings.onboardingAmrCloudOfficialBadge': string;
   'settings.onboardingLocalTitle': string;
@@ -205,7 +209,6 @@ export interface Dict {
   'settings.onboardingBack': string;
   'settings.onboardingContinue': string;
   'settings.onboardingFinish': string;
-  'settings.onboardingSkip': string;
   'settings.kicker': string;
   'settings.title': string;
   'settings.subtitle': string;
@@ -279,6 +282,12 @@ export interface Dict {
   'settings.amrSignedIn': string;
   'settings.amrNotSignedIn': string;
   'settings.amrSigningIn': string;
+  'settings.amrActivationHint': string;
+  'settings.amrActivationBrowserFailed': string;
+  'settings.amrActivationOpen': string;
+  'settings.amrActivationCopyCode': string;
+  'settings.amrActivationCopy': string;
+  'settings.amrActivationCopied': string;
   'settings.amrCancelSignIn': string;
   'settings.amrAccountStatus': string;
   'settings.amrConsole': string;
@@ -1437,6 +1446,10 @@ export interface Dict {
   'automations.crystallize': string;
   'automations.crystallizing': string;
   'automations.crystallizeTitle': string;
+  'automations.crystallizeFailed': string;
+  'automations.crystallizePartialSuccess': string;
+  'automations.crystallizeRefreshFailed': string;
+  'automations.crystallizeNoProposals': string;
   'automations.openConversation': string;
   'automations.runHistoryAria': string;
   'automations.proposalsAria': string;
@@ -1960,6 +1973,8 @@ export interface Dict {
   'socialShare.openDesignText': string;
   'socialShare.openDesignCopyText': string;
   'socialShare.projectSection': string;
+  'socialShare.publishPageTitle': string;
+  'socialShare.publishPageSubtitle': string;
   'socialShare.projectTitle': string;
   'socialShare.projectText': string;
   'socialShare.projectCopyText': string;

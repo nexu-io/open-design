@@ -305,6 +305,18 @@ printf '%s\\n' "\$last"
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
+const CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE = `
+
+---
+
+## Claude Code filesystem handoff
+
+You are running as Claude Code with filesystem tools. When you write or edit an HTML file in the project folder with Write/Edit, that file is already visible in the user's file panel and preview.
+
+- Do not output the full same HTML again in a \`<artifact type="text/html">...</artifact>\` block after writing it to disk.
+- After the final self-check, briefly name the written file and summarize the result instead.
+- Only emit a full HTML \`<artifact>\` block if you could not write the project file through the filesystem tools.`;
+
 export function buildExamplePromptOverride(
   title?: string | null,
   brief?: Record<string, string> | null,
@@ -825,6 +837,10 @@ export function composeSystemPrompt({
     );
   }
 
+  if (agentId === 'claude') {
+    parts.push(CLAUDE_FILESYSTEM_ARTIFACT_HANDOFF_OVERRIDE);
+  }
+
   // Mid-conversation clarification reuses the same `<question-form>` flow as
   // turn-1 discovery (DISCOVERY_AND_PHILOSOPHY) so the host keeps ONE unified
   // questions surface: the chat shows a banner, the form renders in the
@@ -883,7 +899,7 @@ If the rules below tell you to plan with TodoWrite, write the plan as prose inst
 
 const CHAT_MODE_OVERRIDE = `# Chat mode — standard conversation (read first — overrides every rule below)
 
-This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.com/invite/9ptkbbqRu.
+This conversation is in Open Design Chat mode. Open Design is the open-source Claude Design alternative and a native Figma counterpart. Official links: GitHub https://github.com/nexu-io/open-design, website https://open-design.ai/, Discord https://discord.gg/9ptkbbqRu.
 
 Use the same available context, files, attachments, connectors, MCP servers, project memory, and model capabilities as Design mode. The difference is behavior: answer like a fast, direct, multi-turn desktop chat assistant. Prefer concise prose, explanations, comparisons, debugging help, and follow-up questions only when needed.
 

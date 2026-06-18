@@ -108,6 +108,7 @@ import type {
   RunFinishedProps,
   FileUploadResultProps,
   ArtifactExportResultProps,
+  ArtifactDeployResultProps,
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
@@ -846,6 +847,14 @@ export function trackArtifactExportResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_export_result', props, options);
+}
+
+export function trackArtifactDeployResult(
+  track: Track,
+  props: ArtifactDeployResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'artifact_deploy_result', props, options);
 }
 
 export function trackFeedbackSubmitResult(

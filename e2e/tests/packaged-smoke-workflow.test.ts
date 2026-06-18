@@ -13,11 +13,19 @@ const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
+const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.yml");
+const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.yml");
+const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.yml");
+const dockerImageWorkflowPath = join(workspaceRoot, ".github", "workflows", "docker-image.yml");
+const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const releaseStableScriptPath = join(workspaceRoot, "scripts", "release-stable.ts");
+const releaseBetaScriptPath = join(workspaceRoot, "scripts", "release-beta.ts");
+const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
+const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const releasePublishMetadataScriptPath = join(
   workspaceRoot,
   ".github",
@@ -67,6 +75,38 @@ async function runReleaseStableForFailure(env: Record<string, string>): Promise<
   throw new Error("release-stable script unexpectedly succeeded");
 }
 
+async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
+  const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
+  const eventPath = join(tempDir, "event.json");
+  const ghPath = join(tempDir, "gh");
+  await writeFile(eventPath, JSON.stringify(eventPayload));
+  await writeFile(
+    ghPath,
+    `#!/usr/bin/env node
+process.stdout.write(${JSON.stringify(changedFiles.join("\n"))});
+if (${JSON.stringify(changedFiles.length > 0)}) process.stdout.write("\\n");
+`,
+  );
+  await chmod(ghPath, 0o755);
+
+  try {
+    const { stdout } = await execFileAsync(process.execPath, ["--experimental-strip-types", scopesScriptPath, "print"], {
+      cwd: workspaceRoot,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: eventName,
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+        PATH: `${tempDir}:${process.env.PATH ?? ""}`,
+      },
+    });
+    return JSON.parse(stdout) as Record<string, unknown>;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function writeFakeGhBin(binDir: string, releases: unknown[]): Promise<void> {
   const ghPath = join(binDir, "gh");
   await writeFile(
@@ -101,22 +141,136 @@ describe("packaged smoke workflow", () => {
 
   it("[P2] runs Windows launcher payload archive validation when tools-pack is touched", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  daemon_workspace_tests:");
+    const job = sectionBetween(workflow, "  windows_tools_pack_payload_tests:", "  web_workspace_tests:");
     const validate = sectionBetween(workflow, "  validate:", "          if [ -n \"$failures\" ]; then");
 
     expect(job).toContain("runs-on: windows-latest");
-    expect(job).toContain("needs.change_scopes.outputs.tools_pack_tests_required == 'true'");
+    expect(job).toContain("needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true'");
     expect(job).toContain("pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts");
     expect(validate).toContain("windows_tools_pack_payload_tests");
   });
 
   it("[P2] limits manual blob guard checks to changed files against main", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const blobGuard = sectionBetween(workflow, "  blob_guard:", "  nix_validation:");
+    const blobGuard = sectionBetween(workflow, "  static_gate:", "  nix_validation:");
 
     expect(blobGuard).toContain('${{ github.event_name }}" = "workflow_dispatch"');
-    expect(blobGuard).toContain("git merge-base origin/main HEAD");
-    expect(blobGuard).toContain('git diff --name-only --diff-filter=AMR "$base" HEAD');
+    expect(blobGuard).toContain("repos/${{ github.repository }}/compare/main...${{ github.sha }}");
+    expect(blobGuard).toContain("select(.status != \"removed\") | .filename");
+  });
+
+  it("[P2] keeps merge queue as the authoritative post-PR validation path", async () => {
+    const [ciWorkflow, dockerWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(dockerImageWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+      readFile(autofixWorkflowPath, "utf8"),
+      readFile(reportWorkflowPath, "utf8"),
+    ]);
+
+    const ciTrigger = sectionBetween(ciWorkflow, "on:", "\npermissions:");
+    const ciBlobGuard = sectionBetween(ciWorkflow, "  static_gate:", "  nix_validation:");
+    const dockerTrigger = sectionBetween(dockerWorkflow, "on:", "\njobs:");
+
+    expect(ciTrigger).toContain("pull_request:");
+    expect(ciTrigger).toContain("merge_group:");
+    expect(ciTrigger).toContain("workflow_dispatch:");
+    expect(ciTrigger).not.toContain("push:");
+    expect(ciBlobGuard).not.toContain('${{ github.event_name }}" = "push"');
+    expect(dockerTrigger).toContain("workflow_call:");
+    expect(dockerTrigger).toContain("tags: ['v*.*.*']");
+    expect(dockerTrigger).not.toContain("branches: [main]");
+    expect(dockerTrigger).not.toContain("- main");
+    expect(commentWorkflow).toContain("workflows: [ci]");
+    expect(commentWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).toContain("workflows: [ci]");
+    expect(autofixWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+    expect(autofixWorkflow).not.toContain("ci-nix");
+    expect(reportWorkflow).toContain("workflows: [ci]");
+    expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+  });
+
+  it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const scopes = sectionBetween(workflow, "  scopes:", "  static_gate:");
+    const validate = sectionBetween(workflow, "  validate:", "  runtime_summary:");
+
+    expect(workflow).toContain("ci_mode:");
+    expect(scopes).toContain("ci_mode: ${{ steps.detect.outputs.ci_mode }}");
+    expect(scopes).toContain("ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}");
+    expect(scopes).toContain("run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}");
+    expect(workflow).toContain("needs.scopes.outputs.run_ui_p0 == 'true'");
+    expect(validate).toContain('when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])');
+
+    await expect(runScopesPrint("workflow_dispatch", { inputs: { ci_mode: "hot" } }, ["apps/web/src/app/page.tsx"])).resolves.toMatchObject({
+      ci_mode: "hot",
+      run_ui_p0: true,
+      run_nix_validation: false,
+    });
+    await expect(runScopesPrint("workflow_dispatch", { inputs: {} })).resolves.toMatchObject({
+      ci_mode: "full",
+      ui_p0_validation_required: true,
+      run_docker_build: true,
+      run_nix_validation: true,
+      run_ui_p0: true,
+    });
+    await expect(runScopesPrint("merge_group", {})).resolves.toMatchObject({
+      ci_mode: "full",
+      ui_p0_validation_required: true,
+      run_docker_build: true,
+      run_nix_validation: true,
+      run_ui_p0: true,
+    });
+  });
+
+  it("[P2] routes CI follow-ons through generic handoff workflows", async () => {
+    const [ciWorkflow, commentWorkflow, autofixWorkflow, reportWorkflow, handoffScript] = await Promise.all([
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(commentWorkflowPath, "utf8"),
+      readFile(autofixWorkflowPath, "utf8"),
+      readFile(reportWorkflowPath, "utf8"),
+      readFile(handoffScriptPath, "utf8"),
+    ]);
+
+    expect(ciWorkflow).toContain("handoff.py dir comment");
+    expect(ciWorkflow).toContain("handoff.py dir autofix");
+    expect(ciWorkflow).toContain("handoff.py dir report");
+    expect(ciWorkflow).toContain("handoff-comment-");
+    expect(ciWorkflow).toContain("handoff-autofix-");
+    expect(ciWorkflow).toContain("handoff-report-");
+    expect(ciWorkflow).not.toContain("nix-hash-autofix");
+    expect(ciWorkflow).not.toContain("visual-pr-comment");
+    expect(commentWorkflow).toContain("artifact-pattern comment");
+    expect(commentWorkflow).toContain("merge-multiple: false");
+    expect(autofixWorkflow).toContain("artifact-pattern autofix");
+    expect(autofixWorkflow).toContain("allowed_paths");
+    expect(reportWorkflow).toContain("artifact-pattern report");
+    expect(reportWorkflow).toContain("scripts/visual-report.ts compare-pr");
+    expect(reportWorkflow).toContain("R2_ACCESS_KEY_ID");
+    expect(reportWorkflow).toContain("jq -n --rawfile body");
+    expect(reportWorkflow).toContain("--input");
+    expect(reportWorkflow).not.toContain("handoff.py dir comment");
+    expect(reportWorkflow).not.toContain("handoff-comment-");
+    expect(handoffScript).toContain("def self_check()");
+    expect(handoffScript).toContain('"report"');
+
+    for (const workflow of [commentWorkflow, autofixWorkflow]) {
+      expect(workflow).toContain("python3 .github/scripts/handoff.py self-check");
+      expect(workflow).toContain("github.event.workflow_run.event == 'pull_request'");
+      expect(workflow).not.toContain("nix/pnpm-deps.nix");
+      expect(workflow).not.toContain("visual-report");
+    }
+    expect(reportWorkflow).toContain("python3 .github/scripts/handoff.py self-check");
+    expect(reportWorkflow).toContain("github.event.workflow_run.event == 'pull_request'");
+
+    expect(commentWorkflow).toContain("jq -n --rawfile body");
+    expect(commentWorkflow).toContain("--input");
+    for (const workflow of [commentWorkflow]) {
+      expect(workflow).toContain("jq -n --rawfile body");
+      expect(workflow).toContain("--input");
+      expect(workflow).not.toContain("--field body=\"$(cat");
+      expect(workflow).not.toContain("--field \"body=$(cat");
+    }
   });
 
   it("[P2] preserves beta linux AppImage smoke reports for platform publication", async () => {
@@ -236,6 +390,75 @@ describe("packaged smoke workflow", () => {
     expect(output).toContain("OPEN_DESIGN_STABLE_VERSION 0.10.1 must match release branch version 0.10.0");
   });
 
+  it("[P2] reads beta metadata.json written with releaseVersion/releaseNumber field names", async () => {
+    // The unified publisher refactor (.github/workflow/scripts/release/storage)
+    // and the in-flight tools-release rewrite stamp beta/latest/metadata.json
+    // with generic releaseVersion/releaseNumber fields instead of the legacy
+    // betaVersion/betaNumber. scripts/release-beta.ts (the daily-beta reader)
+    // must accept those aliases or the scheduled build dies at metadata time.
+    const packagedVersion = JSON.parse(
+      await readFile(join(workspaceRoot, "apps", "packaged", "package.json"), "utf8"),
+    ).version as string;
+
+    const objects: Record<string, unknown> = {
+      "stable/latest/metadata.json": { channel: "stable", stableVersion: "0.0.1" },
+      "beta/latest/metadata.json": {
+        baseVersion: packagedVersion,
+        channel: "beta",
+        releaseNumber: 4,
+        releaseVersion: `${packagedVersion}-beta.4`,
+      },
+    };
+    const fixture = await startStableNightlyMetadataServer(objects);
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-beta-reader-"));
+    const outputPath = join(runnerTemp, "outputs.txt");
+
+    try {
+      const result = await execFileAsync(process.execPath, ["--experimental-strip-types", releaseBetaScriptPath], {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          GITHUB_OUTPUT: outputPath,
+          GITHUB_REF_NAME: "main",
+          GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+          NODE_TLS_REJECT_UNAUTHORIZED: "0",
+          OPEN_DESIGN_BETA_METADATA_URL: `${fixture.origin}/beta/latest/metadata.json`,
+          OPEN_DESIGN_STABLE_METADATA_URL: `${fixture.origin}/stable/latest/metadata.json`,
+        },
+        maxBuffer: 1024 * 1024,
+      });
+
+      expect(result.stdout).toContain(`[release-beta] beta version: ${packagedVersion}-beta.5`);
+      const outputs = await readFile(outputPath, "utf8");
+      expect(outputs).toContain(`beta_version=${packagedVersion}-beta.5`);
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
+  it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {
+    // Beta is the daily R&D channel and must track the development tip (main).
+    // Selecting the highest-semver release/vX.Y.Z branch stalls the build: once
+    // that branch ships stable, its base version equals the latest stable and
+    // release-beta's strictly-greater-than-stable guard rejects every run until
+    // someone hand-bumps the retired branch. main always leads stable, so it
+    // never hits that trap.
+    //
+    // Scope every assertion to the resolve job so a refactor elsewhere in the
+    // workflow cannot keep this green while changing the build-ref control flow,
+    // and prove both branches of that control flow: the empty-input default
+    // builds main, and the workflow_dispatch override is still propagated.
+    const workflow = await readFile(notifyDailyFeishuWorkflowPath, "utf8");
+    const resolveJob = sectionBetween(workflow, "  resolve:", "\n  build:");
+    // Override path: workflow_dispatch ref is wired in and forwarded verbatim.
+    expect(resolveJob).toContain("OVERRIDE_REF: ${{ inputs.ref }}");
+    expect(resolveJob).toContain('echo "ref=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"');
+    // Default path: an empty input builds main, never a release branch.
+    expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
+    expect(resolveJob).not.toContain("refs/heads/release/v*");
+  });
+
   it("[P2] supports release dry-run preflight without build or publish side effects", async () => {
     const [workflow, script] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
@@ -261,9 +484,9 @@ describe("packaged smoke workflow", () => {
   it("[P2] validates stable dry-run nightly metadata from a non-release ref", async () => {
     const objects: Record<string, unknown> = {};
     const fixture = await startStableNightlyMetadataServer(objects);
-    objects["nightly/versions/0.10.0.nightly.12/metadata.json"] = stableNightlyMetadataFixture(
-      "0.10.0",
-      "0.10.0.nightly.12",
+    objects["nightly/versions/0.11.0.nightly.12/metadata.json"] = stableNightlyMetadataFixture(
+      "0.11.0",
+      "0.11.0.nightly.12",
       fixture.origin,
     );
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-stable-dry-run-"));
@@ -283,16 +506,16 @@ describe("packaged smoke workflow", () => {
           OPEN_DESIGN_RELEASE_CHANNEL: "stable",
           OPEN_DESIGN_RELEASE_DRY_RUN: "true",
           OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: fixture.origin,
-          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.10.0.nightly.12",
-          OPEN_DESIGN_STABLE_VERSION: "0.10.0",
+          OPEN_DESIGN_STABLE_NIGHTLY_VERSION: "0.11.0.nightly.12",
+          OPEN_DESIGN_STABLE_VERSION: "0.11.0",
           PATH: `${join(runnerTemp, "bin")}:${process.env.PATH ?? ""}`,
         },
       });
 
-      expect(result.stdout).toContain("[release-stable] validated nightly: 0.10.0.nightly.12");
+      expect(result.stdout).toContain("[release-stable] validated nightly: 0.11.0.nightly.12");
       expect(result.stdout).toContain("[release-stable] channel: stable");
       expect(result.stdout).toContain("[release-stable] dry run: true");
-      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.10.0");
+      expect(result.stdout).toContain("[release-stable] version tag: open-design-v0.11.0");
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });

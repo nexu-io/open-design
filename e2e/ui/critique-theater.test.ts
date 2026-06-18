@@ -36,7 +36,7 @@
  * same critique frames for the same screenshot baseline.
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import type { Page, Route } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
 

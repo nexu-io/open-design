@@ -29,6 +29,7 @@ import type { AudioKind, MediaAspect } from '../types';
  */
 export type MediaProviderId =
   | 'openai'
+  | 'codex'
   | 'volcengine'
   | 'grok'
   | 'hyperframes'
@@ -90,6 +91,14 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.openai.com/v1',
     docsUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    id: 'codex',
+    label: 'Codex Subscription',
+    hint: 'gpt-image-2 via local Codex CLI login',
+    integrated: true,
+    credentialsRequired: false,
+    docsUrl: 'https://developers.openai.com/codex',
   },
   {
     id: 'volcengine',
@@ -360,6 +369,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'OpenAI · legacy',
     provider: 'openai',
     caps: ['t2i'],
+  },
+  {
+    id: 'codex-gpt-image-2',
+    label: 'gpt-image-2 (Codex)',
+    hint: 'Codex Subscription · local CLI imagegen',
+    provider: 'codex',
+    caps: ['t2i', 'i2i'],
   },
 
   // Volcengine — Doubao Seedream image generation.

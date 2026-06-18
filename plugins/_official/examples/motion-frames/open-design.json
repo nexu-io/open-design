@@ -24,7 +24,7 @@
     "en": "Motion Frames"
   },
   "version": "0.1.0",
-  "description": "A single-frame motion-design composition with looping CSS animations —\nrotating type ring, animated globe, ticking timer, parallax labels.\nRenders as a hero video poster you can hand straight to HyperFrames or\nany keyframe-based exporter. Use when the brief asks for \"motion design\",\n\"animated hero\", \"loop\", \"video poster\", \"title card\", or pairs Open\nClaude Design with HyperFrames for a kinetic export.",
+  "description": "A single-frame motion-design composition with looping CSS animations — rotating type ring, animated globe, ticking timer, parallax labels. Renders as a hero video poster you can hand straight to HyperFrames or any keyframe-based exporter. Use when the brief asks for \"motion design\", \"animated hero\", \"loop\", \"video poster\", \"title card\", or pairs Open Claude Design with HyperFrames for a kinetic export.",
   "description_i18n": {
     "zh-CN": "单帧动态设计合成，包含循环 CSS 动画——旋转文字环、动画地球、计时器、视差标签。渲染为视频封面海报，可直接导入 HyperFrames 或任何基于关键帧的导出工具。适用于动态设计、动画主视觉、循环视频、视频封面、标题卡等需求，搭配 HyperFrames 实现动态导出。",
     "zh-TW": "單幀動態設計合成，包含循環 CSS 動畫——旋轉文字環、動畫地球、計時器、視差標籤。渲染為影片封面海報，可直接導入 HyperFrames 或任何基於關鍵影格的匯出工具。適用於動態設計、動畫主視覺、循環影片、影片封面、標題卡等需求，搭配 HyperFrames 實現動態匯出。",
@@ -43,7 +43,7 @@
     "ar": "تكوين تصميم حركي بإطار واحد مع رسوم متحركة CSS متكررة — حلقة نص دوارة، كرة أرضية متحركة، مؤقت، تسميات parallax. يُعرض كملصق فيديو بطولي لـ HyperFrames أو أي أداة تصدير قائمة على الإطارات الرئيسية. مثالي لتصميم الحركة، البطل المتحرك، الحلقات، ملصقات الفيديو وبطاقات العنوان.",
     "tr": "Döngüsel CSS animasyonlarıyla tek-kare motion design kompozisyonu — dönen yazı halkası, animasyonlu küre, zamanlayıcı, parallax etiketler. HyperFrames veya herhangi bir keyframe tabanlı dışa aktarıcı için hero video posteri olarak render eder. Motion design, animasyonlu hero, döngü, video posteri ve başlık kartları için idealdir.",
     "uk": "Однокадрова композиція motion-дизайну із зацикленими CSS-анімаціями — обертове текстове кільце, анімований глобус, таймер, parallax-мітки. Рендериться як постер hero-відео для HyperFrames або будь-якого експортера на основі ключових кадрів. Підходить для motion-дизайну, анімованих hero-секцій, циклічного відео та титульних карток.",
-    "en": "A single-frame motion-design composition with looping CSS animations —\nrotating type ring, animated globe, ticking timer, parallax labels.\nRenders as a hero video poster you can hand straight to HyperFrames or\nany keyframe-based exporter. Use when the brief asks for \"motion design\",\n\"animated hero\", \"loop\", \"video poster\", \"title card\", or pairs Open\nClaude Design with HyperFrames for a kinetic export."
+    "en": "A single-frame motion-design composition with looping CSS animations — rotating type ring, animated globe, ticking timer, parallax labels. Renders as a hero video poster you can hand straight to HyperFrames or any keyframe-based exporter. Use when the brief asks for \"motion design\", \"animated hero\", \"loop\", \"video poster\", \"title card\", or pairs Open Claude Design with HyperFrames for a kinetic export."
   },
   "license": "MIT",
   "author": {

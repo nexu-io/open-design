@@ -53,7 +53,7 @@ interface TabDragTarget {
 interface Props {
   route: Route;
   projects: Project[];
-  // Once onboarding is finished (completed or skipped), the permanent entry
+  // Once onboarding is finished, the permanent entry
   // tab must never linger on the 'onboarding' (Welcome) view — some completion
   // paths navigate straight to a new project/design-system and leave the entry
   // tab showing Welcome in the background. This flips it back to Home.
@@ -424,6 +424,15 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<TabDragTarget | null>(null);
 
+  // While the app is on the onboarding (Welcome) route, opening a new tab
+  // would navigate away from onboarding and bypass the Connect gate. Key off
+  // the live `route` (the URL truth), NOT `onboardingCompleted` and NOT the
+  // internal tab `view`: a user who finished onboarding before (completion
+  // persisted) can still land on /onboarding, and the entry tab's view can be
+  // mid-rewrite by the post-completion effect. Gating in `createNewTab` blocks
+  // both the "+" button and the Cmd/Ctrl+T shortcut from one place.
+  const onboardingActive = route.kind === 'home' && route.view === 'onboarding';
+
   function clearHoverTimer() {
     if (hoverTimerRef.current !== null) {
       window.clearTimeout(hoverTimerRef.current);
@@ -485,9 +494,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
 
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
-  // finish path uniformly — Skip, last-step Continue, and the design-system
-  // Generate route that navigates to a fresh project while leaving the entry
-  // tab on Welcome in the background.
+  // finish path uniformly — last-step Continue and any future route that
+  // navigates away while leaving the entry tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
     setState((current) => {
@@ -719,6 +727,9 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   }
 
   function createNewTab() {
+    // Onboarding gate — see `onboardingActive`. Covers the "+" button and the
+    // Cmd/Ctrl+T keyboard shortcut, since both funnel through here.
+    if (onboardingActive) return;
     const normalized = normalizeTabsState(state);
     const existingEntryTab = normalized.tabs.find((tab) => tab.kind === 'entry');
     if (existingEntryTab) {
@@ -930,11 +941,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
             >
               <button
                 type="button"
-                className="workspace-tab__main od-tooltip"
+                className="workspace-tab__main"
                 onClick={() => openTab(tab)}
-                title={display.title}
-                data-tooltip={display.title}
-                data-tooltip-placement="bottom"
                 onFocus={(event) => scheduleHoverPreview(tab.id, event.currentTarget.parentElement ?? event.currentTarget)}
                 onBlur={dismissHoverPreview}
               >
@@ -967,6 +975,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
           data-tooltip="New tab"
           data-tooltip-placement="bottom"
           aria-label="New tab"
+          data-testid="workspace-tabs-new-tab"
+          disabled={onboardingActive}
         >
           <Icon name="plus" size={14} />
         </button>
@@ -1067,7 +1077,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
               const previewDisplay = displayTabById.get(previewTab.id)
                 ?? displayTabFor(previewTab, projectById, t);
               const previewDetail = describePreviewDetail(previewTab, projectById);
-              const previewWidth = Math.max(1, Math.round(hoverPreview.anchorWidth));
+              const previewWidth = Math.max(220, Math.round(hoverPreview.anchorWidth));
               const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
               const left = Math.max(
                 0,

@@ -25,6 +25,25 @@ describe('daemon startup CLI parsing', () => {
     });
   });
 
+  it('falls back to loopback when bind host input is blank', () => {
+    expect(parseDaemonCliStartupArgs([], { OD_BIND_HOST: '   ' })).toEqual({
+      ok: true,
+      config: {
+        host: '127.0.0.1',
+        open: true,
+        port: 7456,
+      },
+    });
+    expect(parseDaemonCliStartupArgs(['--host', '   '], {})).toEqual({
+      ok: true,
+      config: {
+        host: '127.0.0.1',
+        open: true,
+        port: 7456,
+      },
+    });
+  });
+
   it('rejects browser snapshot instead of treating it as daemon startup', () => {
     expect(parseDaemonCliStartupArgs(['browser', 'snapshot', '--url', 'https://example.test/'], {})).toEqual({
       ok: false,

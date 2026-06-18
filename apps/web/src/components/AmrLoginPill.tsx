@@ -8,9 +8,12 @@ import {
 } from '../providers/daemon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  amrHandoffDeviceId,
+  attributedAmrUrl,
   recordAmrEntry,
   type TrackingAmrEntrySource,
 } from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
@@ -24,6 +27,7 @@ import {
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { Icon } from './Icon';
 import { amrConsoleUrlForProfile, amrProfileBadgeLabel } from '../runtime/amr-guidance';
 
 interface AmrLoginPillProps {
@@ -34,8 +38,12 @@ interface AmrLoginPillProps {
   skipInitialRefresh?: boolean;
   signInLabel?: string;
   amrEntrySourceDetail?: TrackingAmrEntrySource;
+  metricsConsent?: boolean;
+  installationId?: string | null;
+  showActivationDetails?: boolean;
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
+  iconOnlySignOut?: boolean;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
 
@@ -66,10 +74,18 @@ export interface AmrAccountControlProps {
   signInLabel?: string;
   showConsoleAction?: boolean;
   consoleUrl?: string;
+  iconOnlySignOut?: boolean;
   showCancelSignInAction?: boolean;
+  // Device-authorization details surfaced while signing in, so the user can
+  // complete login manually when the browser did not auto-open (see
+  // parseVelaLoginActivation in the daemon's vela.ts).
+  activationUrl?: string;
+  userCode?: string;
+  browserOpenFailed?: boolean;
   onSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
   onSignOut?: (event: MouseEvent<HTMLButtonElement>) => void;
   onCancelSignIn?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onConsoleClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   signInDisabled?: boolean;
   signOutDisabled?: boolean;
   cancelSignInDisabled?: boolean;
@@ -106,15 +122,24 @@ export function AmrAccountControl({
   signInLabel,
   showConsoleAction = false,
   consoleUrl,
+  iconOnlySignOut = false,
   showCancelSignInAction = false,
+  activationUrl,
+  userCode,
+  browserOpenFailed = false,
   onSignIn,
   onSignOut,
   onCancelSignIn,
+  onConsoleClick,
   signInDisabled = false,
   signOutDisabled = false,
   cancelSignInDisabled = false,
 }: AmrAccountControlProps) {
   const { t } = useI18n();
+  const [codeCopied, setCodeCopied] = useState(false);
+  useEffect(() => {
+    setCodeCopied(false);
+  }, [activationUrl, userCode]);
   const isSignedIn = status === 'signed-in';
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
@@ -135,6 +160,9 @@ export function AmrAccountControl({
         ? ''
         : t('settings.amrNotSignedIn');
   const canSignIn = showSignInAction && (status === 'signed-out' || hasError);
+  const signOutLabel = signOutDisabled
+    ? t('settings.amrLoggingOut')
+    : t('settings.amrLogout');
 
   return (
     <div
@@ -162,6 +190,7 @@ export function AmrAccountControl({
           target="_blank"
           rel="noopener noreferrer"
           aria-label={t('settings.amrConsole')}
+          onClick={onConsoleClick}
         >
           {t('settings.amrConsole')}
         </a>
@@ -169,13 +198,23 @@ export function AmrAccountControl({
       {isSignedIn && onSignOut ? (
         <button
           type="button"
-          className="amr-account-control__action"
+          className={classNames(
+            'amr-account-control__action',
+            iconOnlySignOut && 'amr-account-control__action--icon',
+            iconOnlySignOut && 'od-tooltip',
+          )}
           disabled={signOutDisabled}
           onClick={onSignOut}
-          title={email || undefined}
-          aria-label={t('settings.amrLogout')}
+          title={iconOnlySignOut ? signOutLabel : email || undefined}
+          aria-label={signOutLabel}
+          data-tooltip={iconOnlySignOut ? signOutLabel : undefined}
+          data-tooltip-placement={iconOnlySignOut ? 'bottom' : undefined}
         >
-          {signOutDisabled ? t('settings.amrLoggingOut') : t('settings.amrLogout')}
+          {iconOnlySignOut ? (
+            <Icon name="log-out" size={15} strokeWidth={1.8} />
+          ) : (
+            signOutLabel
+          )}
         </button>
       ) : null}
       {isSigningIn && showCancelSignInAction && onCancelSignIn ? (
@@ -204,6 +243,50 @@ export function AmrAccountControl({
           {loginErrorText}
         </span>
       ) : null}
+      {isSigningIn && activationUrl ? (
+        <div className="amr-login-activation" role="group">
+          <span className="amr-login-activation__hint">
+            {browserOpenFailed
+              ? t('settings.amrActivationBrowserFailed')
+              : t('settings.amrActivationHint')}
+          </span>
+          <div className="amr-login-activation__actions">
+            <a
+              className="amr-login-activation__open"
+              href={activationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('settings.amrActivationOpen')}
+            </a>
+            {userCode ? (
+              <button
+                type="button"
+                className="amr-login-activation__code"
+                onClick={() => {
+                  // Guard explicitly: in runtimes without the async clipboard
+                  // API, copying is a no-op rather than a thrown click handler.
+                  const clipboard = navigator.clipboard;
+                  if (!clipboard) return;
+                  void clipboard.writeText(userCode).then(
+                    () => setCodeCopied(true),
+                    () => {},
+                  );
+                }}
+                aria-label={t('settings.amrActivationCopyCode')}
+                title={t('settings.amrActivationCopyCode')}
+              >
+                <span className="amr-login-activation__code-value">{userCode}</span>
+                <span className="amr-login-activation__code-action">
+                  {codeCopied
+                    ? t('settings.amrActivationCopied')
+                    : t('settings.amrActivationCopy')}
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -219,8 +302,12 @@ export function AmrLoginPill({
   skipInitialRefresh = false,
   signInLabel,
   amrEntrySourceDetail,
+  metricsConsent = false,
+  installationId,
+  showActivationDetails = false,
   revealPendingCancelAction = false,
   showConsoleAction = false,
+  iconOnlySignOut = false,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
@@ -325,6 +412,7 @@ export function AmrLoginPill({
     pollRef.current = window.setInterval(() => {
       void tick();
     }, AMR_LOGIN_POLL_INTERVAL_MS);
+    void tick();
   }, [analytics.track, refresh, stopPolling, t]);
 
   useEffect(() => {
@@ -402,11 +490,17 @@ export function AmrLoginPill({
       setPending('login');
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
+            metricsConsent,
             reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
           })
         : null;
       beginAmrAuthTracking(attribution, startedAt);
-      const result = await startVelaLogin(attribution);
+      const odDeviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      const result = await startVelaLogin(attribution, odDeviceId);
       if (!result.ok && !result.alreadyRunning) {
         resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
         loginStartedAtRef.current = null;
@@ -418,7 +512,14 @@ export function AmrLoginPill({
       notifyAmrLoginStatusChanged('login-started');
       startPolling(startedAt);
     },
-    [amrEntrySourceDetail, analytics.track, startPolling, t],
+    [
+      amrEntrySourceDetail,
+      analytics.track,
+      installationId,
+      metricsConsent,
+      startPolling,
+      t,
+    ],
   );
 
   const handleCancelLogin = useCallback(
@@ -474,12 +575,36 @@ export function AmrLoginPill({
     [refresh, t],
   );
 
+  const handleConsoleClick = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      event.stopPropagation();
+      const attribution = recordAmrEntry(analytics.track, 'settings_amr_console', new Date(), {
+        metricsConsent,
+      });
+      const deviceId = amrHandoffDeviceId({
+        metricsConsent,
+        resolvedDeviceId: getResolvedDeviceId(),
+        installationId,
+      });
+      event.currentTarget.href = attributedAmrUrl(
+        amrConsoleUrlForProfile(status?.profile),
+        attribution,
+        deviceId,
+      );
+    },
+    [analytics.track, installationId, metricsConsent, status?.profile],
+  );
+
   const loggedIn = status?.loggedIn === true;
   const userEmail = status?.user?.email ?? '';
   const loginInFlight =
     pending === 'login' || (status?.loggedIn !== true && status?.loginInFlight === true);
   const logoutInFlight = pending === 'logout';
   const cancelInFlight = pending === 'cancel';
+  const activeLoginActivationStatus =
+    showActivationDetails && status?.loggedIn !== true && status?.loginInFlight === true
+      ? status
+      : null;
   const accountStatus: AmrAccountControlStatus = errorMessage
     ? 'error'
     : loggedIn
@@ -507,13 +632,18 @@ export function AmrLoginPill({
         hideSignedInStatus={hideSignedInStatus}
         signInLabel={signInLabel}
         showConsoleAction={showConsoleAction}
+        iconOnlySignOut={iconOnlySignOut}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}
         showCancelSignInAction={revealPendingCancelAction && loginInFlight}
         cancelSignInDisabled={cancelInFlight}
+        activationUrl={activeLoginActivationStatus?.activationUrl}
+        userCode={activeLoginActivationStatus?.userCode}
+        browserOpenFailed={activeLoginActivationStatus?.browserOpenFailed}
         onSignIn={handleLogin}
         onSignOut={handleLogout}
         onCancelSignIn={handleCancelLogin}
+        onConsoleClick={showConsoleAction ? handleConsoleClick : undefined}
         className={loggedIn ? 'amr-login-pill-status' : undefined}
       />
     </div>

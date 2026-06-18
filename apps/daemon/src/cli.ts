@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // @ts-nocheck
+import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
@@ -4730,10 +4732,8 @@ function normalizeChatSessionModeFlag(value) {
 
 function safeReadJsonFile(p) {
   try {
-    const fs = (require ? require('node:fs') : null);
-    if (!fs) return null;
-    if (p === '-') return JSON.parse(fs.readFileSync(0, 'utf8'));
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
+    return JSON.parse(readFileSync(p, 'utf8'));
   } catch {
     return null;
   }
@@ -5057,6 +5057,8 @@ async function runRun(args) {
   od run cancel <runId>                     Request cancellation.
   od run list   [--project <id>]            List recent runs.
   od run info   <runId>                     One run's status.
+  od run result-package <runId> [--json]    Inspect run outputs and workspace
+                                            provenance without applying them.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -5092,6 +5094,30 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'result-package': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od run result-package <runId> [--json]');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/runs/${encodeURIComponent(id)}/result-package`);
+      if (!resp.ok) return structuredHttpFailure(resp, 'run-not-found');
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const run = data?.run ?? {};
+      const workspace = data?.workspace ?? {};
+      const storage = workspace.storage ?? {};
+      const provenance = workspace.provenance ?? null;
+      console.log(`run\t${run.id ?? id}\t${run.status ?? '-'}`);
+      console.log(`workspace\t${storage.kind ?? '-'}\t${storage.baseDir ?? '-'}`);
+      console.log(`provenance\t${provenance?.kind ?? '-'}\twriteback=${provenance?.writeback ?? '-'}`);
+      console.log(`project\t${data?.project?.id ?? '-'}\tfiles=${data?.project?.fileCount ?? 0}`);
+      const artifacts = Array.isArray(data?.artifacts) ? data.artifacts : [];
+      for (const artifact of artifacts) {
+        console.log(`artifact\t${artifact.file ?? '-'}\t${artifact.kind ?? '-'}\t${artifact.title ?? '-'}`);
+      }
       return;
     }
     case 'cancel': {
@@ -5448,12 +5474,10 @@ Common options:
         console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
         process.exit(2);
       }
-      const fs = require('node:fs');
-      const path = require('node:path');
-      const buf = fs.readFileSync(localPath);
+      const buf = readFileSync(localPath);
       const desiredName = typeof flags.as === 'string' && flags.as.length > 0
         ? flags.as
-        : path.basename(localPath);
+        : basename(localPath);
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/files`, {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -5477,10 +5501,9 @@ Common options:
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
-      const fs = require('node:fs');
       let chunks = [];
       try {
-        const stdin = fs.readFileSync(0);
+        const stdin = readFileSync(0);
         chunks = [stdin];
       } catch (err) {
         console.error(`stdin read failed: ${err.message ?? err}`);
@@ -6164,7 +6187,7 @@ function formatBytes(n) {
 
 async function runDaemonStart(flags) {
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
-  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1');
+  const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
   const headless = Boolean(flags.headless || flags['no-open'] || flags['serve-web']);
   const runtime = await startDaemonRuntime({
     host,

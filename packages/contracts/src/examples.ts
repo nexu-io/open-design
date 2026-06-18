@@ -1,4 +1,4 @@
-import type { ChatRequest } from './api/chat';
+import type { ChatRequest, ChatRunStatusResponse } from './api/chat';
 import type {
   AutomationCompressionReport,
   AutomationContentPacket,
@@ -8,8 +8,14 @@ import type {
   MemoryTreeNode,
 } from './api/automations';
 import type { ConnectorDetail } from './api/connectors';
-import type { ProjectFile } from './api/files';
+import {
+  PROJECT_EXPORT_MANIFEST_SCHEMA,
+  buildProjectRawFileUrl,
+  type ProjectExportManifestResponse,
+  type ProjectFile,
+} from './api/files';
 import type { LiveArtifact, LiveArtifactCreateInput, LiveArtifactUpdateInput } from './api/live-artifacts';
+import { DEFAULT_MEDIA_EXECUTION_POLICY } from './api/media';
 import type { HealthResponse } from './api/registry';
 import type { ApiErrorResponse, ApiValidationErrorDetails } from './errors';
 import type { ChatSseEvent } from './sse/chat';
@@ -56,6 +62,55 @@ export const exampleApiErrorResponse: ApiErrorResponse = {
     retryable: false,
   },
 };
+
+export const exampleMediaExecutionDisabledErrorResponse: ApiErrorResponse = {
+  error: {
+    code: 'MEDIA_EXECUTION_DISABLED',
+    message: 'media generation is disabled for this run',
+    retryable: false,
+  },
+};
+
+export const exampleChatRunStatusResponse: ChatRunStatusResponse = {
+  id: 'run_1',
+  projectId: 'project_1',
+  conversationId: 'conversation_1',
+  assistantMessageId: 'assistant_1',
+  agentId: 'codex',
+  status: 'succeeded',
+  createdAt: 1_717_200_000_000,
+  updatedAt: 1_717_200_030_000,
+  exitCode: 0,
+  signal: null,
+  error: null,
+  errorCode: null,
+  eventsLogPath: null,
+  mediaExecution: DEFAULT_MEDIA_EXECUTION_POLICY,
+  toolBundle: { mcpServers: [] },
+};
+
+export const exampleProjectExportManifestResponse: ProjectExportManifestResponse = {
+  schema: PROJECT_EXPORT_MANIFEST_SCHEMA,
+  projectId: 'project_1',
+  projectName: 'Launch prototype',
+  generatedAt: '2026-06-01T00:00:00.000Z',
+  entryFile: 'index.html',
+  files: [
+    {
+      ...exampleProjectFile,
+      included: true,
+      role: 'entry',
+      reasons: ['project-entry-file'],
+    },
+  ],
+  artifacts: [],
+};
+
+export const exampleProjectRawPreviewUrl = buildProjectRawFileUrl(
+  'http://127.0.0.1:17456',
+  'project_1',
+  'screens/main page.html',
+) ?? '';
 
 const exampleLiveArtifactValidationDetails: ApiValidationErrorDetails = {
   kind: 'validation',

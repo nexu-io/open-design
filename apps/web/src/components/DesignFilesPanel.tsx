@@ -11,6 +11,7 @@ import {
   FILE_SYSTEM_READ_ERROR_MESSAGE,
   isFileSystemReadError,
 } from '../utils/fileSystemErrors';
+import { isVisualStabilityMode } from '../utils/visualStability';
 import { selectInitialDesignPreviewFile } from './design-files/designArtifacts';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
@@ -170,7 +171,7 @@ const USEFUL_TIPS: ReadonlyArray<{ key: keyof Dict; url?: string }> = [
   { key: 'designFiles.usefulInfoTip14' },
   { key: 'designFiles.usefulInfoTip15' },
   { key: 'designFiles.usefulInfoTip5' },
-  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/mHAjSMV6gz' },
+  { key: 'designFiles.usefulInfoTip6', url: 'https://discord.gg/9ptkbbqRu' },
   { key: 'designFiles.usefulInfoTip7', url: 'https://github.com/nexu-io/open-design' },
   { key: 'designFiles.usefulInfoTip8', url: 'https://x.com/nexudotio' },
 ];
@@ -201,6 +202,11 @@ function RotatingTip() {
   useEffect(() => {
     const tips = tipsRef.current;
     const full = tips[index] ?? '';
+    if (isVisualStabilityMode()) {
+      setIndex(0);
+      setTyped(tips[0] ?? '');
+      return;
+    }
     if (prefersReducedMotion()) {
       setTyped(full);
       if (tips.length < 2) return;

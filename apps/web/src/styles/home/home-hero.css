@@ -1130,7 +1130,17 @@
   transition:
     background-color 120ms var(--ease-out),
     border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out);
+    color 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out);
+}
+.home-hero__active-type-chip.is-active {
+  border-color: color-mix(in srgb, var(--selected) 42%, var(--border));
+  background: color-mix(in srgb, var(--selected) 10%, var(--bg-panel));
+  color: var(--selected);
+  font-weight: 650;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--selected-soft) 66%, transparent),
+    var(--shadow-xs);
 }
 .home-hero__active-type-chip-icon {
   width: 13px;
@@ -1139,6 +1149,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-pill);
+}
+.home-hero__active-type-chip.is-active .home-hero__active-type-chip-icon {
+  background: color-mix(in srgb, var(--selected) 12%, transparent);
+  color: var(--selected);
 }
 .home-hero__active-type-chip-close {
   flex: 0 0 auto;
@@ -1156,9 +1171,12 @@
 .home-hero__active-type-chip:hover,
 .home-hero__active-type-chip:focus-visible {
   outline: none;
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--accent);
+  border-color: color-mix(in srgb, var(--selected) 54%, var(--border-strong));
+  background: color-mix(in srgb, var(--selected) 14%, var(--bg-panel));
+  color: var(--selected);
+  box-shadow:
+    0 0 0 3px var(--selected-soft),
+    var(--shadow-xs);
 }
 .home-hero__active-type-chip:hover .home-hero__active-type-chip-close,
 .home-hero__active-type-chip:focus-visible .home-hero__active-type-chip-close {
@@ -2132,6 +2150,32 @@
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
   transform: scale(0.172);
+}
+
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport, so the
+   default scaled preview would letterbox them with a dark --stage-bg band.
+   Keep deck tiles on the SAME 150px preview row as every other preset tile
+   (don't switch to an `auto` 16:9 row — that makes the deck card shorter than
+   its siblings, and the flex rail then stretches it back up by leaking the
+   slack into the title row, leaving deck titles ~6px taller than the rest).
+   Instead render the stage at a native 16:9 and center it in the standard
+   cell, so the slide has no dark band and deck cards keep an identical card
+   height + title-row height to prototype/HyperFrames/image tiles. */
+.home-hero__plugin-preset[data-od-mode="deck"] .home-hero__plugin-preset-preview {
+  aspect-ratio: auto;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-iframe {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  transform: none;
 }
 
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles

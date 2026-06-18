@@ -3,7 +3,7 @@ name: open-design
 services:
   open-design:
     container_name: open-design
-    image: ${OPEN_DESIGN_IMAGE:-docker.io/vanjayak/open-design:latest}
+    image: ${OPEN_DESIGN_IMAGE:-ghcr.io/nexu-io/od:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile

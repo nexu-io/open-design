@@ -65,8 +65,24 @@ describe('diagnostics export handler — non-sidecar launch', () => {
     const manifest = JSON.parse(manifestRaw) as {
       warnings: string[];
       files: DiagnosticsManifestFile[];
+      extra?: {
+        browserUse?: {
+          registryPath?: string;
+          socketCount?: number;
+          candidateCount?: number;
+          staleCount?: number;
+          probeFailureCategory?: string;
+        };
+      };
     };
     expect(manifest.warnings).toContain(STANDALONE_LAUNCH_WARNING);
+    expect(manifest.extra?.browserUse).toMatchObject({
+      registryPath: expect.stringContaining('codex-browser-use'),
+      probeFailureCategory: expect.any(String),
+    });
+    expect(typeof manifest.extra?.browserUse?.socketCount).toBe('number');
+    expect(typeof manifest.extra?.browserUse?.candidateCount).toBe('number');
+    expect(typeof manifest.extra?.browserUse?.staleCount).toBe('number');
     // Standalone launches intentionally omit sidecar-managed daemon/web/desktop
     // log files, but real developer machines may still contribute matching
     // macOS crash reports from /Library/Logs/DiagnosticReports. Keep the test
@@ -211,5 +227,26 @@ describe('diagnostics export handler — run event logs', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it('warns when runsDir is set but no per-run event logs were found', async () => {
+    // An empty/absent runs dir adds no manifest file entries, so without an
+    // explicit warning an empty bundle is indistinguishable from a healthy run
+    // — exactly the gap that made an AMR loop look like "nothing happened."
+    const runsDir = join(tmpdir(), `od-diag-empty-runs-${randomUUID()}`);
+    const handler = createDiagnosticsExportHandler({
+      runtime: null,
+      projectRoot: '/tmp/test-project',
+      runsDir,
+    });
+    const res = mockResponse();
+    await handler({} as never, res as never, () => undefined);
+
+    expect(res.capturedStatus).toBe(200);
+    const zip = await JSZip.loadAsync(res.capturedPayload!);
+    const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+      warnings: string[];
+    };
+    expect(manifest.warnings.some((w) => w.includes('No per-run event logs found'))).toBe(true);
   });
 });

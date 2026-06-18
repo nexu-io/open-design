@@ -20,7 +20,7 @@ import {
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
-const X_PROFILE = 'https://x.com/nexudotio';
+const X_PROFILE = 'https://x.com/OpenDesignHQ';
 // AMR product page on the production site (this repo has no /amr/ route).
 // Single destination for every AMR surface: the nav logo, the Agent
 // dropdown entry, and the footer Partners column.
@@ -95,6 +95,7 @@ export interface HeaderProps {
     | 'resources'
     | 'blog'
     | 'tutorials'
+    | 'download'
     | 'community';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
@@ -340,7 +341,10 @@ export function Header({
               <a
                 href={href('/blog/')}
                 className={
-                  active === 'resources' || active === 'tutorials' || active === 'blog'
+                  active === 'resources' ||
+                  active === 'blog' ||
+                  active === 'tutorials' ||
+                  active === 'download'
                     ? 'is-active'
                     : undefined
                 }
@@ -374,7 +378,10 @@ export function Header({
                     main dropped it from Resources until the subscribe page
                     ships. */}
                 <li>
-                  <a href={href('/download/')}>
+                  <a
+                    href={href('/download/')}
+                    className={active === 'download' ? 'is-active' : undefined}
+                  >
                     <span className='dropdown-name'>
                       {productMenuCopy.resourceItems.download}
                     </span>
@@ -501,6 +508,7 @@ export function Header({
             title={headerCopy.downloadTitle}
             data-download-cta
             data-download-page
+            data-download-placement='nav'
           >
             {headerCopy.download}
           </a>
@@ -538,7 +546,7 @@ export function Header({
               in2='map'
               xChannelSelector='R'
               yChannelSelector='B'
-              scale='-180'
+              scale='-50'
               result='dispRed'
             />
             <feColorMatrix
@@ -552,7 +560,7 @@ export function Header({
               in2='map'
               xChannelSelector='R'
               yChannelSelector='B'
-              scale='-170'
+              scale='-47'
               result='dispGreen'
             />
             <feColorMatrix
@@ -566,7 +574,7 @@ export function Header({
               in2='map'
               xChannelSelector='R'
               yChannelSelector='B'
-              scale='-160'
+              scale='-44'
               result='dispBlue'
             />
             <feColorMatrix

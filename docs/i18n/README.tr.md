@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/9ptkbbqRu).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">Web Sitesi</a> ·
   <a href="https://open-design.ai/">İndir</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio'yu takip et</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -264,7 +264,7 @@ Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact �
 
 - 🤖 **Ajan-yerel, modelden bağımsız.** Bir ajan sunmuyoruz. `PATH`'inizde zaten bulunan `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` tasarım motorudur. Tek tıkla değiştirin.
 - 🧠 **Varsayılan olarak marka düzeyinde.** Her işleme etkin `DESIGN.md` dosyasını okur — palet, tipografi, boşluk, hareket, ses, anti-desenleri kapsayan 9 bölümlük bir şema. 150 sistem depoyla birlikte gelir (Linear, Stripe, Vercel, Airbnb, Apple, Tesla, Notion, Anthropic, Cursor, Supabase, Figma…). Bir klasör bırakın, seçici onu bulur.
-- 🖥️ **Yerel öncelikli, her katmanda BYOK.** macOS (Apple Silicon + Intel) ve Windows (x64) için yerel masaüstü uygulamaları. İsteğe bağlı sürüm hattında Linux AppImage. `.od/app.sqlite` adresinde SQLite, `.od/projects/<id>/` adresinde dosyalar, telemetri yok, bulut gidiş-dönüşü yok.
+- 🖥️ **Yerel öncelikli, her katmanda BYOK.** Yerel masaüstü uygulamaları buluta gidip gelmeden yerel öncelikli kalır. Daemon veri yollarını açıklamadan önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun.
 - 🌍 **Üç düzlemde birleştirilebilir.** **Eklentiler** çalıştırılabilir iş akışları taşır · **beceriler** ajanın tasarım zevkini taşır · **tasarım sistemleri** markayı taşır. Üçü de herkesin yazabileceği, sürümleyebileceği ve yayınlayabileceği düz dosyalardır.
 - 🔁 **Mevcut bir kod tabanını yenileyin.** Ajana bir `git` deposu + `DESIGN.md` verin, gerçek bileşenlerinizi marka spesifikasyonuna göre yeniden düzenler. Özel eklentiler Figma / Pencil iş akışlarını React / Next.js / Vue koduna taşır.
 - 🔒 **İlkesel gizlilik.** Her şey verilerinizin bulunduğu yerde çalışır — dizüstü bilgisayarınız, ekibinizin sunucusu, Vercel projeniz. Ağ gerektiğinde, BYOK proxy SSRF korumalıdır.
@@ -325,6 +325,12 @@ echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up -d
 # open http://localhost:7456
 ```
+
+### 🚀 Sealos üzerinde dağıtın
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store şablonu, yayımlanmış Open Design Docker imajını kalıcı çalışma alanı depolaması ve herkese açık proxy üzerinde Basic Auth ile çalıştırır. Özel herkese açık veya paylaşılan Docker dağıtımları için [`deploy/README.md`](../../deploy/README.md#local-compose) içindeki ters proxy ve `OPEN_DESIGN_ALLOWED_ORIGINS` rehberini izleyin.
 
 ### 🧑‍💻 Kaynaktan çalıştırın
 
@@ -536,7 +542,7 @@ Eklenti kayıt uç noktası: `GET /api/plugins`. Dizin genel bakışı → [`plu
    │  /api/import/claude-design      │
    │  MCP stdio server                │
    └─────────┬───────────────────────┘
-             │ spawn(cli, [...], { cwd: .od/projects/<id> })
+             │ spawn(cli, [...], { cwd: managed project cwd })
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  claude · codex · cursor-agent · copilot · openclaw · antigravity ·│
@@ -550,7 +556,7 @@ Eklenti kayıt uç noktası: `GET /api/plugins`. Dizin genel bakışı → [`plu
 |---|---|
 | Frontend | Next.js 16 App Router + React 18 + TypeScript |
 | Daemon | Node 24 · Express · SSE streaming · `better-sqlite3` |
-| Depolama | `.od/projects/<id>/` adresinde dosyalar + `.od/app.sqlite` adresinde SQLite + `media-config.json` (gitignore'lu, otomatik oluşturulur). `OD_DATA_DIR` her şeyi yeniden konumlandırır. |
+| Depolama | Daemon depolama yollarını değiştirmeden veya belgelemeden önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun. Bu README onu TEKRAR ETMEMELİDİR. |
 | Önizleme | Yalıtılmış `srcdoc` iframe + akış `<artifact>` ayrıştırıcı |
 | Dışa aktarma | HTML (gömülü) · PDF (tarayıcı yazdırma) · PPTX (ajan güdümlü) · ZIP · Markdown · MP4 (HyperFrames) |
 | Masaüstü | Electron shell + yalıtılmış renderer + sidecar IPC (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
@@ -588,7 +594,7 @@ Aşamalı teslimat → [`docs/roadmap.md`](../../docs/roadmap.md).
 
 Her kanalın arkasında gerçek insanlar var.
 
-- 💬 **Discord** — günlük sohbet, eklenti paylaşımı, sorular → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 💬 **Discord** — günlük sohbet, eklenti paylaşımı, sorular → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
 - 🐦 **X / Twitter** — sürüm notları, kilometre taşları, perde arkası → [**@nexudotio**](https://x.com/nexudotio)
 - 🗣️ **GitHub Discussions** — derinlemesine soru-cevap, RFC'ler, "çalışmanı göster" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — hata raporları, özellik istekleri → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -638,7 +644,7 @@ Tam ajan dostu katkı akışı, kod stili ve PR çıtası → [`CONTRIBUTING.md`
 
 ### 🏅 Open Design Fellow programı
 
-Dünya çapında **Open Design Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Open Design'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/qhbcCH8Am4) üzerindeki duyuru.
+Dünya çapında **Open Design Fellow'ları** alıyoruz — Fellow'lar ürünü çekirdek ekiple birlikte şekillendirir, kendi bölgelerinde Open Design'ı resmî olarak temsil eder ve topluluğu yerel olarak büyütür; fonlu destek ($1,000 / MR), ücretsiz LLM kredileri ve doğrudan inceleme hattıyla desteklenir. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/9ptkbbqRu) üzerindeki duyuru.
 
 ---
 

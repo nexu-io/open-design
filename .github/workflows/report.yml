@@ -1,0 +1,341 @@
+name: report
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: report-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Materialize handoff reports
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check handoff helper
+        run: python3 .github/scripts/handoff.py self-check
+
+      - name: Resolve report handoff artifacts
+        id: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern="$(python3 .github/scripts/handoff.py artifact-pattern report)"
+          count="$(
+            gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[]? | select(.expired == false and (.name | startswith("handoff-report-"))) | .name' \
+              | sed '/^$/d' \
+              | wc -l \
+              | tr -d ' '
+          )"
+          if [ "$count" = "0" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "pattern=$pattern"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download report handoff artifacts
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ steps.artifacts.outputs.pattern }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/handoff-report
+          merge-multiple: false
+          github-token: ${{ github.token }}
+
+      - name: Read visual report request
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        id: report_request
+        env:
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          entries="$RUNNER_TEMP/report-handoffs.jsonl"
+          python3 .github/scripts/handoff.py list report "$RUNNER_TEMP/handoff-report" > "$entries"
+          visual_entry="$(
+            jq -s -c '[.[] | select(.report_type == "visual-pr")] | if length == 0 then empty elif length == 1 then .[0] else error("multiple visual-pr report handoffs") end' "$entries"
+          )"
+          if [ -z "$visual_entry" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          head_sha="$(jq -r '.head_sha' <<< "$visual_entry")"
+          if [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
+            echo "Report handoff head $head_sha does not match workflow_run head $RUN_HEAD_SHA." >&2
+            exit 1
+          fi
+          {
+            echo "present=true"
+            echo "id=$(jq -r '.id' <<< "$visual_entry")"
+            echo "pr_number=$(jq -r '.pr_number' <<< "$visual_entry")"
+            echo "head_sha=$head_sha"
+            echo "base_sha=$(jq -r '.base_sha' <<< "$visual_entry")"
+            echo "run_id=$(jq -r '.run_id' <<< "$visual_entry")"
+            echo "artifact_pattern=$(jq -r '.artifact_pattern' <<< "$visual_entry")"
+            echo "output_comment_id=$(jq -r '.output_comment_id' <<< "$visual_entry")"
+            echo "marker=$(jq -r '.marker' <<< "$visual_entry")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve visual capture artifacts
+        if: ${{ steps.report_request.outputs.present == 'true' }}
+        id: capture_artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          CAPTURE_PATTERN: ${{ steps.report_request.outputs.artifact_pattern }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="${CAPTURE_PATTERN%\*}"
+          count="$(
+            gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[]? | select(.expired == false) | .name' \
+              | awk -v prefix="$prefix" 'index($0, prefix) == 1 { count += 1 } END { print count + 0 }'
+          )"
+          if [ "$count" = "0" ]; then
+            echo "No visual capture artifacts found for pattern $CAPTURE_PATTERN; skipping report."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Download visual capture artifacts
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ steps.report_request.outputs.artifact_pattern }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/visual-artifacts
+          merge-multiple: false
+          github-token: ${{ github.token }}
+
+      - name: Read visual capture manifests
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' }}
+        id: manifest
+        env:
+          PR_NUMBER: ${{ steps.report_request.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.report_request.outputs.head_sha }}
+          BASE_SHA: ${{ steps.report_request.outputs.base_sha }}
+          RUN_ID: ${{ steps.report_request.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts_dir="$RUNNER_TEMP/visual-artifacts"
+          combined_dir="$RUNNER_TEMP/visual-combined"
+          screenshots_dir="$combined_dir/visual-screenshots"
+          mkdir -p "$screenshots_dir"
+          mapfile -t manifests < <(find "$artifacts_dir" -type f -path '*/visual-report/manifest.json' | sort)
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            mapfile -t manifests < <(find "$artifacts_dir" -type f -name manifest.json | sort)
+          fi
+          if [ "${#manifests[@]}" -eq 0 ]; then
+            echo "Capture manifests not found" >&2
+            find "$artifacts_dir" -maxdepth 5 -type f >&2
+            exit 1
+          fi
+
+          capture_outcome="success"
+          for current_manifest in "${manifests[@]}"; do
+            current_pr_number="$(jq -r '.pr_number' "$current_manifest")"
+            current_head_sha="$(jq -r '.head_sha' "$current_manifest")"
+            current_base_sha="$(jq -r '.base_sha' "$current_manifest")"
+            current_run_id="$(jq -r '.run_id' "$current_manifest")"
+            current_outcome="$(jq -r '.capture_outcome // "success"' "$current_manifest")"
+            if [ "$current_pr_number" != "$PR_NUMBER" ]; then
+              echo "Mismatched visual manifest PR number: $current_pr_number vs $PR_NUMBER" >&2
+              exit 1
+            fi
+            if [ "$current_head_sha" != "$HEAD_SHA" ]; then
+              echo "Mismatched visual manifest head SHA: $current_head_sha vs $HEAD_SHA" >&2
+              exit 1
+            fi
+            if [ "$current_base_sha" != "$BASE_SHA" ]; then
+              echo "Mismatched visual manifest base SHA: $current_base_sha vs $BASE_SHA" >&2
+              exit 1
+            fi
+            if [ "$current_run_id" != "$RUN_ID" ]; then
+              echo "Mismatched visual manifest run ID: $current_run_id vs $RUN_ID" >&2
+              exit 1
+            fi
+            if ! [[ "$current_outcome" =~ ^(success|failure|cancelled|skipped)$ ]]; then
+              echo "Invalid manifest capture_outcome: $current_outcome" >&2
+              exit 1
+            fi
+            if [ "$current_outcome" != "success" ]; then
+              capture_outcome="failure"
+            fi
+
+            manifest_dir="$(dirname "$current_manifest")"
+            if [ "$(basename "$manifest_dir")" = "visual-report" ]; then
+              artifact_root="$(dirname "$manifest_dir")"
+            else
+              artifact_root="$manifest_dir"
+            fi
+            if [ -d "$artifact_root/visual-screenshots" ]; then
+              find "$artifact_root/visual-screenshots" -type f -name '*.png' -exec cp '{}' "$screenshots_dir/" \;
+            fi
+          done
+          {
+            echo "capture_outcome=$capture_outcome"
+            echo "screenshots_dir=$screenshots_dir"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate live PR state
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' }}
+        id: trusted-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.report_request.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.report_request.outputs.head_sha }}
+          BASE_SHA: ${{ steps.report_request.outputs.base_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          pr_state="$(jq -r '.state' <<< "$pr_json")"
+          pr_is_draft="$(jq -r '.draft' <<< "$pr_json")"
+          current_head="$(jq -r '.head.sha' <<< "$pr_json")"
+          current_base="$(jq -r '.base.sha' <<< "$pr_json")"
+          if [ "$pr_state" != "open" ]; then
+            echo "Skipping visual report for PR $PR_NUMBER because state is $pr_state."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$pr_is_draft" != "false" ]; then
+            echo "Skipping visual report for PR $PR_NUMBER because it is draft."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "Skipping stale visual report for $HEAD_SHA; current PR head is $current_head."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$current_base" != "$BASE_SHA" ]; then
+            echo "Skipping stale visual report for base $BASE_SHA; current PR base is $current_base."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "stale=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted base revision
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ steps.report_request.outputs.base_sha }}
+
+      - name: Setup workspace
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
+        uses: ./.github/actions/setup-workspace
+
+      - name: Build visual diff report
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_AK: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          CLOUDFLARE_R2_RELEASES_SK: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+        run: |
+          pnpm -C e2e exec tsx scripts/visual-report.ts compare-pr \
+            --pr-number "${{ steps.report_request.outputs.pr_number }}" \
+            --run-id "${{ steps.report_request.outputs.run_id }}" \
+            --head-sha "${{ steps.report_request.outputs.head_sha }}" \
+            --base-sha "${{ steps.report_request.outputs.base_sha }}" \
+            --capture-outcome "${{ steps.manifest.outputs.capture_outcome }}" \
+            --screenshots "${{ steps.manifest.outputs.screenshots_dir }}" \
+            --comment-out ui/reports/visual-report/comment.md \
+            --manifest-out ui/reports/visual-report/report-manifest.json
+
+      - name: Upsert visual report comment
+        if: ${{ steps.capture_artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.report_request.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.report_request.outputs.head_sha }}
+          BASE_SHA: ${{ steps.report_request.outputs.base_sha }}
+          MARKER: ${{ steps.report_request.outputs.marker }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          pr_state="$(jq -r '.state' <<< "$pr_json")"
+          pr_is_draft="$(jq -r '.draft' <<< "$pr_json")"
+          current_head="$(jq -r '.head.sha' <<< "$pr_json")"
+          current_base="$(jq -r '.base.sha' <<< "$pr_json")"
+          if [ "$pr_state" != "open" ]; then
+            echo "Skipping visual report comment for PR $PR_NUMBER because state is $pr_state."
+            exit 0
+          fi
+          if [ "$pr_is_draft" != "false" ]; then
+            echo "Skipping visual report comment for PR $PR_NUMBER because it is draft."
+            exit 0
+          fi
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "Skipping stale visual report comment for $HEAD_SHA; current PR head is $current_head."
+            exit 0
+          fi
+          if [ "$current_base" != "$BASE_SHA" ]; then
+            echo "Skipping stale visual report comment for base $BASE_SHA; current PR base is $current_base."
+            exit 0
+          fi
+
+          body_path="e2e/ui/reports/visual-report/comment.md"
+          payload_file="$RUNNER_TEMP/visual-report-comment.json"
+          jq -n --rawfile body "$body_path" '{body: $body}' > "$payload_file"
+          comment_id="$(
+            gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+              | jq -r --arg marker "$MARKER" '.[] | select((.body // "") | contains($marker)) | .id' \
+              | tail -n 1 || true
+          )"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --input "$payload_file" >/dev/null
+            echo "Updated visual report comment on PR $PR_NUMBER."
+          else
+            gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" --input "$payload_file" >/dev/null
+            echo "Created visual report comment on PR $PR_NUMBER."
+          fi
+
+      - name: Upload visual report artifact
+        if: ${{ always() && steps.capture_artifacts.outputs.found == 'true' && steps.trusted-pr.outputs.stale != 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-pr-report-${{ steps.report_request.outputs.pr_number }}-${{ steps.report_request.outputs.run_id }}
+          path: e2e/ui/reports/visual-report
+          if-no-files-found: ignore
+          retention-days: 7

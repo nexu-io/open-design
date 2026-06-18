@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -133,6 +133,23 @@ describe('resolveProjectFilePath', () => {
     await expect(
       resolveProjectFilePath(projectsRoot, projectId, '../other-project/secret.mp4'),
     ).rejects.toThrow();
+  });
+
+  it('rejects symlink escapes inside managed projects', async () => {
+    const outsideRoot = mkdtempSync(path.join(tmpdir(), 'od-range-outside-'));
+    try {
+      await writeFile(path.join(outsideRoot, 'secret.txt'), 'secret');
+      await symlink(
+        path.join(outsideRoot, 'secret.txt'),
+        path.join(projectsRoot, projectId, 'linked-secret.txt'),
+      );
+
+      await expect(
+        resolveProjectFilePath(projectsRoot, projectId, 'linked-secret.txt'),
+      ).rejects.toMatchObject({ code: 'EPATHESCAPE' });
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
   });
 });
 

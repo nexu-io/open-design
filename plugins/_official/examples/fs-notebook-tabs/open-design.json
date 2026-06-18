@@ -1,0 +1,158 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-fs-notebook-tabs",
+  "title": "Notebook Tabs",
+  "title_i18n": {
+    "en": "Notebook Tabs",
+    "zh-CN": "索引笔记本"
+  },
+  "version": "1.0.0",
+  "description": "Editorial 'physical notebook' HTML decks: a cream paper card (#f8f6f1) floating on a dark ground, mint/lavender/pink/sky index tabs on the right fore-edge, binder holes on the left, Bodoni Moda display + DM Sans body, on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides 'Notebook Tabs' style preset (STYLE_PRESETS.md section 5).",
+  "description_i18n": {
+    "en": "Editorial 'physical notebook' HTML decks: a cream paper card (#f8f6f1) floating on a dark ground, mint/lavender/pink/sky index tabs on the right fore-edge, binder holes on the left, Bodoni Moda display + DM Sans body, on a fixed 1920x1080 stage that scales to any viewport. Based on zarazhangrui/frontend-slides 'Notebook Tabs' style preset (STYLE_PRESETS.md section 5).",
+    "zh-CN": "编辑系「实体笔记本」HTML 幻灯片：深底之上的奶油纸卡 (#f8f6f1)，右缘薄荷/薰衣草/粉/天蓝竖向索引标签 + 左侧活页装订孔装饰，Bodoni Moda 标题 + DM Sans 正文，固定 1920x1080 舞台等比缩放适配任意视口。基于 zarazhangrui/frontend-slides 的 Notebook Tabs 风格预设（STYLE_PRESETS.md 第 5 节）。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "zarazhangrui",
+    "url": "https://github.com/zarazhangrui"
+  },
+  "homepage": "https://github.com/zarazhangrui/frontend-slides",
+  "plugin": {
+    "repo": "https://github.com/zarazhangrui/frontend-slides"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "presentation",
+    "notebook",
+    "editorial",
+    "paper",
+    "web",
+    "ppt"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, designed as a {{density}} deck in the locked 'Notebook Tabs' visual system: an editorial physical notebook where every slide is a cream paper page floating on a dark desk, with a colorful tab index on the right fore-edge and binder holes on the left. Output one self-contained single-file HTML deck with zero dependencies (all CSS/JS inline, no build step, no external JS libraries; the only external reference is the Google Fonts @import). Hard rules, all locked: (1) Fixed 16:9 stage - author every slide on a 1920x1080 canvas inside .deck-viewport > .deck-stage and scale the whole stage uniformly with one transform (factor = min(innerWidth/1920, innerHeight/1080), centered with letterbox); never reflow content per device, no responsive breakpoints inside slides, all measurements fixed px at design size. (2) Each page is one <section class=\"slide\">; switch slides only via .active/.visible classes toggling visibility/opacity/pointer-events - never display:none. (3) Keyboard navigation (arrows, Space, PageUp/PageDown, Home/End), debounced wheel (~650ms), touch swipe, and #/<index> hash routing with deep-link restore; page counter chrome fixed outside the scaled stage. (4) Theme tokens are LOCKED - reproduce the seed's :root exactly: --bg-outer:#2d2d2d (dark desk), --bg-page:#f8f6f1 (cream paper), --text-primary:#1a1a1a, --text-secondary:#6b6358, --rule:#d8d2c4, tabs --tab-1:#98d4bb mint / --tab-2:#c7b8ea lavender / --tab-3:#f4b8c5 pink / --tab-4:#a8d8ea sky / --tab-5:#ffe6a7 cream; fonts 'Bodoni Moda' (400/700 + italic) display + 'DM Sans' (400/500/700) body via one Google Fonts @import; sizes --title-size:150px, --h2-size:84px, --body-size:26px, --label-size:17px; one signature easing cubic-bezier(0.16,1,0.3,1). Never introduce any other color or font; no gradients-as-decoration, no Inter/Roboto/Arial, no #6366f1. (5) Every slide carries the full notebook device: .paper card positioned by the --paper-* insets with layered shadow, faint 44px ruled-line grain, z-index:1; .holes column of 10 punched circles (26px, bg-outer fill, inset shadow + white bottom highlight) at left:38px inside the paper; .margin-rule 1px pink vertical line at left:92px at 0.55 opacity; .tabs column of 5 vertical-rl uppercase DM Sans tabs (56x158px, radius 0 10px 10px 0) on the right fore-edge positioned against the stage so 12px of each tab root tucks under the paper at z-index:0, colored tab-1..tab-5 in order, current section's tab gets .on (full opacity, translateX(0), stronger shadow), labels renamed to the deck's actual sections; .runhead top chrome ('No. NN' + running title over a hairline) and .baseline bottom chrome (section + 'NN / total' under a hairline). (6) Compose slides from the locked layout vocabulary: cover (kicker with color chip + giant Bodoni display with one italic word + tab-color swatch row), contents index (color chip + roman numeral + dotted leaders + page no.), section divider (430px outline-stroke Bodoni numeral + color bar), bullets (max 3 points, colored circular pin with inline-SVG icon), quote (lavender 220px quote mark + Bodoni italic 66px), big stat (300px Bodoni number + italic unit + mint-bordered side note), pure-CSS bar chart (scaleY-animated bars in tab colors), two-column comparison (.hot column with 8px 8px 0 sky hard offset shadow), 2x2 principle grid (12px colored left edge per card via --edge), closing (display sign-off + underlined links + colophon line). Match the requested slide count ({{slideCount}}); split content rather than shrinking type; no scrolling, no overflow. (7) Entrances only via .reveal elements staggered with transition-delay (~0.1s steps) when the slide gains .visible; animate only transform and opacity; chart bars grow via scaleY from bottom; prefers-reduced-motion support mandatory. (8) Icons are inline SVG stroked in #1a1a1a; no remote images, no Chart.js/mermaid - pure CSS/SVG visuals only. Start from the example.html seed in this plugin: keep its stage CSS (full viewport-base.css contents), :root tokens, paper/holes/margin-rule/tabs devices, runhead/baseline chrome, and the entire SlidePresentation controller script verbatim - replace only the slide content, section/tab names, data values, and icon paths.",
+        "zh-CN": "用「索引笔记本」锁定主题为 {{audience}} 创作一套关于 {{topic}} 的 {{deckType}}（{{slideCount}}，{{density}}）：编辑系实体笔记本装置——每页都是浮于深色桌面 (#2d2d2d) 的奶油纸卡 (#f8f6f1)，右缘薄荷/薰衣草/粉/天蓝/奶油五色竖向索引标签（当前章节标签高亮外凸），左侧活页装订孔 + 粉色页边线，Bodoni Moda 标题 + DM Sans 正文。零依赖单文件 HTML：固定 1920x1080 舞台等比缩放、section.slide + .active/.visible 切换、键盘/滚轮/触摸导航 + hash 路由、.reveal 错峰入场、纯 CSS/SVG 图表、prefers-reduced-motion。从插件内 example.html 种子出发，保留全部设计 token 与笔记本装置，只替换内容、章节标签名与数据；禁止引入规格外的任何颜色和字体。完整硬性规格以英文 prompt 为准。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Fieldnote Press - The 2026 Editorial Almanac",
+          "title_i18n": {
+            "en": "Fieldnote Press - The 2026 Editorial Almanac",
+            "zh-CN": "Fieldnote Press · 2026 编辑年鉴"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "annual report / review",
+          "editorial plan",
+          "pitch deck",
+          "internal presentation",
+          "teaching / tutorial deck",
+          "product overview"
+        ],
+        "default": "annual report / review"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "An independent print studio's year in review",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Readers, patrons, and stockists",
+        "default": "a general professional audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Length",
+        "type": "select",
+        "required": true,
+        "options": [
+          "short 8-10 slides",
+          "medium 10-15 slides",
+          "long 15+ slides"
+        ],
+        "default": "short 8-10 slides"
+      },
+      {
+        "name": "density",
+        "label": "Density",
+        "type": "select",
+        "required": true,
+        "options": [
+          "low density / speaker-led",
+          "high density / reading-first"
+        ],
+        "default": "low density / speaker-led"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -53,6 +53,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
+import { claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
@@ -233,6 +234,14 @@ export function mergeSavedPreviewComment(current: PreviewComment[], saved: Previ
 function mergeServerMessageWithLocal(server: ChatMessage, local?: ChatMessage): ChatMessage {
   if (!local) return server;
   const merged: ChatMessage = { ...server };
+  if (local.role === 'assistant' && server.role === 'assistant') {
+    if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
+      merged.content = local.content;
+    }
+    if ((local.events?.length ?? 0) > (server.events?.length ?? 0)) {
+      merged.events = local.events;
+    }
+  }
   if (!server.producedFiles?.length && local.producedFiles?.length) {
     merged.producedFiles = local.producedFiles;
   }
@@ -794,6 +803,20 @@ function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['eve
   };
 }
 
+function artifactWithHtml(
+  artifact: Artifact | null,
+  fallbackIdentifier: string,
+  html: string,
+): Artifact {
+  return artifact
+    ? { ...artifact, html }
+    : {
+        identifier: fallbackIdentifier,
+        title: '',
+        html,
+      };
+}
+
 export function ProjectView({
   project,
   routeFileName,
@@ -838,6 +861,35 @@ export function ProjectView({
   // Reviewer #2285 (mrcfps, 2026-05-20 04:08) flagged the previous
   // ChatComposer-level emit for skewing the funnel.
   const chatPanelPageViewFiredRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const trackedTimeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const timer of trackedTimeoutsRef.current) clearTimeout(timer);
+      trackedTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  const scheduleProjectTimeout = useCallback((callback: () => void, delayMs: number) => {
+    if (!mountedRef.current) return null;
+    const timer = setTimeout(() => {
+      trackedTimeoutsRef.current.delete(timer);
+      if (!mountedRef.current) return;
+      callback();
+    }, delayMs);
+    trackedTimeoutsRef.current.add(timer);
+    return timer;
+  }, []);
+
+  const clearProjectTimeout = useCallback((timer: ReturnType<typeof setTimeout> | null) => {
+    if (timer == null) return;
+    clearTimeout(timer);
+    trackedTimeoutsRef.current.delete(timer);
+  }, []);
+
   useEffect(() => {
     if (chatPanelPageViewFiredRef.current === project.id) return;
     chatPanelPageViewFiredRef.current = project.id;
@@ -865,6 +917,10 @@ export function ProjectView({
     }
   }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,
   );
@@ -1072,6 +1128,8 @@ export function ProjectView({
   const reattachControllersRef = useRef<Map<string, AbortController>>(new Map());
   const reattachCancelControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedReattachRunsRef = useRef<Set<string>>(new Set());
+  const recoveredArtifactMessagesRef = useRef<Set<string>>(new Set());
+  const messagesRef = useRef<ChatMessage[]>([]);
   const startingQueuedChatSendIdRef = useRef<string | null>(null);
   const [queuedAutoStartTick, setQueuedAutoStartTick] = useState(0);
   const skillCache = useRef<Map<string, string>>(new Map());
@@ -1105,6 +1163,9 @@ export function ProjectView({
     projectIdRef.current = project.id;
   }, [project.id]);
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
     setChatSeed(null);
     setAutoAuditRepairSeed(null);
     const restored = loadQueuedChatSends(project.id);
@@ -1124,6 +1185,10 @@ export function ProjectView({
   const [creatingConversation, setCreatingConversation] = useState(false);
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
+    [messages],
+  );
+  const currentConversationHasRecoverableArtifact = useMemo(
+    () => messages.some((message) => hasRecoverableArtifactMessage(message)),
     [messages],
   );
   const currentConversationLoading = Boolean(
@@ -1736,7 +1801,12 @@ export function ProjectView({
   }, []);
 
   const persistArtifact = useCallback(
-    async (art: Artifact, projectFilesSnapshot?: ProjectFile[], sourceText?: string) => {
+    async (
+      art: Artifact,
+      projectFilesSnapshot?: ProjectFile[],
+      sourceText?: string,
+      options: { pointerMinMtime?: number } = {},
+    ) => {
       const recoveredHtml = recoverHtmlArtifactFromPrecedingDocument({
         artifactHtml: art.html,
         identifier: art.identifier,
@@ -1757,10 +1827,14 @@ export function ProjectView({
         n += 1;
       }
       if (ext === '.html') {
+        const pointerProjectFiles = filterProjectFilesByMinMtime(
+          currentProjectFiles,
+          options.pointerMinMtime,
+        );
         const pointerTarget = resolveHtmlPointerArtifactTarget({
           content: artifactToPersist.html,
           candidateFileName: fileName,
-          projectFiles: currentProjectFiles,
+          projectFiles: pointerProjectFiles,
         });
         if (pointerTarget) {
           if (savedArtifactRef.current === pointerTarget) return;
@@ -1782,7 +1856,6 @@ export function ProjectView({
         }
       }
       if (savedArtifactRef.current === fileName) return;
-      savedArtifactRef.current = fileName;
       const title = art.title || art.identifier || fileName;
       const metadata = {
         identifier: art.identifier,
@@ -1811,6 +1884,7 @@ export function ProjectView({
         artifactManifest: manifest ?? undefined,
       });
       if (file) {
+        savedArtifactRef.current = file.name;
         setFilesRefresh((n) => n + 1);
         // Surface the daemon's stub-guard warning when it fires in `warn`
         // mode (the default). Without this the warning would land in the
@@ -1844,17 +1918,10 @@ export function ProjectView({
     [project.id, project.designSystemId, project.skillId, requestOpenFile],
   );
 
-  const artifactFromStandaloneHtml = useCallback((sourceText: string): Artifact | null => {
-    const html = recoverStandaloneHtmlDocument(sourceText)
-      ?? recoverHtmlDocumentFromMarkdownFence(sourceText);
-    if (!html) return null;
-    return {
-      identifier: 'response',
-      artifactType: 'text/html',
-      title: 'Response',
-      html,
-    };
-  }, []);
+  const artifactFromStandaloneHtml = useCallback(
+    (sourceText: string): Artifact | null => artifactFromRecoverableSourceText(sourceText),
+    [],
+  );
 
   // Set of project file names that the chat surface uses to decide whether
   // a tool card's path is openable as a tab. Recomputed on every file-list
@@ -2293,11 +2360,11 @@ export function ProjectView({
 
   const scheduleConversationMessageRefresh = useCallback(
     (conversationId: string) => {
-      window.setTimeout(() => {
+      scheduleProjectTimeout(() => {
         void refreshConversationMessagesFromServer(conversationId);
       }, 150);
     },
-    [refreshConversationMessagesFromServer],
+    [refreshConversationMessagesFromServer, scheduleProjectTimeout],
   );
 
   const markStreamingConversation = useCallback((conversationId: string) => {
@@ -2569,7 +2636,9 @@ export function ProjectView({
       for (const message of messages) {
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
-        const needsFullReplay = isActiveRunStatus(message.runStatus);
+
+        const needsFullReplay =
+          isActiveRunStatus(message.runStatus) || shouldReplayTerminalRunMessage(message);
         if (!needsFullReplay) continue;
         const fallbackRun = !message.runId
           ? activeByMessage.get(message.id) ?? historicalByMessage.get(message.id) ?? null
@@ -2626,6 +2695,96 @@ export function ProjectView({
           true,
         );
 
+        if (shouldReplayTerminalRunMessage(message)) {
+          const replayedContent = textContentFromAgentEvents(message.events);
+          if (replayedContent.trim().length > 0) {
+            const parser = createArtifactParser();
+            let parsedArtifact: Artifact | null = null;
+            let liveHtml = '';
+            for (const ev of [...parser.feed(replayedContent), ...parser.flush()]) {
+              if (ev.type === 'artifact:start') {
+                liveHtml = '';
+                parsedArtifact = {
+                  identifier: ev.identifier,
+                  artifactType: ev.artifactType,
+                  title: ev.title,
+                  html: '',
+                };
+                setArtifact(parsedArtifact);
+              } else if (ev.type === 'artifact:chunk') {
+                liveHtml += ev.delta;
+                parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, liveHtml);
+                setArtifact((prev) =>
+                  artifactWithHtml(prev, ev.identifier, liveHtml),
+                );
+              } else if (ev.type === 'artifact:end') {
+                parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
+                setArtifact((prev) =>
+                  prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null,
+                );
+              }
+            }
+
+            updateMessageById(
+              message.id,
+              (prev) => ({
+                ...prev,
+                content: replayedContent,
+                runStatus: resolveSucceededRunStatus(prev.runStatus),
+                endedAt: prev.endedAt ?? Date.now(),
+              }),
+              true,
+              { telemetryFinalized: true },
+            );
+
+            let nextFiles = await refreshProjectFiles();
+            const beforeFileNames = new Set(
+              message.preTurnFileNames ?? nextFiles.map((f) => f.name),
+            );
+            const artifactToPersist = parsedArtifact?.html
+              ? parsedArtifact
+              : artifactFromStandaloneHtml(replayedContent);
+            let recoveredExistingArtifact: ProjectFile | null = null;
+            if (artifactToPersist?.html) {
+              const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
+              recoveredExistingArtifact = findExistingArtifactProjectFile(
+                artifactToPersist,
+                nextFiles,
+                { minMtime: runStartedAt },
+              );
+              if (recoveredExistingArtifact) {
+                savedArtifactRef.current = recoveredExistingArtifact.name;
+                requestOpenFile(recoveredExistingArtifact.name);
+              } else {
+                savedArtifactRef.current = null;
+                await persistArtifact(
+                  artifactToPersist,
+                  nextFiles,
+                  replayedContent,
+                  { pointerMinMtime: runStartedAt },
+                );
+                nextFiles = await refreshProjectFiles();
+              }
+            }
+            const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+            const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+            const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+            if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
+            if (produced.length > 0) {
+              updateMessageById(
+                message.id,
+                (prev) => ({ ...prev, producedFiles: produced }),
+                true,
+                { telemetryFinalized: true },
+              );
+            }
+            await auditDesignSystemWorkspaceAfterRun(message.id);
+            completedReattachRunsRef.current.add(runId);
+            onProjectsRefresh();
+            continue;
+          }
+        }
+
         const controller = new AbortController();
         const cancelController = new AbortController();
         reattachControllersRef.current.set(runId, controller);
@@ -2645,14 +2804,14 @@ export function ProjectView({
         let persistTimer: ReturnType<typeof setTimeout> | null = null;
         const persistSoon = () => {
           if (persistTimer) return;
-          persistTimer = setTimeout(() => {
+          persistTimer = scheduleProjectTimeout(() => {
             persistTimer = null;
             persistMessageById(message.id);
           }, 500);
         };
         const persistNow = (options?: SaveMessageOptions) => {
           if (persistTimer) {
-            clearTimeout(persistTimer);
+            clearProjectTimeout(persistTimer);
             persistTimer = null;
           }
           textBuffer.flush();
@@ -2785,17 +2944,29 @@ export function ProjectView({
                   ? parsedArtifact
                   : artifactFromStandaloneHtml(replayedContent);
                 if (artifactToPersist?.html) {
+                  const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
                   recoveredExistingArtifact = findExistingArtifactProjectFile(
                     artifactToPersist,
                     nextFiles,
                     { minMtime: runStartedAt },
-                  );
+                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
+                    artifactHtml: artifactToPersist.html,
+                    producedFiles: producedBeforeFallback,
+                    readProjectHtml,
+                    allowAnyHtmlWrite: message.agentId === 'claude',
+                  });
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
                   } else {
-                    await persistArtifact(artifactToPersist, nextFiles, replayedContent);
+                    savedArtifactRef.current = null;
+                    await persistArtifact(
+                      artifactToPersist,
+                      nextFiles,
+                      replayedContent,
+                      { pointerMinMtime: runStartedAt },
+                    );
                     nextFiles = await refreshProjectFiles();
                   }
                 }
@@ -2838,12 +3009,77 @@ export function ProjectView({
                   }),
                   true,
                 );
+                if (artifactFromRecoverableSourceText(replayedContent)) {
+                  void (async () => {
+                    if (recoveredArtifactMessagesRef.current.has(message.id)) return;
+                    const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+                    const artifactToPersist = parsedArtifact?.html
+                      ? parsedArtifact
+                      : artifactFromStandaloneHtml(replayedContent);
+                    if (!artifactToPersist?.html) return;
+                    let nextFiles = await refreshProjectFiles();
+                    const beforeFileNames = new Set(
+                      message.preTurnFileNames ?? nextFiles.map((f) => f.name),
+                    );
+                    const runStartedAt =
+                      latestRunStatus?.createdAt || message.startedAt || message.createdAt;
+                    let recoveredExistingArtifact = findExistingArtifactProjectFile(
+                      artifactToPersist,
+                      nextFiles,
+                      { minMtime: runStartedAt },
+                    );
+                    if (recoveredExistingArtifact) {
+                      savedArtifactRef.current = recoveredExistingArtifact.name;
+                      requestOpenFile(recoveredExistingArtifact.name);
+                    } else {
+                      savedArtifactRef.current = null;
+                      await persistArtifact(
+                        artifactToPersist,
+                        nextFiles,
+                        replayedContent,
+                        { pointerMinMtime: runStartedAt },
+                      );
+                      nextFiles = await refreshProjectFiles();
+                      recoveredExistingArtifact = findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
+                    }
+                    const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                    if (produced.length > 0) {
+                      recoveredArtifactMessagesRef.current.add(message.id);
+                    }
+                    const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+                    if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
+                    if (latestRunStatus?.status === 'succeeded') setError(null);
+                    updateMessageById(
+                      message.id,
+                      (prev) => ({
+                        ...prev,
+                        content: replayedContent,
+                        producedFiles: produced.length > 0 ? produced : prev.producedFiles,
+                        runStatus:
+                          latestRunStatus?.status === 'succeeded'
+                            ? resolveSucceededRunStatus(prev.runStatus)
+                            : prev.runStatus,
+                        endedAt: prev.endedAt ?? Date.now(),
+                      }),
+                      true,
+                      { telemetryFinalized: true },
+                    );
+                    await auditDesignSystemWorkspaceAfterRun(message.id);
+                    onProjectsRefresh();
+                  })();
+                }
               }
               completedReattachRunsRef.current.add(runId);
               reattachControllersRef.current.delete(runId);
               reattachCancelControllersRef.current.delete(runId);
               clearCurrentRunStreamingMarker(reattachConversationId, controller, cancelController);
               persistNow({ telemetryFinalized: true });
+              scheduleConversationMessageRefresh(reattachConversationId);
             },
           },
           onRunStatus: (runStatus) => {
@@ -2898,7 +3134,7 @@ export function ProjectView({
             textBuffer.flush();
             textBuffer.cancel();
             unregisterTextBuffer();
-            if (persistTimer) clearTimeout(persistTimer);
+            if (persistTimer) clearProjectTimeout(persistTimer);
             reattachControllersRef.current.delete(runId);
             reattachCancelControllersRef.current.delete(runId);
             clearActiveRunRefs(reattachConversationId, controller, cancelController);
@@ -2924,11 +3160,158 @@ export function ProjectView({
     clearStreamingMarker,
     clearActiveRunRefs,
     clearCurrentRunStreamingMarker,
+    clearProjectTimeout,
     refreshProjectFiles,
+    readProjectHtml,
     persistArtifact,
     requestOpenFile,
     onProjectsRefresh,
+    scheduleProjectTimeout,
     scheduleConversationMessageRefresh,
+  ]);
+
+  useEffect(() => {
+    if (config.mode !== 'daemon' || !daemonLive || !activeConversationId) return;
+    if (!currentConversationHasRecoverableArtifact) return;
+    let cancelled = false;
+    let recovering = false;
+
+    const recoverArtifacts = async () => {
+      if (recovering) return;
+      recovering = true;
+      try {
+        const serverMessages = await listMessages(project.id, activeConversationId).catch(() => []);
+        if (cancelled) return;
+        const recoveryMessages = serverMessages.length > 0 ? serverMessages : messagesRef.current;
+        for (const message of recoveryMessages) {
+          if (cancelled) return;
+          if (!hasRecoverableArtifactMessage(message)) continue;
+          if (recoveredArtifactMessagesRef.current.has(message.id)) continue;
+          const runId = message.runId;
+          if (!runId) continue;
+
+          const sourceText = message.content.trim().length > 0
+            ? message.content
+            : textContentFromAgentEvents(message.events);
+
+          const parser = createArtifactParser();
+          let parsedArtifact: Artifact | null = null;
+          let liveHtml = '';
+          for (const ev of [...parser.feed(sourceText), ...parser.flush()]) {
+            if (ev.type === 'artifact:start') {
+              liveHtml = '';
+              parsedArtifact = {
+                identifier: ev.identifier,
+                artifactType: ev.artifactType,
+                title: ev.title,
+                html: '',
+              };
+              setArtifact(parsedArtifact);
+            } else if (ev.type === 'artifact:chunk') {
+              liveHtml += ev.delta;
+              parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, liveHtml);
+              setArtifact((prev) =>
+                artifactWithHtml(prev, ev.identifier, liveHtml),
+              );
+            } else if (ev.type === 'artifact:end') {
+              parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
+              setArtifact((prev) =>
+                prev ? artifactWithHtml(prev, ev.identifier, ev.fullContent) : null,
+              );
+            }
+          }
+
+          const artifactToPersist = parsedArtifact?.html
+            ? parsedArtifact
+            : artifactFromStandaloneHtml(sourceText);
+          if (!artifactToPersist?.html) continue;
+          const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
+          let nextFiles = await refreshProjectFiles();
+          if (cancelled) return;
+          const beforeFileNames = new Set(
+            message.preTurnFileNames ?? nextFiles.map((f) => f.name),
+          );
+          const runStartedAt =
+            latestRunStatus?.createdAt || message.startedAt || message.createdAt;
+          let recoveredExistingArtifact = findExistingArtifactProjectFile(
+            artifactToPersist,
+            nextFiles,
+            { minMtime: runStartedAt },
+          );
+          if (recoveredExistingArtifact) {
+            savedArtifactRef.current = recoveredExistingArtifact.name;
+            requestOpenFile(recoveredExistingArtifact.name);
+          } else {
+            savedArtifactRef.current = null;
+            await persistArtifact(
+              artifactToPersist,
+              nextFiles,
+              sourceText,
+              { pointerMinMtime: runStartedAt },
+            );
+            nextFiles = await refreshProjectFiles();
+            recoveredExistingArtifact = findExistingArtifactProjectFile(
+              artifactToPersist,
+              nextFiles,
+              { minMtime: runStartedAt },
+            );
+          }
+          if (cancelled) return;
+          const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+          if (produced.length === 0) {
+            continue;
+          }
+          recoveredArtifactMessagesRef.current.add(message.id);
+          const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+          if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
+          updateMessageById(
+            message.id,
+            (prev) => ({
+              ...prev,
+              content: sourceText,
+              producedFiles: produced,
+              runStatus:
+                latestRunStatus?.status === 'succeeded'
+                  ? 'succeeded'
+                  : prev.runStatus,
+              endedAt: prev.endedAt ?? Date.now(),
+            }),
+            true,
+            { telemetryFinalized: true },
+          );
+          await auditDesignSystemWorkspaceAfterRun(message.id);
+          scheduleConversationMessageRefresh(activeConversationId);
+          onProjectsRefresh();
+        }
+      } finally {
+        recovering = false;
+      }
+    };
+
+    void recoverArtifacts();
+    const interval = window.setInterval(() => {
+      void recoverArtifacts();
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    daemonLive,
+    config.mode,
+    activeConversationId,
+    project.id,
+    currentConversationHasRecoverableArtifact,
+    artifactFromStandaloneHtml,
+    refreshProjectFiles,
+    persistArtifact,
+    requestOpenFile,
+    updateMessageById,
+    auditDesignSystemWorkspaceAfterRun,
+    scheduleConversationMessageRefresh,
+    onProjectsRefresh,
   ]);
 
   const commitQueuedChatSends = useCallback((next: QueuedChatSend[]) => {
@@ -3204,13 +3587,16 @@ export function ProjectView({
           current.filter((comment) => !consumedCommentIds.has(comment.id)),
         );
       }
+      const isFirstTurn = !retryTarget && historyBase.length === 0;
+      const fallbackFirstTurnTitle = isDesignSystemWorkspacePrompt(prompt)
+        ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
+        : summarizeProjectNameFromPrompt(prompt) || prompt.slice(0, 60).trim();
+      const fallbackProjectName = summarizeProjectNameFromPrompt(prompt);
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
-      if (!retryTarget && historyBase.length === 0) {
-        const title = isDesignSystemWorkspacePrompt(prompt)
-          ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
-          : prompt.slice(0, 60).trim();
+      if (isFirstTurn) {
+        const title = fallbackFirstTurnTitle;
         if (title) {
           setConversations((curr) =>
             curr.map((c) =>
@@ -3219,11 +3605,11 @@ export function ProjectView({
           );
           void patchConversation(project.id, runConversationId, { title });
         }
-        const projectName = summarizeProjectNameFromPrompt(prompt);
+        const projectName = fallbackProjectName;
         if (
           projectName &&
           projectName !== project.name &&
-          canAutoRenameProjectFromPrompt(project)
+          canAutoRenameProjectFromPrompt(project, prompt)
         ) {
           const metadata = project.metadata
             ? { ...project.metadata, nameSource: 'prompt' as const }
@@ -3241,6 +3627,52 @@ export function ProjectView({
           });
         }
       }
+      const canReplaceConversationTitle = (title: string | null | undefined) => {
+        const trimmed = (title ?? '').trim();
+        return (
+          !trimmed ||
+          trimmed === fallbackFirstTurnTitle ||
+          trimmed === prompt.slice(0, 60).trim()
+        );
+      };
+      const applyAgentGeneratedTitle = (rawTitle: string) => {
+        if (!isFirstTurn) return;
+        const agentTitle = rawTitle.trim();
+        if (!agentTitle || isDesignSystemWorkspacePrompt(prompt)) return;
+        const currentConversationTitle = conversationsRef.current.find(
+          (conversation) => conversation.id === runConversationId,
+        )?.title;
+        const shouldPatchConversation = canReplaceConversationTitle(currentConversationTitle);
+        setConversations((curr) =>
+          curr.map((conversation) => {
+            if (conversation.id !== runConversationId) return conversation;
+            if (!canReplaceConversationTitle(conversation.title)) return conversation;
+            return { ...conversation, title: agentTitle };
+          }),
+        );
+        if (shouldPatchConversation) {
+          void patchConversation(project.id, runConversationId, { title: agentTitle });
+        }
+        if (
+          agentTitle !== project.name &&
+          canAutoRenameProjectFromPrompt(project, prompt)
+        ) {
+          const metadata = project.metadata
+            ? { ...project.metadata, nameSource: 'agent' as const }
+            : undefined;
+          const updated: Project = {
+            ...project,
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+            updatedAt: Date.now(),
+          };
+          onProjectChange(updated);
+          void patchProject(project.id, {
+            name: agentTitle,
+            ...(metadata ? { metadata } : {}),
+          });
+        }
+      };
 
       // Snapshot the file list at turn-start so we can diff after the
       // agent finishes and surface anything new (e.g. a generated .pptx)
@@ -3265,14 +3697,14 @@ export function ProjectView({
       let persistTimer: ReturnType<typeof setTimeout> | null = null;
       const persistAssistantSoon = () => {
         if (persistTimer) return;
-        persistTimer = setTimeout(() => {
+        persistTimer = scheduleProjectTimeout(() => {
           persistTimer = null;
           persistMessageById(assistantId);
         }, 500);
       };
       const persistAssistantNowKeepalive = () => {
         if (persistTimer) {
-          clearTimeout(persistTimer);
+          clearProjectTimeout(persistTimer);
           persistTimer = null;
         }
         persistMessageById(assistantId, { keepalive: true });
@@ -3412,6 +3844,10 @@ export function ProjectView({
           textBuffer.appendContent(delta);
         },
         onAgentEvent: (ev: AgentEvent) => {
+          if (ev.kind === 'conversation_title') {
+            applyAgentGeneratedTitle(ev.title);
+            return;
+          }
           if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
           else pushEvent(ev);
         },
@@ -3529,8 +3965,20 @@ export function ProjectView({
               ? parsedArtifact
               : artifactFromStandaloneHtml(finalText);
             if (artifactToPersist?.html) {
-              await persistArtifact(artifactToPersist, nextFiles, finalText);
-              nextFiles = await refreshProjectFiles();
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
+                artifactHtml: artifactToPersist.html,
+                producedFiles: producedBeforeFallback,
+                readProjectHtml,
+                allowAnyHtmlWrite: assistantAgentId === 'claude',
+              });
+              if (sameTurnHtmlWrite) {
+                savedArtifactRef.current = sameTurnHtmlWrite.name;
+                requestOpenFile(sameTurnHtmlWrite.name);
+              } else {
+                await persistArtifact(artifactToPersist, nextFiles, finalText);
+                nextFiles = await refreshProjectFiles();
+              }
             }
             const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
             const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
@@ -3631,10 +4079,24 @@ export function ProjectView({
         // A caller-supplied entry_from (e.g. 'resume_continue' from the
         // resumable-failure Continue action) overrides the DS default so the
         // run is attributed to the affordance that started it.
-        const runAnalyticsHints =
-          meta?.entryFrom
-            ? { ...(dsAnalyticsHints ?? {}), entryFrom: meta.entryFrom }
-            : dsAnalyticsHints;
+        //
+        // Session-dimension hints are stamped on every real run creation (this
+        // path only runs for non-queued sends): claim the next 0-based turn
+        // index for this browser session, and flag whether the project already
+        // had a generated artifact (project-scoped) so the run reads as an edit
+        // rather than a first creation.
+        const sessionTurn = claimRunTurnIndex();
+        const hasExistingArtifact = projectFilesRef.current.some(
+          (file) => Boolean(file.artifactManifest),
+        );
+        const runAnalyticsHints = {
+          ...(dsAnalyticsHints ?? {}),
+          ...(meta?.entryFrom ? { entryFrom: meta.entryFrom } : {}),
+          ...(sessionTurn
+            ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
+            : {}),
+          hasExistingArtifact,
+        };
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -3658,6 +4120,7 @@ export function ProjectView({
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
+          titleGeneration: isFirstTurn ? { enabled: true } : undefined,
           locale,
           ...(runAnalyticsHints ? { analyticsHints: runAnalyticsHints } : {}),
           onRunCreated: (runId) => {
@@ -3834,6 +4297,7 @@ export function ProjectView({
       projectFiles,
       refreshProjectFiles,
       refreshLiveArtifacts,
+      readProjectHtml,
       requestOpenFile,
       persistMessage,
       persistMessageById,
@@ -3843,7 +4307,9 @@ export function ProjectView({
       markStreamingConversation,
       clearStreamingMarker,
       clearCurrentRunStreamingMarker,
+      clearProjectTimeout,
       scheduleConversationMessageRefresh,
+      scheduleProjectTimeout,
       onProjectsRefresh,
       onProjectChange,
     ],
@@ -3983,7 +4449,7 @@ export function ProjectView({
         return;
       }
       removeQueuedChatSend(next.id);
-      window.setTimeout(() => {
+      scheduleProjectTimeout(() => {
         if (startingQueuedChatSendIdRef.current !== next.id) return;
         startingQueuedChatSendIdRef.current = null;
         setQueuedAutoStartTick((tick) => tick + 1);
@@ -3997,6 +4463,7 @@ export function ProjectView({
     queuedChatSends,
     handleSend,
     removeQueuedChatSend,
+    scheduleProjectTimeout,
   ]);
 
   const handleRetry = useCallback(
@@ -4122,18 +4589,20 @@ export function ProjectView({
         uploaded = result.uploaded;
       }
       if (commentAttachments.length === 0) {
-        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true });
+        if (uploaded.length > 0) await handleSend('', uploaded, [], { queueOnly: true, entryFrom: 'comment' });
         return true;
       }
       for (let i = 0; i < commentAttachments.length; i++) {
         const commentAttachment = commentAttachments[i]!;
         const savedImages = chatAttachmentsFromPreviewCommentImages(commentAttachment.imageAttachments);
         const prompt = commentTaskQuery(commentAttachment);
+        // Comment/board pin → run: tag entry_from='comment' so the dashboard
+        // separates annotation-driven runs from plain composer sends.
         await handleSend(
           prompt,
           mergeChatAttachments(i === 0 ? uploaded : [], savedImages),
           [commentTaskContextAttachment(commentAttachment)],
-          { queueOnly: true },
+          { queueOnly: true, entryFrom: 'comment' },
         );
       }
       return true;
@@ -5850,6 +6319,8 @@ export function ProjectView({
                 agents={agents}
                 artifactId={headerArtifact.artifact_id}
                 artifactKind={headerArtifact.artifact_kind}
+                metricsConsent={config.telemetry?.metrics === true}
+                installationId={config.installationId}
               />
               <EntrySettingsMenu
                 config={config}
@@ -5880,7 +6351,9 @@ export function ProjectView({
           focusQuestionsRequest={focusQuestionsRequest}
           onSubmitQuestionForm={(text) => {
             if (currentConversationActionDisabled) return;
-            void handleSend(text, [], []);
+            // Submitting question-form answers is a clarification turn, not a
+            // fresh create/edit — tag entry_from so the dashboard can separate it.
+            void handleSend(text, [], [], { entryFrom: 'question_answer' });
           }}
         />
       </div>
@@ -5941,10 +6414,7 @@ export function findExistingArtifactProjectFile(
   const ext = artifactExtensionFor(art);
   const baseName = artifactBaseNameFor(art);
   const candidateFileName = `${baseName}${ext}`;
-  const minMtime = options.minMtime;
-  const currentRunFiles = typeof minMtime === 'number' && Number.isFinite(minMtime)
-    ? projectFiles.filter((file) => file.mtime >= minMtime)
-    : projectFiles;
+  const currentRunFiles = filterProjectFilesByMinMtime(projectFiles, options.minMtime);
 
   if (ext === '.html') {
     const pointerTarget = resolveHtmlPointerArtifactTarget({
@@ -5967,6 +6437,15 @@ export function findExistingArtifactProjectFile(
   }
 
   return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
+}
+
+function filterProjectFilesByMinMtime(
+  projectFiles: readonly ProjectFile[],
+  minMtime?: number,
+): ProjectFile[] {
+  return typeof minMtime === 'number' && Number.isFinite(minMtime)
+    ? projectFiles.filter((file) => file.mtime >= minMtime)
+    : [...projectFiles];
 }
 
 export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | null {
@@ -6044,6 +6523,65 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+export function hasRecoverableArtifactMessage(message: ChatMessage): boolean {
+  if (message.role !== 'assistant') return false;
+  if (!message.runId) return false;
+  if (!isTerminalRunStatus(message.runStatus)) return false;
+  if (message.producedFiles?.length) return false;
+  const sourceText = message.content.trim().length > 0
+    ? message.content
+    : textContentFromAgentEvents(message.events);
+  return artifactFromRecoverableSourceText(sourceText) !== null;
+}
+
+function artifactFromRecoverableSourceText(sourceText: string): Artifact | null {
+  const parser = createArtifactParser();
+  let parsedArtifact: Artifact | null = null;
+  let liveHtml = '';
+  for (const ev of [...parser.feed(sourceText), ...parser.flush()]) {
+    if (ev.type === 'artifact:start') {
+      liveHtml = '';
+      parsedArtifact = {
+        identifier: ev.identifier,
+        artifactType: ev.artifactType,
+        title: ev.title,
+        html: '',
+      };
+    } else if (ev.type === 'artifact:chunk') {
+      liveHtml += ev.delta;
+      parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, liveHtml);
+    } else if (ev.type === 'artifact:end') {
+      parsedArtifact = artifactWithHtml(parsedArtifact, ev.identifier, ev.fullContent);
+    }
+  }
+  if (parsedArtifact?.html) return parsedArtifact;
+
+  const html = recoverStandaloneHtmlDocument(sourceText)
+    ?? recoverHtmlDocumentFromMarkdownFence(sourceText);
+  if (!html) return null;
+  return {
+    identifier: 'response',
+    artifactType: 'text/html',
+    title: 'Response',
+    html,
+  };
+}
+
+function shouldReplayTerminalRunMessage(message: ChatMessage): boolean {
+  if (message.role !== 'assistant') return false;
+  if (!message.runId) return false;
+  if (message.runStatus !== 'succeeded') return false;
+  if (message.content.trim().length > 0) return false;
+  return !(message.producedFiles?.length);
+}
+
+function textContentFromAgentEvents(events?: AgentEvent[]): string {
+  return (events ?? [])
+    .filter((event): event is Extract<AgentEvent, { kind: 'text' }> => event.kind === 'text')
+    .map((event) => event.text)
+    .join('');
 }
 
 const QUEUED_CHAT_SENDS_STORAGE_VERSION = 1;
@@ -6304,6 +6842,42 @@ export function mergeRecoveredArtifact(
   if (!recovered) return [...diff];
   if (diff.some((f) => f.name === recovered.name)) return [...diff];
   return [...diff, recovered];
+}
+
+export async function findSameTurnHtmlWriteForRecoveredArtifact({
+  artifactHtml,
+  producedFiles,
+  readProjectHtml,
+  allowAnyHtmlWrite = false,
+}: {
+  artifactHtml: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectHtml: (name: string) => Promise<string | null>;
+  allowAnyHtmlWrite?: boolean;
+}): Promise<ProjectFile | null> {
+  const recovered = normalizeHtmlForRecoveredArtifactComparison(artifactHtml);
+  if (!recovered) return null;
+  const candidates = producedFiles.filter(isHtmlProjectFile);
+  for (const file of candidates) {
+    const text = await readProjectHtml(file.name);
+    if (normalizeHtmlForRecoveredArtifactComparison(text) === recovered) {
+      return file;
+    }
+  }
+  if (allowAnyHtmlWrite) return candidates[0] ?? null;
+  return null;
+}
+
+function isHtmlProjectFile(file: ProjectFile): boolean {
+  const name = (file.path || file.name).toLowerCase();
+  return file.kind === 'html' || /\.(?:html?|xhtml)$/u.test(name);
+}
+
+function normalizeHtmlForRecoveredArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
 }
 
 export function clearStreamingConversationMarker(

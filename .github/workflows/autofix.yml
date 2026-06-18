@@ -1,0 +1,287 @@
+name: autofix
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: autofix-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  autofix:
+    name: Apply handoff fixes
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Check handoff helper
+        run: python3 .github/scripts/handoff.py self-check
+
+      - name: Resolve autofix handoff artifacts
+        id: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern="$(python3 .github/scripts/handoff.py artifact-pattern autofix)"
+          count="$(
+            gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" \
+              --jq '.artifacts[]? | select(.expired == false and (.name | startswith("handoff-autofix-"))) | .name' \
+              | sed '/^$/d' \
+              | wc -l \
+              | tr -d ' '
+          )"
+          if [ "$count" = "0" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "pattern=$pattern"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download autofix handoff artifacts
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ steps.artifacts.outputs.pattern }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/handoff-autofix
+          merge-multiple: false
+          github-token: ${{ github.token }}
+
+      - name: Read autofix handoffs
+        if: ${{ steps.artifacts.outputs.found == 'true' }}
+        id: handoffs
+        shell: bash
+        run: |
+          set -euo pipefail
+          entries="$RUNNER_TEMP/autofix-handoffs.jsonl"
+          python3 .github/scripts/handoff.py list autofix "$RUNNER_TEMP/handoff-autofix" > "$entries"
+          if [ ! -s "$entries" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "present=true"
+            echo "entries=$entries"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect bot credentials
+        if: ${{ steps.handoffs.outputs.present == 'true' }}
+        id: bot-secrets
+        env:
+          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${BOT_APP_ID}" ] && [ -n "${BOT_APP_PRIVATE_KEY}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate Open Design bot token
+        if: ${{ steps.handoffs.outputs.present == 'true' && steps.bot-secrets.outputs.present == 'true' }}
+        id: bot-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+
+      - name: Apply handoff fixes
+        if: ${{ steps.handoffs.outputs.present == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          ENTRIES_PATH: ${{ steps.handoffs.outputs.entries }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          upsert_nix_fallback_comment() {
+            local id="$1"
+            local pr_number="$2"
+            local patch_path="$3"
+            local reason="$4"
+
+            if [ "$id" != "nix-pnpm-deps" ]; then
+              echo "No fallback comment handler configured for autofix handoff $id."
+              return 0
+            fi
+
+            local marker="<!-- nix-hash-refresh -->"
+            local body_path="$RUNNER_TEMP/nix-hash-refresh-fallback-$id.md"
+            local payload_file="$RUNNER_TEMP/nix-hash-refresh-fallback-$id.json"
+            {
+              printf '%s\n' "$marker"
+              printf "A generated Nix hash refresh is available for this PR, but the automated same-repo push did not complete: %s\n\n" "$reason"
+              printf "Apply the diff below with \`git apply\`:\n\n"
+              printf '```diff\n'
+              cat "$patch_path"
+              printf '\n```\n'
+            } > "$body_path"
+
+            jq -n --rawfile body "$body_path" '{body: $body}' > "$payload_file"
+            local comment_id
+            comment_id="$(
+              gh api --paginate "repos/$REPO/issues/$pr_number/comments" \
+                | jq -r --arg marker "$marker" '.[] | select((.body // "") | contains($marker)) | .id' \
+                | tail -n 1 || true
+            )"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" --input "$payload_file" >/dev/null
+              echo "Updated Nix hash fallback comment on PR $pr_number."
+            else
+              gh api --method POST "repos/$REPO/issues/$pr_number/comments" --input "$payload_file" >/dev/null
+              echo "Created Nix hash fallback comment on PR $pr_number."
+            fi
+          }
+
+          clear_nix_fallback_comment() {
+            local id="$1"
+            local pr_number="$2"
+
+            if [ "$id" != "nix-pnpm-deps" ]; then
+              return 0
+            fi
+
+            local marker="<!-- nix-hash-refresh -->"
+            local comment_ids
+            comment_ids="$(
+              gh api --paginate "repos/$REPO/issues/$pr_number/comments" \
+                | jq -r --arg marker "$marker" '.[] | select((.body // "") | contains($marker)) | .id' || true
+            )"
+            if [ -z "$comment_ids" ]; then
+              echo "No stale Nix hash fallback comment found on PR $pr_number."
+              return 0
+            fi
+
+            while IFS= read -r comment_id; do
+              if [ -n "$comment_id" ]; then
+                gh api --method DELETE "repos/$REPO/issues/comments/$comment_id" >/dev/null
+                echo "Deleted stale Nix hash fallback comment $comment_id on PR $pr_number."
+              fi
+            done <<< "$comment_ids"
+          }
+
+          while IFS= read -r entry_json; do
+            id="$(jq -r '.id' <<< "$entry_json")"
+            pr_number="$(jq -r '.pr_number' <<< "$entry_json")"
+            head_sha="$(jq -r '.head_sha' <<< "$entry_json")"
+            base_sha="$(jq -r '.base_sha' <<< "$entry_json")"
+            patch_path="$(jq -r '.patch_path' <<< "$entry_json")"
+            commit_message="$(jq -r '.commit_message' <<< "$entry_json")"
+            allowed_paths_json="$(jq -c '.allowed_paths' <<< "$entry_json")"
+
+            if [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
+              echo "Skipping autofix handoff $id because artifact head $head_sha does not match workflow_run head $RUN_HEAD_SHA."
+              continue
+            fi
+
+            pr_json="$(gh api "repos/$REPO/pulls/$pr_number")"
+            pr_state="$(jq -r '.state' <<< "$pr_json")"
+            pr_draft="$(jq -r '.draft' <<< "$pr_json")"
+            head_repo="$(jq -r '.head.repo.full_name // empty' <<< "$pr_json")"
+            head_ref="$(jq -r '.head.ref // empty' <<< "$pr_json")"
+            current_head="$(jq -r '.head.sha' <<< "$pr_json")"
+            current_base="$(jq -r '.base.sha' <<< "$pr_json")"
+            if [ "$pr_state" != "open" ]; then
+              echo "Skipping autofix handoff $id because PR $pr_number state is $pr_state."
+              continue
+            fi
+            if [ "$pr_draft" != "false" ]; then
+              echo "Skipping autofix handoff $id because PR $pr_number is draft."
+              continue
+            fi
+            if [ "$head_repo" != "$REPO" ]; then
+              echo "Skipping autofix handoff $id because PR $pr_number is from fork $head_repo."
+              continue
+            fi
+            if [ "$current_head" != "$head_sha" ]; then
+              echo "Skipping stale autofix handoff $id for $head_sha; current PR head is $current_head."
+              continue
+            fi
+            if [ "$current_base" != "$base_sha" ]; then
+              echo "Skipping stale autofix handoff $id for base $base_sha; current PR base is $current_base."
+              continue
+            fi
+
+            if [ -z "${BOT_TOKEN:-}" ]; then
+              echo "Skipping autofix handoff $id because bot token is unavailable."
+              upsert_nix_fallback_comment "$id" "$pr_number" "$patch_path" "bot credentials were unavailable"
+              continue
+            fi
+
+            work_dir="$RUNNER_TEMP/autofix-work-$id"
+            rm -rf "$work_dir"
+            git clone --no-checkout "https://x-access-token:${BOT_TOKEN}@github.com/${REPO}.git" "$work_dir"
+            cd "$work_dir"
+            git fetch origin "+refs/heads/$head_ref:refs/remotes/origin/$head_ref"
+            git checkout -B "handoff-$id" "refs/remotes/origin/$head_ref"
+            checked_out="$(git rev-parse HEAD)"
+            if [ "$checked_out" != "$head_sha" ]; then
+              echo "Skipping stale autofix handoff $id for $head_sha; fetched $checked_out."
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+            if ! git apply --check "$patch_path"; then
+              cd "$GITHUB_WORKSPACE"
+              upsert_nix_fallback_comment "$id" "$pr_number" "$patch_path" "the generated patch did not apply cleanly"
+              continue
+            fi
+            git apply "$patch_path"
+
+            changed_files="$(git diff --name-only | sort)"
+            allowed_files="$(jq -r '.[]' <<< "$allowed_paths_json" | sort)"
+            if [ "$changed_files" != "$allowed_files" ]; then
+              echo "Unexpected files changed after applying autofix handoff $id:" >&2
+              printf '%s\n' "$changed_files" >&2
+              echo "Allowed files:" >&2
+              printf '%s\n' "$allowed_files" >&2
+              exit 1
+            fi
+            if git diff --quiet --exit-code; then
+              echo "Autofix handoff $id produced no changes."
+              cd "$GITHUB_WORKSPACE"
+              continue
+            fi
+
+            git config user.name 'open-design-bot[bot]'
+            git config user.email '282769551+open-design-bot[bot]@users.noreply.github.com'
+            jq -r '.[]' <<< "$allowed_paths_json" | xargs git add --
+            git commit -m "$commit_message"
+            if ! git push origin "HEAD:refs/heads/$head_ref"; then
+              cd "$GITHUB_WORKSPACE"
+              upsert_nix_fallback_comment "$id" "$pr_number" "$patch_path" "the bot push failed"
+              continue
+            fi
+            cd "$GITHUB_WORKSPACE"
+            clear_nix_fallback_comment "$id" "$pr_number"
+            echo "Applied autofix handoff $id to PR $pr_number."
+          done < "$ENTRIES_PATH"

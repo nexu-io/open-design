@@ -167,6 +167,10 @@ interface Props {
   pendingPluginId: string | null;
   pendingChipId: string | null;
   submitDisabled?: boolean;
+  // True while the submitted run is still creating its project/conversation
+  // (#4082). Distinct from `submitDisabled`: it swaps the send button into a
+  // visible Sending… state instead of leaving it silently idle.
+  submitting?: boolean;
   onPickPlugin: (record: InstalledPluginRecord, nextPrompt: string | null) => void;
   onPickExamplePlugin?: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
   onPickSkill?: (skill: SkillSummary, nextPrompt: string | null) => void;
@@ -275,6 +279,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     pendingPluginId,
     pendingChipId,
     submitDisabled = false,
+    submitting = false,
     onPickPlugin,
     onPickExamplePlugin = () => undefined,
     onPickSkill = () => undefined,
@@ -324,7 +329,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const mentionPickerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcutsMenuRef = useRef<HTMLDivElement>(null);
-  const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
+  const canSubmit =
+    (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled && !submitting;
   const previewHomeFile = useMemo(() => {
     if (!previewHomeFileKey) return null;
     return stagedFiles.find((file, index) => homeFileKey(file, index) === previewHomeFileKey) ?? null;
@@ -1479,17 +1485,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             <button
               type="button"
-              className={`home-hero__submit od-tooltip${sendAttention ? ' home-hero__attention-sheen' : ''}`}
+              className={`home-hero__submit od-tooltip${sendAttention ? ' home-hero__attention-sheen' : ''}${submitting ? ' is-sending' : ''}`}
               data-testid="home-hero-submit"
               onClick={onSubmit}
               onAnimationEnd={() => setSendAttention(false)}
               disabled={!canSubmit}
-              title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-              data-tooltip={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
-              aria-label={t('homeHero.run')}
+              title={submitting ? t('chat.comments.sending') : canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              data-tooltip={submitting ? t('chat.comments.sending') : canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+              aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
+              aria-busy={submitting}
             >
               <Icon name="send" size={13} />
-              <span>{t('chat.send')}</span>
+              <span>{submitting ? t('chat.comments.sending') : t('chat.send')}</span>
             </button>
           </div>
         </div>
@@ -1728,12 +1735,17 @@ function PluginPromptPresetCard({
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
     pluginPresetPromptPreview(record, locale, chipId),
   ).text;
+  // Decks ship a fixed 16:9 stage; tag them so the preset thumbnail uses a 16:9
+  // frame the iframe fills natively, instead of letterboxing the stage with a
+  // dark band above it (matches the Community gallery deck treatment).
+  const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
   return (
     <button
       type="button"
       className={`home-hero__plugin-preset${active ? ' is-active' : ''}${pending ? ' is-pending' : ''}${pulse ? ' home-hero__attention-sheen' : ''}`}
       data-testid="home-hero-plugin-preset"
       data-plugin-id={record.id}
+      {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
       role="listitem"
       disabled={disabled}
       onClick={() => onPick(record, chipId, seedPrompt)}
@@ -2667,11 +2679,12 @@ function ActiveTypeChip({ chip, onClear }: { chip: HomeHeroChip; onClear: () => 
   return (
     <button
       type="button"
-      className="home-hero__active-type-chip"
+      className="home-hero__active-type-chip is-active"
       data-testid="home-hero-active-type-chip"
       data-chip-id={chip.id}
       title={homeHeroChipTitle(chip, t)}
       aria-label={`${homeHeroChipLabel(chip.id, t)} ${t('common.delete')}`}
+      aria-pressed="true"
       onClick={onClear}
     >
       <span className="home-hero__active-type-chip-icon" aria-hidden>
@@ -2812,6 +2825,12 @@ export function homeHeroExamplePluginsForChip(
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
+  // The top-level rail is a curated showcase capped at 18 for most chips. The
+  // deck chip is the exception: surface the FULL slide-template library so every
+  // bundled deck is reachable as an example prompt straight from "All" (without
+  // first picking a sub-category), keeping the rail in parity with the Community
+  // section's "Slides" count.
+  const showcaseLimit = chipId === 'deck' ? Number.POSITIVE_INFINITY : 18;
   const presets = plugins
     .filter((plugin) => !EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS.has(plugin.id))
     .filter((plugin) => (
@@ -2823,7 +2842,7 @@ export function homeHeroExamplePluginsForChip(
       curatedPluginPriorityForChip(plugin, chipId) !== null
     ))
     .sort((a, b) => comparePluginPresetOrder(a, b, chipId))
-    .slice(0, 18);
+    .slice(0, showcaseLimit);
   if (chipId === 'image') {
     return movePluginPresetToEnd(presets, 'example-hatch-pet');
   }

@@ -24,7 +24,7 @@
     "en": "Flowai Live Dashboard Template"
   },
   "version": "0.1.0",
-  "description": "Team-management dashboard skill in the FlowAI aesthetic — three tabs\n(Team Members, Team Details, Activity Log), KPI stat row, member table,\nrole distribution bar chart, online presence and activity sparklines,\nand a top-contributors panel, all in a single self-contained HTML file\nwith light/dark theming, hoverable chart tooltips, click-to-zoom panels,\nand CSV export. Use when the brief asks for a team / workspace admin\ndashboard, an interactive admin dashboard with charts, or names FlowAI.",
+  "description": "Team-management dashboard skill in the FlowAI aesthetic — three tabs (Team Members, Team Details, Activity Log), KPI stat row, member table, role distribution bar chart, online presence and activity sparklines, and a top-contributors panel, all in a single self-contained HTML file with light/dark theming, hoverable chart tooltips, click-to-zoom panels, and CSV export. Use when the brief asks for a team / workspace admin dashboard, an interactive admin dashboard with charts, or names FlowAI.",
   "description_i18n": {
     "zh-CN": "FlowAI 风格的团队管理仪表板，包含三个标签页（团队成员、团队详情、活动日志）、KPI 统计行、成员表格、角色分布条形图、在线状态和活动趋势图、顶级贡献者面板，支持亮暗主题切换、图表悬停提示、面板点击缩放和 CSV 导出功能。",
     "zh-TW": "FlowAI 風格的團隊管理儀表板，包含三個分頁（團隊成員、團隊詳情、活動記錄）、KPI 統計列、成員表格、角色分佈長條圖、線上狀態和活動趨勢圖、頂級貢獻者面板，支援亮暗主題切換、圖表懸停提示、面板點擊縮放和 CSV 匯出功能。",
@@ -43,7 +43,7 @@
     "ar": "لوحة تحكم لإدارة الفريق بأسلوب FlowAI تتضمن ثلاث علامات تبويب (أعضاء الفريق، تفاصيل الفريق، سجل النشاط)، صف إحصائيات KPI، جدول الأعضاء، مخطط شريطي لتوزيع الأدوار، رسوم بيانية للحضور والنشاط عبر الإنترنت، ولوحة أفضل المساهمين. يدعم السمة الفاتحة/الداكنة، تلميحات الرسوم البيانية، التكبير وتصدير CSV.",
     "tr": "FlowAI estetiğinde ekip yönetimi panosu; üç sekme (Ekip Üyeleri, Ekip Detayları, Etkinlik Günlüğü), KPI istatistik satırı, üye tablosu, rol dağılımı çubuk grafiği, çevrimiçi durum ve etkinlik sparkline'ları ile en iyi katkıda bulunanlar paneli içerir. Açık/koyu tema, grafik araç ipuçları, tıklayarak yakınlaştırma ve CSV dışa aktarma desteği.",
     "uk": "Панель управління командою в естетиці FlowAI з трьома вкладками (Члени команди, Деталі команди, Журнал активності), рядком статистики KPI, таблицею учасників, стовпчиковою діаграмою розподілу ролей, графіками присутності та активності, панеллю топ-учасників. Підтримує світлу/темну тему, підказки графіків, масштабування та експорт CSV.",
-    "en": "Team-management dashboard skill in the FlowAI aesthetic — three tabs\n(Team Members, Team Details, Activity Log), KPI stat row, member table,\nrole distribution bar chart, online presence and activity sparklines,\nand a top-contributors panel, all in a single self-contained HTML file\nwith light/dark theming, hoverable chart tooltips, click-to-zoom panels,\nand CSV export. Use when the brief asks for a team / workspace admin\ndashboard, an interactive admin dashboard with charts, or names FlowAI."
+    "en": "Team-management dashboard skill in the FlowAI aesthetic — three tabs (Team Members, Team Details, Activity Log), KPI stat row, member table, role distribution bar chart, online presence and activity sparklines, and a top-contributors panel, all in a single self-contained HTML file with light/dark theming, hoverable chart tooltips, click-to-zoom panels, and CSV export. Use when the brief asks for a team / workspace admin dashboard, an interactive admin dashboard with charts, or names FlowAI."
   },
   "license": "MIT",
   "author": {
