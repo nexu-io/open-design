@@ -12,7 +12,7 @@
   const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
   const DISCORD = 'https://discord.gg/9ptkbbqRu';
   const REPO = 'https://github.com/nexu-io/open-design';
-  const X_PROFILE = 'https://x.com/nexudotio';
+  const X_PROFILE = 'https://x.com/OpenDesignHQ';
   const AMR_URL = 'https://open-design.ai/amr/';
 
   const renderSiteNav = () => `

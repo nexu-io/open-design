@@ -166,7 +166,7 @@ const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DOCS = `${REPO}#readme`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
-const X_TWITTER = 'https://x.com/nexudotio';
+const X_TWITTER = 'https://x.com/OpenDesignHQ';
 const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
 
 // Footer columns mirror the top-nav sections + `site-footer.astro` (the
