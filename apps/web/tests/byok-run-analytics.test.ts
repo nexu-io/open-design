@@ -55,8 +55,9 @@ describe('buildByokRunCreatedProps', () => {
       token_count_source: 'unknown',
       session_mode: 'design',
     });
-    // runtime_type is NOT set here — it rides on the registered super-property.
-    expect('runtime_type' in props).toBe(false);
+    // runtime_type is stamped on the event itself (not left to the mutable
+    // super-property) so a mid-stream mode switch can't split the run.
+    expect(props.runtime_type).toBe('byok');
   });
 
   it('buckets a missing model into "default"', () => {
@@ -83,6 +84,7 @@ describe('buildByokRunFinishedProps', () => {
       asked_user_question: false,
       total_duration_ms: 8421,
       agent_provider_id: 'anthropic',
+      runtime_type: 'byok',
     });
   });
 });

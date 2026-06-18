@@ -2630,6 +2630,13 @@ export interface RunCreatedProps {
   // CLI providers for daemon-executed runs; BYOK providers for runs streamed
   // client-side against the user's own key (those never reach a local CLI).
   agent_provider_id: TrackingCliProviderId | TrackingByokProviderId;
+  // The runtime this run launched with, stamped on the event so it cannot
+  // drift. Normally `runtime_type` rides on the global super-property, but the
+  // active runtime can change mid-stream (e.g. the user flips the avatar-menu
+  // mode while a BYOK turn is in flight), which would split one run across
+  // buckets. Client-side BYOK emits set this explicitly; daemon run events
+  // already pin it. Omit to inherit the global value.
+  runtime_type?: TrackingRuntimeType;
   skill_id: string | null;
   mcp_id: string | null;
   // Composer mode the prompt was sent in. `ask` is the lighter Q&A mode
@@ -3436,10 +3443,15 @@ export function deriveConfigureGlobals(
   // run-request override to report 'byok'. Falls back through the same
   // capability signals as configure_type for the ambient (no-mode) case.
   let runtimeType: TrackingRuntimeType;
-  if (input.agentId === 'amr') {
-    runtimeType = 'amr_cloud';
-  } else if (input.mode === 'api') {
+  if (input.mode === 'api') {
+    // `api` mode IS the active BYOK execution path. It must win over a
+    // remembered `agentId === 'amr'`: switching AMR → BYOK only flips
+    // `config.mode` and leaves `config.agentId` as 'amr' (see App.tsx mode
+    // switch), so checking agentId first would mislabel live BYOK runs as
+    // amr_cloud.
     runtimeType = 'byok';
+  } else if (input.agentId === 'amr') {
+    runtimeType = 'amr_cloud';
   } else if (input.mode === 'daemon' && selectedAgentAvailable) {
     runtimeType = 'local_cli';
   } else if (hasAvailableCli) {

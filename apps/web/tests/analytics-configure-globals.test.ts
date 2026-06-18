@@ -77,6 +77,15 @@ describe('deriveConfigureGlobals', () => {
     });
   });
 
+  it('runtime_type follows api mode over a stale remembered amr agentId', () => {
+    // Switching AMR → BYOK only flips config.mode; config.agentId can stay
+    // 'amr'. The active runtime is BYOK, so runtime_type must be 'byok', not
+    // 'amr_cloud'. Regression for the AMR→Use-API funnel mislabel.
+    expect(
+      deriveConfigureGlobals({ mode: 'api', agentId: 'amr', byokConfigured: true }).runtime_type,
+    ).toBe('byok');
+  });
+
   it('reports byok when an api-mode user has saved credentials', () => {
     expect(
       deriveConfigureGlobals({

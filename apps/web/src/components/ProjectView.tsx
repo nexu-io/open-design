@@ -4286,13 +4286,20 @@ export function ProjectView({
           onDone: () => {
             handlers.onDone();
             // Count artifacts produced this turn from the project file diff,
-            // mirroring the daemon's run_finished artifact_count.
+            // mirroring the daemon's run_finished artifact_count. The
+            // artifact-count refresh is best-effort: a rejected refetch must
+            // NOT swallow run_finished, or a successful BYOK turn leaves the
+            // funnel hanging at run_created — the exact gap this path closes.
             void (async () => {
-              const files = await refreshProjectFiles();
-              const produced = computeProducedFiles(beforeFileNames, files) ?? [];
-              const artifactCount = produced.filter((f) =>
-                Boolean(f.artifactManifest),
-              ).length;
+              let artifactCount = 0;
+              try {
+                const files = await refreshProjectFiles();
+                artifactCount = (computeProducedFiles(beforeFileNames, files) ?? []).filter(
+                  (f) => Boolean(f.artifactManifest),
+                ).length;
+              } catch {
+                // Refresh failed — still emit run_finished with a 0 count.
+              }
               emitByokRunFinished('success', artifactCount);
             })();
             const assistantText = accumulatedAssistantText.trim();

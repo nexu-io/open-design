@@ -65,6 +65,12 @@ function baseRunProps(input: ByokRunBaseInput) {
     project_id: input.projectId,
     conversation_id: input.conversationId,
     run_id: input.runId,
+    // Stamp the launched runtime onto the event itself. These builders only
+    // run on the BYOK (mode === 'api') path, so the run launched as 'byok'.
+    // Pinning it here keeps run_created and run_finished in the same bucket
+    // even if the user flips the execution mode mid-stream — the registered
+    // super-property would otherwise drift and split the run.
+    runtime_type: 'byok' as const,
     project_kind: input.projectKind,
     // BYOK composer runs are not design-system generation runs (those go
     // through the daemon path), so no design system is in play.
