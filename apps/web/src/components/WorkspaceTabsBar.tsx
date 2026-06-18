@@ -498,6 +498,11 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   // navigates away while leaving the entry tab on Welcome in the background.
   useEffect(() => {
     if (!onboardingCompleted) return;
+    // Don't rewrite the tab back to 'home' while the user is *still* on the
+    // onboarding route — a previously-completed user who re-opens /onboarding
+    // should keep the "Onboarding" tab label, not flip to "Home". The rewrite
+    // still fires the moment they navigate away (onboardingActive turns false).
+    if (onboardingActive) return;
     setState((current) => {
       if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
         return current;
@@ -511,7 +516,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         ),
       });
     });
-  }, [onboardingCompleted]);
+  }, [onboardingCompleted, onboardingActive]);
 
   // Scroll the active tab into view when it changes. The strip itself
   // is native-scrollable horizontally (see CSS), so we just nudge the
@@ -982,6 +987,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         </button>
       </div>
       <div className="workspace-tabs-actions" ref={menuRef}>
+        {onboardingActive ? null : (
         <button
           type="button"
           className={`workspace-tabs-icon-btn od-tooltip${tabsMenuOpen ? ' is-active' : ''}`}
@@ -995,6 +1001,7 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
         >
           <Icon name="search" size={15} />
         </button>
+        )}
         {tabsMenuOpen && typeof document !== 'undefined'
           ? createPortal(
               <div
