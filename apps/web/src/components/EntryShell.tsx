@@ -2097,6 +2097,13 @@ function OnboardingView({
                 recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
                   metricsConsent: config.telemetry?.metrics === true,
                 });
+                // Pin the runtime explicitly (mirroring handleCloudSignIn)
+                // rather than leaning on the amrAgent effect, so the
+                // completion event records runtime_type='amr_cloud' even if
+                // amrAgent hasn't resolved yet when Continue is clicked.
+                setRuntime('amr');
+                onModeChange('daemon');
+                onAgentChange('amr');
                 recordAmrEntry(
                   analytics.track,
                   'onboarding_amr_sign_in_continue',
