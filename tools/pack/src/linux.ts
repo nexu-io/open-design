@@ -505,7 +505,7 @@ async function writeAssembledApp(
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 
-  const mainStub = `"use strict";\nrequire("@open-design/packaged");\n`;
+  const mainStub = `"use strict";\n// Keep Electron's main process alive while the ESM packaged entry imports and\n// reaches app.whenReady(). Dynamic import alone is not a libuv handle.\nsetTimeout(() => {}, 60_000);\nimport("@open-design/packaged").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n`;
   await writeFile(paths.assembledMainEntryPath, mainStub, "utf8");
 
   await writeFile(
