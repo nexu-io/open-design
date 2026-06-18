@@ -24,6 +24,10 @@ function displayName(
 export function AuthAccountMenu() {
   const t = useT();
   const session = authClient.useSession();
+  // Auth is opt-in: the daemon only mounts /api/auth when OPEN_DESIGN_DATABASE_URL
+  // is set. Probe once and render nothing when it's absent (a 404), so instances
+  // without accounts don't show a dead Sign in affordance. null = still checking.
+  const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [name, setName] = useState('');
@@ -35,6 +39,20 @@ export function AuthAccountMenu() {
 
   const user = session.data?.user;
   const signedIn = Boolean(user);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/get-session', { headers: { origin: window.location.origin } })
+      .then((res) => {
+        if (!cancelled) setAuthEnabled(res.status !== 404);
+      })
+      .catch(() => {
+        if (!cancelled) setAuthEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -103,6 +121,9 @@ export function AuthAccountMenu() {
 
   const accountName = displayName(user?.name, user?.email, t('auth.account'));
   const triggerLabel = signedIn ? t('auth.accountLabel', { name: accountName }) : t('auth.signIn');
+
+  // Hide entirely until we've confirmed auth is enabled on this daemon.
+  if (authEnabled !== true) return null;
 
   return (
     <div className={styles.root} ref={rootRef}>

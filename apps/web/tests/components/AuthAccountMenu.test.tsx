@@ -5,7 +5,7 @@
 // asserts the signed-out / signed-in states and the sign-up interaction. The
 // real /api/auth round-trip is covered by the e2e flow, not here.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthAccountMenu } from '../../src/components/AuthAccountMenu';
@@ -36,12 +36,17 @@ describe('AuthAccountMenu', () => {
     h.signInEmail.mockClear();
     h.signUpEmail.mockClear();
     h.signOut.mockClear();
+    // Auth-enabled probe: any non-404 means /api/auth is mounted.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 }) as Response));
   });
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
-  it('shows a Sign in trigger and opens the auth form when signed out', () => {
+  it('shows a Sign in trigger and opens the auth form when signed out', async () => {
     render(<AuthAccountMenu />);
-    const trigger = screen.getByRole('button', { name: 'Sign in' });
+    const trigger = await screen.findByRole('button', { name: 'Sign in' });
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
     fireEvent.click(trigger);
@@ -54,7 +59,7 @@ describe('AuthAccountMenu', () => {
 
   it('switching to Create reveals the Name field and submits via signUp', async () => {
     render(<AuthAccountMenu />);
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Create' }));
     expect(screen.getByText('Name')).toBeTruthy();
 
@@ -72,10 +77,18 @@ describe('AuthAccountMenu', () => {
     expect(h.signInEmail).not.toHaveBeenCalled();
   });
 
-  it('renders the account identity and a Sign out action when signed in', () => {
+  it('renders nothing when auth is not enabled (probe returns 404)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 404 }) as Response));
+    const { container } = render(<AuthAccountMenu />);
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders the account identity and a Sign out action when signed in', async () => {
     h.state.data = { user: { name: 'Ada Lovelace', email: 'ada@example.com' } };
     render(<AuthAccountMenu />);
-    const trigger = screen.getByRole('button', { name: 'Account: Ada Lovelace' });
+    const trigger = await screen.findByRole('button', { name: 'Account: Ada Lovelace' });
     fireEvent.click(trigger);
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
     expect(screen.getByText('ada@example.com')).toBeTruthy();
