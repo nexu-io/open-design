@@ -403,6 +403,22 @@ function isAcpArtifactWriteUpdate(update: JsonObject, writeToolCallIds: Set<stri
   return isAcpArtifactWriteLabel(update) || (toolCallId ? writeToolCallIds.has(toolCallId) : false);
 }
 
+// Best-effort file path for an ACP artifact-write tool call. ACP can carry a
+// `locations: [{ path }]` array and/or `content: [{ type:'diff', path }]`
+// entries, but many agents omit both and send only a human `title` ("edit").
+// Returns null when no concrete path is present; the caller then falls back to
+// the toolCallId as a dedup key.
+function acpArtifactWritePath(update: JsonObject): string | null {
+  for (const field of [update.locations, update.content]) {
+    if (!Array.isArray(field)) continue;
+    for (const entry of field) {
+      const path = asObject(entry)?.path;
+      if (typeof path === 'string' && path.trim()) return path.trim();
+    }
+  }
+  return null;
+}
+
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
   let pendingJson = '';
@@ -822,6 +838,11 @@ export function attachAcpSession({
   let dsmlArtifactSuppressorArmedAfterText = false;
   let dsmlArtifactSuppressorSawIncrementalProse = false;
   const acpArtifactWriteToolCallIds = new Set<string>();
+  // Tracks artifact-write tool calls we have mirrored into canonical
+  // tool_use/tool_result events. `'open'` = tool_use emitted, awaiting a
+  // terminal status; `'resolved'` = tool_result already emitted (guards
+  // against duplicate results when ACP sends several tool_call_update frames).
+  const acpArtifactRunEventState = new Map<string, 'open' | 'resolved'>();
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -1122,6 +1143,38 @@ export function attachAcpSession({
         const toolCallId = acpToolCallId(update);
         if (toolCallId && isAcpArtifactWriteLabel(update)) {
           acpArtifactWriteToolCallIds.add(toolCallId);
+        }
+        // Mirror artifact-write tool calls into the daemon's canonical
+        // tool_use/tool_result event shape so `countNewArtifacts`
+        // (run-artifacts.ts) can see ACP file writes. Without this, every ACP
+        // agent (AMR, Hermes, Kilo, Kiro, Devin, Vibe, …) reported
+        // run_finished.artifact_count: 0 even when the run wrote artifacts,
+        // because the ACP adapter emitted only text/status/thinking events and
+        // never the tool_use/tool_result pair the counter scans for. ACP gives
+        // no reliable file path (often just a `title` like "edit"), so when no
+        // concrete path is present we key on toolCallId: each distinct write
+        // tool-call counts once. A file edited by several tool-calls
+        // over-counts, which run-artifacts treats as harmless for the boolean
+        // "did this run produce an artifact?" funnel; under-counting was not.
+        if (toolCallId) {
+          const isWriteCall =
+            isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
+          if (isWriteCall && !acpArtifactRunEventState.has(toolCallId)) {
+            acpArtifactRunEventState.set(toolCallId, 'open');
+            send('agent', {
+              type: 'tool_use',
+              id: toolCallId,
+              name: 'Write',
+              input: { file_path: acpArtifactWritePath(update) ?? toolCallId },
+            });
+          }
+          if (acpArtifactRunEventState.get(toolCallId) === 'open') {
+            const failed = isAcpTerminalFailureStatus(update);
+            if (failed || isAcpCompletedStatus(update)) {
+              acpArtifactRunEventState.set(toolCallId, 'resolved');
+              send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
+            }
+          }
         }
         if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
           dsmlArtifactSuppressor = createDsmlArtifactTextSuppressor();

@@ -84,19 +84,26 @@ const ARTIFACT_EXTENSIONS: ReadonlySet<string> = new Set([
   '.m4a',
 ]);
 
-function isArtifactPath(path: string): boolean {
+// Exported so the agent-agnostic filesystem artifact counter
+// (`run-artifact-fs.ts`) classifies files by the exact same extension set the
+// tool-stream counter uses, keeping the two definitions of "artifact" aligned.
+export function isArtifactPath(path: string): boolean {
   const lower = path.toLowerCase();
   const dot = lower.lastIndexOf('.');
   if (dot < 0) return false;
   return ARTIFACT_EXTENSIONS.has(lower.slice(dot));
 }
 
-function isDesignSystemFile(path: string): boolean {
+// Exported so the filesystem counter (`run-artifact-fs.ts`) classifies a
+// touched `DESIGN.md` the same way the tool-stream counter does.
+export function isDesignSystemFile(path: string): boolean {
   const lower = path.toLowerCase();
   return lower.endsWith('/design.md') || lower === 'design.md';
 }
 
-function isPreviewModulePath(path: string): boolean {
+// Exported so the filesystem counter (`run-artifact-fs.ts`) recognizes the same
+// `preview/*.html` modules as the tool-stream counter.
+export function isPreviewModulePath(path: string): boolean {
   const lower = path.toLowerCase();
   // Preview modules live under `preview/*.html` in DS workspaces.
   // `preview/index.html` is the shell, others are per-module previews
