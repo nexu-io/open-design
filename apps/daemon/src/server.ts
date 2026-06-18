@@ -140,6 +140,37 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
+import {
+  cleanString,
+  normalizePreviewCommentImageAttachments,
+  imageOnlyCommentFallback,
+  normalizeVisualMarkKind,
+  visualAnnotationIntent,
+  compactString,
+  normalizeAttachmentPosition,
+  normalizeAttachmentPodMembers,
+  normalizeAnnotationStyle,
+  formatAnnotationStyle,
+  ANNOTATION_STYLE_KEYS,
+  finiteAttachmentNumber,
+  formatAttachmentPosition,
+} from './annotation-attachments.js';
+import {
+  execFileBuffered,
+  quotePosixShellArg,
+  buildGhShellCommand,
+  buildCommandShellCommand,
+  buildLoginShellCommand,
+  execGhBuffered,
+  execCommandViaLoginShell,
+} from './exec-shell.js';
+import {
+  normalizeRunContextSelection,
+  renderRunContextPrompt,
+  normalizeProjectDisplayStatus,
+} from './workspace-context.js';
+// Preserve the public re-export that lived on server.ts before the extraction.
+export { normalizeProjectDisplayStatus };
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import {
   AssetCacheError,
@@ -986,127 +1017,8 @@ export function renderCommentAttachmentHint(commentAttachments) {
   return lines.join('\n');
 }
 
-function cleanString(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizePreviewCommentImageAttachments(input) {
-  if (!Array.isArray(input)) return [];
-  const out = [];
-  const seen = new Set();
-  for (const item of input) {
-    if (!item || typeof item !== 'object') continue;
-    const path = cleanString(item.path);
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    const name = cleanString(item.name) || path.split('/').pop() || path;
-    out.push({ path, name });
-    if (out.length >= 20) break;
-  }
-  return out;
-}
-
-function imageOnlyCommentFallback(count) {
-  if (count <= 0) return '';
-  return count > 1
-    ? `Use the ${count} attached images as the comment reference.`
-    : 'Use the attached image as the comment reference.';
-}
-
-function normalizeVisualMarkKind(value) {
-  return value === 'click' || value === 'click+stroke' || value === 'stroke'
-    ? value
-    : 'stroke';
-}
-
-function visualAnnotationIntent(markKind) {
-  if (markKind === 'click') {
-    return 'The screenshot has a blue focus box around the picked element; modify that picked part first.';
-  }
-  if (markKind === 'click+stroke') {
-    return 'The screenshot has a blue focus box and red strokes; together they identify the part the user wants changed.';
-  }
-  return 'The screenshot has red strokes that identify the visual region the user wants changed.';
-}
-
-function compactString(value, max) {
-  const text = cleanString(value).replace(/\s+/g, ' ');
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
-}
-
-function normalizeAttachmentPosition(input) {
-  const value = input && typeof input === 'object' ? input : {};
-  return {
-    x: finiteAttachmentNumber(value.x),
-    y: finiteAttachmentNumber(value.y),
-    width: finiteAttachmentNumber(value.width),
-    height: finiteAttachmentNumber(value.height),
-  };
-}
-
-function normalizeAttachmentPodMembers(input) {
-  if (!Array.isArray(input)) return [];
-  return input
-    .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanString(member.elementId);
-      const selector = cleanString(member.selector);
-      const label = cleanString(member.label);
-      if (!elementId || !selector) return null;
-      return {
-        elementId,
-        selector,
-        label,
-        text: compactString(member.text, 160),
-        position: normalizeAttachmentPosition(member.position),
-        htmlHint: compactString(member.htmlHint, 180),
-        style: normalizeAnnotationStyle(member.style),
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizeAnnotationStyle(input) {
-  if (!input || typeof input !== 'object') return undefined;
-  const style = {};
-  for (const key of ANNOTATION_STYLE_KEYS) {
-    const value = input[key];
-    if (typeof value !== 'string') continue;
-    const trimmed = value.replace(/\s+/g, ' ').trim();
-    if (trimmed) style[key] = trimmed.slice(0, 120);
-  }
-  return Object.keys(style).length > 0 ? style : undefined;
-}
-
-function formatAnnotationStyle(style) {
-  if (!style || typeof style !== 'object') return '';
-  return ANNOTATION_STYLE_KEYS
-    .map((key) => {
-      const value = style[key];
-      return value ? `${key}: ${value}` : null;
-    })
-    .filter(Boolean)
-    .join('; ');
-}
-
-const ANNOTATION_STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'textAlign',
-  'fontFamily',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderRadius',
-];
-
-function finiteAttachmentNumber(value) {
-  return Number.isFinite(value) ? Math.round(value) : 0;
-}
+// Preview-comment image attachments + visual annotation styling/positioning
+// helpers moved to ./annotation-attachments.ts (imported above).
 
 const DESIGN_FILES_HINT_FOLDER_LIMIT = 40;
 const DESIGN_FILES_HINT_FILE_LIMIT = 80;
@@ -1118,9 +1030,6 @@ type DesignFilesHintEntry = {
   size?: number;
 };
 
-function formatAttachmentPosition(position) {
-  return `x=${position.x}, y=${position.y}, width=${position.width}, height=${position.height}`;
-}
 
 function isPathWithin(base, target) {
   const relativePath = path.relative(path.resolve(base), path.resolve(target));
@@ -1790,230 +1699,6 @@ export function createAgentRuntimeToolPrompt(
   ].join('\n');
 }
 
-const WORKSPACE_CONTEXT_KINDS = new Set([
-  'design-files',
-  'design-system',
-  'file',
-  'folder',
-  'browser',
-  'terminal',
-  'side-chat',
-  'live-artifact',
-]);
-
-function normalizeWorkspaceContextItems(items) {
-  if (!Array.isArray(items)) return [];
-  const out = [];
-  const seen = new Set();
-  const cleanString = (value, max = 500) => {
-    if (typeof value !== 'string') return '';
-    return value.trim().slice(0, max);
-  };
-  for (const item of items) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const record = item as Record<string, unknown>;
-    const kind = cleanString(record.kind, 64);
-    if (!WORKSPACE_CONTEXT_KINDS.has(kind)) continue;
-    const id = cleanString(record.id, 240);
-    const label = cleanString(record.label, 240);
-    if (!id || !label) continue;
-    const dedupeKey = `${kind}:${id}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-    const normalized: Record<string, string> = { id, kind, label };
-    const tabId = cleanString(record.tabId, 240);
-    const pathValue = cleanString(record.path, 500);
-    const absolutePath = cleanString(record.absolutePath, 1000);
-    const url = cleanString(record.url, 1000);
-    const title = cleanString(record.title, 500);
-    if (tabId) normalized.tabId = tabId;
-    if (pathValue) normalized.path = pathValue;
-    if (absolutePath) normalized.absolutePath = absolutePath;
-    if (url) normalized.url = url;
-    if (title) normalized.title = title;
-    out.push(normalized);
-  }
-  return out;
-}
-
-function normalizeRunContextSelection(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const stringList = (items) => {
-    if (!Array.isArray(items)) return [];
-    const out = [];
-    const seen = new Set();
-    for (const item of items) {
-      if (typeof item !== 'string') continue;
-      const trimmed = item.trim();
-      if (!trimmed || seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      out.push(trimmed);
-    }
-    return out;
-  };
-  return {
-    skillIds: stringList(value.skillIds),
-    pluginIds: stringList(value.pluginIds),
-    mcpServerIds: stringList(value.mcpServerIds),
-    connectorIds: stringList(value.connectorIds),
-    workspaceItems: normalizeWorkspaceContextItems(value.workspaceItems),
-  };
-}
-
-function mergeRunContextSelections(...contexts) {
-  const merged = { skillIds: [], pluginIds: [], mcpServerIds: [], connectorIds: [], workspaceItems: [] };
-  const listKeys = ['skillIds', 'pluginIds', 'mcpServerIds', 'connectorIds'];
-  const workspaceSeen = new Set();
-  for (const context of contexts) {
-    const normalized = normalizeRunContextSelection(context);
-    for (const key of listKeys) {
-      const seen = new Set(merged[key]);
-      for (const id of normalized[key] ?? []) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          merged[key].push(id);
-        }
-      }
-    }
-    for (const item of normalized.workspaceItems ?? []) {
-      const key = `${item.kind}:${item.id}`;
-      if (workspaceSeen.has(key)) continue;
-      workspaceSeen.add(key);
-      merged.workspaceItems.push(item);
-    }
-  }
-  return Object.fromEntries(
-    Object.entries(merged).filter(([, ids]) => ids.length > 0),
-  );
-}
-
-function projectMetadataContextSelection(metadata) {
-  if (!metadata || typeof metadata !== 'object') return {};
-  return {
-    pluginIds: Array.isArray(metadata.contextPlugins)
-      ? metadata.contextPlugins.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
-    mcpServerIds: Array.isArray(metadata.contextMcpServers)
-      ? metadata.contextMcpServers.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
-    connectorIds: Array.isArray(metadata.contextConnectors)
-      ? metadata.contextConnectors.map((item) => item?.id).filter((id) => typeof id === 'string')
-      : [],
-  };
-}
-
-function formatContextRefList(ids, refs, titleKey = 'title') {
-  const byId = new Map();
-  if (Array.isArray(refs)) {
-    for (const ref of refs) {
-      if (ref && typeof ref.id === 'string') byId.set(ref.id, ref);
-    }
-  }
-  return ids
-    .map((id) => {
-      const ref = byId.get(id);
-      const label =
-        typeof ref?.[titleKey] === 'string' && ref[titleKey].trim()
-          ? ref[titleKey].trim()
-          : typeof ref?.label === 'string' && ref.label.trim()
-            ? ref.label.trim()
-            : typeof ref?.name === 'string' && ref.name.trim()
-              ? ref.name.trim()
-              : id;
-      const meta = [
-        ref?.provider,
-        ref?.transport,
-        ref?.status,
-        ref?.accountLabel,
-      ].filter((value) => typeof value === 'string' && value.trim()).join(' · ');
-      return `- ${label} (\`${id}\`)${meta ? ` — ${meta}` : ''}`;
-    })
-    .join('\n');
-}
-
-function formatWorkspaceContextList(items) {
-  if (!Array.isArray(items)) return '';
-  return items
-    .map((item, index) => {
-      const details = [
-        item.path ? `path: \`${item.path}\`` : null,
-        item.absolutePath ? `absolute: \`${item.absolutePath}\`` : null,
-        item.url ? `url: ${item.url}` : null,
-        item.title ? `title: ${item.title}` : null,
-        item.tabId ? `tab: \`${item.tabId}\`` : null,
-      ].filter(Boolean).join(' | ');
-      return `${index + 1}. ${item.kind}: ${item.label} (\`${item.id}\`)${details ? ` — ${details}` : ''}`;
-    })
-    .join('\n');
-}
-
-function renderWorkspaceContextToolHints(items) {
-  if (!Array.isArray(items) || items.length === 0) return '';
-  const kinds = new Set(items.map((item) => item?.kind).filter(Boolean));
-  const hints = [];
-  if (kinds.has('browser')) {
-    hints.push(
-      '- Browser tabs: use the selected browser tab URL/title as the target for requests about logos, fonts, images, colors, motion code, element/page screenshots, accessibility, OG/meta tags, or page structure. Prefer mounted browser automation / browser-use style tools when available (DOM snapshot, page screenshot, element screenshot, accessibility tree, evaluated JavaScript). If only URL/title context is available and no inspection tool is mounted, say that explicitly and do not invent page internals.',
-    );
-  }
-  if (kinds.has('terminal')) {
-    hints.push(
-      '- Terminal tabs: treat the selected terminal tab as the target shell/session. If the exact scrollback is not included in the prompt, run safe project-local read-only commands or ask for the terminal transcript instead of guessing hidden output.',
-    );
-  }
-  if (kinds.has('file') || kinds.has('folder') || kinds.has('design-files')) {
-    hints.push(
-      '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
-    );
-  }
-  if (kinds.has('live-artifact')) {
-    hints.push(
-      '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
-    );
-  }
-  return hints.join('\n');
-}
-
-function renderRunContextPrompt(selection, metadata) {
-  const context = mergeRunContextSelections(projectMetadataContextSelection(metadata), selection);
-  const lines = [];
-  if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
-    lines.push('### Active workspace context');
-    lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
-    );
-    lines.push(formatWorkspaceContextList(context.workspaceItems));
-    const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
-    if (toolHints) lines.push(toolHints);
-  }
-  if (Array.isArray(context.pluginIds) && context.pluginIds.length > 0) {
-    lines.push('### Selected plugins');
-    lines.push(
-      'The user selected these plugins as run context. When an active plugin snapshot is pinned, follow that executable plugin block; otherwise combine these plugins as requested references.',
-    );
-    lines.push(formatContextRefList(context.pluginIds, metadata?.contextPlugins ?? [], 'title'));
-  }
-  if (Array.isArray(context.mcpServerIds) && context.mcpServerIds.length > 0) {
-    lines.push('### Selected MCP servers');
-    lines.push(
-      'The user selected these MCP servers for this run. Prefer their tools when they are mounted and relevant before asking where data should come from.',
-    );
-    lines.push(formatContextRefList(context.mcpServerIds, metadata?.contextMcpServers ?? [], 'label'));
-  }
-  if (Array.isArray(context.connectorIds) && context.connectorIds.length > 0) {
-    lines.push('### Selected connectors');
-    lines.push(
-      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
-    );
-    lines.push(formatContextRefList(context.connectorIds, metadata?.contextConnectors ?? [], 'name'));
-  }
-  if (lines.length === 0) return '';
-  return ['## Selected run context', ...lines].join('\n');
-}
-
-export function normalizeProjectDisplayStatus(status) {
-  return status === 'starting' || status === 'queued' ? 'running' : status;
-}
 
 export function composeProjectDisplayStatus(
   baseStatus,
@@ -2038,56 +1723,8 @@ export function composeProjectDisplayStatus(
  * @param {Omit<ApiError, 'code' | 'message'>} [init]
  * @returns {ApiError}
  */
-function execFileBuffered(command, args, opts = {}) {
-  return new Promise((resolve) => {
-    execFile(command, args, { timeout: 120_000, maxBuffer: 1024 * 1024, ...opts }, (error, stdout, stderr) => {
-      resolve({
-        ok: !error,
-        code: error?.code,
-        stdout: String(stdout ?? '').trim(),
-        stderr: String(stderr ?? '').trim(),
-        error,
-      });
-    });
-  });
-}
-
-function quotePosixShellArg(value) {
-  const text = String(value ?? '');
-  return `'${text.replace(/'/g, `'\\''`)}'`;
-}
-
-function buildGhShellCommand(args) {
-  return ['gh', ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildCommandShellCommand(command, args) {
-  return [command, ...args].map(quotePosixShellArg).join(' ');
-}
-
-function buildLoginShellCommand(innerCommand) {
-  // Use a non-login shell and re-export PATH so test fakes and agent wrappers
-  // remain visible; login shells often reset PATH from profile scripts.
-  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
-}
-
-function execGhBuffered(args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
-    env: process.env,
-    ...opts,
-  });
-}
-
-function execCommandViaLoginShell(command, args, opts = {}) {
-  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
-  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
-  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
-    env: process.env,
-    ...opts,
-  });
-}
+// Buffered exec + POSIX login-shell command builders moved to
+// ./exec-shell.ts (imported above).
 
 async function readProjectPluginManifest(folder) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
