@@ -792,6 +792,12 @@ export interface Dict {
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
   'updater.upToDate': string;
+  'updater.manualInstallReadyGeneric': string;
+  'updater.manualInstallReadyVersion': string;
+  'updater.manualInstallAction': string;
+  'settings.updateInstallMode': string;
+  'settings.updateInstallModeAutomatic': string;
+  'settings.updateInstallModeManual': string;
 
   // Newsletter email field on the onboarding About-you step.
   'newsletter.label': string;

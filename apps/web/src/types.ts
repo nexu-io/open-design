@@ -444,6 +444,8 @@ export interface AppConfig {
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  /** Controls whether the updater picks the in-app payload path or the traditional installer path. Absent → 'automatic'. */
+  updateInstallMode?: 'automatic' | 'manual';
 }
 
 export interface TelemetryConfig {

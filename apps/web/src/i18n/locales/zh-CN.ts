@@ -2835,6 +2835,12 @@ export const zhCN: Dict = {
   'updater.readyGeneric': '新版本已就绪。Open Design 会关闭并打开安装器。',
   'updater.readyVersion': 'Open Design {version} 已就绪。Open Design 会关闭并打开安装器。',
   'updater.upToDate': '您已经是最新版本啦',
+  'updater.manualInstallReadyGeneric': 'Open Design 更新已就绪。请打开下载的安装程序以完成安装。',
+  'updater.manualInstallReadyVersion': 'Open Design {version} 已就绪。请打开下载的安装程序以完成安装。',
+  'updater.manualInstallAction': '打开安装程序',
+  'settings.updateInstallMode': '更新安装模式',
+  'settings.updateInstallModeAutomatic': '自动（应用内）',
+  'settings.updateInstallModeManual': '手动（安装程序）',
 
   'newsletter.label': '邮箱地址（选填）',
   'newsletter.placeholder': 'you@studio.com',

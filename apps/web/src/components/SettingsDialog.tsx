@@ -165,6 +165,11 @@ import {
   requestNotificationPermission,
   showCompletionNotification,
 } from '../utils/notifications';
+import {
+  deriveUpdaterModel,
+  readUpdaterStatus,
+  type UpdaterModel,
+} from '../lib/updater';
 
 export type SettingsSection =
   | 'execution'
@@ -1363,6 +1368,22 @@ export function SettingsDialog({
   >(() => new Set());
   const [versionChecking, setVersionChecking] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
+  const [updaterModel, setUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
+
+  useEffect(() => {
+    let mounted = true;
+    void readUpdaterStatus().then((result) => {
+      if (!mounted) return;
+      if (result.ok) {
+        setUpdaterModel(result.model);
+      } else {
+        setUpdaterModel(deriveUpdaterModel(null, { hostAvailable: false }));
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
@@ -4727,6 +4748,28 @@ export function SettingsDialog({
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
+              {updaterModel.canApplyInPlace ? (
+                <div className="settings-about-update-install-mode">
+                  <label htmlFor="update-install-mode-toggle">{t('settings.updateInstallMode')}</label>
+                  <select
+                    id="update-install-mode-toggle"
+                    data-testid="update-install-mode-toggle"
+                    value={cfg.updateInstallMode ?? 'automatic'}
+                    onChange={async (e) => {
+                      const mode = e.currentTarget.value as 'automatic' | 'manual';
+                      setCfg((prev) => ({ ...prev, updateInstallMode: mode }));
+                      await fetch('/api/app-config', {
+                        method: 'PUT',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({ updateInstallMode: mode }),
+                      }).catch(() => {/* best-effort */});
+                    }}
+                  >
+                    <option value="automatic">{t('settings.updateInstallModeAutomatic')}</option>
+                    <option value="manual">{t('settings.updateInstallModeManual')}</option>
+                  </select>
+                </div>
+              ) : null}
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>

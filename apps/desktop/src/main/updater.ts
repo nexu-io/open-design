@@ -160,6 +160,8 @@ export type DesktopUpdaterDeps = {
   openPath?: (path: string) => Promise<string>;
   processExecPath?: string;
   processPid?: number;
+  /** Lazy-read the user's install-mode preference at check time. Absent → treated as 'automatic'. */
+  readUpdateInstallMode?: () => Promise<'automatic' | 'manual' | undefined>;
   spawnDetached?: SpawnInstallerHelper;
 };
 
@@ -2269,6 +2271,7 @@ export function createDesktopUpdater(
   const openPath = deps.openPath ?? (async () => "openPath is not available");
   const processPid = deps.processPid ?? process.pid;
   const extractLauncherPayloadArchive = deps.extractLauncherPayloadArchive ?? defaultExtractLauncherPayloadArchive;
+  const readUpdateInstallMode = deps.readUpdateInstallMode;
   const spawnDetached: SpawnInstallerHelper = deps.spawnDetached ?? ((command, args, options) => spawn(command, args, options));
   const launchInstallerAfterQuit = deps.launchInstallerAfterQuit ?? ((input) => (
     config.platform === "win32"
@@ -2523,7 +2526,9 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
-      const selected = selectUpdateCandidateWithFallback(body, config, await hasValidLauncherPayloadContext(config));
+      const pref = readUpdateInstallMode ? await readUpdateInstallMode() : undefined;
+      const preferPayload = pref === 'manual' ? false : await hasValidLauncherPayloadContext(config);
+      const selected = selectUpdateCandidateWithFallback(body, config, preferPayload);
       if (!selected.ok) return setState(selected.state, selected.error);
       if (compareVersions(selected.candidate.version, config.currentVersion) <= 0) {
         logUpdateEvent("check-not-available", { candidateVersion: selected.candidate.version });

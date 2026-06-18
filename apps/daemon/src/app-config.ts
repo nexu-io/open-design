@@ -122,6 +122,10 @@ export interface AppConfigPrefs {
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
   // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
   recentLinkedDirs?: string[];
+  // Controls whether the updater picks the in-app payload path or the
+  // traditional installer/DMG path. Absent / unset ⇒ treated as 'automatic'
+  // (preserves the #4471 default; backward-safe, no migration needed).
+  updateInstallMode?: 'automatic' | 'manual';
 }
 
 // Cap on how many recent working directories we remember. Keeps the picker's
@@ -146,6 +150,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'projectLocations',
   'defaultProjectLocationId',
   'recentLinkedDirs',
+  'updateInstallMode',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -582,6 +587,14 @@ function applyConfigValue(
         if (cleaned.length >= RECENT_LINKED_DIRS_MAX) break;
       }
       target[key] = cleaned;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'updateInstallMode') {
+    if (value === 'automatic' || value === 'manual') {
+      target[key] = value;
     } else {
       delete target[key];
     }

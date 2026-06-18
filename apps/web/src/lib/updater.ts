@@ -151,7 +151,7 @@ export function deriveUpdaterModel(
     promptKey,
     requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
     upToDate,
-    shouldShowControl: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
+    shouldShowControl: (canInstallUpdate || Boolean(status?.capabilities.requiresManualInstall)) && hasDownloadedInstaller && !installerOpened,
     shouldPrompt: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
     status,
     supported: Boolean(status?.supported),

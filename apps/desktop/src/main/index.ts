@@ -303,6 +303,30 @@ async function readAppConfigFromDaemon(baseUrl: string): Promise<DesktopAppConfi
   return payload.config;
 }
 
+/**
+ * Reads the `updateInstallMode` preference from the daemon's app-config
+ * endpoint. Returns `'automatic'` or `'manual'` if the value is present and
+ * valid; resolves to `undefined` on any failure (network error, non-OK status,
+ * missing or unrecognised field) so the updater always has a safe fallback.
+ *
+ * The optional `fetchImpl` parameter is provided for test injection.
+ */
+export async function readUpdateInstallMode(
+  baseUrl: string,
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+): Promise<'automatic' | 'manual' | undefined> {
+  try {
+    const response = await fetchImpl(appConfigUrl(baseUrl));
+    if (!response.ok) return undefined;
+    const payload = await response.json() as { config?: { updateInstallMode?: unknown } };
+    const mode = payload?.config?.updateInstallMode;
+    if (mode === 'automatic' || mode === 'manual') return mode;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function writeAppConfigToDaemon(
   baseUrl: string,
   config: DesktopAppConfigPrefs,
@@ -621,7 +645,13 @@ export async function runDesktopMain(
       runtimeBase: runtime.base,
       source: runtime.source,
     },
-    { openPath: (path) => shell.openPath(path) },
+    {
+      openPath: (path) => shell.openPath(path),
+      readUpdateInstallMode: async () => {
+        const baseUrl = await resolveDaemonBaseUrl(runtime, options)();
+        return readUpdateInstallMode(baseUrl);
+      },
+    },
   );
   // Resolve the namespace root the same way the daemon diagnostics export does
   // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged

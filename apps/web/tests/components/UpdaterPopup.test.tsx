@@ -120,14 +120,14 @@ describe('UpdaterPopup', () => {
     render(<UpdaterPopup />);
 
     const button = await screen.findByTestId('entry-nav-updater');
-    expect(button.getAttribute('data-tooltip')).toBe('Install update');
+    expect(button.getAttribute('data-tooltip')).toBe('Open installer');
     expect(screen.queryByTestId('updater-popup')).toBeNull();
 
     fireEvent.click(button);
 
     expect(await screen.findByRole('dialog', { name: 'Update ready' })).toBeTruthy();
-    expect(screen.getByText('Open Design 1.2.3-beta.4 is ready. Open Design will close and open the installer.')).toBeTruthy();
-    expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
+    expect(screen.getByText('Open Design 1.2.3-beta.4 is ready. Open the downloaded installer to apply it.')).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('Open installer');
   });
 
   it('uses localized ready prompt copy from the app i18n provider', async () => {
@@ -148,8 +148,8 @@ describe('UpdaterPopup', () => {
     fireEvent.click(await screen.findByTestId('entry-nav-updater'));
 
     expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
-    expect(screen.getByTestId('updater-install-button').textContent).toBe('安装更新');
-    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。Open Design 会关闭并打开安装器。')).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('打开安装程序');
+    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。请打开下载的安装程序以完成安装。')).toBeTruthy();
   });
 
   it('uses install-and-restart copy for payload updates', async () => {
@@ -282,7 +282,7 @@ describe('UpdaterPopup', () => {
       });
 
       expect(screen.getByRole('dialog', { name: 'Update ready' })).toBeTruthy();
-      expect(screen.getByTestId('updater-install-button').textContent).toBe('Install update');
+      expect(screen.getByTestId('updater-install-button').textContent).toBe('Open installer');
       expect(screen.getByTestId('updater-install-button').getAttribute('disabled')).toBeNull();
       fireEvent.click(screen.getByTestId('updater-install-button'));
 

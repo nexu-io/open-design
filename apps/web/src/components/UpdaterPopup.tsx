@@ -27,8 +27,19 @@ const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
 type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
+/** True when the downloaded update must be applied by running the installer/DMG
+ *  manually rather than an in-place payload swap (requiresManualInstall ⇒ packaged
+ *  installer/DMG artifact, not a payload). The installer is still openable via
+ *  canOpenInstaller; only the copy changes to reflect the manual-run requirement. */
+function isManualInstallCase(model: UpdaterModel): boolean {
+  return model.requiresManualInstall;
+}
+
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
+  if (isManualInstallCase(model)) {
+    return version == null ? t('updater.manualInstallReadyGeneric') : t('updater.manualInstallReadyVersion', { version });
+  }
   if (model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
@@ -36,6 +47,9 @@ function versionText(t: Translator, model: UpdaterModel): string {
 }
 
 function installActionText(t: Translator, model: UpdaterModel, installBusy: boolean): string {
+  if (isManualInstallCase(model)) {
+    return installBusy ? t('updater.opening') : t('updater.manualInstallAction');
+  }
   if (model.updateKind === 'payload') {
     return installBusy ? t('updater.installingRestart') : t('updater.installRestart');
   }
@@ -124,7 +138,11 @@ export function UpdaterPopup() {
   const installBusy = installState === 'opening' || installState === 'handoff';
   const canStartInstall = ready || installState === 'recoverable';
   const showControl = ready || installState !== 'idle';
-  const controlLabel = model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
+  const controlLabel = isManualInstallCase(model)
+    ? t('updater.manualInstallAction')
+    : model.updateKind === 'payload'
+      ? t('updater.installRestart')
+      : t('updater.openInstaller');
   const channelLabel = channelLabelFor(model.status?.channel);
   const analytics = useAnalytics();
   const appVersionBefore = useAppVersion();

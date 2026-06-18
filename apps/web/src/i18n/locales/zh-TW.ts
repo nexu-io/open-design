@@ -2835,6 +2835,12 @@ export const zhTW: Dict = {
   'updater.readyGeneric': '新版本已就緒。Open Design 會關閉並開啟安裝器。',
   'updater.readyVersion': 'Open Design {version} 已就緒。Open Design 會關閉並開啟安裝器。',
   'updater.upToDate': '您已經是最新版本啦',
+  'updater.manualInstallReadyGeneric': 'A new Open Design update is ready. Open the downloaded installer to apply it.',
+  'updater.manualInstallReadyVersion': 'Open Design {version} is ready. Open the downloaded installer to apply it.',
+  'updater.manualInstallAction': 'Open installer',
+  'settings.updateInstallMode': 'Update install mode',
+  'settings.updateInstallModeAutomatic': 'Automatic (in-app)',
+  'settings.updateInstallModeManual': 'Manual (installer)',
 
   'newsletter.label': '訂閱產品更新（選填）',
   'newsletter.placeholder': 'you@studio.com',
