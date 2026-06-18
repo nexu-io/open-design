@@ -328,6 +328,12 @@ docker compose up -d
 
 > **macOS users:** If the web UI shows `Authorization: Bearer <OD_API_TOKEN> required`, Docker Desktop bridge networking is the cause. See [Docker Desktop on macOS](deploy/README.md#docker-desktop-on-macos) for the fix.
 
+### 🚀 Deploy on Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+The Sealos App Store template runs the published Open Design Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
+
 ### 🧑‍💻 Run from source
 
 ```bash

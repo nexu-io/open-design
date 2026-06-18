@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Implante no Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+O template da Sealos App Store executa a imagem Docker publicada do Open Design com armazenamento persistente para o workspace e Basic Auth no proxy público. Para implantações Docker públicas ou compartilhadas personalizadas, siga as orientações de proxy reverso e `OPEN_DESIGN_ALLOWED_ORIGINS` em [`deploy/README.md`](../../deploy/README.md#local-compose).
+
 ### 🧑‍💻 Rode a partir do código-fonte
 
 ```bash

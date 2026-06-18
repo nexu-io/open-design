@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Sealos üzerinde dağıtın
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store şablonu, yayımlanmış Open Design Docker imajını kalıcı çalışma alanı depolaması ve herkese açık proxy üzerinde Basic Auth ile çalıştırır. Özel herkese açık veya paylaşılan Docker dağıtımları için [`deploy/README.md`](../../deploy/README.md#local-compose) içindeki ters proxy ve `OPEN_DESIGN_ALLOWED_ORIGINS` rehberini izleyin.
+
 ### 🧑‍💻 Kaynaktan çalıştırın
 
 ```bash
