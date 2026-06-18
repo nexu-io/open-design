@@ -3,6 +3,7 @@ import type {
   ReasoningExecutionMode,
   ReasoningExecutionPolicy,
 } from '@open-design/contracts/api/reasoningExecution';
+import { normalizeGoogleModelId } from './google-models.js';
 
 export type ReasoningEgressRouteKind =
   | 'proxy'
@@ -132,12 +133,18 @@ function allowedBaseUrlSet(policy: Partial<ReasoningExecutionPolicy>): Set<strin
   );
 }
 
-function allowedModelSet(policy: Partial<ReasoningExecutionPolicy>): Set<string> {
+function normalizeReasoningModelId(provider: string, model: string): string {
+  const trimmed = model.trim();
+  if (provider === 'google') return normalizeGoogleModelId(trimmed);
+  return trimmed;
+}
+
+function allowedModelSet(policy: Partial<ReasoningExecutionPolicy>, provider: string): Set<string> {
   const values: unknown[] = Array.isArray(policy.allowedModels) ? policy.allowedModels : [];
   return new Set(
     values
       .filter((value: unknown): value is string => typeof value === 'string')
-      .map((value: string) => value.trim())
+      .map((value: string) => normalizeReasoningModelId(provider, value))
       .filter(Boolean),
   );
 }
@@ -158,7 +165,10 @@ export function authorizeReasoningEgress(args: ReasoningEgressRequest): Reasonin
     return allowlistDenial(args);
   }
 
-  if (args.model !== undefined && !allowedModelSet(policy).has(args.model)) {
+  if (
+    args.model !== undefined
+    && !allowedModelSet(policy, args.provider).has(normalizeReasoningModelId(args.provider, args.model))
+  ) {
     return allowlistDenial(args);
   }
 

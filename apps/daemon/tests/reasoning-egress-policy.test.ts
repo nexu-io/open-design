@@ -266,6 +266,34 @@ describe('reasoningExecution egress policy', () => {
     );
   });
 
+  it('canonicalizes Google proxy model ids before checking the allowlist', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await postJson('/api/proxy/google/stream', {
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      apiKey: 'google-key',
+      model: 'models/gemini-test',
+      messages: [{ role: 'user', content: 'hello' }],
+      reasoningExecution: {
+        mode: 'allowlist',
+        allowedBaseUrls: ['https://generativelanguage.googleapis.com'],
+        allowedModels: ['gemini-test'],
+      },
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.text()).resolves.toContain('event: end');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-test:streamGenerateContent?alt=sse',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('denies allowlist proxy egress when the resolved base URL is not allowlisted', async () => {
     await expectReasoningDenied(
       '/api/proxy/openai/stream',
