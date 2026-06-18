@@ -1,0 +1,129 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "reusable-workflow-builder",
+  "title": "Reusable Workflow Builder",
+  "version": "0.1.0",
+  "description": "A local Open Design scenario that turns a short workflow goal into a scoped artifact workflow with discovery, planning, generation, and review.",
+  "license": "MIT",
+  "author": {
+    "name": "Local user",
+    "url": "https://github.com/workspaccode"
+  },
+  "tags": [
+    "scenario",
+    "workflow",
+    "generation",
+    "my-plugins"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "reusable-workflow-builder",
+    "mode": "scenario",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "review",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a reusable Open Design workflow for {{workflowGoal}}. Target {{artifactKind}} for {{audience}} on {{platform}}. Use the supplied constraints, produce the appropriate local files, and finish with a readiness summary."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/use-case.md",
+          "title": "Example reusable workflow brief"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "workflowGoal",
+        "type": "string",
+        "required": true,
+        "label": "Workflow goal",
+        "placeholder": "turn a brand brief into a launch landing page workflow"
+      },
+      {
+        "name": "artifactKind",
+        "type": "string",
+        "required": false,
+        "default": "prototype",
+        "label": "Artifact kind",
+        "placeholder": "prototype, deck, dashboard, landing page, plugin, image, video"
+      },
+      {
+        "name": "audience",
+        "type": "string",
+        "required": false,
+        "default": "the intended users or reviewers",
+        "label": "Audience",
+        "placeholder": "product evaluators, internal team, customers, investors"
+      },
+      {
+        "name": "platform",
+        "type": "string",
+        "required": false,
+        "default": "responsive web",
+        "label": "Platform",
+        "placeholder": "responsive web, desktop web, iOS app, Android app, tablet app"
+      },
+      {
+        "name": "constraints",
+        "type": "string",
+        "required": false,
+        "default": "Use the current project context and ask only for missing hard requirements.",
+        "label": "Constraints",
+        "placeholder": "brand rules, required sections, files to preserve, references, things to avoid"
+      }
+    ]
+  },
+  "plugin": {
+    "repo": "https://github.com/workspaccode/reusable-workflow-builder"
+  },
+  "homepage": "https://github.com/workspaccode/reusable-workflow-builder"
+}
