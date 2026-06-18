@@ -2091,7 +2091,21 @@ function OnboardingView({
             onClick={() => {
               if (amrStatusResolving) return;
               if (amrSignedIn) {
-                // 已登录：不再触发登录，直接进入下一步
+                // 已登录：不再触发登录，但仍记一次 AMR 归因，否则
+                // “已登录直接继续”的用户在 AMR 归因漏斗里会整段隐形
+                // （登录流程的用户由 handleCloudSignIn 记录）。
+                recordAmrEntry(analytics.track, 'onboarding_amr_card', new Date(), {
+                  metricsConsent: config.telemetry?.metrics === true,
+                });
+                recordAmrEntry(
+                  analytics.track,
+                  'onboarding_amr_sign_in_continue',
+                  new Date(),
+                  {
+                    metricsConsent: config.telemetry?.metrics === true,
+                    reuseExistingFrom: ['onboarding_amr_card'],
+                  },
+                );
                 setStep((current) => current + 1);
                 return;
               }
