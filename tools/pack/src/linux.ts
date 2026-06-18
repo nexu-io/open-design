@@ -982,6 +982,21 @@ function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
   };
 }
 
+export function createLinuxDesktopLaunchEnv(
+  config: ToolPackConfig,
+  stamp: SidecarStamp,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env = createSidecarLaunchEnv({
+    base: join(config.roots.runtime.namespaceRoot, "runtime"),
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    extraEnv: { ...baseEnv, [DESKTOP_LOG_ECHO_ENV]: "0" },
+    stamp,
+  });
+  delete env.ELECTRON_RUN_AS_NODE;
+  return env;
+}
+
 async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1037,12 +1052,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     args,
     command: appImagePath,
     cwd: dirname(appImagePath),
-    env: createSidecarLaunchEnv({
-      base: join(config.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      extraEnv: { ...process.env, [DESKTOP_LOG_ECHO_ENV]: "0" },
-      stamp,
-    }),
+    env: createLinuxDesktopLaunchEnv(config, stamp),
     logFd: null,
   });
 

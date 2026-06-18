@@ -28,6 +28,7 @@ import type { ToolPackConfig } from "../src/config.js";
 import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
+  createLinuxDesktopLaunchEnv,
   inspectPackedLinuxApp,
   matchesAppImageProcess,
   renderDesktopTemplate,
@@ -609,6 +610,30 @@ MimeType=x-scheme-handler/od;
       iconName: "open-design-ns",
     });
     expect(out).toContain("MimeType=x-scheme-handler/od;");
+  });
+});
+
+describe("createLinuxDesktopLaunchEnv", () => {
+  it("strips ELECTRON_RUN_AS_NODE before spawning the Electron AppImage", () => {
+    const config = makeConfig();
+    const stamp = {
+      app: APP_KEYS.DESKTOP,
+      ipc: "/tmp/open-design/ipc/default/desktop.sock",
+      mode: SIDECAR_MODES.RUNTIME,
+      namespace: "default",
+      source: SIDECAR_SOURCES.TOOLS_PACK,
+    };
+
+    const env = createLinuxDesktopLaunchEnv(config, stamp, {
+      ELECTRON_RUN_AS_NODE: "1",
+      KEEP_ME: "yes",
+    });
+
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+    expect(env.KEEP_ME).toBe("yes");
+    expect(env.OD_SIDECAR_BASE).toBe(
+      "/work/.tmp/tools-pack/runtime/linux/namespaces/default/runtime",
+    );
   });
 });
 
