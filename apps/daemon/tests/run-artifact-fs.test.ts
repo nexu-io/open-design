@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
+  createRunArtifactBaselines,
   diffRunArtifacts,
   snapshotProjectArtifacts,
 } from '../src/run-artifact-fs.js';
@@ -105,6 +106,46 @@ test('non-artifact files and ignored dirs do not count', () => {
     designSystemCreated: false,
     previewModuleCount: 0,
   });
+});
+
+test('a same-size rewrite with a preserved mtime is still detected (content hash)', () => {
+  // The pathological edit: equal byte length AND the timestamp reset to its
+  // original value. size + mtime alone cannot tell this apart, so the content
+  // hash must catch it — otherwise an edit-only turn would silently report 0.
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>AAAA</html>');
+  const { atimeMs, mtimeMs } = fs.statSync(page);
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(page, '<html>BBBB</html>'); // same byte length, different content
+  fs.utimesSync(page, atimeMs / 1000, mtimeMs / 1000); // pin timestamp back to original
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.modified, 1, 'same-size, same-mtime rewrite must be caught by the content hash');
+  assert.equal(diff.touched, 1);
+});
+
+test('contended same-cwd runs are flagged so the caller skips the whole-tree diff', () => {
+  // The daemon allows overlapping runs; a whole-tree snapshot diff cannot tell
+  // which concurrent run wrote a file. The registry must mark BOTH overlapping
+  // runs in a shared cwd as contended, while leaving distinct-cwd runs clean.
+  const reg = createRunArtifactBaselines();
+  const empty = new Map();
+
+  reg.remember('A', '/proj-1', empty);
+  reg.remember('B', '/proj-1', empty); // overlaps A in the same cwd
+  reg.remember('C', '/proj-2', empty); // different cwd, no overlap
+
+  const a = reg.take('A');
+  const b = reg.take('B');
+  const c = reg.take('C');
+  assert.equal(a?.contended, true, 'the earlier run is retroactively marked contended');
+  assert.equal(b?.contended, true, 'the later overlapping run is marked contended');
+  assert.equal(c?.contended, false, 'a distinct-cwd run stays uncontended');
+  // take() removes the entry — a second take is empty.
+  assert.equal(reg.take('A'), undefined);
 });
 
 test('a no-op turn (no file writes) reports zero', () => {

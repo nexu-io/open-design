@@ -267,9 +267,9 @@ import {
   runAskedUserQuestion,
 } from './run-artifacts.js';
 import {
+  createRunArtifactBaselines,
   diffRunArtifacts,
   snapshotProjectArtifacts,
-  type ArtifactSnapshot,
 } from './run-artifact-fs.js';
 import {
   reportRunCompletedFromDaemon,
@@ -1699,26 +1699,14 @@ const promptFileBootstrap = (fp) =>
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
 const critiqueCfg = loadCritiqueConfigFromEnv();
-// Per-run baseline of the project's artifact files, captured before the agent
+// Per-run baselines of the project's artifact files, captured before the agent
 // runs and diffed at run-finish to derive `artifact_count` agent-agnostically
 // (see `run-artifact-fs.ts`). Keyed by run id because the run-start scope and
-// the run-finished analytics scope are different closures. Entries are deleted
-// at finish; the size cap evicts the oldest baseline as a leak backstop for the
-// rare run that terminates without reaching the finish bookkeeping.
-const runArtifactBaselines = new Map<string, { cwd: string; before: ArtifactSnapshot }>();
-const RUN_ARTIFACT_BASELINE_CAP = 2000;
-function rememberRunArtifactBaseline(runId: string, cwd: string): void {
-  if (runArtifactBaselines.size >= RUN_ARTIFACT_BASELINE_CAP) {
-    const oldest = runArtifactBaselines.keys().next().value;
-    if (oldest !== undefined) runArtifactBaselines.delete(oldest);
-  }
-  try {
-    runArtifactBaselines.set(runId, { cwd, before: snapshotProjectArtifacts(cwd) });
-  } catch {
-    // Snapshotting is best-effort; on failure we simply fall back to the
-    // tool-stream count at finish.
-  }
-}
+// the run-finished analytics scope are different closures. The registry also
+// flags runs that overlapped another run in the same cwd as `contended`; those
+// must not trust the whole-tree diff (it would cross-attribute writes) and fall
+// back to the per-run tool-stream count.
+const runArtifactBaselines = createRunArtifactBaselines();
 // Tracks adapter streamFormat values that have already received a one-time
 // warning explaining why the Critique Theater orchestrator was bypassed.
 // Adapter denylist for orchestrator routing is implicit: anything that is
@@ -7569,7 +7557,11 @@ export async function startServer({
     // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
     // not the user's artifacts — those fall back to the tool-stream count.
     if (run?.id && cwd) {
-      rememberRunArtifactBaseline(run.id, cwd);
+      try {
+        runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
+      } catch {
+        // Snapshotting is best-effort; finish falls back to the tool-stream count.
+      }
     }
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
@@ -10897,14 +10889,19 @@ export async function startServer({
           didRunCreateDesignSystemFile(run.events);
         const toolStreamPreviewModuleCount = (): number =>
           countDesignSystemPreviewModules(run.events);
-        const artifactBaseline = runArtifactBaselines.get(run.id);
+        const artifactBaseline = runArtifactBaselines.take(run.id);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
         let artifactsModified: number | undefined;
         let designSystemCreated: boolean;
         let previewModuleCount: number;
-        if (artifactBaseline) {
-          runArtifactBaselines.delete(run.id);
+        // Skip the whole-tree diff when this run overlapped another run in the
+        // same cwd: the snapshot cannot tell which run wrote a file, so a
+        // contended diff would cross-attribute artifacts / design_system /
+        // preview / activation milestones. Fall back to the per-run tool-stream
+        // count instead (claude-accurate; a non-claude contended run is a rare
+        // undercount, which beats misattribution).
+        if (artifactBaseline && !artifactBaseline.contended) {
           // Diff the project's tracked files against the run-start baseline so
           // artifact_count / design_system_created / preview_module_count are
           // derived agent-agnostically (not just for claude_code).

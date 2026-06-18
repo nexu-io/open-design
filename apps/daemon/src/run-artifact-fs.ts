@@ -13,6 +13,7 @@
 // touched when it is new OR its size/mtime changed — which matches the
 // tool-stream counter's existing semantics (both Write and Edit count).
 
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -32,6 +33,29 @@ function isTrackedRunFile(name: string): boolean {
 export interface ArtifactFingerprint {
   size: number;
   mtimeMs: number;
+  // Content hash for files up to `HASH_MAX_BYTES`, else null. size + mtime
+  // already catch every real agent edit (the baseline is taken before the run,
+  // so a write during the run advances mtime), but the hash closes the
+  // pathological "same byte length AND preserved mtime" rewrite that size+mtime
+  // alone would miss. Large media skip hashing to bound run-finish cost.
+  hash: string | null;
+}
+
+// Files larger than this are not content-hashed (cost bound). Artifacts that
+// get edited in place — HTML, DESIGN.md, SVG — are small; large media are
+// regenerated wholesale (size changes), so size+mtime suffices for them.
+const HASH_MAX_BYTES = 1024 * 1024;
+
+function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactFingerprint {
+  let hash: string | null = null;
+  if (size <= HASH_MAX_BYTES) {
+    try {
+      hash = createHash('sha1').update(fs.readFileSync(full)).digest('hex');
+    } catch {
+      hash = null;
+    }
+  }
+  return { size, mtimeMs, hash };
 }
 
 // path -> fingerprint for every artifact-extension file under the project root.
@@ -77,7 +101,7 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
         const full = path.join(dir, entry.name);
         try {
           const stat = fs.statSync(full);
-          snapshot.set(full, { size: stat.size, mtimeMs: stat.mtimeMs });
+          snapshot.set(full, fingerprintFile(full, stat.size, stat.mtimeMs));
         } catch {
           // Race (file removed mid-walk) or permission error — skip.
         }
@@ -124,7 +148,10 @@ export function diffRunArtifacts(
     const prior = before.get(filePath);
     const isNew = !prior;
     const isChanged =
-      !!prior && (prior.size !== fingerprint.size || prior.mtimeMs !== fingerprint.mtimeMs);
+      !!prior &&
+      (prior.size !== fingerprint.size ||
+        prior.mtimeMs !== fingerprint.mtimeMs ||
+        prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
     if (isArtifactPath(filePath)) {
       if (isNew) created += 1;
@@ -134,4 +161,44 @@ export function diffRunArtifacts(
     if (isDesignSystemFile(filePath)) designSystemCreated = true;
   }
   return { created, modified, touched: created + modified, designSystemCreated, previewModuleCount };
+}
+
+export interface RunArtifactBaseline {
+  cwd: string;
+  before: ArtifactSnapshot;
+  // True when another run was active in the SAME cwd while this run ran. The
+  // daemon allows overlapping runs (see the antigravity lock in server.ts), and
+  // a whole-tree snapshot diff cannot tell which concurrent run wrote a file —
+  // so a contended run must NOT trust the filesystem diff (the caller falls back
+  // to the per-run tool-stream count) to avoid attributing one run's artifacts
+  // to another.
+  contended: boolean;
+}
+
+// Registry of per-run baselines that flags same-cwd overlap. `remember` marks
+// both the incoming run and every still-open run sharing its cwd as contended;
+// `take` removes and returns a run's baseline at finish.
+export function createRunArtifactBaselines(cap = 2000) {
+  const baselines = new Map<string, RunArtifactBaseline>();
+  return {
+    remember(runId: string, cwd: string, before: ArtifactSnapshot): void {
+      if (baselines.size >= cap) {
+        const oldest = baselines.keys().next().value;
+        if (oldest !== undefined) baselines.delete(oldest);
+      }
+      let contended = false;
+      for (const [id, other] of baselines) {
+        if (id !== runId && other.cwd === cwd) {
+          other.contended = true; // the already-open run is now contended too
+          contended = true;
+        }
+      }
+      baselines.set(runId, { cwd, before, contended });
+    },
+    take(runId: string): RunArtifactBaseline | undefined {
+      const baseline = baselines.get(runId);
+      if (baseline) baselines.delete(runId);
+      return baseline;
+    },
+  };
 }
