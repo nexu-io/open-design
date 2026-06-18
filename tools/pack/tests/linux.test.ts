@@ -547,7 +547,7 @@ describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
 Name=Open Design (@@NAMESPACE@@)
-Exec=env OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
+Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
 `;
@@ -560,7 +560,7 @@ MimeType=x-scheme-handler/od;
     });
     expect(out).toContain("Name=Open Design (default)");
     expect(out).toContain(
-      "Exec=env OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
+      "Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=default /home/u/.local/bin/Open-Design.default.AppImage --appimage-extract-and-run %U",
     );
     expect(out).toContain("Icon=open-design-default");
   });
@@ -571,8 +571,17 @@ MimeType=x-scheme-handler/od;
       execPath: "/x",
       iconName: "open-design-ns",
     });
-    expect(out).toMatch(/^Exec=env OD_PACKAGED_NAMESPACE=ns /m);
+    expect(out).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE OD_PACKAGED_NAMESPACE=ns /m);
     expect(out).not.toMatch(/OD_NAMESPACE=/);
+  });
+
+  it("unsets ELECTRON_RUN_AS_NODE on the Exec= line so desktop launches run Electron normally", () => {
+    const out = renderDesktopTemplate(template, {
+      namespace: "ns",
+      execPath: "/x",
+      iconName: "open-design-ns",
+    });
+    expect(out).toMatch(/^Exec=env -u ELECTRON_RUN_AS_NODE /m);
   });
 
   it("preserves --appimage-extract-and-run on the Exec= line so menu launches bypass FUSE", () => {
