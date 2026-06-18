@@ -332,7 +332,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-The Sealos template runs the published Open Design Docker image with persistent workspace storage. Configure access control for any public or shared deployment, matching the Docker deployment guidance above.
+The Sealos App Store template runs the published Open Design Docker image with persistent workspace storage and Basic Auth on the public proxy. For custom public or shared Docker deployments, follow the reverse-proxy and `OPEN_DESIGN_ALLOWED_ORIGINS` guidance in [`deploy/README.md`](deploy/README.md#local-compose).
 
 ### 🧑‍💻 Run from source
 

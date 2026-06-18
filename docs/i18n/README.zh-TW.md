@@ -330,7 +330,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Sealos 範本會執行已發布的 Open Design Docker 映像，並提供持久化工作區儲存。面向公開或共享部署時，請依照上方 Docker 部署指引設定存取控制。
+Sealos App Store 範本會執行已發布的 Open Design Docker 映像，提供持久化工作區儲存，並在公開代理層啟用 Basic Auth。自訂公開或共享 Docker 部署請遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理與 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
 
 ### 🧑‍💻 從原始碼執行
 

@@ -330,7 +330,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Sealos テンプレートは、公開済みの Open Design Docker イメージを永続的なワークスペースストレージ付きで実行します。公開または共有デプロイでは、上記の Docker デプロイ手順に沿ってアクセス制御を設定してください。
+Sealos App Store テンプレートは、公開済みの Open Design Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
 
 ### 🧑‍💻 ソースから実行
 

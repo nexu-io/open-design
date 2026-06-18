@@ -330,7 +330,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-La plantilla de Sealos ejecuta la imagen Docker publicada de Open Design con almacenamiento persistente para el espacio de trabajo. Configura el control de acceso para cualquier despliegue público o compartido según la guía de Docker anterior.
+La plantilla de Sealos App Store ejecuta la imagen Docker publicada de Open Design con almacenamiento persistente para el espacio de trabajo y Basic Auth en el proxy público. Para despliegues Docker públicos o compartidos personalizados, sigue la guía de proxy inverso y `OPEN_DESIGN_ALLOWED_ORIGINS` en [`deploy/README.md`](../../deploy/README.md#local-compose).
 
 ### 🧑‍💻 Ejecútalo desde el código fuente
 

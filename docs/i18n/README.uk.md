@@ -330,7 +330,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Шаблон Sealos запускає опублікований Docker-образ Open Design із постійним сховищем робочої області. Налаштуйте контроль доступу для публічного або спільного розгортання згідно з рекомендаціями Docker вище.
+Шаблон Sealos App Store запускає опублікований Docker-образ Open Design із постійним сховищем робочої області та Basic Auth на публічному проксі. Для користувацьких публічних або спільних Docker-розгортань дотримуйтеся рекомендацій щодо зворотного проксі та `OPEN_DESIGN_ALLOWED_ORIGINS` у [`deploy/README.md`](../../deploy/README.md#local-compose).
 
 ### 🧑‍💻 Запуск із вихідного коду
 

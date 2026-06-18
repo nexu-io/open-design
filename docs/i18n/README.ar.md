@@ -332,7 +332,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-يشغّل قالب Sealos صورة Docker المنشورة لـ Open Design مع تخزين دائم لمساحة العمل. اضبط التحكم في الوصول لأي نشر عام أو مشترك بما يتوافق مع إرشادات نشر Docker أعلاه.
+يشغّل قالب Sealos App Store صورة Docker المنشورة لـ Open Design مع تخزين دائم لمساحة العمل وBasic Auth على الوكيل العام. لعمليات نشر Docker العامة أو المشتركة المخصصة، اتبع إرشادات الوكيل العكسي و`OPEN_DESIGN_ALLOWED_ORIGINS` في [`deploy/README.md`](../../deploy/README.md#local-compose).
 
 ### 🧑‍💻 التشغيل من المصدر
 
