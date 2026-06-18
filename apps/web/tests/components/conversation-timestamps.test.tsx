@@ -69,6 +69,27 @@ describe('conversation timestamps', () => {
     expect(container.querySelector('.msg-time')).toBeNull();
   });
 
+  it('does not render the user-message "You" header or time stamp', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-15T14:00:00Z'));
+
+    const { container } = renderChatPane([
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Create a landing page',
+        createdAt: Date.parse('2025-01-15T12:00:00Z'),
+      },
+    ]);
+
+    const userMessage = container.querySelector('.msg.user');
+    expect(userMessage).not.toBeNull();
+    // Both redundant metadata elements are removed from the user message:
+    // the "You" role header and the time stamp beside the copy button.
+    expect(userMessage?.querySelector('.role')).toBeNull();
+    expect(container.querySelector('.user-actions-time')).toBeNull();
+  });
+
   it('does not add day separators when a conversation crosses days', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-16T14:00:00Z'));
