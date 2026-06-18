@@ -1002,18 +1002,26 @@ export function wellKnownUserToolchainBins(
       segments: ["installation", "bin"],
     },
   ];
-  // Windows fnm keeps Node installs under %APPDATA%\fnm\node-versions\<ver>\
-  // installation, with node.exe directly in `installation` (no POSIX-style
-  // `bin` subdir). `FNM_DIR` overrides that root. A GUI-launched packaged
-  // app inherits a stripped PATH and reads no shell rc, so without an
-  // explicit probe fnm-managed Node — and every agent CLI it runs — is
-  // silently undetected on Windows. See issue #3517.
+  // Windows fnm keeps Node installs under <fnm-root>\node-versions\<ver>\
+  // installation, with node.exe — and any `npm i -g`'d CLI shim such as
+  // codex.cmd — directly in `installation` (no POSIX-style `bin` subdir).
+  // The fnm root is %APPDATA%\fnm or %LOCALAPPDATA%\fnm depending on the
+  // install, and `FNM_DIR` overrides both. A GUI-launched packaged app
+  // inherits a stripped PATH and reads no shell rc, so without an explicit
+  // probe fnm-managed Node — and every agent CLI it runs — is silently
+  // undetected on Windows. See issues #3517 and #3062.
   if (process.platform === "win32") {
     const fnmDirOverride = typeof env.FNM_DIR === "string" ? env.FNM_DIR.trim() : "";
-    const appData = typeof env.APPDATA === "string" ? env.APPDATA.trim() : "";
-    const fnmRoot =
-      fnmDirOverride.length > 0 ? fnmDirOverride : appData.length > 0 ? join(appData, "fnm") : "";
-    if (fnmRoot.length > 0) {
+    const fnmRoots: string[] = [];
+    if (fnmDirOverride.length > 0) {
+      fnmRoots.push(fnmDirOverride);
+    } else {
+      for (const base of [env.LOCALAPPDATA, env.APPDATA]) {
+        const trimmed = typeof base === "string" ? base.trim() : "";
+        if (trimmed.length > 0) fnmRoots.push(join(trimmed, "fnm"));
+      }
+    }
+    for (const fnmRoot of fnmRoots) {
       nodeInstallRoots.push({ root: join(fnmRoot, "node-versions"), segments: ["installation"] });
     }
   }
