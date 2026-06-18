@@ -3413,6 +3413,7 @@ function UserMessageImpl({
 
   return (
     <div className="msg user">
+      <span className="sr-only">{t('chat.you')}</span>
       {hasRunContext ? (
         <div className="msg-run-context-row" data-testid="msg-run-context-row">
           {message.sessionMode ? (
