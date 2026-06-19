@@ -6930,8 +6930,9 @@ Common options:
         process.exit(2);
       }
       const cfg = await fetchConfig();
-      const next = { ...cfg };
-      delete next[key];
+      // Send explicit null so the daemon's merge-patch handler clears the key;
+      // omitting the key (delete) leaves the old value intact on the server.
+      const next = { ...cfg, [key]: null };
       const written = await writeConfig(next);
       if (flags.json) {
         process.stdout.write(JSON.stringify(written, null, 2) + '\n');
