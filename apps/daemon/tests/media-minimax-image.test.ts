@@ -109,4 +109,63 @@ describe('minimax image generation', () => {
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'minimax.png'));
     expect(bytes.length).toBeGreaterThan(0);
   });
+
+  it('forwards --image as subject_reference[0].image_file for I2I', async () => {
+    await writeConfig({
+      providers: {
+        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
+      },
+    });
+
+    // Write a real reference PNG inside the project so resolveProjectImage
+    // can stat it and turn it into a data URL the renderer can splice in.
+    const projectDir = path.join(projectsRoot, 'project-1');
+    await mkdir(projectDir, { recursive: true });
+    const refPath = path.join(projectDir, 'ref.png');
+    await writeFile(refPath, Buffer.from(PNG_BASE64, 'base64'));
+
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      // Subject reference must be present and carry the data URL of the
+      // --image file (we don't assert exact bytes because the data URL is
+      // derived from the on-disk PNG; the prefix is the contract).
+      expect(body.subject_reference).toEqual([{
+        type: 'character',
+        image_file: expect.stringMatching(/^data:image\/png;base64,/),
+      }]);
+      // Wire model falls through to MINIMAX_IMAGE_MODEL_MAP when no override.
+      expect(body.model).toBe('image-01');
+      // defaultAspectFor('image') returns '1:1', which IS in the MiniMax
+      // allowlist, so the renderer forwards it.
+      expect(body.aspect_ratio).toBe('1:1');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'restyle as ukiyo-e',
+      image: './ref.png',
+      output: 'minimax-i2i.png',
+    });
+
+    expect(result.name).toBe('minimax-i2i.png');
+    expect(result.providerId).toBe('minimax');
+    // providerNote must NOT echo the data URL — no PII leak in metadata.
+    expect(result.providerNote).not.toContain('data:image');
+    expect(result.providerNote).toContain('minimax/image-01');
+
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'minimax-i2i.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
 });
