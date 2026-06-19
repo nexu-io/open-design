@@ -698,6 +698,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'senseaudio' && surface === 'audio') {
       const result = await renderSenseAudioTTS(ctx, credentials);
       bytes = result.bytes;
@@ -2767,6 +2772,21 @@ const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
 } as Record<string, string>;
 
+// Image generation lives on a different host than the legacy TTS endpoint.
+// Renderer resolves baseUrl from credentials.baseUrl -> MINIMAX_IMAGE_DEFAULT_BASE_URL
+// -> legacy TTS constant. Keeping the two constants separate lets existing TTS
+// users keep their api.minimaxi.chat/v1 default while new image users get
+// api.minimax.io without manual configuration.
+const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
+
+// Map our generic catalogue id onto MiniMax's actual wire model name. Mirrors
+// the TTS pattern above: the catalog id `minimax-image-01` is shorthand for
+// "their flagship image model"; we substitute the real model name on the wire
+// so MiniMax accepts the request without exposing the user to internal naming.
+const MINIMAX_IMAGE_MODEL_MAP = {
+  'minimax-image-01': 'image-01',
+} as Record<string, string>;
+
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
@@ -2856,6 +2876,118 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
     providerNote: `minimax/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: MiniMax — image-01 text-to-image (synchronous, with optional
+// I2I via subject_reference).
+//
+// Docs: https://platform.minimax.io/docs/api-reference/image-generation-t2i
+// POST /v1/image_generation with a JSON body describing the prompt +
+// optional subject reference for image-to-image. Response is JSON with the
+// image base64-encoded under `data.image_base64[0]` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, mirroring
+// MiniMax's TTS API.
+//
+// We always request `response_format: 'base64'` because MiniMax's default
+// URL responses expire after 24 hours — base64 persists at write time and
+// never goes stale. The wire model `image-01` is mapped from our catalog id
+// `minimax-image-01` via MINIMAX_IMAGE_MODEL_MAP.
+// ---------------------------------------------------------------------------
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || MINIMAX_IMAGE_DEFAULT_BASE_URL).replace(/\/$/, '');
+  // Precedence: credentials.model (user override in stored config) ->
+  // ctx.wireModel (alias-aware from OD_MEDIA_MODEL_ALIASES) -> catalog map
+  // for the vendor-prefixed id `minimax-image-01` -> bare ctx.model as a
+  // last-ditch default. Mirrors the convention used by the nanobanana,
+  // openrouter, imagerouter, and custom-image renderers in this file.
+  const wireModel = (
+    credentials.model
+    || ctx.wireModel
+    || MINIMAX_IMAGE_MODEL_MAP[ctx.model]
+    || ctx.model
+  ).trim();
+  const aspectRatio = minimaxImageAspectFor(ctx.aspect);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.',
+    response_format: 'base64',
+    n: 1,
+  };
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
+  }
+  // I2I: when --image is supplied, pass it as subject_reference[0]. The
+  // existing resolveProjectImage() helper already returns a base64 dataUrl
+  // with a strict mime allowlist (png/jpg/jpeg/webp/gif, < 16MB).
+  if (ctx.imageRef) {
+    body.subject_reference = [{
+      type: 'character',
+      image_file: ctx.imageRef.dataUrl,
+    }];
+  }
+  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // MiniMax wraps every response in `base_resp`; even an HTTP 200 can
+  // be a logical failure (`status_code !== 0`).
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const base64 = data?.data?.image_base64?.[0];
+  if (typeof base64 !== 'string' || !base64) {
+    throw new Error('minimax image response missing data.image_base64[0]');
+  }
+  const bytes = Buffer.from(base64, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('minimax image decoded zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${aspectRatio || '1:1'} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function minimaxImageAspectFor(aspect?: string): string | undefined {
+  // MiniMax supports 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9. We accept the
+  // user-supplied aspect if it's in the allowed subset that matches our
+  // MEDIA_ASPECTS list ('1:1', '16:9', '9:16', '4:3', '3:4'); for any other
+  // value (including undefined), we omit `aspect_ratio` from the body and
+  // let MiniMax use its default 1:1.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+  ) {
+    return aspect;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
