@@ -68,6 +68,52 @@ through that authenticated proxy. It disables daemon-side bearer enforcement for
 all `/api/*` requests, so direct access to the daemon must remain blocked. The
 Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
 
+### Deployment provider gateway
+
+Self-host administrators can optionally configure an OpenAI-compatible provider
+gateway for the deployment. This keeps provider credentials server-side while
+letting users choose "Provider orchestrator" during onboarding or from Settings.
+The existing AMR, local CLI, and direct BYOK paths remain unchanged when these
+variables are unset.
+
+Set both required values in `.env`:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_BASE_URL=https://provider.example.com/v1
+OD_PROVIDER_ORCHESTRATOR_API_KEY=provider-token-placeholder
+```
+
+Optional values:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL=example-chat-model
+OD_PROVIDER_ORCHESTRATOR_LABEL="Provider orchestrator"
+```
+
+The daemon validates the configured base URL before provider egress and never
+returns the credential from `/api/provider-orchestrator/config` or `od provider
+config`. Model discovery, connection tests, OpenAI-compatible chat proxying, and
+finalize flows use the daemon-held credential when the saved configuration
+selects the deployment provider source.
+
+Troubleshooting:
+
+- `not_configured`: leave the variables blank to disable deployment provider
+  mode, or set both required values.
+- `missing_config`: set both `OD_PROVIDER_ORCHESTRATOR_BASE_URL` and
+  `OD_PROVIDER_ORCHESTRATOR_API_KEY`; partial configuration fails closed.
+- `invalid_base_url`: use an absolute `http://` or `https://` gateway URL that
+  passes the same provider base URL validation as direct BYOK.
+- `Deployment provider mode currently supports OpenAI-compatible provider
+  routes only`: choose the OpenAI-compatible protocol or use direct BYOK for
+  another provider protocol.
+- `Reasoning provider egress is disabled` or `not allowlisted`: update the
+  run's provider egress policy or choose a model/base URL permitted by that
+  run.
+- Empty model picker or gateway `401`/`403`/`5xx`: verify the gateway is
+  reachable from the daemon container and that the deployment credential is
+  valid for model listing and chat completions.
+
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash
