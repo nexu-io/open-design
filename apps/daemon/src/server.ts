@@ -11625,6 +11625,7 @@ export async function startServer({
 
   registerBuilderRunLedgerRoutes(app, {
     db,
+    resources: { listAllSkillLikeEntries },
     routines: { routineService },
   });
 

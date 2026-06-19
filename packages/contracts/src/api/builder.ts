@@ -518,6 +518,31 @@ export interface BuilderApprovalResponse {
   approval: Approval;
 }
 
+export interface StartBuilderSkillRunContext {
+  skillIds?: string[];
+  pluginIds?: string[];
+  mcpServerIds?: string[];
+  connectorIds?: string[];
+}
+
+export interface StartBuilderSkillRunRequest {
+  skillId: string;
+  prompt?: string;
+  routineId?: string;
+  agentId?: BuilderAgentKind | string | null;
+  context?: StartBuilderSkillRunContext;
+}
+
+export interface StartBuilderSkillRunResponse {
+  routineId: string;
+  routineCreated: boolean;
+  process: HarnessProcess;
+  run: BuilderRun;
+  projectId: BuilderProjectId;
+  conversationId: string;
+  agentRunId: string;
+}
+
 export interface ResolveBuilderApprovalRequest {
   resolution: ApprovalResolution;
   resolvedBy?: string;

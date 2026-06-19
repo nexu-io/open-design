@@ -210,7 +210,10 @@ const AUTOMATION_STRING_FLAGS = new Set([
 const AUTOMATION_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'disabled', 'enabled',
 ]);
-const RUN_LEDGER_STRING_FLAGS = new Set(['daemon-url', 'project', 'limit', 'run', 'resolution', 'resolved-by']);
+const RUN_LEDGER_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'limit', 'run', 'resolution', 'resolved-by',
+  'skill', 'context-skill', 'routine', 'agent', 'prompt', 'prompt-file',
+]);
 const RUN_LEDGER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
@@ -8089,6 +8092,13 @@ function printRunLedgerHelp() {
   od run-ledger processes --project <projectId> [--json]
       List Builder harness-process projections for a project.
 
+  od run-ledger run-skill --project <projectId> --skill <skillId>
+                       [--prompt "<text>" | --prompt-file <path|->]
+                       [--context-skill <skillId[,skillId]>] [--agent <id>]
+                       [--routine <routineId>] [--json]
+      Create or reuse a project-scoped routine for a registered skill, then
+      trigger a manual run and return its Builder run-ledger projection.
+
   od run-ledger process <processId> --project <projectId> [--json]
       Show one Builder harness-process projection.
 
@@ -8179,6 +8189,43 @@ async function runRunLedger(args) {
   };
 
   switch (sub) {
+    case 'run-skill': {
+      const skillId = typeof flags.skill === 'string' ? flags.skill.trim() : '';
+      if (!skillId) {
+        console.error('Usage: od run-ledger run-skill --project <projectId> --skill <skillId>');
+        process.exit(2);
+      }
+      const prompt = await readPromptFromFlags(flags);
+      const contextSkillIds = splitAutomationIds(flags['context-skill']);
+      const data = await requestJson(`${projectPath}/skill-runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          skillId,
+          ...(prompt ? { prompt } : {}),
+          ...(typeof flags.routine === 'string' && flags.routine.trim()
+            ? { routineId: flags.routine.trim() }
+            : {}),
+          ...(typeof flags.agent === 'string' && flags.agent.trim()
+            ? { agentId: flags.agent.trim() }
+            : {}),
+          ...(contextSkillIds.length > 0
+            ? { context: { skillIds: contextSkillIds } }
+            : {}),
+        }),
+      });
+      if (flags.json) return writeJson(data);
+      console.log([
+        data.routineId,
+        data.routineCreated ? 'created' : 'reused',
+        data.process?.id ?? '-',
+        data.run?.id ?? '-',
+        data.run?.status ?? '-',
+        data.conversationId ?? '-',
+        data.agentRunId ?? '-',
+      ].join('\t'));
+      return;
+    }
     case 'processes': {
       const data = await requestJson(`${projectPath}/processes`);
       if (flags.json) return writeJson(data);

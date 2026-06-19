@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
   closeDatabase,
+  getRoutine,
   insertBuilderApproval,
   insertProject,
   insertRoutine,
@@ -40,19 +41,57 @@ describe('builder run ledger routes', () => {
     vi.restoreAllMocks();
   });
 
-  function buildApp() {
+  function buildApp(options: { skills?: Array<Record<string, unknown>> } = {}) {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const app = express();
     app.use(express.json());
+    let runCounter = 0;
+    const routineService = {
+      nextRunAt: vi.fn(() => new Date('2026-06-22T09:00:00.000Z')),
+      runNow: vi.fn(async (routineId: string) => {
+        const routine = getRoutine(db as any, routineId);
+        if (!routine) throw new Error('routine not found');
+        runCounter += 1;
+        const now = new Date('2026-06-19T10:00:00.000Z').getTime() + runCounter;
+        const projectId = routine.projectMode === 'reuse' && routine.projectId
+          ? routine.projectId
+          : `project-${runCounter}`;
+        const runId = `manual-run-${runCounter}`;
+        const conversationId = `canvas-conv-${runCounter}`;
+        const agentRunId = `canvas-agent-run-${runCounter}`;
+        insertRoutineRun(db as any, {
+          id: runId,
+          routineId,
+          trigger: 'manual',
+          status: 'succeeded',
+          projectId,
+          conversationId,
+          agentRunId,
+          startedAt: now,
+          completedAt: now + 1000,
+          summary: 'Manual canvas skill run completed.',
+        });
+        return {
+          projectId,
+          conversationId,
+          agentRunId,
+          completion: Promise.resolve({ status: 'succeeded' }),
+        };
+      }),
+    };
     registerBuilderRunLedgerRoutes(app, {
       db,
+      resources: {
+        listAllSkillLikeEntries: vi.fn(async () => options.skills ?? [
+          { id: 'gsc-keyword-optimization', name: 'GSC keyword optimization' },
+          { id: 'build-a-content-page', name: 'Build a content page' },
+        ]),
+      },
       routines: {
-        routineService: {
-          nextRunAt: vi.fn(() => new Date('2026-06-22T09:00:00.000Z')),
-        },
+        routineService,
       },
     } as any);
-    return { app, db };
+    return { app, db, routineService };
   }
 
   function seedRoutineRun(db: unknown) {
@@ -166,6 +205,97 @@ describe('builder run ledger routes', () => {
 
       const eventRes = await fetch(`http://127.0.0.1:${port}/api/projects/proj-2/builder/runs/run-1/events`);
       expect(eventRes.status).toBe(404);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('starts a registered skill through a reusable project-scoped routine', async () => {
+    const { app, db, routineService } = buildApp();
+    const now = new Date('2026-06-19T09:30:00.000Z').getTime();
+    insertProject(db as any, {
+      id: 'proj-1',
+      name: 'Canvas run target',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { server, port } = await listen(app);
+    try {
+      const startRes = await fetch(`http://127.0.0.1:${port}/api/projects/proj-1/builder/skill-runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          skillId: 'gsc-keyword-optimization',
+          prompt: 'Run from the canvas card.',
+          context: { skillIds: ['build-a-content-page'] },
+        }),
+      });
+      expect(startRes.status).toBe(202);
+      const startJson = await startRes.json() as Record<string, any>;
+      expect(startJson).toMatchObject({
+        routineCreated: true,
+        projectId: 'proj-1',
+        conversationId: 'canvas-conv-1',
+        agentRunId: 'canvas-agent-run-1',
+        process: {
+          projectId: 'proj-1',
+          status: 'completed',
+          skillIds: ['gsc-keyword-optimization', 'build-a-content-page'],
+          enabled: false,
+        },
+        run: {
+          id: 'manual-run-1',
+          projectId: 'proj-1',
+          status: 'completed',
+          origin: 'manual',
+          skillIds: ['gsc-keyword-optimization', 'build-a-content-page'],
+        },
+      });
+      expect(startJson.routineId).toMatch(/^routine-/);
+      expect(startJson.process.id).toBe(`routine:${startJson.routineId}`);
+      expect(routineService.runNow).toHaveBeenCalledWith(startJson.routineId);
+
+      const runsRes = await fetch(`http://127.0.0.1:${port}/api/projects/proj-1/builder/runs`);
+      expect(runsRes.status).toBe(200);
+      const runsJson = await runsRes.json() as { runs: Array<Record<string, any>> };
+      expect(runsJson.runs.map((run) => run.id)).toEqual(['manual-run-1']);
+
+      const reuseRes = await fetch(`http://127.0.0.1:${port}/api/projects/proj-1/builder/skill-runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ skillId: 'gsc-keyword-optimization' }),
+      });
+      expect(reuseRes.status).toBe(202);
+      const reuseJson = await reuseRes.json() as Record<string, any>;
+      expect(reuseJson.routineId).toBe(startJson.routineId);
+      expect(reuseJson.routineCreated).toBe(false);
+      expect(reuseJson.run.id).toBe('manual-run-2');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects unknown skills before creating a canvas routine', async () => {
+    const { app, db, routineService } = buildApp({ skills: [] });
+    const now = new Date('2026-06-19T09:45:00.000Z').getTime();
+    insertProject(db as any, {
+      id: 'proj-1',
+      name: 'Canvas run target',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { server, port } = await listen(app);
+    try {
+      const startRes = await fetch(`http://127.0.0.1:${port}/api/projects/proj-1/builder/skill-runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ skillId: 'missing-skill' }),
+      });
+      expect(startRes.status).toBe(400);
+      expect(await startRes.json()).toEqual({ error: 'unknown skill id: missing-skill' });
+      expect(routineService.runNow).not.toHaveBeenCalled();
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { randomUUID } from 'node:crypto';
 import type {
   Approval,
   ApprovalResolution,
@@ -8,29 +9,50 @@ import type {
   BuilderTriggerKind,
   HarnessProcess,
   HarnessProcessStatus,
+  StartBuilderSkillRunRequest,
+  StartBuilderSkillRunResponse,
 } from '@open-design/contracts';
 import {
   getBuilderApproval,
+  getLatestRoutineRun,
   getProject,
   getRoutine,
   getRoutineRun,
+  insertRoutine,
   listBuilderApprovals,
   listRoutineRuns,
   listRoutines,
   resolveBuilderApproval,
 } from '../db.js';
 import type { RouteDeps } from '../server-context.js';
+import { findSkillById, type SkillInfo } from '../skills.js';
 import { routineDbRowToContract, type RoutineRoutesService } from './routine.js';
 
-export interface RegisterBuilderRunLedgerRoutesDeps extends RouteDeps<'db' | 'routines'> {}
+export interface RegisterBuilderRunLedgerRoutesDeps extends RouteDeps<'db' | 'routines'> {
+  resources?: {
+    listAllSkillLikeEntries?: () => Promise<unknown[]>;
+  };
+}
 
 type RoutineRow = ReturnType<typeof getRoutine> extends infer T ? NonNullable<T> : never;
 type RoutineRunRow = ReturnType<typeof getRoutineRun> extends infer T ? NonNullable<T> : never;
 
 const DEFAULT_LIMIT = 50;
+const CANVAS_ROUTINE_NAME_PREFIX = 'Canvas skill run:';
+const CANVAS_ROUTINE_SCHEDULE = {
+  kind: 'daily',
+  time: '09:00',
+  timezone: 'UTC',
+};
 
 function iso(ms: number | null | undefined): string | undefined {
   return typeof ms === 'number' && Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function uniqueIds(ids: Array<string | null | undefined>): string[] {
@@ -43,6 +65,38 @@ function uniqueIds(ids: Array<string | null | undefined>): string[] {
     out.push(trimmed);
   }
   return out;
+}
+
+function cleanStringList(value: unknown, field: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== 'string') throw new Error(`${field} must contain strings`);
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function normalizeBuilderSkillRunContext(value: unknown) {
+  if (value === undefined || value === null) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('context must be an object');
+  }
+  const input = asRecord(value);
+  const context = {
+    skillIds: cleanStringList(input.skillIds, 'context.skillIds'),
+    pluginIds: cleanStringList(input.pluginIds, 'context.pluginIds'),
+    mcpServerIds: cleanStringList(input.mcpServerIds, 'context.mcpServerIds'),
+    connectorIds: cleanStringList(input.connectorIds, 'context.connectorIds'),
+  };
+  return Object.fromEntries(
+    Object.entries(context).filter(([, ids]) => ids.length > 0),
+  );
 }
 
 function routineSkillIds(routine: RoutineRow): string[] {
@@ -65,11 +119,11 @@ function processStatusForRoutine(
   latestRun: RoutineRunRow | null,
   approvals: Approval[] = [],
 ): HarnessProcessStatus {
-  if (!routine.enabled) return 'disabled';
   if (approvals.some((approval) => approval.status === 'requested')) {
     return 'waiting_for_approval';
   }
-  if (!latestRun) return 'sleeping';
+  if (!latestRun) return routine.enabled ? 'sleeping' : 'disabled';
+  if (!routine.enabled && latestRun.trigger !== 'manual') return 'disabled';
   return mapRoutineRunStatus(latestRun.status);
 }
 
@@ -103,6 +157,16 @@ function routinesForProject(db: unknown, projectId: string): RoutineRow[] {
     (routine.projectMode === 'reuse' && routine.projectId === projectId)
     || runRoutineIds.has(routine.id)
   ));
+}
+
+function findReusableCanvasRoutine(db: unknown, projectId: string, skillId: string): RoutineRow | null {
+  return listRoutines(db as any).find((routine) => (
+    routine.projectMode === 'reuse'
+    && routine.projectId === projectId
+    && routine.skillId === skillId
+    && typeof routine.name === 'string'
+    && routine.name.startsWith(CANVAS_ROUTINE_NAME_PREFIX)
+  )) ?? null;
 }
 
 function approvalsForRun(db: unknown, projectId: string, runId: string): Approval[] {
@@ -380,6 +444,87 @@ export function registerBuilderRunLedgerRoutes(
       return routineToProcessWithApprovals(routine, req.params.projectId, latest, routineService, approvals);
     });
     res.json({ processes });
+  });
+
+  app.post('/api/projects/:projectId/builder/skill-runs', async (req, res) => {
+    try {
+      if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
+      const body = asRecord(req.body) as unknown as StartBuilderSkillRunRequest;
+      const skillId = typeof body.skillId === 'string' ? body.skillId.trim() : '';
+      if (!skillId) return res.status(400).json({ error: 'skillId is required' });
+      const context = normalizeBuilderSkillRunContext(body.context);
+      let skill: SkillInfo | null = null;
+      if (ctx.resources?.listAllSkillLikeEntries) {
+        const registry = await ctx.resources.listAllSkillLikeEntries();
+        skill = findSkillById(registry, skillId) ?? null;
+        const referencedSkillIds = uniqueIds([skillId, ...(context.skillIds ?? [])]);
+        const missing = referencedSkillIds.filter((id) => !findSkillById(registry, id));
+        if (missing.length > 0) {
+          return res.status(400).json({ error: `unknown skill id${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}` });
+        }
+      }
+
+      let routineCreated = false;
+      let routine: RoutineRow | null = null;
+      const requestedRoutineId = typeof body.routineId === 'string' ? body.routineId.trim() : '';
+      if (requestedRoutineId) {
+        routine = getRoutine(db, requestedRoutineId);
+        if (!routine) return res.status(404).json({ error: 'routine not found' });
+        if (routine.projectMode !== 'reuse' || routine.projectId !== req.params.projectId) {
+          return res.status(400).json({ error: 'routine is not scoped to the requested project' });
+        }
+        if (routine.skillId !== skillId) {
+          return res.status(400).json({ error: 'routine skillId does not match requested skillId' });
+        }
+      } else {
+        routine = findReusableCanvasRoutine(db, req.params.projectId, skillId);
+        if (!routine) {
+          const now = Date.now();
+          const defaultPrompt = `Run the "${skill?.name ?? skillId}" skill for this project from the canvas.`;
+          routine = insertRoutine(db, {
+            id: `routine-${randomUUID()}`,
+            name: `${CANVAS_ROUTINE_NAME_PREFIX} ${skill?.name ?? skillId}`,
+            prompt: typeof body.prompt === 'string' && body.prompt.trim()
+              ? body.prompt
+              : defaultPrompt,
+            scheduleKind: CANVAS_ROUTINE_SCHEDULE.kind,
+            scheduleValue: CANVAS_ROUTINE_SCHEDULE.time,
+            scheduleJson: JSON.stringify(CANVAS_ROUTINE_SCHEDULE),
+            projectMode: 'reuse',
+            projectId: req.params.projectId,
+            skillId,
+            agentId: typeof body.agentId === 'string' && body.agentId.trim()
+              ? body.agentId.trim()
+              : null,
+            contextJson: JSON.stringify(context),
+            enabled: false,
+            createdAt: now,
+            updatedAt: now,
+          });
+          routineCreated = true;
+        }
+      }
+      if (!routine) return res.status(500).json({ error: 'routine could not be prepared' });
+
+      const start = await routineService.runNow(routine.id);
+      const latest = getLatestRoutineRun(db, routine.id);
+      if (!latest || latest.projectId !== req.params.projectId) {
+        return res.status(500).json({ error: 'routine run was not projected into the requested project' });
+      }
+      const approvals = approvalsForRun(db, req.params.projectId, latest.id);
+      const response: StartBuilderSkillRunResponse = {
+        routineId: routine.id,
+        routineCreated,
+        process: routineToProcessWithApprovals(routine, req.params.projectId, latest, routineService, approvals),
+        run: routineRunToBuilderRun(routine, latest, approvals),
+        projectId: start.projectId,
+        conversationId: start.conversationId,
+        agentRunId: start.agentRunId,
+      };
+      res.status(202).json(response);
+    } catch (err: any) {
+      res.status(400).json({ error: String(err?.message ?? err) });
+    }
   });
 
   app.get('/api/projects/:projectId/builder/processes/:processId', (req, res) => {
