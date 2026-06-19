@@ -208,4 +208,30 @@ describe('minimax image generation', () => {
     const outPath = path.join(projectsRoot, 'project-1', 'minimax.png');
     await expect(readFile(outPath)).rejects.toThrow();
   });
+
+  it('surfaces upstream HTTP errors with status code and body excerpt', async () => {
+    await writeConfig({
+      providers: {
+        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
+      },
+    });
+
+    // 401 with a non-JSON body — the renderer must report both the HTTP
+    // status and the body excerpt in the thrown Error.
+    const fetchMock = vi.fn(async () => new Response('unauthorized', {
+      status: 401,
+      headers: { 'content-type': 'text/plain' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).rejects.toThrow(/minimax image 401: unauthorized/);
+  });
 });
