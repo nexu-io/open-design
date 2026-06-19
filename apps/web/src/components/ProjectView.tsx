@@ -6240,6 +6240,7 @@ export function ProjectView({
         <FileWorkspace
           projectId={project.id}
           projectKind={projectKindToTracking(project.metadata?.kind, project.metadata?.videoModel) ?? 'prototype'}
+          skills={skills}
           rootDirName={(() => {
             const baseDir =
               projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;

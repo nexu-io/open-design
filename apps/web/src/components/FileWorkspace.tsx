@@ -60,6 +60,7 @@ import {
   type ProjectMetadata,
   type ProjectFile,
   type ProjectFolder,
+  type SkillSummary,
 } from '../types';
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
@@ -82,6 +83,7 @@ import { PasteTextDialog } from './PasteTextDialog';
 import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
+import { CanvasRunPanel } from './CanvasRunPanel';
 import {
   buildSketchDocument,
   isSketchJsonFileName,
@@ -94,6 +96,7 @@ import type { ChatMessage } from '../types';
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  skills?: SkillSummary[];
   // Basename of the project's chosen working directory (e.g. "openclaw").
   // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
   // default-storage projects.
@@ -234,6 +237,7 @@ interface SketchState {
 
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
+export const CANVAS_RUN_TAB = '__canvas_run__';
 const QUESTIONS_TAB = '__questions__';
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
@@ -366,6 +370,7 @@ const DESIGN_SYSTEM_IMAGE_OR_FONT_EXTENSIONS = /\.(svg|png|jpe?g|gif|webp|avif|i
 export function FileWorkspace({
   projectId,
   projectKind,
+  skills = [],
   rootDirName,
   reloading,
   resolvedDir,
@@ -720,6 +725,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === CANVAS_RUN_TAB
       || activeTab === QUESTIONS_TAB
     ) return;
     if (isBrowserTabId(activeTab)) {
@@ -742,11 +748,15 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
-    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
+    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === CANVAS_RUN_TAB) {
       const nextActive =
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
           : name;
+      if (name === CANVAS_RUN_TAB) {
+        setActiveTab(CANVAS_RUN_TAB);
+        return;
+      }
       onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
       setActiveTab(nextActive);
       return;
@@ -873,6 +883,11 @@ export function FileWorkspace({
       setPersistedActive(DESIGN_FILES_TAB);
       return;
     }
+    if (tabId === CANVAS_RUN_TAB) {
+      setUploadError(null);
+      setActiveTab(CANVAS_RUN_TAB);
+      return;
+    }
     if (isBrowserTabId(tabId)) {
       if (!browserTabs.some((tab) => tab.id === tabId)) return;
       commitTabsState(workspaceTabsState(persistedTabs, tabId, browserTabs));
@@ -884,6 +899,11 @@ export function FileWorkspace({
 
   function activateWorkspaceTab(tabId: string) {
     if (tabId === QUESTIONS_TAB) {
+      setUploadError(null);
+      setActiveTab(tabId);
+      return;
+    }
+    if (tabId === CANVAS_RUN_TAB) {
       setUploadError(null);
       setActiveTab(tabId);
       return;
@@ -919,6 +939,10 @@ export function FileWorkspace({
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
     if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (activeTab === CANVAS_RUN_TAB) {
+      setActiveTab(defaultRootTab);
+      return;
+    }
     if (activeTab === QUESTIONS_TAB) {
       setActiveTab(defaultRootTab);
       return;
@@ -1115,7 +1139,12 @@ export function FileWorkspace({
   // The Design Files entry is already sticky-pinned, so we only scroll
   // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (
+      activeTab === DESIGN_FILES_TAB
+      || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === CANVAS_RUN_TAB
+      || activeTab === QUESTIONS_TAB
+    ) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
@@ -1449,6 +1478,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === CANVAS_RUN_TAB
       || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
@@ -1470,6 +1500,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === CANVAS_RUN_TAB
       || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
@@ -1499,6 +1530,7 @@ export function FileWorkspace({
         ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
       };
     }
+    if (activeTab === CANVAS_RUN_TAB) return null;
     if (isBrowserTabId(activeTab)) {
       const tab = browserTabs.find((candidate) => candidate.id === activeTab);
       if (!tab) return null;
@@ -1592,6 +1624,7 @@ export function FileWorkspace({
     const ids: string[] = [];
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
     ids.push(DESIGN_FILES_TAB);
+    ids.push(CANVAS_RUN_TAB);
     if (showQuestionsTab) ids.push(QUESTIONS_TAB);
     for (const entry of orderedWorkspaceTabs) {
       ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
@@ -1859,6 +1892,21 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{t('workspace.designFiles')}</span>
           </button>
+          <button
+            type="button"
+            className={`ws-tab canvas-run-tab ${activeTab === CANVAS_RUN_TAB ? 'active' : ''}`}
+            role="tab"
+            aria-selected={activeTab === CANVAS_RUN_TAB}
+            tabIndex={0}
+            data-testid="canvas-run-tab"
+            onClick={() => setActiveTab(CANVAS_RUN_TAB)}
+            title="Canvas Run"
+          >
+            <span className="tab-icon" aria-hidden>
+              <Icon name="orbit" size={13} />
+            </span>
+            <span className="ws-tab-label">Canvas Run</span>
+          </button>
           {showQuestionsTab ? (
             <button
               type="button"
@@ -2086,7 +2134,9 @@ export function FileWorkspace({
             />
           </div>
         ))}
-        {activeTab === QUESTIONS_TAB ? (
+        {activeTab === CANVAS_RUN_TAB ? (
+          <CanvasRunPanel projectId={projectId} skills={skills} />
+        ) : activeTab === QUESTIONS_TAB ? (
           <QuestionsPanel
             key={questionFormKey ?? undefined}
             projectId={projectId}
