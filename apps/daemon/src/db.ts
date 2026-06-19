@@ -238,6 +238,33 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
       ON routine_runs(routine_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS builder_approvals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      run_id TEXT,
+      process_id TEXT,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL,
+      requested_by TEXT NOT NULL,
+      requested_at INTEGER NOT NULL,
+      resolved_at INTEGER,
+      resolved_by TEXT,
+      expires_at INTEGER,
+      policy_json TEXT,
+      subject_json TEXT,
+      metadata_json TEXT,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_builder_approvals_project
+      ON builder_approvals(project_id, requested_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_builder_approvals_project_run
+      ON builder_approvals(project_id, run_id, requested_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_builder_approvals_status
+      ON builder_approvals(status, requested_at DESC);
   `);
   // Forward-compatible column add for databases created before metadata_json.
   // SQLite has no IF NOT EXISTS for ALTER, so we check pragma_table_info.
@@ -1953,6 +1980,140 @@ function normalizeRoutineRun(row: DbRow) {
     error: row.error ?? null,
     errorCode: row.errorCode ?? null,
   };
+}
+
+// ---------- builder approvals ----------
+
+const BUILDER_APPROVAL_COLS = `id,
+  project_id AS projectId,
+  run_id AS runId,
+  process_id AS processId,
+  kind,
+  title,
+  description,
+  status,
+  requested_by AS requestedBy,
+  requested_at AS requestedAt,
+  resolved_at AS resolvedAt,
+  resolved_by AS resolvedBy,
+  expires_at AS expiresAt,
+  policy_json AS policyJson,
+  subject_json AS subjectJson,
+  metadata_json AS metadataJson`;
+
+function msFromApprovalTimestamp(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeBuilderApproval(row: DbRow) {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    ...(row.runId ? { runId: row.runId } : {}),
+    ...(row.processId ? { processId: row.processId } : {}),
+    kind: row.kind,
+    title: row.title,
+    ...(row.description ? { description: row.description } : {}),
+    status: row.status,
+    requestedBy: row.requestedBy,
+    requestedAt: new Date(Number(row.requestedAt)).toISOString(),
+    resolvedAt: row.resolvedAt == null ? null : new Date(Number(row.resolvedAt)).toISOString(),
+    resolvedBy: row.resolvedBy ?? null,
+    expiresAt: row.expiresAt == null ? null : new Date(Number(row.expiresAt)).toISOString(),
+    ...(parseJsonOrUndef(row.policyJson) ? { policy: parseJsonOrUndef(row.policyJson) } : {}),
+    ...(parseJsonOrUndef(row.subjectJson) ? { subject: parseJsonOrUndef(row.subjectJson) } : {}),
+    ...(parseJsonOrUndef(row.metadataJson) ? { metadata: parseJsonOrUndef(row.metadataJson) } : {}),
+  };
+}
+
+export function listBuilderApprovals(
+  db: SqliteDb,
+  input: { projectId: string; runId?: string | null },
+) {
+  const runId = typeof input.runId === 'string' && input.runId.trim()
+    ? input.runId.trim()
+    : null;
+  const query = runId
+    ? {
+        sql: `SELECT ${BUILDER_APPROVAL_COLS}
+                FROM builder_approvals
+               WHERE project_id = ? AND run_id = ?
+               ORDER BY requested_at DESC`,
+        params: [input.projectId, runId],
+      }
+    : {
+        sql: `SELECT ${BUILDER_APPROVAL_COLS}
+                FROM builder_approvals
+               WHERE project_id = ?
+               ORDER BY requested_at DESC`,
+        params: [input.projectId],
+      };
+  return (db.prepare(query.sql).all(...query.params) as DbRow[])
+    .map(normalizeBuilderApproval);
+}
+
+export function getBuilderApproval(db: SqliteDb, id: string) {
+  const r = db
+    .prepare(`SELECT ${BUILDER_APPROVAL_COLS} FROM builder_approvals WHERE id = ?`)
+    .get(id) as DbRow | undefined;
+  return r ? normalizeBuilderApproval(r) : null;
+}
+
+export function insertBuilderApproval(db: SqliteDb, approval: DbRow) {
+  const requestedAt = msFromApprovalTimestamp(approval.requestedAt) ?? Date.now();
+  const resolvedAt = msFromApprovalTimestamp(approval.resolvedAt);
+  const expiresAt = msFromApprovalTimestamp(approval.expiresAt);
+  db.prepare(
+    `INSERT INTO builder_approvals
+       (id, project_id, run_id, process_id, kind, title, description, status,
+        requested_by, requested_at, resolved_at, resolved_by, expires_at,
+        policy_json, subject_json, metadata_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    approval.id,
+    approval.projectId,
+    approval.runId ?? null,
+    approval.processId ?? null,
+    approval.kind,
+    approval.title,
+    approval.description ?? null,
+    approval.status ?? 'requested',
+    approval.requestedBy ?? 'agent',
+    requestedAt,
+    resolvedAt,
+    approval.resolvedBy ?? null,
+    expiresAt,
+    approval.policy == null ? null : JSON.stringify(approval.policy),
+    approval.subject == null ? null : JSON.stringify(approval.subject),
+    approval.metadata == null ? null : JSON.stringify(approval.metadata),
+  );
+  return getBuilderApproval(db, approval.id);
+}
+
+export function resolveBuilderApproval(
+  db: SqliteDb,
+  id: string,
+  input: { resolution: string; resolvedBy?: string | null; resolvedAt?: number },
+) {
+  const existing = getBuilderApproval(db, id);
+  if (!existing) return null;
+  const resolvedAt = input.resolvedAt ?? Date.now();
+  db.prepare(
+    `UPDATE builder_approvals
+        SET status = ?, resolved_at = ?, resolved_by = ?
+      WHERE id = ?`,
+  ).run(
+    input.resolution,
+    resolvedAt,
+    input.resolvedBy ?? null,
+    id,
+  );
+  return getBuilderApproval(db, id);
 }
 
 // ---------- tabs ----------

@@ -210,7 +210,7 @@ const AUTOMATION_STRING_FLAGS = new Set([
 const AUTOMATION_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'disabled', 'enabled',
 ]);
-const RUN_LEDGER_STRING_FLAGS = new Set(['daemon-url', 'project', 'limit']);
+const RUN_LEDGER_STRING_FLAGS = new Set(['daemon-url', 'project', 'limit', 'run', 'resolution', 'resolved-by']);
 const RUN_LEDGER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
@@ -8102,8 +8102,23 @@ function printRunLedgerHelp() {
       List normalized Builder events for a run.
 
   od run-ledger approvals --project <projectId> [--json]
-      List approval records for a project. Currently empty until approval
-      persistence lands.
+      List approval records for a project.
+
+  od run-ledger approvals --project <projectId> --run <runId> [--json]
+      List approval records scoped to one run.
+
+  od run-ledger approval <approvalId> --project <projectId> [--json]
+      Show one approval record.
+
+  od run-ledger resolve-approval <approvalId> --project <projectId>
+                       --resolution approved|rejected [--resolved-by <id>] [--json]
+      Resolve an approval without performing external side effects.
+
+  od run-ledger approve <approvalId> --project <projectId> [--resolved-by <id>] [--json]
+      Mark an approval as approved. Placeholder action only.
+
+  od run-ledger reject <approvalId> --project <projectId> [--resolved-by <id>] [--json]
+      Mark an approval as rejected. Placeholder action only.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -8151,10 +8166,10 @@ async function runRunLedger(args) {
   const sub = args[0];
   const parts = positionalArgs(args.slice(1));
   const projectPath = `/api/projects/${encodeURIComponent(projectId)}/builder`;
-  const requestJson = async (path) => {
+  const requestJson = async (path, init = undefined) => {
     let resp;
     try {
-      resp = await fetch(`${base}${path}`);
+      resp = await fetch(`${base}${path}`, init);
     } catch (err) {
       surfaceFetchError(err, base);
       process.exit(3);
@@ -8239,10 +8254,21 @@ async function runRunLedger(args) {
       return;
     }
     case 'approvals': {
-      const data = await requestJson(`${projectPath}/approvals`);
+      const runId = typeof flags.run === 'string' && flags.run.trim().length > 0
+        ? flags.run.trim()
+        : null;
+      const data = await requestJson(
+        runId
+          ? `${projectPath}/approvals?runId=${encodeURIComponent(runId)}`
+          : `${projectPath}/approvals`,
+      );
       if (flags.json) return writeJson(data);
       const approvals = data.approvals ?? [];
-      if (approvals.length === 0) return console.log(`No approvals for ${projectId}.`);
+      if (approvals.length === 0) {
+        return console.log(runId
+          ? `No approvals for ${projectId} run ${runId}.`
+          : `No approvals for ${projectId}.`);
+      }
       console.log('# approvalId\tstatus\tkind\trunId\ttitle');
       for (const approval of approvals) {
         console.log([
@@ -8253,6 +8279,66 @@ async function runRunLedger(args) {
           approval.title,
         ].join('\t'));
       }
+      return;
+    }
+    case 'approval': {
+      const approvalId = parts[0];
+      if (!approvalId) {
+        console.error('Usage: od run-ledger approval <approvalId> --project <projectId>');
+        process.exit(2);
+      }
+      const data = await requestJson(`${projectPath}/approvals/${encodeURIComponent(approvalId)}`);
+      return writeJson(flags.json ? data : (data.approval ?? data));
+    }
+    case 'resolve-approval': {
+      const approvalId = parts[0];
+      if (!approvalId) {
+        console.error('Usage: od run-ledger resolve-approval <approvalId> --project <projectId> --resolution approved|rejected');
+        process.exit(2);
+      }
+      const resolution = typeof flags.resolution === 'string' ? flags.resolution.trim() : '';
+      if (resolution !== 'approved' && resolution !== 'rejected') {
+        console.error('--resolution must be approved or rejected');
+        process.exit(2);
+      }
+      const data = await requestJson(
+        `${projectPath}/approvals/${encodeURIComponent(approvalId)}/resolve`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            resolution,
+            ...(typeof flags['resolved-by'] === 'string' && flags['resolved-by'].trim()
+              ? { resolvedBy: flags['resolved-by'].trim() }
+              : {}),
+          }),
+        },
+      );
+      if (flags.json) return writeJson(data);
+      console.log(`${data.approval?.id ?? approvalId}\t${data.approval?.status ?? resolution}`);
+      return;
+    }
+    case 'approve':
+    case 'reject': {
+      const approvalId = parts[0];
+      if (!approvalId) {
+        console.error(`Usage: od run-ledger ${sub} <approvalId> --project <projectId>`);
+        process.exit(2);
+      }
+      const data = await requestJson(
+        `${projectPath}/approvals/${encodeURIComponent(approvalId)}/${sub}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...(typeof flags['resolved-by'] === 'string' && flags['resolved-by'].trim()
+              ? { resolvedBy: flags['resolved-by'].trim() }
+              : {}),
+          }),
+        },
+      );
+      if (flags.json) return writeJson(data);
+      console.log(`${data.approval?.id ?? approvalId}\t${data.approval?.status ?? sub}`);
       return;
     }
     default:

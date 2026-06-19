@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import type {
   Approval,
+  ApprovalResolution,
   BuilderRun,
   BuilderRunEvent,
   BuilderRunStatus,
@@ -9,11 +10,14 @@ import type {
   HarnessProcessStatus,
 } from '@open-design/contracts';
 import {
+  getBuilderApproval,
   getProject,
   getRoutine,
   getRoutineRun,
+  listBuilderApprovals,
   listRoutineRuns,
   listRoutines,
+  resolveBuilderApproval,
 } from '../db.js';
 import type { RouteDeps } from '../server-context.js';
 import { routineDbRowToContract, type RoutineRoutesService } from './routine.js';
@@ -59,8 +63,12 @@ function mapRoutineRunStatus(status: string): BuilderRunStatus {
 function processStatusForRoutine(
   routine: RoutineRow,
   latestRun: RoutineRunRow | null,
+  approvals: Approval[] = [],
 ): HarnessProcessStatus {
   if (!routine.enabled) return 'disabled';
+  if (approvals.some((approval) => approval.status === 'requested')) {
+    return 'waiting_for_approval';
+  }
   if (!latestRun) return 'sleeping';
   return mapRoutineRunStatus(latestRun.status);
 }
@@ -97,11 +105,16 @@ function routinesForProject(db: unknown, projectId: string): RoutineRow[] {
   ));
 }
 
-function routineToProcess(
+function approvalsForRun(db: unknown, projectId: string, runId: string): Approval[] {
+  return listBuilderApprovals(db as any, { projectId, runId }) as Approval[];
+}
+
+function routineToProcessWithApprovals(
   routine: RoutineRow,
   projectId: string,
   latestRun: RoutineRunRow | null,
   routineService: RoutineRoutesService,
+  approvals: Approval[],
 ): HarnessProcess {
   const contract = routineDbRowToContract(routine, latestRun);
   const nextRunAt = routineService?.nextRunAt(routine.id)?.toISOString() ?? null;
@@ -112,7 +125,7 @@ function routineToProcess(
     projectId,
     skillIds: routineSkillIds(routine),
     agentId: contract.agentId ?? 'default-agent',
-    status: processStatusForRoutine(routine, latestRun),
+    status: processStatusForRoutine(routine, latestRun, approvals),
     trigger: {
       kind: latestRun ? triggerKind(latestRun.trigger) : 'scheduled',
       source: 'routine',
@@ -140,21 +153,32 @@ function routineToProcess(
   };
 }
 
-function routineRunToBuilderRun(routine: RoutineRow, run: RoutineRunRow): BuilderRun {
+function runStatusWithApprovals(run: RoutineRunRow, approvals: Approval[]): BuilderRunStatus {
+  if (approvals.some((approval) => approval.status === 'requested')) {
+    return 'waiting_for_approval';
+  }
+  return mapRoutineRunStatus(run.status);
+}
+
+function routineRunToBuilderRun(
+  routine: RoutineRow,
+  run: RoutineRunRow,
+  approvals: Approval[] = [],
+): BuilderRun {
   return {
     id: run.id,
     projectId: run.projectId,
     processId: routineProcessId(routine.id),
     skillIds: routineSkillIds(routine),
     agentId: routine.agentId ?? 'default-agent',
-    status: mapRoutineRunStatus(run.status),
+    status: runStatusWithApprovals(run, approvals),
     origin: triggerKind(run.trigger),
     autonomy: 'stage',
     prompt: routine.prompt,
     startedAt: new Date(run.startedAt).toISOString(),
     completedAt: iso(run.completedAt) ?? null,
     lastEventId: `event:${run.id}:terminal`,
-    approvalIds: [],
+    approvalIds: approvals.map((approval) => approval.id),
     outputEntityIds: [],
     error: run.error
       ? {
@@ -174,7 +198,50 @@ function routineRunToBuilderRun(routine: RoutineRow, run: RoutineRunRow): Builde
   };
 }
 
-function routineRunEvents(routine: RoutineRow, run: RoutineRunRow): BuilderRunEvent[] {
+function approvalEvents(
+  approvals: Approval[],
+  base: { runId: string; projectId: string; timestamp: string },
+  startSequence: number,
+): BuilderRunEvent[] {
+  let sequence = startSequence;
+  const events: BuilderRunEvent[] = [];
+  const orderedApprovals = [...approvals].sort((a, b) =>
+    a.requestedAt.localeCompare(b.requestedAt),
+  );
+  for (const approval of orderedApprovals) {
+    events.push({
+      ...base,
+      id: `event:${base.runId}:approval:${approval.id}:requested`,
+      type: 'approval.requested',
+      sequence: sequence++,
+      source: 'builder',
+      timestamp: approval.requestedAt,
+      approvalId: approval.id,
+      approvalKind: approval.kind,
+      title: approval.title,
+    });
+    if (approval.status !== 'requested' && approval.resolvedAt) {
+      events.push({
+        ...base,
+        id: `event:${base.runId}:approval:${approval.id}:resolved`,
+        type: 'approval.resolved',
+        sequence: sequence++,
+        source: 'builder',
+        timestamp: approval.resolvedAt,
+        approvalId: approval.id,
+        resolution: approval.status as ApprovalResolution,
+        ...(approval.resolvedBy ? { resolvedBy: approval.resolvedBy } : {}),
+      });
+    }
+  }
+  return events;
+}
+
+function routineRunEvents(
+  routine: RoutineRow,
+  run: RoutineRunRow,
+  approvals: Approval[] = [],
+): BuilderRunEvent[] {
   const skillIds = routineSkillIds(routine);
   const base = {
     runId: run.id,
@@ -213,7 +280,25 @@ function routineRunEvents(routine: RoutineRow, run: RoutineRunRow): BuilderRunEv
     source: 'harness',
     workflowId: routine.id,
   });
-  if (run.status === 'running' || run.status === 'queued') {
+  events.push(...approvalEvents(approvals, base, sequence));
+  sequence = events.length + 1;
+  if (approvals.some((approval) => approval.status === 'requested')) {
+    events.push({
+      ...base,
+      id: `event:${run.id}:waiting-for-approval`,
+      type: 'process.heartbeat',
+      sequence: sequence++,
+      source: 'builder',
+      timestamp: approvals
+        .filter((approval) => approval.status === 'requested')
+        .map((approval) => approval.requestedAt)
+        .sort()
+        .at(-1) ?? base.timestamp,
+      processId: routineProcessId(routine.id),
+      status: 'waiting_for_approval',
+      summary: 'Waiting for approval.',
+    });
+  } else if (run.status === 'running' || run.status === 'queued') {
     events.push({
       ...base,
       id: `event:${run.id}:heartbeat`,
@@ -254,6 +339,22 @@ function routineRunEvents(routine: RoutineRow, run: RoutineRunRow): BuilderRunEv
   return events;
 }
 
+const APPROVAL_RESOLUTIONS = new Set(['approved', 'rejected', 'cancelled', 'expired']);
+
+function parseApprovalResolution(value: unknown): ApprovalResolution | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return APPROVAL_RESOLUTIONS.has(normalized) ? normalized as ApprovalResolution : null;
+}
+
+function approvalBelongsToProject(approval: Approval | null, projectId: string): approval is Approval {
+  return Boolean(approval && approval.projectId === projectId);
+}
+
+function approvalBelongsToRun(approval: Approval | null, projectId: string, runId: string): approval is Approval {
+  return approvalBelongsToProject(approval, projectId) && approval.runId === runId;
+}
+
 function limitFromQuery(value: unknown): number {
   const n = typeof value === 'string' ? Number(value) : DEFAULT_LIMIT;
   return Math.min(100, Math.max(1, Number.isFinite(n) ? n : DEFAULT_LIMIT));
@@ -275,7 +376,8 @@ export function registerBuilderRunLedgerRoutes(
     const processes = routinesForProject(db, req.params.projectId).map((routine) => {
       const latest = listRoutineRuns(db, routine.id, 100)
         .find((run) => run.projectId === req.params.projectId) ?? null;
-      return routineToProcess(routine, req.params.projectId, latest, routineService);
+      const approvals = latest ? approvalsForRun(db, req.params.projectId, latest.id) : [];
+      return routineToProcessWithApprovals(routine, req.params.projectId, latest, routineService, approvals);
     });
     res.json({ processes });
   });
@@ -289,7 +391,10 @@ export function registerBuilderRunLedgerRoutes(
     if (routine.projectId !== req.params.projectId && !latest) {
       return res.status(404).json({ error: 'process not found' });
     }
-    res.json({ process: routineToProcess(routine, req.params.projectId, latest, routineService) });
+    const approvals = latest ? approvalsForRun(db, req.params.projectId, latest.id) : [];
+    res.json({
+      process: routineToProcessWithApprovals(routine, req.params.projectId, latest, routineService, approvals),
+    });
   });
 
   app.get('/api/projects/:projectId/builder/runs', (req, res) => {
@@ -297,7 +402,8 @@ export function registerBuilderRunLedgerRoutes(
     const runs = projectRoutineRuns(db, req.params.projectId, limitFromQuery(req.query.limit))
       .map((run) => {
         const routine = getRoutine(db, run.routineId);
-        return routine ? routineRunToBuilderRun(routine, run) : null;
+        const approvals = approvalsForRun(db, req.params.projectId, run.id);
+        return routine ? routineRunToBuilderRun(routine, run, approvals) : null;
       })
       .filter(Boolean);
     res.json({ runs });
@@ -310,7 +416,8 @@ export function registerBuilderRunLedgerRoutes(
     if (!run || !routine || run.projectId !== req.params.projectId) {
       return res.status(404).json({ error: 'run not found' });
     }
-    res.json({ run: routineRunToBuilderRun(routine, run) });
+    const approvals = approvalsForRun(db, req.params.projectId, run.id);
+    res.json({ run: routineRunToBuilderRun(routine, run, approvals) });
   });
 
   app.get('/api/projects/:projectId/builder/runs/:runId/events', (req, res) => {
@@ -320,22 +427,92 @@ export function registerBuilderRunLedgerRoutes(
     if (!run || !routine || run.projectId !== req.params.projectId) {
       return res.status(404).json({ error: 'run not found' });
     }
-    res.json({ events: routineRunEvents(routine, run) });
+    const approvals = approvalsForRun(db, req.params.projectId, run.id);
+    res.json({ events: routineRunEvents(routine, run, approvals) });
+  });
+
+  app.get('/api/projects/:projectId/builder/runs/:runId/approvals', (req, res) => {
+    if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
+    const run = getRoutineRun(db, req.params.runId);
+    if (!run || run.projectId !== req.params.projectId) {
+      return res.status(404).json({ error: 'run not found' });
+    }
+    res.json({ approvals: approvalsForRun(db, req.params.projectId, req.params.runId) });
   });
 
   app.get('/api/projects/:projectId/builder/approvals', (req, res) => {
     if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
-    const approvals: Approval[] = [];
-    res.json({ approvals });
+    const runId = typeof req.query.runId === 'string' ? req.query.runId : null;
+    res.json({ approvals: listBuilderApprovals(db, { projectId: req.params.projectId, runId }) });
   });
 
   app.get('/api/projects/:projectId/builder/approvals/:approvalId', (req, res) => {
     if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
-    res.status(404).json({ error: 'approval not found' });
+    const approval = getBuilderApproval(db, req.params.approvalId) as Approval | null;
+    if (!approvalBelongsToProject(approval, req.params.projectId)) {
+      return res.status(404).json({ error: 'approval not found' });
+    }
+    res.json({ approval });
+  });
+
+  app.get('/api/projects/:projectId/builder/runs/:runId/approvals/:approvalId', (req, res) => {
+    if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
+    const approval = getBuilderApproval(db, req.params.approvalId) as Approval | null;
+    if (!approvalBelongsToRun(approval, req.params.projectId, req.params.runId)) {
+      return res.status(404).json({ error: 'approval not found' });
+    }
+    res.json({ approval });
   });
 
   app.post('/api/projects/:projectId/builder/approvals/:approvalId/resolve', (req, res) => {
     if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
-    res.status(404).json({ error: 'approval not found' });
+    const approval = getBuilderApproval(db, req.params.approvalId) as Approval | null;
+    if (!approvalBelongsToProject(approval, req.params.projectId)) {
+      return res.status(404).json({ error: 'approval not found' });
+    }
+    if (approval.status !== 'requested') {
+      return res.status(409).json({ error: 'approval already resolved' });
+    }
+    const resolution = parseApprovalResolution(req.body?.resolution);
+    if (!resolution || resolution === 'cancelled' || resolution === 'expired') {
+      return res.status(400).json({ error: 'resolution must be approved or rejected' });
+    }
+    const resolved = resolveBuilderApproval(db, req.params.approvalId, {
+      resolution,
+      resolvedBy: typeof req.body?.resolvedBy === 'string' ? req.body.resolvedBy : null,
+    });
+    res.json({ approval: resolved });
+  });
+
+  app.post('/api/projects/:projectId/builder/approvals/:approvalId/approve', (req, res) => {
+    if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
+    const approval = getBuilderApproval(db, req.params.approvalId) as Approval | null;
+    if (!approvalBelongsToProject(approval, req.params.projectId)) {
+      return res.status(404).json({ error: 'approval not found' });
+    }
+    if (approval.status !== 'requested') {
+      return res.status(409).json({ error: 'approval already resolved' });
+    }
+    const resolved = resolveBuilderApproval(db, req.params.approvalId, {
+      resolution: 'approved',
+      resolvedBy: typeof req.body?.resolvedBy === 'string' ? req.body.resolvedBy : null,
+    });
+    res.json({ approval: resolved });
+  });
+
+  app.post('/api/projects/:projectId/builder/approvals/:approvalId/reject', (req, res) => {
+    if (!getProject(db, req.params.projectId)) return sendMissingProject(res);
+    const approval = getBuilderApproval(db, req.params.approvalId) as Approval | null;
+    if (!approvalBelongsToProject(approval, req.params.projectId)) {
+      return res.status(404).json({ error: 'approval not found' });
+    }
+    if (approval.status !== 'requested') {
+      return res.status(409).json({ error: 'approval already resolved' });
+    }
+    const resolved = resolveBuilderApproval(db, req.params.approvalId, {
+      resolution: 'rejected',
+      resolvedBy: typeof req.body?.resolvedBy === 'string' ? req.body.resolvedBy : null,
+    });
+    res.json({ approval: resolved });
   });
 }
