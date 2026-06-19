@@ -493,6 +493,116 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('persists a send-path run-event cursor when a live artifact event consumes it', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let onRunCreated: ((runId: string) => void) | null = null;
+    let onRunEventId: ((eventId: string) => void) | null = null;
+    let onAgentEvent: ((ev: unknown) => void) | null = null;
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        handlers: { onAgentEvent: (ev: unknown) => void };
+        onRunCreated?: (runId: string) => void;
+        onRunEventId?: (eventId: string) => void;
+      }) => {
+        onRunCreated = options.onRunCreated ?? null;
+        onRunEventId = options.onRunEventId ?? null;
+        onAgentEvent = options.handlers.onAgentEvent;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(1));
+    const chatPaneProps = chatPaneMock.render.mock.calls.at(-1)?.[0] as {
+      onSend: (
+        prompt: string,
+        attachments: [],
+        commentAttachments: [],
+      ) => Promise<boolean> | boolean;
+    };
+
+    await act(async () => {
+      await chatPaneProps.onSend('make a live preview', [], []);
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(onRunCreated).not.toBeNull();
+    expect(onRunEventId).not.toBeNull();
+    expect(onAgentEvent).not.toBeNull();
+    await act(async () => {
+      onRunCreated?.('run-1');
+    });
+    const liveArtifactCases = [
+      {
+        eventId: '8',
+        event: {
+          kind: 'live_artifact',
+          action: 'created',
+          projectId: 'project-1',
+          artifactId: 'artifact-1',
+          title: 'Preview',
+        },
+        matches: (message: ChatMessage) =>
+          message.events?.some(
+            (ev) =>
+              ev.kind === 'live_artifact' &&
+              ev.artifactId === 'artifact-1' &&
+              ev.action === 'created',
+          ),
+      },
+      {
+        eventId: '9',
+        event: {
+          kind: 'live_artifact_refresh',
+          phase: 'started',
+          projectId: 'project-1',
+          artifactId: 'artifact-1',
+          refreshId: 'refresh-1',
+          title: 'Preview',
+        },
+        matches: (message: ChatMessage) =>
+          message.events?.some(
+            (ev) =>
+              ev.kind === 'live_artifact_refresh' &&
+              ev.artifactId === 'artifact-1' &&
+              ev.refreshId === 'refresh-1',
+          ),
+      },
+    ];
+
+    for (const { eventId, event, matches } of liveArtifactCases) {
+      saveMessage.mockClear();
+
+      await act(async () => {
+        onRunEventId?.(eventId);
+        onAgentEvent?.(event);
+      });
+
+      await waitFor(() => {
+        const saved = saveMessage.mock.calls
+          .map((call) => call[2] as ChatMessage)
+          .find((m) =>
+            m?.role === 'assistant' &&
+            m.runId === 'run-1' &&
+            m.lastRunEventId === eventId &&
+            matches(m)
+          );
+        expect(saved).toBeTruthy();
+      });
+    }
+  });
+
   it('reaches succeeded state via the SSE end event even when only the terminal event replays', async () => {
     const startedAt = Date.now();
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);

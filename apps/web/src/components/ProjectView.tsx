@@ -3324,6 +3324,7 @@ export function ProjectView({
       };
       const pushEvent = (ev: AgentEvent) => {
         textBuffer.flush();
+        const consumedRunEventId = runEventIdBuffer.hasPending();
         updateAssistant(withPendingRunEventId((prev) => ({
           ...prev,
           events: [...(prev.events ?? []), ev],
@@ -3334,15 +3335,16 @@ export function ProjectView({
             if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
           });
           onProjectsRefresh();
+          if (consumedRunEventId) persistAssistantSoon();
           return;
         }
         if (ev.kind === 'live_artifact_refresh') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
           void refreshLiveArtifacts();
           onProjectsRefresh();
+          if (consumedRunEventId) persistAssistantSoon();
           return;
         }
-        persistAssistantSoon();
         persistAssistantSoon();
         // Track Write tool invocations so we can auto-open the destination
         // file the moment the agent finishes writing it. The file-creating
