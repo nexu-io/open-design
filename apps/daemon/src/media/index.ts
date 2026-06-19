@@ -35,6 +35,10 @@
 //                              (Gemini Flash, Flux, Recraft) and async
 //                              /videos submit + poll for video
 //                              (Seedance 2.0, Veo 3.1, Wan 2.7)
+//   * provider 'minimax'    → MiniMax: synchronous /v1/image_generation
+//                              for image-01 (T2I + I2I via subject_reference)
+//                              on api.minimax.io, plus TTS via the legacy
+//                              api.minimaxi.chat host
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
@@ -2903,15 +2907,15 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   }
   const baseUrl = (credentials.baseUrl || MINIMAX_IMAGE_DEFAULT_BASE_URL).replace(/\/$/, '');
   // Precedence: credentials.model (user override in stored config) ->
-  // ctx.wireModel (alias-aware from OD_MEDIA_MODEL_ALIASES) -> catalog map
-  // for the vendor-prefixed id `minimax-image-01` -> bare ctx.model as a
-  // last-ditch default. Mirrors the convention used by the nanobanana,
-  // openrouter, imagerouter, and custom-image renderers in this file.
+  // ctx.wireModel (alias-aware from OD_MEDIA_MODEL_ALIASES) ->
+  // MINIMAX_IMAGE_MODEL_MAP (resolves the vendor-prefixed catalog id
+  // `minimax-image-01` to MiniMax's wire name `image-01`). The map is
+  // keyed off ctx.wireModel, not ctx.model, so an aliased wire name
+  // passes through unchanged when it isn't in the map.
   const wireModel = (
     credentials.model
+    || MINIMAX_IMAGE_MODEL_MAP[ctx.wireModel]
     || ctx.wireModel
-    || MINIMAX_IMAGE_MODEL_MAP[ctx.model]
-    || ctx.model
   ).trim();
   const aspectRatio = minimaxImageAspectFor(ctx.aspect);
   const body: Record<string, unknown> = {
