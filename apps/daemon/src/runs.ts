@@ -86,6 +86,7 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
     };
@@ -315,10 +316,24 @@ export function createChatRunService({
     return statusBody(run);
   };
 
+  const closeRunStdin = (run) => {
+    if (!run?.stdinOpen) return;
+    const stdin = run.child?.stdin;
+    if (stdin && !stdin.destroyed) {
+      try {
+        stdin.end();
+      } catch {
+        // Best-effort: cancellation still falls back to process signals below.
+      }
+    }
+    run.stdinOpen = false;
+  };
+
   const cancel = async (run) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return statusBody(run);
     run.cancelRequested = true;
     run.updatedAt = Date.now();
+    closeRunStdin(run);
     if (!run.child) {
       finish(run, 'canceled', null, 'SIGTERM');
       return statusBody(run);
@@ -360,6 +375,7 @@ export function createChatRunService({
     await Promise.all(activeRuns.map(async (run) => {
       run.cancelRequested = true;
       run.updatedAt = Date.now();
+      closeRunStdin(run);
       if (run.acpSession?.abort) {
         try {
           run.acpSession.abort();
