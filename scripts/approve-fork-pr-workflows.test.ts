@@ -116,7 +116,7 @@ test("isPendingApprovalRun rejects runs outside the allowlist or without action_
         status: "completed",
         conclusion: "action_required",
         head_sha: "734076155c44e569304856590019cea54506fdab",
-        path: ".github/workflows/comment.yml@main",
+        path: ".github/workflows/comment.atom.yml@main",
         pull_requests: [],
       },
       pull,

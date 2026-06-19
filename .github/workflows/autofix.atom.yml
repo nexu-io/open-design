@@ -1,4 +1,4 @@
-name: autofix
+name: autofix.atom
 
 on:
   workflow_run:

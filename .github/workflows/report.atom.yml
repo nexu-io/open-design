@@ -1,4 +1,4 @@
-name: report
+name: report.atom
 
 on:
   workflow_run:

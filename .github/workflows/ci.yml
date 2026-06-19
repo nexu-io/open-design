@@ -373,10 +373,10 @@ jobs:
           CI regenerated a hash-only patch for `nix/pnpm-deps.nix` and uploaded
           it through the shared handoff contract.
 
-          - same-repo PRs: `autofix.yml` will try to push the patch back to the
+          - same-repo PRs: `autofix.atom.yml` will try to push the patch back to the
             PR branch automatically and will publish patch guidance only if the
             trusted writer cannot complete the autofix;
-          - fork PRs: `comment.yml` will publish patch guidance on the PR.
+          - fork PRs: `comment.atom.yml` will publish patch guidance on the PR.
           EOF
               ;;
             no-change)
@@ -393,7 +393,7 @@ jobs:
           ## Nix hash refresh failed
 
           `nix flake check` failed and the helper could not generate a hash-only
-          patch. `comment.yml` will publish the generated guidance when a
+          patch. `comment.atom.yml` will publish the generated guidance when a
           comment handoff is available.
           EOF
               ;;

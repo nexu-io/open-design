@@ -143,9 +143,9 @@ Read `.github/AGENTS.md` before editing `.github/workflows/`, `.github/scripts/`
 CI-related GitHub automation uses a two-layer architecture:
 
 - Business layer workflows own product or validation decisions. `ci.yml` is the main low-privilege PR, merge-queue, and manual validation workflow. It detects scope, runs checks, and produces typed handoff artifacts.
-- Atomic capability workflows own reusable trusted operations. `comment.yml` publishes pure text PR comments, `autofix.yml` applies same-repository patches, and `report.yml` materializes advanced comments that need trusted dependencies, secrets, or report generation before upsert.
+- Atomic capability workflows own reusable trusted operations. `comment.atom.yml` publishes pure text PR comments, `autofix.atom.yml` applies same-repository patches, and `report.atom.yml` materializes advanced comments that need trusted dependencies, secrets, or report generation before upsert.
 
-Do not add a new business-named follow-on workflow such as `foo-comment.yml` or `bar-autofix.yml` without first trying to express the flow as a `ci.yml` producer plus the existing `comment`, `autofix`, or `report` capability. Keep artifact naming, storage layout, and parser behavior centralized in `.github/scripts/handoff.py`; do not let individual workflows invent parallel handoff conventions.
+Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml` or `bar.autofix.atom.yml` without first trying to express the flow as a `ci.yml` producer plus the existing `comment`, `autofix`, or `report` capability. Keep artifact naming, storage layout, and parser behavior centralized in `.github/scripts/handoff.py`; do not let individual workflows invent parallel handoff conventions.
 
 ## Release channel model
 
