@@ -18,6 +18,7 @@ describe('minimax image generation', () => {
   const originalDataDir = process.env.OD_DATA_DIR;
   const originalMinimaxApiKey = process.env.OD_MINIMAX_API_KEY;
   const originalImageBaseUrl = process.env.OD_MINIMAX_IMAGE_BASE_URL;
+  const originalMediaModelAliases = process.env.OD_MEDIA_MODEL_ALIASES;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-minimax-image-'));
@@ -27,6 +28,7 @@ describe('minimax image generation', () => {
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
     delete process.env.OD_MINIMAX_IMAGE_BASE_URL;
+    delete process.env.OD_MEDIA_MODEL_ALIASES;
     process.env.OD_MINIMAX_API_KEY = 'minimax-test-key';
   });
 
@@ -51,6 +53,11 @@ describe('minimax image generation', () => {
       delete process.env.OD_MINIMAX_IMAGE_BASE_URL;
     } else {
       process.env.OD_MINIMAX_IMAGE_BASE_URL = originalImageBaseUrl;
+    }
+    if (originalMediaModelAliases == null) {
+      delete process.env.OD_MEDIA_MODEL_ALIASES;
+    } else {
+      process.env.OD_MEDIA_MODEL_ALIASES = originalMediaModelAliases;
     }
     await rm(root, { recursive: true, force: true });
   });
@@ -341,6 +348,111 @@ describe('minimax image generation', () => {
       surface: 'image',
       model: 'minimax-image-01',
       prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).resolves.toMatchObject({ providerId: 'minimax' });
+  });
+
+  it('throws a clear error when no MiniMax API key is configured', async () => {
+    // The renderer must reject the request before touching the network
+    // when credentials.apiKey is missing — otherwise the user gets a
+    // confusing 401 from MiniMax instead of the actionable "configure
+    // it in Settings" message that matches every other renderer.
+    delete process.env.OD_MINIMAX_API_KEY;
+    await writeConfig({ providers: { minimax: {} } });
+
+    // No fetch mock needed: the renderer must short-circuit before
+    // dispatching. If it doesn't, vi.fn would surface as unhandled
+    // and the test would still fail — both sides of the contract are
+    // anchored.
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).rejects.toThrow(/no MiniMax API key/);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('passes an aliased wireModel through unchanged when not in the catalog map', async () => {
+    // The map MINIMAX_IMAGE_MODEL_MAP is keyed off the catalog id, but
+    // ctx.wireModel may have been rewritten by OD_MEDIA_MODEL_ALIASES.
+    // When the alias is *not* in the map, the renderer must use the
+    // aliased name as-is rather than silently substituting the catalog
+    // map value or the bare catalog id. Anchors the alias passthrough
+    // contract so a future refactor that re-keys the map off ctx.model
+    // would fail this test instead of silently breaking aliases.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'minimax-image-01': 'image-01-pro',
+    });
+    await writeConfig({ providers: { minimax: {} } });
+
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.model).toBe('image-01-pro');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    });
+
+    expect(result.providerId).toBe('minimax');
+    // providerNote must surface the aliased wire name, not the catalog
+    // id — the FileViewer toolbar tells the truth about what was sent.
+    expect(result.providerNote).toContain('minimax/image-01-pro');
+  });
+
+  it('forwards aspects outside MEDIA_ASPECTS but inside MiniMax allowlist (21:9)', async () => {
+    // MEDIA_ASPECTS (apps/web/src/media/models.ts) is currently
+    // ['1:1','16:9','9:16','4:3','3:4']. The agent can still pass an
+    // arbitrary aspect string through the media API; the renderer must
+    // honor any value in MiniMax's wider allowlist (1:1, 16:9, 4:3, 3:2,
+    // 2:3, 3:4, 9:16, 21:9) rather than silently dropping it back to
+    // MiniMax's 1:1 default. Anchors the "21:9 reaches the wire"
+    // contract for any future UI that exposes wider aspect ratios.
+    await writeConfig({ providers: { minimax: {} } });
+
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.aspect_ratio).toBe('21:9');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      aspect: '21:9',
       output: 'minimax.png',
     })).resolves.toMatchObject({ providerId: 'minimax' });
   });

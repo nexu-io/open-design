@@ -2776,11 +2776,13 @@ const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
 } as Record<string, string>;
 
-// Image generation lives on a different host than the legacy TTS endpoint.
-// Renderer resolves baseUrl from credentials.baseUrl -> MINIMAX_IMAGE_DEFAULT_BASE_URL
-// -> legacy TTS constant. Keeping the two constants separate lets existing TTS
-// users keep their api.minimaxi.chat/v1 default while new image users get
-// api.minimax.io without manual configuration.
+// Image generation lives on a different host than the legacy TTS endpoint
+// (api.minimax.io vs api.minimaxi.chat). Keeping the two constants
+// separate lets existing TTS users keep their api.minimaxi.chat/v1
+// default while new image users get api.minimax.io without manual
+// configuration. The image renderer resolves baseUrl from
+// OD_MINIMAX_IMAGE_BASE_URL env -> this constant; credentials.baseUrl
+// is intentionally ignored for image (see renderMinimaxImage).
 const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
 
 // Map our generic catalogue id onto MiniMax's actual wire model name. Mirrors
@@ -2919,12 +2921,13 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   const baseUrl = (
     process.env.OD_MINIMAX_IMAGE_BASE_URL?.trim() || MINIMAX_IMAGE_DEFAULT_BASE_URL
   ).replace(/\/+$/, '');
-  // Precedence: credentials.model (user override in stored config) ->
-  // ctx.wireModel (alias-aware from OD_MEDIA_MODEL_ALIASES) ->
-  // MINIMAX_IMAGE_MODEL_MAP (resolves the vendor-prefixed catalog id
-  // `minimax-image-01` to MiniMax's wire name `image-01`). The map is
-  // keyed off ctx.wireModel, not ctx.model, so an aliased wire name
-  // passes through unchanged when it isn't in the map.
+  // Resolve the wire model. credentials.model wins if the user pinned a
+  // specific deployment name in Settings; otherwise we look up the
+  // ctx.wireModel in MINIMAX_IMAGE_MODEL_MAP (which translates our
+  // catalog id `minimax-image-01` to MiniMax's wire name `image-01`),
+  // falling back to ctx.wireModel itself. The map is keyed off
+  // ctx.wireModel so user aliases (OD_MEDIA_MODEL_ALIASES) pass through
+  // unchanged when they aren't in the map.
   const wireModel = (
     credentials.model
     || MINIMAX_IMAGE_MODEL_MAP[ctx.wireModel]
@@ -2943,7 +2946,7 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
   // I2I: when --image is supplied, pass it as subject_reference[0]. The
   // existing resolveProjectImage() helper already returns a base64 dataUrl
   // with a strict mime allowlist (png/jpg/jpeg/webp/gif, < 16MB).
-  if (ctx.imageRef) {
+  if (ctx.imageRef?.dataUrl) {
     body.subject_reference = [{
       type: 'character',
       image_file: ctx.imageRef.dataUrl,
@@ -2990,17 +2993,20 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
 }
 
 function minimaxImageAspectFor(aspect?: string): string | undefined {
-  // MiniMax supports 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9. We accept the
-  // user-supplied aspect if it's in the allowed subset that matches our
-  // MEDIA_ASPECTS list ('1:1', '16:9', '9:16', '4:3', '3:4'); for any other
-  // value (including undefined), we omit `aspect_ratio` from the body and
-  // let MiniMax use its default 1:1.
+  // MiniMax's full allowlist: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9.
+  // We accept any of these so the agent (or a future picker option) can
+  // request a wider aspect without silently falling back to 1:1.
+  // Anything outside this set is omitted from the body, letting MiniMax
+  // pick its own default rather than us round-tripping an unknown value.
   if (
     aspect === '1:1'
     || aspect === '16:9'
     || aspect === '9:16'
     || aspect === '4:3'
     || aspect === '3:4'
+    || aspect === '3:2'
+    || aspect === '2:3'
+    || aspect === '21:9'
   ) {
     return aspect;
   }
