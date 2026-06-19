@@ -200,7 +200,7 @@ async function probeMacBundle(name: string | readonly string[]): Promise<{ name:
 async function resolveEntry(entry: CatalogueEntry): Promise<{
   available: boolean;
   resolvedPath?: string;
-  launch?: { command: string; argsForDir: (resolvedDir: string) => string[]; cwdForDir?: (resolvedDir: string) => string };
+  launch?: { command: string; argsForDir: (resolvedDir: string) => string[]; cwdForDir?: (resolvedDir: string) => string; shell?: boolean };
 }> {
   if (entry.command) {
     const resolved = await probeCommandOnPath(entry.command);
@@ -224,6 +224,9 @@ async function resolveEntry(entry: CatalogueEntry): Promise<{
           argsForDir: () => [],
           // Best-effort: set cwd so Warp opens in the project directory.
           cwdForDir: (resolvedDir) => resolvedDir,
+          // shell:false so Node uses CreateProcess directly — cmd.exe mis-parses
+          // forward-slash exe paths (fix #4539).
+          shell: false,
         },
       };
     }
@@ -253,6 +256,8 @@ export interface HostToolLaunchPlan {
   args?: string[];
   /** Working directory for spawn; set when the tool has no dir CLI arg (e.g. Warp on Windows). */
   cwd?: string;
+  /** When false, bypass cmd.exe and use CreateProcess directly (win32 install-path entries). Unset for PATH/shim entries. */
+  shell?: boolean;
 }
 
 export async function resolveHostToolLaunchPlan(
@@ -275,6 +280,7 @@ export async function resolveHostToolLaunchPlan(
     command: probe.launch.command,
     args: probe.launch.argsForDir(resolvedDir),
     ...(cwd ? { cwd } : {}),
+    ...(probe.launch.shell !== undefined ? { shell: probe.launch.shell } : {}),
   };
 }
 
@@ -373,7 +379,7 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       const child = spawn(launchPlan.command, launchPlan.args, {
         detached: true,
         stdio: 'ignore',
-        shell: process.platform === 'win32',
+        shell: launchPlan.shell ?? (process.platform === 'win32'),
         ...(launchPlan.cwd ? { cwd: launchPlan.cwd } : {}),
       });
       child.on('error', () => {
