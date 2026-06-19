@@ -128,9 +128,6 @@ export const codexAgentDef = {
             '-c',
             'sandbox_workspace_write.network_access=true',
           ];
-      // Newer Codex builds honor permissions config over legacy sandbox
-      // flags; without this, Windows/WSL launches can stay read-only (#2834).
-      args.push('-c', 'default_permissions=":workspace"');
       if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
         args.push('--disable', 'plugins');
       }
