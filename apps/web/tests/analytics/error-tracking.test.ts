@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearExceptionTrackingContext,
   installErrorHandlers,
+  patchExceptionTrackingAppVersion,
   reportHandledException,
   setExceptionTrackingContext,
 } from '../../src/analytics/error-tracking';
@@ -240,6 +241,25 @@ describe('error-tracking', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     // Even after explicitly clearing — the buffer is bounded and harmless.
     clearExceptionTrackingContext();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('patchExceptionTrackingAppVersion updates appVersion on dispatched events', () => {
+    setExceptionTrackingContext({
+      apiKey: 'phc_test',
+      host: 'https://us.i.posthog.com',
+      distinctId: 'user-patch',
+      appVersion: '0.0.0',
+    });
+    patchExceptionTrackingAppVersion('1.2.3');
+    reportHandledException(new Error('patched'));
+    const body = lastFetchedBody();
+    expect((body.properties as Record<string, unknown>).app_version).toBe('1.2.3');
+  });
+
+  it('patchExceptionTrackingAppVersion is a no-op when no context is set', () => {
+    expect(() => patchExceptionTrackingAppVersion('1.2.3')).not.toThrow();
+    reportHandledException(new Error('no context'));
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
