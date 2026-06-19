@@ -7,12 +7,16 @@ import type {
   CanvasEntity,
   HarnessProcess,
 } from '@open-design/contracts';
-import { useEffect, useMemo, useState } from 'react';
+import { Button } from '@open-design/components';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  approveProjectBuilderApproval,
   getProjectBuilderApprovals,
   getProjectBuilderProcesses,
   getProjectBuilderRunEvents,
+  getProjectBuilderRunApprovals,
   getProjectBuilderRuns,
+  rejectProjectBuilderApproval,
 } from '../state/projects';
 import type { SkillSummary } from '../types';
 import styles from './CanvasRunPanel.module.css';
@@ -65,41 +69,75 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
     events: [],
     approvals: [],
   });
+  const [actionApprovalId, setActionApprovalId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const ledgerRequestRef = useRef(0);
+
+  const loadLedger = useCallback(async (options?: { showLoading?: boolean }) => {
+    const requestId = ledgerRequestRef.current + 1;
+    ledgerRequestRef.current = requestId;
+    if (options?.showLoading !== false) {
+      setLedger((current) => ({ ...current, loading: true }));
+    };
+    const [processesResponse, runsResponse, approvalsResponse] = await Promise.all([
+      getProjectBuilderProcesses(projectId),
+      getProjectBuilderRuns(projectId),
+      getProjectBuilderApprovals(projectId),
+    ]);
+    const runs = runsResponse?.runs ?? [];
+    const activeRunId = runs[0]?.id ?? null;
+    const [eventsResponse, runApprovalsResponse] = activeRunId
+      ? await Promise.all([
+        getProjectBuilderRunEvents(projectId, activeRunId),
+        getProjectBuilderRunApprovals(projectId, activeRunId),
+      ])
+      : [null, null];
+    if (ledgerRequestRef.current !== requestId) return;
+    setLedger({
+      loading: false,
+      apiAvailable: Boolean(
+        processesResponse
+        || runsResponse
+        || approvalsResponse
+        || eventsResponse
+        || runApprovalsResponse
+      ),
+      processes: processesResponse?.processes ?? [],
+      runs,
+      events: eventsResponse?.events ?? [],
+      approvals: runApprovalsResponse?.approvals ?? approvalsResponse?.approvals ?? [],
+    });
+  }, [projectId]);
 
   useEffect(() => {
-    let canceled = false;
-    async function loadLedger() {
-      setLedger((current) => ({ ...current, loading: true }));
-      const [processesResponse, runsResponse, approvalsResponse] = await Promise.all([
-        getProjectBuilderProcesses(projectId),
-        getProjectBuilderRuns(projectId),
-        getProjectBuilderApprovals(projectId),
-      ]);
-      const runs = runsResponse?.runs ?? [];
-      const eventsResponse = runs[0]
-        ? await getProjectBuilderRunEvents(projectId, runs[0].id)
-        : null;
-      if (canceled) return;
-      setLedger({
-        loading: false,
-        apiAvailable: Boolean(processesResponse || runsResponse || approvalsResponse || eventsResponse),
-        processes: processesResponse?.processes ?? [],
-        runs,
-        events: eventsResponse?.events ?? [],
-        approvals: approvalsResponse?.approvals ?? [],
-      });
-    }
     void loadLedger();
     return () => {
-      canceled = true;
+      ledgerRequestRef.current += 1;
     };
-  }, [projectId]);
+  }, [loadLedger]);
+
+  const handleApprovalAction = useCallback(async (
+    approval: Approval,
+    action: 'approve' | 'reject',
+  ) => {
+    setActionError(null);
+    setActionApprovalId(approval.id);
+    const response = action === 'approve'
+      ? await approveProjectBuilderApproval(projectId, approval.id)
+      : await rejectProjectBuilderApproval(projectId, approval.id);
+    if (!response) {
+      setActionError(`Could not ${action} approval.`);
+    }
+    await loadLedger({ showLoading: false });
+    setActionApprovalId(null);
+  }, [loadLedger, projectId]);
 
   const registrySkill = findCanvasDemoSkill(skills);
   const skill = builderSkillSummaryFromRegistry(registrySkill);
   const process = ledger.processes[0] ?? demoHarnessProcess(projectId, skill);
   const run = ledger.runs[0] ?? demoBuilderRun(projectId, skill, process);
-  const approval = ledger.approvals[0] ?? (ledger.runs.length > 0 ? null : demoApproval(projectId, run, process));
+  const approval = selectDisplayApproval(ledger.approvals)
+    ?? (ledger.runs.length > 0 ? null : demoApproval(projectId, run, process));
   const events = ledger.events.length > 0
     ? ledger.events
     : demoRunEvents(projectId, run, process, skill, approval);
@@ -113,7 +151,7 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
   const cards = [
     skillCardView(skill, registrySkill),
     processCardView(process, ledger.processes.length > 0),
-    runCardView(run, approval, ledger.runs.length > 0),
+    runCardView(run, approval, ledger.approvals, ledger.runs.length > 0),
   ];
 
   return (
@@ -132,7 +170,15 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
       <div className={styles.canvas} data-testid="canvas-run-ui-panel">
         <div className={styles.cards} aria-label="Canvas automation cards">
           {cards.map((card) => (
-            <CanvasRunCard key={card.kind} card={card} />
+            <CanvasRunCard
+              key={card.kind}
+              card={card}
+              approval={card.kind === 'run' ? approval : null}
+              approvalApiBacked={card.kind === 'run' && ledger.runs.length > 0}
+              actionApprovalId={actionApprovalId}
+              actionError={card.kind === 'run' ? actionError : null}
+              onApprovalAction={handleApprovalAction}
+            />
           ))}
         </div>
 
@@ -167,7 +213,23 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
   );
 }
 
-function CanvasRunCard({ card }: { card: CanvasRunCardView }) {
+function CanvasRunCard({
+  card,
+  approval,
+  approvalApiBacked,
+  actionApprovalId,
+  actionError,
+  onApprovalAction,
+}: {
+  card: CanvasRunCardView;
+  approval: Approval | null;
+  approvalApiBacked: boolean;
+  actionApprovalId: string | null;
+  actionError: string | null;
+  onApprovalAction: (approval: Approval, action: 'approve' | 'reject') => void;
+}) {
+  const canActOnApproval = approvalApiBacked && approval?.status === 'requested';
+  const actionBusy = Boolean(approval && actionApprovalId === approval.id);
   return (
     <article className={styles.card} data-card-kind={card.kind} data-testid={`canvas-run-${card.kind}-card`}>
       <div className={styles.cardHead}>
@@ -203,8 +265,48 @@ function CanvasRunCard({ card }: { card: CanvasRunCardView }) {
           <span key={chip}>{chip}</span>
         ))}
       </div>
+      {card.kind === 'run' && approval ? (
+        <div className={styles.approvalActions} data-testid="canvas-run-approval-actions">
+          <div>
+            <strong>{approval.title}</strong>
+            <span>
+              {approval.kind} - {approval.status}
+              {approval.resolvedAt ? ` - resolved ${formatShortDateTime(approval.resolvedAt)}` : ''}
+            </span>
+          </div>
+          {canActOnApproval ? (
+            <div className={styles.approvalButtons}>
+              <Button
+                variant="primary"
+                data-testid="canvas-run-approve-approval"
+                disabled={actionBusy}
+                onClick={() => onApprovalAction(approval, 'approve')}
+              >
+                {actionBusy ? 'Working' : 'Approve'}
+              </Button>
+              <Button
+                variant="ghost"
+                data-testid="canvas-run-reject-approval"
+                disabled={actionBusy}
+                onClick={() => onApprovalAction(approval, 'reject')}
+              >
+                Reject
+              </Button>
+            </div>
+          ) : (
+            <span className={styles.approvalReadonly}>
+              {approvalApiBacked ? 'Resolved placeholder state' : 'Demo placeholder only'}
+            </span>
+          )}
+          {actionError ? <small className={styles.approvalError}>{actionError}</small> : null}
+        </div>
+      ) : null}
     </article>
   );
+}
+
+function selectDisplayApproval(approvals: Approval[]): Approval | null {
+  return approvals.find((approval) => approval.status === 'requested') ?? approvals[0] ?? null;
 }
 
 function findCanvasDemoSkill(skills: SkillSummary[]): SkillSummary | null {
@@ -495,7 +597,14 @@ function processCardView(process: HarnessProcess, apiBacked: boolean): CanvasRun
   };
 }
 
-function runCardView(run: BuilderRun, approval: Approval | null, apiBacked: boolean): CanvasRunCardView {
+function runCardView(
+  run: BuilderRun,
+  approval: Approval | null,
+  approvals: Approval[],
+  apiBacked: boolean,
+): CanvasRunCardView {
+  const requestedCount = approvals.filter((candidate) => candidate.status === 'requested').length;
+  const resolvedCount = approvals.filter((candidate) => candidate.status !== 'requested').length;
   return {
     kind: 'run',
     eyebrow: 'Run Card',
@@ -506,13 +615,26 @@ function runCardView(run: BuilderRun, approval: Approval | null, apiBacked: bool
     autonomy: run.autonomy,
     lastRun: '5 min ago',
     nextRun: 'from process schedule',
-    approval: approval ? (approval.status === 'requested' ? '1 pending' : approval.status) : 'none',
+    approval: approval
+      ? `${requestedCount} pending / ${resolvedCount} resolved`
+      : 'none',
     metrics: [
       { label: 'Agent', value: run.agentId },
       { label: 'Origin', value: run.origin },
     ],
     chips: [...run.skillIds, ...(run.outputEntityIds ?? [])],
   };
+}
+
+function formatShortDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function runEventDetail(event: BuilderRunEvent): string {

@@ -217,6 +217,59 @@
   text-overflow: ellipsis;
 }
 
+.approvalActions {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.approvalActions > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.approvalActions strong,
+.approvalActions span,
+.approvalActions small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvalActions strong {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.approvalActions span,
+.approvalReadonly {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.approvalButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.approvalButtons button {
+  min-height: 28px;
+}
+
+.approvalError {
+  color: var(--danger, var(--text-strong));
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .timelineCard {
   display: flex;
   min-height: 520px;

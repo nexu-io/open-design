@@ -13,6 +13,7 @@ import type {
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
   BuilderApprovalsResponse,
+  BuilderApprovalResponse,
   BuilderProcessesResponse,
   BuilderRunEventsResponse,
   BuilderRunsResponse,
@@ -705,6 +706,61 @@ export async function getProjectBuilderApprovals(projectId: string): Promise<Bui
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/builder/approvals`);
     if (!resp.ok) return null;
     return (await resp.json()) as BuilderApprovalsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectBuilderRunApprovals(
+  projectId: string,
+  runId: string,
+): Promise<BuilderApprovalsResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/builder/runs/${encodeURIComponent(runId)}/approvals`,
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderApprovalsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function approveProjectBuilderApproval(
+  projectId: string,
+  approvalId: string,
+): Promise<BuilderApprovalResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/builder/approvals/${encodeURIComponent(approvalId)}/approve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolvedBy: 'canvas-run-ui' }),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderApprovalResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function rejectProjectBuilderApproval(
+  projectId: string,
+  approvalId: string,
+): Promise<BuilderApprovalResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/builder/approvals/${encodeURIComponent(approvalId)}/reject`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolvedBy: 'canvas-run-ui' }),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderApprovalResponse;
   } catch {
     return null;
   }
