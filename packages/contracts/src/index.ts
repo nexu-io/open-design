@@ -4,6 +4,8 @@ export * from './tasks.js';
 export * from './api/app-config.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
+export * from './api/builder.js';
+export * from './api/canvas.js';
 export * from './api/chat.js';
 export * from './api/community.js';
 export * from './api/context.js';
