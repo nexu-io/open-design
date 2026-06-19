@@ -255,6 +255,7 @@ import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
+  runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
 } from './run-analytics-observability.js';
@@ -10702,6 +10703,13 @@ export async function startServer({
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
+        // Override the BYOK-blind derived runtime_type with the client's
+        // authoritative per-run value when supplied — the daemon can't see a
+        // saved BYOK key, so a BYOK run would otherwise report as local_cli/amr.
+        runtime_type: runtimeTypeForRunAnalytics({
+          derived: configureGlobals.runtime_type,
+          hint: analyticsHints.runtimeType,
+        }),
         ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
         project_id: requestProjectId,
         conversation_id:

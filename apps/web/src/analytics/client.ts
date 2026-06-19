@@ -33,6 +33,7 @@ let configureGlobals: AnalyticsConfigureGlobals = {
   has_available_configure_cli: false,
   configure_type: 'unknown',
   configure_availability: 'unknown',
+  runtime_type: 'none',
   cli_runnable: false,
   byok_runnable: false,
   amr_runnable: false,
