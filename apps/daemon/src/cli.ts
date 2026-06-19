@@ -106,6 +106,14 @@ const RESEARCH_SEARCH_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
+const PROVIDER_STRING_FLAGS = new Set([
+  'daemon-url',
+]);
+const PROVIDER_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+  'json',
+]);
 
 const PLUGIN_STRING_FLAGS = new Set([
   'daemon-url',
@@ -256,6 +264,7 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
+  provider: runProvider,
   mcp: runMcp,
   research: runResearch,
   plugin: runPlugin,
@@ -359,6 +368,9 @@ function printRootHelp() {
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]
       Run agent-callable Tavily research through the local daemon.
 
+  od provider config [--json] [--daemon-url <url>]
+      Inspect daemon-managed provider availability without printing credentials.
+
   od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
   od plugin publish-repo <folder>
@@ -420,6 +432,73 @@ What the daemon does:
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
      dispatcher that the agent calls via \`od media generate\`.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od provider …
+// ---------------------------------------------------------------------------
+
+async function runProvider(args) {
+  const sub = args.find((a) => !a.startsWith('-')) || '';
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    printProviderHelp();
+    process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  if (sub !== 'config') {
+    console.error(`unknown subcommand: od provider ${sub}`);
+    printProviderHelp();
+    process.exit(2);
+  }
+  const idx = args.indexOf(sub);
+  const rest = [...args.slice(0, idx), ...args.slice(idx + 1)];
+  let flags;
+  try {
+    flags = parseFlags(rest, {
+      string: PROVIDER_STRING_FLAGS,
+      boolean: PROVIDER_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printProviderHelp();
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/provider-orchestrator/config`);
+  } catch (err) {
+    return exitWithStructuredError({
+      code: 'daemon-not-running',
+      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+  console.log(`[provider] ${data.available ? 'available' : 'unavailable'} (${data.kind ?? 'unknown'})`);
+  console.log(`  source:   ${data.credentialSource ?? 'deployment'}`);
+  console.log(`  protocol: ${data.protocol ?? 'openai'}`);
+  console.log(`  label:    ${data.label ?? 'Provider orchestrator'}`);
+  if (data.displayHost) console.log(`  host:     ${data.displayHost}`);
+  if (data.defaultModel) console.log(`  model:    ${data.defaultModel}`);
+  if (data.detail) console.log(`  detail:   ${data.detail}`);
+}
+
+function printProviderHelp() {
+  console.log(`Usage:
+  od provider config [--json] [--daemon-url <url>]
+
+Inspects daemon-managed provider configuration. This is the CLI mirror of
+the Settings execution provider choice: it reports whether a deployment
+provider is available, which protocol it fronts, its display label/host,
+and the default model. Provider credentials are never printed.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit the raw redacted JSON response.`);
 }
 
 // ---------------------------------------------------------------------------
