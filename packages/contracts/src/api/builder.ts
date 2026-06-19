@@ -489,3 +489,40 @@ export interface ComputerProvider {
   capabilities: string[];
   metadata?: Record<string, JsonValue>;
 }
+
+export interface BuilderProcessesResponse {
+  processes: HarnessProcess[];
+}
+
+export interface BuilderProcessResponse {
+  process: HarnessProcess;
+}
+
+export interface BuilderRunsResponse {
+  runs: BuilderRun[];
+}
+
+export interface BuilderRunResponse {
+  run: BuilderRun;
+}
+
+export interface BuilderRunEventsResponse {
+  events: BuilderRunEvent[];
+}
+
+export interface BuilderApprovalsResponse {
+  approvals: Approval[];
+}
+
+export interface BuilderApprovalResponse {
+  approval: Approval;
+}
+
+export interface ResolveBuilderApprovalRequest {
+  resolution: ApprovalResolution;
+  resolvedBy?: string;
+}
+
+export interface ResolveBuilderApprovalResponse {
+  approval: Approval;
+}

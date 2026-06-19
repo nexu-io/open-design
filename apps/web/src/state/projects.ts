@@ -12,6 +12,10 @@ import type {
   CreateConversationRequest,
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
+  BuilderApprovalsResponse,
+  BuilderProcessesResponse,
+  BuilderRunEventsResponse,
+  BuilderRunsResponse,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
@@ -658,6 +662,51 @@ export async function persistTabsToDaemonNow(
   } catch {
     // best-effort; the local cache (written via cacheTabsLocally) is canonical
     // and will re-push on the next loadTabs reconciliation.
+  }
+}
+
+export async function getProjectBuilderProcesses(projectId: string): Promise<BuilderProcessesResponse | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/builder/processes`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderProcessesResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectBuilderRuns(projectId: string): Promise<BuilderRunsResponse | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/builder/runs`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderRunsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectBuilderRunEvents(
+  projectId: string,
+  runId: string,
+): Promise<BuilderRunEventsResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/builder/runs/${encodeURIComponent(runId)}/events`,
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderRunEventsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectBuilderApprovals(projectId: string): Promise<BuilderApprovalsResponse | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/builder/approvals`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as BuilderApprovalsResponse;
+  } catch {
+    return null;
   }
 }
 

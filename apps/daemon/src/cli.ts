@@ -210,6 +210,8 @@ const AUTOMATION_STRING_FLAGS = new Set([
 const AUTOMATION_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'disabled', 'enabled',
 ]);
+const RUN_LEDGER_STRING_FLAGS = new Set(['daemon-url', 'project', 'limit']);
+const RUN_LEDGER_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
 ]);
@@ -267,6 +269,7 @@ const SUBCOMMAND_MAP = {
   project: runProject,
   automation: runAutomation,
   automations: runAutomation,
+  'run-ledger': runRunLedger,
   memory: runMemory,
   run: runRun,
   files: runFiles,
@@ -8077,6 +8080,184 @@ async function runAutomation(args) {
     default:
       console.error(`unknown subcommand: od automation ${sub}`);
       printAutomationHelp();
+      process.exit(2);
+  }
+}
+
+function printRunLedgerHelp() {
+  console.log(`Usage:
+  od run-ledger processes --project <projectId> [--json]
+      List Builder harness-process projections for a project.
+
+  od run-ledger process <processId> --project <projectId> [--json]
+      Show one Builder harness-process projection.
+
+  od run-ledger runs --project <projectId> [--limit 50] [--json]
+      List Builder run ledger entries for a project.
+
+  od run-ledger run <runId> --project <projectId> [--json]
+      Show one Builder run ledger entry.
+
+  od run-ledger events <runId> --project <projectId> [--json]
+      List normalized Builder events for a run.
+
+  od run-ledger approvals --project <projectId> [--json]
+      List approval records for a project. Currently empty until approval
+      persistence lands.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Print raw JSON.`);
+}
+
+async function runRunLedger(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printRunLedgerHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  let flags;
+  try {
+    flags = parseFlags(args.slice(1), {
+      string: RUN_LEDGER_STRING_FLAGS,
+      boolean: RUN_LEDGER_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const projectId = typeof flags.project === 'string' ? flags.project.trim() : '';
+  if (!projectId) {
+    console.error('--project <projectId> is required');
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  const writeJson = (data) =>
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  const positionalArgs = (values) => {
+    const out = [];
+    for (let i = 0; i < values.length; i++) {
+      const value = values[i];
+      if (!value) continue;
+      if (value.startsWith('--')) {
+        const eq = value.indexOf('=');
+        const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+        if (eq < 0 && RUN_LEDGER_STRING_FLAGS.has(key)) i++;
+        continue;
+      }
+      out.push(value);
+    }
+    return out;
+  };
+  const sub = args[0];
+  const parts = positionalArgs(args.slice(1));
+  const projectPath = `/api/projects/${encodeURIComponent(projectId)}/builder`;
+  const requestJson = async (path) => {
+    let resp;
+    try {
+      resp = await fetch(`${base}${path}`);
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    return await resp.json();
+  };
+
+  switch (sub) {
+    case 'processes': {
+      const data = await requestJson(`${projectPath}/processes`);
+      if (flags.json) return writeJson(data);
+      const processes = data.processes ?? [];
+      if (processes.length === 0) return console.log(`No run-ledger processes for ${projectId}.`);
+      console.log('# processId\tstatus\tautonomy\tnextRun\tskills');
+      for (const process of processes) {
+        console.log([
+          process.id,
+          process.status,
+          process.autonomy,
+          process.nextRunAt ?? '-',
+          (process.skillIds ?? []).join(','),
+        ].join('\t'));
+      }
+      return;
+    }
+    case 'process': {
+      const processId = parts[0];
+      if (!processId) {
+        console.error('Usage: od run-ledger process <processId> --project <projectId>');
+        process.exit(2);
+      }
+      const data = await requestJson(`${projectPath}/processes/${encodeURIComponent(processId)}`);
+      return writeJson(flags.json ? data : (data.process ?? data));
+    }
+    case 'runs': {
+      const limit = Number(flags.limit) > 0 ? Number(flags.limit) : 50;
+      const data = await requestJson(`${projectPath}/runs?limit=${encodeURIComponent(String(limit))}`);
+      if (flags.json) return writeJson(data);
+      const runs = data.runs ?? [];
+      if (runs.length === 0) return console.log(`No run-ledger runs for ${projectId}.`);
+      console.log('# runId\tstatus\torigin\tstartedAt\tprocessId');
+      for (const run of runs) {
+        console.log([
+          run.id,
+          run.status,
+          run.origin,
+          run.startedAt,
+          run.processId ?? '-',
+        ].join('\t'));
+      }
+      return;
+    }
+    case 'run': {
+      const runId = parts[0];
+      if (!runId) {
+        console.error('Usage: od run-ledger run <runId> --project <projectId>');
+        process.exit(2);
+      }
+      const data = await requestJson(`${projectPath}/runs/${encodeURIComponent(runId)}`);
+      return writeJson(flags.json ? data : (data.run ?? data));
+    }
+    case 'events': {
+      const runId = parts[0];
+      if (!runId) {
+        console.error('Usage: od run-ledger events <runId> --project <projectId>');
+        process.exit(2);
+      }
+      const data = await requestJson(`${projectPath}/runs/${encodeURIComponent(runId)}/events`);
+      if (flags.json) return writeJson(data);
+      const events = data.events ?? [];
+      if (events.length === 0) return console.log(`No run-ledger events for ${runId}.`);
+      console.log('# sequence\ttype\ttimestamp\tsource');
+      for (const event of events) {
+        console.log([
+          event.sequence,
+          event.type,
+          event.timestamp,
+          event.source,
+        ].join('\t'));
+      }
+      return;
+    }
+    case 'approvals': {
+      const data = await requestJson(`${projectPath}/approvals`);
+      if (flags.json) return writeJson(data);
+      const approvals = data.approvals ?? [];
+      if (approvals.length === 0) return console.log(`No approvals for ${projectId}.`);
+      console.log('# approvalId\tstatus\tkind\trunId\ttitle');
+      for (const approval of approvals) {
+        console.log([
+          approval.id,
+          approval.status,
+          approval.kind,
+          approval.runId ?? '-',
+          approval.title,
+        ].join('\t'));
+      }
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od run-ledger ${sub}`);
+      printRunLedgerHelp();
       process.exit(2);
   }
 }

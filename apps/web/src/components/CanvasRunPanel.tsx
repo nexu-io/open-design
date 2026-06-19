@@ -7,6 +7,13 @@ import type {
   CanvasEntity,
   HarnessProcess,
 } from '@open-design/contracts';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  getProjectBuilderApprovals,
+  getProjectBuilderProcesses,
+  getProjectBuilderRunEvents,
+  getProjectBuilderRuns,
+} from '../state/projects';
 import type { SkillSummary } from '../types';
 import styles from './CanvasRunPanel.module.css';
 
@@ -16,6 +23,15 @@ interface CanvasRunPanelProps {
 }
 
 type CanvasRunCardKind = 'skill' | 'process' | 'run';
+
+interface CanvasRunLedgerState {
+  loading: boolean;
+  apiAvailable: boolean;
+  processes: HarnessProcess[];
+  runs: BuilderRun[];
+  events: BuilderRunEvent[];
+  approvals: Approval[];
+}
 
 interface CanvasRunCardView {
   kind: CanvasRunCardKind;
@@ -41,29 +57,75 @@ const DEMO_UPDATED_AT = '2026-06-19T09:17:00.000Z';
 const DEMO_NEXT_RUN_AT = '2026-06-22T09:00:00.000Z';
 
 export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
+  const [ledger, setLedger] = useState<CanvasRunLedgerState>({
+    loading: true,
+    apiAvailable: false,
+    processes: [],
+    runs: [],
+    events: [],
+    approvals: [],
+  });
+
+  useEffect(() => {
+    let canceled = false;
+    async function loadLedger() {
+      setLedger((current) => ({ ...current, loading: true }));
+      const [processesResponse, runsResponse, approvalsResponse] = await Promise.all([
+        getProjectBuilderProcesses(projectId),
+        getProjectBuilderRuns(projectId),
+        getProjectBuilderApprovals(projectId),
+      ]);
+      const runs = runsResponse?.runs ?? [];
+      const eventsResponse = runs[0]
+        ? await getProjectBuilderRunEvents(projectId, runs[0].id)
+        : null;
+      if (canceled) return;
+      setLedger({
+        loading: false,
+        apiAvailable: Boolean(processesResponse || runsResponse || approvalsResponse || eventsResponse),
+        processes: processesResponse?.processes ?? [],
+        runs,
+        events: eventsResponse?.events ?? [],
+        approvals: approvalsResponse?.approvals ?? [],
+      });
+    }
+    void loadLedger();
+    return () => {
+      canceled = true;
+    };
+  }, [projectId]);
+
   const registrySkill = findCanvasDemoSkill(skills);
   const skill = builderSkillSummaryFromRegistry(registrySkill);
-  const process = demoHarnessProcess(projectId, skill);
-  const run = demoBuilderRun(projectId, skill, process);
-  const approval = demoApproval(projectId, run, process);
-  const events = demoRunEvents(projectId, run, process, skill, approval);
-  const entities = demoCanvasEntities(projectId, skill, process, run, approval);
+  const process = ledger.processes[0] ?? demoHarnessProcess(projectId, skill);
+  const run = ledger.runs[0] ?? demoBuilderRun(projectId, skill, process);
+  const approval = ledger.approvals[0] ?? (ledger.runs.length > 0 ? null : demoApproval(projectId, run, process));
+  const events = ledger.events.length > 0
+    ? ledger.events
+    : demoRunEvents(projectId, run, process, skill, approval);
+  const entities = useMemo(
+    () => demoCanvasEntities(projectId, skill, process, run, approval),
+    [approval, process, projectId, run, skill],
+  );
+  const sourceMode = ledger.runs.length > 0 || ledger.processes.length > 0
+    ? 'Run Ledger API'
+    : (registrySkill ? 'Skill API + demo run ledger' : 'Placeholder data');
   const cards = [
     skillCardView(skill, registrySkill),
-    processCardView(process),
-    runCardView(run, approval),
+    processCardView(process, ledger.processes.length > 0),
+    runCardView(run, approval, ledger.runs.length > 0),
   ];
 
   return (
-    <section className={styles.panel} aria-label="Canvas Run UI demo">
+    <section className={styles.panel} aria-label="Canvas Run panel">
       <div className={styles.header}>
         <div>
           <p className={styles.kicker}>Builder Canvas Run</p>
           <h2>Skill-backed automations</h2>
         </div>
         <div className={styles.headerMeta} aria-label="Canvas run data source">
-          <span>Demo-gated</span>
-          <strong>{registrySkill ? 'Skill API + demo run ledger' : 'Placeholder data'}</strong>
+          <span>{ledger.loading ? 'Loading' : ledger.apiAvailable ? 'API-backed' : 'Demo-gated'}</span>
+          <strong>{sourceMode}</strong>
         </div>
       </div>
 
@@ -98,7 +160,7 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
         <div className={styles.legend} aria-label="Canvas entities">
           <span>{entities.length} canvas entities</span>
           <span>no daemon private imports</span>
-          <span>run state demo-only</span>
+          <span>{ledger.runs.length > 0 ? 'run state from API' : 'run state demo-only'}</span>
         </div>
       </div>
     </section>
@@ -252,14 +314,14 @@ function demoRunEvents(
   run: BuilderRun,
   process: HarnessProcess,
   skill: BuilderSkillSummary,
-  approval: Approval,
+  approval: Approval | null,
 ): BuilderRunEvent[] {
   const base = {
     runId: run.id,
     projectId,
     timestamp: DEMO_STARTED_AT,
   };
-  return [
+  const events: BuilderRunEvent[] = [
     {
       ...base,
       id: 'event-1-process-started',
@@ -299,7 +361,9 @@ function demoRunEvents(
       status: 'succeeded',
       outputSummary: 'Preview smoke check passed.',
     },
-    {
+  ];
+  if (approval) {
+    events.push({
       ...base,
       id: 'event-5-approval-requested',
       type: 'approval.requested',
@@ -309,18 +373,21 @@ function demoRunEvents(
       approvalId: approval.id,
       approvalKind: approval.kind,
       title: approval.title,
-    },
+    });
+  }
+  events.push(
     {
       ...base,
       id: 'event-6-canvas-output-pinned',
       type: 'canvas.output_pinned',
-      sequence: 6,
+      sequence: approval ? 6 : 5,
       source: 'builder',
       timestamp: DEMO_UPDATED_AT,
       entityId: 'canvas-output-demo-keyword-gap',
       outputKind: 'recommendation_card',
     },
-  ];
+  );
+  return events;
 }
 
 function demoCanvasEntities(
@@ -328,9 +395,9 @@ function demoCanvasEntities(
   skill: BuilderSkillSummary,
   process: HarnessProcess,
   run: BuilderRun,
-  approval: Approval,
+  approval: Approval | null,
 ): CanvasEntity[] {
-  return [
+  const entities: CanvasEntity[] = [
     {
       id: `skill:${skill.id}`,
       kind: 'skill',
@@ -370,7 +437,9 @@ function demoCanvasEntities(
       updatedAt: DEMO_UPDATED_AT,
       metadata: { demoOnly: true },
     },
-    {
+  ];
+  if (approval) {
+    entities.push({
       id: `approval:${approval.id}`,
       kind: 'approval',
       title: approval.title,
@@ -381,8 +450,9 @@ function demoCanvasEntities(
       createdAt: approval.requestedAt,
       updatedAt: approval.requestedAt,
       metadata: { demoOnly: true },
-    },
-  ];
+    });
+  }
+  return entities;
 }
 
 function skillCardView(skill: BuilderSkillSummary, registrySkill: SkillSummary | null): CanvasRunCardView {
@@ -405,13 +475,13 @@ function skillCardView(skill: BuilderSkillSummary, registrySkill: SkillSummary |
   };
 }
 
-function processCardView(process: HarnessProcess): CanvasRunCardView {
+function processCardView(process: HarnessProcess, apiBacked: boolean): CanvasRunCardView {
   return {
     kind: 'process',
     eyebrow: 'Process Card',
     title: 'Weekly GSC keyword scan',
     description: 'Scheduled harness process that references skill markdown by id.',
-    sourceLabel: 'Demo',
+    sourceLabel: apiBacked ? 'Run Ledger API' : 'Demo',
     status: process.status,
     autonomy: process.autonomy,
     lastRun: 'Jun 19, 09:12',
@@ -425,18 +495,18 @@ function processCardView(process: HarnessProcess): CanvasRunCardView {
   };
 }
 
-function runCardView(run: BuilderRun, approval: Approval): CanvasRunCardView {
+function runCardView(run: BuilderRun, approval: Approval | null, apiBacked: boolean): CanvasRunCardView {
   return {
     kind: 'run',
     eyebrow: 'Run Card',
     title: run.id,
     description: 'Run ledger placeholder with replayable normalized Builder events.',
-    sourceLabel: 'Demo',
+    sourceLabel: apiBacked ? 'Run Ledger API' : 'Demo',
     status: run.status,
     autonomy: run.autonomy,
     lastRun: '5 min ago',
     nextRun: 'from process schedule',
-    approval: approval.status === 'requested' ? '1 pending' : approval.status,
+    approval: approval ? (approval.status === 'requested' ? '1 pending' : approval.status) : 'none',
     metrics: [
       { label: 'Agent', value: run.agentId },
       { label: 'Origin', value: run.origin },

@@ -509,6 +509,7 @@ import { registerSocialShareRoutes } from './social-share-routes.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
+import { registerBuilderRunLedgerRoutes } from './routes/builder-run-ledger.js';
 import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
@@ -11619,6 +11620,11 @@ export async function startServer({
     db,
     paths: { RUNTIME_DATA_DIR },
     resources: { listAllSkillLikeEntries },
+    routines: { routineService },
+  });
+
+  registerBuilderRunLedgerRoutes(app, {
+    db,
     routines: { routineService },
   });
 
