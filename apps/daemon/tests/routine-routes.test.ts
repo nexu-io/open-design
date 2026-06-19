@@ -42,7 +42,7 @@ describe('routine routes', () => {
     vi.restoreAllMocks();
   });
 
-  function buildApp() {
+  function buildApp(options: { skills?: Array<{ id: string; name?: string }> } = {}) {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const nextRunAt = vi.fn(() => new Date('2026-05-13T01:00:00.000Z'));
     const rescheduleOne = vi.fn();
@@ -71,6 +71,9 @@ describe('routine routes', () => {
     registerRoutineRoutes(app, {
       db,
       paths: { RUNTIME_DATA_DIR: tempDir },
+      resources: options.skills
+        ? { listAllSkillLikeEntries: async () => options.skills ?? [] }
+        : undefined,
       routines: {
         routineService: {
           nextRunAt,
@@ -181,6 +184,57 @@ describe('routine routes', () => {
       expect(stored?.projectId).toBe('proj-1');
       expect(JSON.parse(stored?.contextJson ?? '{}')).toEqual(json.routine.context);
       expect(rescheduleOne).toHaveBeenCalledWith(json.routine.id);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('validates primary and context skill ids when creating routines', async () => {
+    const { app, db } = buildApp({
+      skills: [
+        { id: 'create-homepage', name: 'Create Homepage' },
+        { id: 'gsc-keyword-optimization', name: 'GSC Keyword Optimization' },
+      ],
+    });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Routine target',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const { server, port } = await listen(app);
+    try {
+      const okRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Weekly homepage',
+          prompt: 'Improve the homepage.',
+          schedule: { kind: 'weekly', weekday: 1, time: '09:00', timezone: 'UTC' },
+          target: { mode: 'reuse', projectId: 'proj-1' },
+          skillId: 'create-homepage',
+          context: { skillIds: ['gsc-keyword-optimization'] },
+        }),
+      });
+      expect(okRes.status).toBe(201);
+
+      const missingRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Missing skill',
+          prompt: 'Run a missing skill.',
+          schedule: { kind: 'weekly', weekday: 1, time: '09:00', timezone: 'UTC' },
+          target: { mode: 'reuse', projectId: 'proj-1' },
+          skillId: 'publish-readiness',
+          context: { skillIds: ['seo-aeo-strategy-system'] },
+        }),
+      });
+      expect(missingRes.status).toBe(400);
+      const json = await missingRes.json() as { error: string };
+      expect(json.error).toContain('unknown skill ids: publish-readiness, seo-aeo-strategy-system');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

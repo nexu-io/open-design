@@ -63,6 +63,8 @@ export interface SkillInfo {
   displayName?: Record<string, string>;
   description: string;
   descriptionI18n?: Record<string, string>;
+  tags?: string[];
+  url?: string | null;
   triggers: unknown[];
   mode: SkillMode;
   surface: SkillSurface;
@@ -100,6 +102,21 @@ export interface SkillInfo {
   critiquePolicy: SkillCritiquePolicy;
   body: string;
   dir: string;
+}
+
+export interface HarnessSkillInventoryRow {
+  id: string;
+  name: string;
+  description: string;
+  url: string | null;
+  tags: string[];
+}
+
+export interface SkillValidationReport {
+  ok: boolean;
+  expectedCount: number;
+  importedCount: number;
+  missing: Array<HarnessSkillInventoryRow & { status: "csv-only" }>;
 }
 
 interface DerivedExample {
@@ -311,6 +328,246 @@ export async function listSkills(
     }
   }
   return out;
+}
+
+const HARNESS_SKILL_ID_BY_TITLE_PREFIX = new Map<string, string>([
+  ["aeo comparison pages", "aeo-comparison-pages"],
+  ["analyze web traffic", "analyze-web-traffic"],
+  ["analyse web traffic", "analyze-web-traffic"],
+  ["build a content page", "build-content-page"],
+  ["company swarm", "company-swarm"],
+  ["create a homepage", "create-homepage"],
+  ["email icp website visitors", "email-icp-visitors"],
+  ["gsc keyword optimization", "gsc-keyword-optimization"],
+  ["optimize above-the-fold", "optimize-above-the-fold"],
+  ["optimize above the fold", "optimize-above-the-fold"],
+  ["publish readiness", "publish-readiness"],
+  ["seo & aeo strategy system", "seo-aeo-strategy-system"],
+]);
+
+const HARNESS_SKILL_ID_BY_FILE = new Map<string, string>([
+  ["aeo-comparison-pages-narrow-concession.md", "aeo-comparison-pages"],
+  ["analyze-web-traffic-and-visitor-engagement.md", "analyze-web-traffic"],
+  ["build-a-content-page.md", "build-content-page"],
+  ["company-swarm-account-based-outreach.md", "company-swarm"],
+  ["create-a-homepage-from-scratch.md", "create-homepage"],
+  ["email-icp-website-visitors.md", "email-icp-visitors"],
+  ["gsc-keyword-optimization.md", "gsc-keyword-optimization"],
+  ["optimize-above-the-fold-content.md", "optimize-above-the-fold"],
+]);
+
+function stripBom(value: string): string {
+  return value.replace(/^\uFEFF/, "");
+}
+
+function normalizeHarnessTitle(title: string): string {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/[—–-].*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function slugifyHarnessId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+}
+
+function harnessSkillIdFromMetadata(input: {
+  fileName?: string;
+  title: string;
+  url?: string | null;
+}): string {
+  if (input.fileName) {
+    const byFile = HARNESS_SKILL_ID_BY_FILE.get(input.fileName);
+    if (byFile) return byFile;
+  }
+  const normalizedTitle = normalizeHarnessTitle(input.title);
+  for (const [prefix, id] of HARNESS_SKILL_ID_BY_TITLE_PREFIX.entries()) {
+    if (normalizedTitle.startsWith(prefix)) return id;
+  }
+  const urlTail = input.url?.match(/\/ploybooks\/([^/?#]+)/)?.[1];
+  if (urlTail) return urlTail;
+  return slugifyHarnessId(input.title);
+}
+
+function parseHarnessSkillMarkdown(raw: string, fileName: string): SkillInfo {
+  const body = stripBom(raw).trim();
+  const lines = body.split(/\r?\n/);
+  const titleLine = lines.find((line) => /^#\s+/.test(line));
+  const title = titleLine?.replace(/^#\s+/, "").trim() || fileName.replace(/\.md$/i, "");
+  const description =
+    lines.find((line) => /^Description:\s*/i.test(line))
+      ?.replace(/^Description:\s*/i, "")
+      .trim() ?? "";
+  const tags =
+    lines.find((line) => /^Tag:\s*/i.test(line))
+      ?.replace(/^Tag:\s*/i, "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean) ?? [];
+  const url =
+    lines.find((line) => /^URL:\s*/i.test(line))
+      ?.replace(/^URL:\s*/i, "")
+      .trim() || null;
+  const id = harnessSkillIdFromMetadata({ fileName, title, url });
+  return {
+    id,
+    name: title,
+    description,
+    tags,
+    url,
+    triggers: [],
+    mode: "prototype",
+    surface: "web",
+    source: "built-in",
+    craftRequires: [],
+    platform: null,
+    scenario: "builder-harness",
+    category: "builder-harness",
+    previewType: "markdown",
+    designSystemRequired: false,
+    defaultFor: [],
+    upstream: url,
+    featured: null,
+    fidelity: null,
+    speakerNotes: null,
+    animations: null,
+    examplePrompt: description,
+    aggregatesExamples: false,
+    critiquePolicy: null,
+    body,
+    dir: fileName,
+  };
+}
+
+export async function listImportedMarkdownSkills(
+  skillsDir: string,
+): Promise<SkillInfo[]> {
+  let entries: Dirent[] = [];
+  try {
+    entries = await readdir(skillsDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skills: SkillInfo[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
+    const filePath = path.join(skillsDir, entry.name);
+    try {
+      const raw = await readFile(filePath, "utf8");
+      skills.push({
+        ...parseHarnessSkillMarkdown(raw, entry.name),
+        dir: filePath,
+      });
+    } catch {
+      // Keep discovery best-effort, matching listSkills().
+    }
+  }
+  skills.sort((a, b) => a.id.localeCompare(b.id));
+  return skills;
+}
+
+function parseCsvRows(raw: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  const text = stripBom(raw);
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(cell);
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  if (row.some((value) => value.length > 0)) rows.push(row);
+  return rows;
+}
+
+export async function readHarnessSkillInventory(
+  csvPath: string,
+): Promise<HarnessSkillInventoryRow[]> {
+  let raw = "";
+  try {
+    raw = await readFile(csvPath, "utf8");
+  } catch {
+    return [];
+  }
+  const rows = parseCsvRows(raw);
+  const header = rows.shift() ?? [];
+  const indexOf = (name: string) =>
+    header.findIndex((value) => value.trim().toLowerCase() === name);
+  const nameIndex = indexOf("name");
+  const descriptionIndex = indexOf("description");
+  const urlIndex = indexOf("url");
+  const tagIndex = indexOf("tag");
+  if (nameIndex < 0) return [];
+  return rows
+    .map((row) => {
+      const name = row[nameIndex]?.trim() ?? "";
+      const description = row[descriptionIndex]?.trim() ?? "";
+      const url = row[urlIndex]?.trim() || null;
+      const tags =
+        row[tagIndex]
+          ?.split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean) ?? [];
+      return {
+        id: harnessSkillIdFromMetadata({ title: name, url }),
+        name,
+        description,
+        url,
+        tags,
+      };
+    })
+    .filter((row) => row.id.length > 0 && row.name.length > 0);
+}
+
+export async function validateImportedMarkdownSkills(input: {
+  skillsDir: string;
+  inventoryCsvPath: string;
+}): Promise<SkillValidationReport> {
+  const [imported, inventory] = await Promise.all([
+    listImportedMarkdownSkills(input.skillsDir),
+    readHarnessSkillInventory(input.inventoryCsvPath),
+  ]);
+  const importedIds = new Set(imported.map((skill) => skill.id));
+  const missing = inventory
+    .filter((row) => !importedIds.has(row.id))
+    .map((row) => ({ ...row, status: "csv-only" as const }));
+  return {
+    ok: missing.length === 0,
+    expectedCount: inventory.length,
+    importedCount: imported.length,
+    missing,
+  };
 }
 
 // Discover example artifacts that live alongside SKILL.md under

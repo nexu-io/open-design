@@ -22,9 +22,13 @@ import {
   type RoutineService,
 } from '../routines.js';
 import type { PathDeps, RouteDeps } from '../server-context.js';
+import { findSkillById } from '../skills.js';
 
 export interface RegisterRoutineRoutesDeps extends RouteDeps<'db' | 'routines'> {
   paths: Pick<PathDeps, 'RUNTIME_DATA_DIR'>;
+  resources?: {
+    listAllSkillLikeEntries?: () => Promise<unknown[]>;
+  };
 }
 
 export type RoutineRoutesService = Pick<
@@ -170,7 +174,28 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     return contract;
   }
 
-  function validateRoutineInput(body: any, partial: boolean) {
+  async function validateRoutineSkillRefs(body: any, partial: boolean) {
+    if (!ctx.resources?.listAllSkillLikeEntries) return;
+    const ids = new Set<string>();
+    if ((!partial || body.skillId !== undefined) && body.skillId != null) {
+      if (typeof body.skillId !== 'string' || !body.skillId.trim()) {
+        throw new Error('skillId must be a non-empty string or null');
+      }
+      ids.add(body.skillId.trim());
+    }
+    if (!partial || body.context !== undefined) {
+      const context = normalizeRoutineContext(body.context);
+      for (const id of context.skillIds ?? []) ids.add(id);
+    }
+    if (ids.size === 0) return;
+    const skills = await ctx.resources.listAllSkillLikeEntries();
+    const missing = Array.from(ids).filter((id) => !findSkillById(skills, id));
+    if (missing.length > 0) {
+      throw new Error(`unknown skill id${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`);
+    }
+  }
+
+  async function validateRoutineInput(body: any, partial: boolean) {
     if (!body || typeof body !== 'object') throw new Error('Request body must be an object');
     if (!partial || body.name !== undefined) {
       if (typeof body.name !== 'string' || !body.name.trim()) throw new Error('name is required');
@@ -187,6 +212,7 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
       }
     }
     if (!partial || body.context !== undefined) normalizeRoutineContext(body.context);
+    await validateRoutineSkillRefs(body, partial);
   }
 
   app.get('/api/routines', (_req, res) => {
@@ -204,10 +230,10 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     }
   });
 
-  app.post('/api/routines', (req, res) => {
+  app.post('/api/routines', async (req, res) => {
     try {
       const body = req.body || {};
-      validateRoutineInput(body, false);
+      await validateRoutineInput(body, false);
       const id = `routine-${randomUUID()}`;
       const now = Date.now();
       const scheduleCols = scheduleToDbCols(body.schedule);
@@ -239,12 +265,12 @@ export function registerRoutineRoutes(app: Express, ctx: RegisterRoutineRoutesDe
     res.json({ routine });
   });
 
-  app.patch('/api/routines/:id', (req, res) => {
+  app.patch('/api/routines/:id', async (req, res) => {
     try {
       const existing = getRoutine(db, req.params.id);
       if (!existing) return res.status(404).json({ error: 'routine not found' });
       const body = req.body || {};
-      validateRoutineInput(body, true);
+      await validateRoutineInput(body, true);
       const patch: any = {};
       if (body.name !== undefined) patch.name = body.name.trim();
       if (body.prompt !== undefined) patch.prompt = body.prompt;

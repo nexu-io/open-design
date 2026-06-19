@@ -142,6 +142,8 @@ export interface SkillSummary {
   displayName?: Record<string, string>;
   description: string;
   descriptionI18n?: Record<string, string>;
+  tags?: string[];
+  url?: string | null;
   triggers: string[];
   mode:
     | 'prototype'
@@ -238,6 +240,22 @@ export interface SkillsResponse {
 
 export interface SkillResponse {
   skill: SkillDetail;
+}
+
+export interface SkillValidationMissingEntry {
+  id: string;
+  name: string;
+  description: string;
+  url: string | null;
+  tags: string[];
+  status: 'csv-only';
+}
+
+export interface SkillValidationResponse {
+  ok: boolean;
+  expectedCount: number;
+  importedCount: number;
+  missing: SkillValidationMissingEntry[];
 }
 
 // Design templates share the SkillSummary/Detail shape (same SKILL.md

@@ -12,16 +12,20 @@ import { readFileSync } from 'node:fs';
 import {
   deleteUserSkill,
   importUserSkill,
+  listImportedMarkdownSkills,
   listSkillFiles,
   listSkills,
   slugifySkillName,
   updateUserSkill,
+  validateImportedMarkdownSkills,
 } from '../src/skills.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../../..');
 const skillsRoot = path.join(repoRoot, 'skills');
+const harnessSkillsRoot = path.join(repoRoot, 'docs/product/harness-skills/skills');
+const harnessSkillsInventory = path.join(repoRoot, 'docs/product/harness-skills/inventory/skills.csv');
 // `live-artifact`, `dcf-valuation`, `x-research`, and `last30days` were
 // reclassified as design templates under the Phase 0 split (see
 // specs/current/skills-and-design-templates.md). The body/preamble
@@ -75,6 +79,53 @@ function writeSkill(
 }
 
 describe('listSkills', () => {
+  it('surfaces imported harness markdown skills with parsed metadata', async () => {
+    const skills = await listImportedMarkdownSkills(harnessSkillsRoot);
+    const byId = new Map(skills.map((skill) => [skill.id, skill]));
+
+    expect(skills).toHaveLength(8);
+    expect(Array.from(byId.keys())).toEqual(expect.arrayContaining([
+      'aeo-comparison-pages',
+      'analyze-web-traffic',
+      'build-content-page',
+      'company-swarm',
+      'create-homepage',
+      'email-icp-visitors',
+      'gsc-keyword-optimization',
+      'optimize-above-the-fold',
+    ]));
+
+    const gsc = byId.get('gsc-keyword-optimization');
+    expect(gsc).toMatchObject({
+      name: 'GSC Keyword Optimization',
+      category: 'builder-harness',
+      scenario: 'builder-harness',
+      previewType: 'markdown',
+      designSystemRequired: false,
+      url: 'https://ploy.ai/workspaces/9f4992d3-b3ea-4bad-9520-910846dd91e3/ploybooks/gsc-keyword-optimization',
+      upstream: 'https://ploy.ai/workspaces/9f4992d3-b3ea-4bad-9520-910846dd91e3/ploybooks/gsc-keyword-optimization',
+    });
+    expect(gsc?.tags).toContain('google-search-console');
+    expect(gsc?.description).toContain('Google Search Console');
+    expect(gsc?.body).toContain('## Phase 0: Preflight');
+  });
+
+  it('reports CSV-only harness inventory rows as incomplete', async () => {
+    const report = await validateImportedMarkdownSkills({
+      skillsDir: harnessSkillsRoot,
+      inventoryCsvPath: harnessSkillsInventory,
+    });
+
+    expect(report.importedCount).toBe(8);
+    expect(report.expectedCount).toBe(10);
+    expect(report.ok).toBe(false);
+    expect(report.missing.map((entry) => entry.id)).toEqual([
+      'publish-readiness',
+      'seo-aeo-strategy-system',
+    ]);
+    expect(report.missing.every((entry) => entry.status === 'csv-only')).toBe(true);
+  });
+
   it('surfaces optional localized display metadata from SKILL.md frontmatter', async () => {
     const root = fresh();
     try {

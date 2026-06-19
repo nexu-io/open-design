@@ -174,6 +174,8 @@ const DAEMON_BOOLEAN_FLAGS = new Set([
 ]);
 const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const SKILLS_STRING_FLAGS = new Set([...LIBRARY_STRING_FLAGS, 'path', 'name']);
+const SKILLS_BOOLEAN_FLAGS = new Set([...LIBRARY_BOOLEAN_FLAGS]);
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
@@ -371,6 +373,9 @@ function printRootHelp() {
       Automations tab, so an external agent (hermes, openclaw, ...) can
       schedule, trigger, or harvest results from a routine without
       opening the web UI.
+
+  od skills <list|show|validate|import> [args]
+      List, inspect, validate, or import Skill Registry entries.
 
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
@@ -6382,8 +6387,104 @@ async function runLibraryList(name, args) {
   }
 }
 
-async function runSkills(args)        { return runLibraryList('skills', args); }
+async function runSkills(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od skills list [--json]                         List skills.
+  od skills show <id> [--json]                    Print one skill.
+  od skills validate [id] [--json]                Validate imported harness skills or one skill id.
+  od skills import --path <path> [--name <name>] [--json]
+                                                  Import a markdown skill into the user skill registry.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  if (sub === 'list' || sub === 'show') return runLibraryList('skills', args);
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: SKILLS_STRING_FLAGS, boolean: SKILLS_BOOLEAN_FLAGS });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  if (sub === 'validate') {
+    const id = positionalArgs(rest, SKILLS_STRING_FLAGS)[0];
+    const url = id
+      ? `${base}/api/skills/${encodeURIComponent(id)}/validate`
+      : `${base}/api/skills/validation`;
+    const resp = await fetch(url, id ? { method: 'POST' } : undefined);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok && flags.json) {
+      process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      process.exit(1);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp);
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    if (id) {
+      console.log(`${data.skillId ?? id}\t${data.ok ? 'ok' : data.status ?? 'failed'}`);
+      for (const issue of data.issues ?? []) {
+        console.log(`${issue.code}\t${issue.message}`);
+      }
+      return;
+    }
+    console.log(`imported\t${data.importedCount ?? 0}`);
+    console.log(`expected\t${data.expectedCount ?? 0}`);
+    const missing = data.missing ?? [];
+    if (missing.length === 0) {
+      console.log('missing\t0');
+      return;
+    }
+    console.log('# missingSkillId\tstatus\tname');
+    for (const entry of missing) {
+      console.log([entry.id, entry.status, entry.name].join('\t'));
+    }
+    return;
+  }
+  if (sub === 'import') {
+    const importPath = flags.path ?? positionalArgs(rest, SKILLS_STRING_FLAGS)[0];
+    if (!importPath) {
+      console.error('Usage: od skills import --path <path> [--name <name>] [--json]');
+      process.exit(2);
+    }
+    const pathModule = await import('node:path');
+    const fs = await import('node:fs/promises');
+    const fullPath = pathModule.resolve(importPath);
+    let body;
+    try {
+      body = await fs.readFile(fullPath, 'utf8');
+    } catch (err) {
+      console.error(`could not read ${fullPath}: ${err?.message ?? err}`);
+      process.exit(2);
+    }
+    const parsed = parseMarkdownSkillForCli(body, pathModule.basename(fullPath));
+    const resp = await fetch(`${base}/api/skills/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: flags.name ?? parsed.name,
+        description: parsed.description,
+        body,
+      }),
+    });
+    if (!resp.ok) return structuredHttpFailure(resp);
+    const data = await resp.json();
+    if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    console.log(`Imported ${data.skill?.id ?? parsed.name}`);
+    return;
+  }
+  console.error(`unknown subcommand: od skills ${sub}`);
+  process.exit(2);
+}
 async function runCraft(args)         { return runLibraryList('craft', args); }
+
+function parseMarkdownSkillForCli(markdown, fallbackName) {
+  const lines = String(markdown ?? '').replace(/^\uFEFF/, '').split(/\r?\n/);
+  const title = lines.find((line) => /^#\s+/.test(line))
+    ?.replace(/^#\s+/, '')
+    .trim();
+  const description = lines.find((line) => /^Description:\s*/i.test(line))
+    ?.replace(/^Description:\s*/i, '')
+    .trim() ?? '';
+  return {
+    name: title || fallbackName.replace(/\.md$/i, ''),
+    description,
+  };
+}
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));

@@ -87,6 +87,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     listAllDesignTemplates,
     listAllSkillLikeEntries,
     listAllDesignSystems,
+    getSkillValidationReport,
     mimeFor,
   } = ctx.resources;
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
@@ -177,6 +178,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
+  app.get('/api/skills/validation', async (_req, res) => {
+    try {
+      if (!getSkillValidationReport) {
+        return res.json({ ok: true, expectedCount: 0, importedCount: 0, missing: [] });
+      }
+      res.json(await getSkillValidationReport());
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   app.get('/api/skills/:id', async (req, res) => {
     try {
       const skills = await listAllSkills();
@@ -184,6 +196,45 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
       res.json(serializable);
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/skills/:id/validate', async (req, res) => {
+    try {
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, req.params.id);
+      if (skill) {
+        return res.json({
+          ok: true,
+          skillId: skill.id,
+          status: 'available',
+          issues: [],
+        });
+      }
+      const report = getSkillValidationReport ? await getSkillValidationReport() : null;
+      const missing = report?.missing.find((entry) => entry.id === req.params.id);
+      if (missing) {
+        return res.status(422).json({
+          ok: false,
+          skillId: missing.id,
+          status: missing.status,
+          issues: [
+            {
+              code: 'CSV_ONLY_SKILL',
+              message: `Skill "${missing.id}" exists in the CSV inventory but has no markdown body.`,
+            },
+          ],
+          missing,
+        });
+      }
+      return res.status(404).json({
+        ok: false,
+        skillId: req.params.id,
+        status: 'missing',
+        issues: [{ code: 'SKILL_NOT_FOUND', message: 'skill not found' }],
+      });
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
     }

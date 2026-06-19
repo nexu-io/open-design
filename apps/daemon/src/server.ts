@@ -134,9 +134,11 @@ export {
 } from './desktop-auth.js';
 import {
   findSkillById,
+  listImportedMarkdownSkills,
   listSkills,
   resolveSkillId,
   splitDerivedSkillId,
+  validateImportedMarkdownSkills,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
@@ -1316,6 +1318,8 @@ const SKILLS_DIR = resolveDaemonResourceDir(
   'skills',
   path.join(PROJECT_ROOT, 'skills'),
 );
+const HARNESS_SKILLS_DIR = path.join(PROJECT_ROOT, 'docs/product/harness-skills/skills');
+const HARNESS_SKILLS_INVENTORY_CSV = path.join(PROJECT_ROOT, 'docs/product/harness-skills/inventory/skills.csv');
 const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'design-systems',
@@ -4491,7 +4495,15 @@ export async function startServer({
   // declares, and lets a user-imported entry shadow a built-in one of
   // the same id without erasing the built-in copy.
   async function listAllSkills() {
-    return listSkills(SKILL_ROOTS);
+    const [regularSkills, harnessSkills] = await Promise.all([
+      listSkills(SKILL_ROOTS),
+      listImportedMarkdownSkills(HARNESS_SKILLS_DIR),
+    ]);
+    const seen = new Set(regularSkills.map((skill) => skill.id));
+    return [
+      ...regularSkills,
+      ...harnessSkills.filter((skill) => !seen.has(skill.id)),
+    ];
   }
 
   async function listAllDesignTemplates() {
@@ -4503,7 +4515,22 @@ export async function startServer({
   // which surface created the project after the skills/design-templates
   // split. Keep in sync with SKILL_ROOTS + DESIGN_TEMPLATE_ROOTS above.
   async function listAllSkillLikeEntries() {
-    return listSkills(ALL_SKILL_LIKE_ROOTS);
+    const [regularSkills, harnessSkills] = await Promise.all([
+      listSkills(ALL_SKILL_LIKE_ROOTS),
+      listImportedMarkdownSkills(HARNESS_SKILLS_DIR),
+    ]);
+    const seen = new Set(regularSkills.map((skill) => skill.id));
+    return [
+      ...regularSkills,
+      ...harnessSkills.filter((skill) => !seen.has(skill.id)),
+    ];
+  }
+
+  async function getSkillValidationReport() {
+    return validateImportedMarkdownSkills({
+      skillsDir: HARNESS_SKILLS_DIR,
+      inventoryCsvPath: HARNESS_SKILLS_INVENTORY_CSV,
+    });
   }
 
   async function listAllDesignSystems() {
@@ -5852,6 +5879,7 @@ export async function startServer({
       listAllDesignTemplates,
       listAllSkillLikeEntries,
       listAllDesignSystems,
+      getSkillValidationReport,
       mimeFor,
     },
     tokenContractRebuild: {
@@ -6638,6 +6666,7 @@ export async function startServer({
     };
     const registerSkillDir = (dir: string | null | undefined) => {
       if (typeof dir !== 'string' || dir.length === 0) return;
+      if (path.extname(dir).toLowerCase() === '.md') return;
       if (!activeSkillDir) activeSkillDir = dir;
       if (!activeSkillDirs.includes(dir)) activeSkillDirs.push(dir);
     };
@@ -11422,6 +11451,7 @@ export async function startServer({
         assistantMessageId: run.assistantMessageId,
         clientRequestId: run.clientRequestId,
         skillId: routineSkillId,
+        skillIds: routineContext.skillIds,
         designSystemId: appConfig.designSystemId ?? null,
         context: routineContext,
         model: modelPrefs.model ?? null,
@@ -11588,6 +11618,7 @@ export async function startServer({
   registerRoutineRoutes(app, {
     db,
     paths: { RUNTIME_DATA_DIR },
+    resources: { listAllSkillLikeEntries },
     routines: { routineService },
   });
 
