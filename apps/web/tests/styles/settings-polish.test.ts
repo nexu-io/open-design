@@ -53,4 +53,13 @@ describe('settings polish CSS', () => {
     expect(ruleValue(content, 'position')).toBe('relative');
     expect(ruleValue(content, 'z-index')).toBe('1');
   });
+
+  it('caps the Execution-mode model picker so it reads as a dropdown, not a full-width input (#4443)', () => {
+    const wrap = cssBlock(
+      expandedIndexCss,
+      '.agent-card-config .agent-model-select-wrap',
+    );
+
+    expect(ruleValue(wrap, 'max-width')).toBe('420px');
+  });
 });

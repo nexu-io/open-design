@@ -1840,6 +1840,19 @@
   position: relative;
   overflow: visible;
 }
+/*
+  Inside an Execution-mode CLI card the model picker reuses the full-width
+  `.settings-model-select` / `.inline-switcher__select` styling, so on a wide
+  Settings dialog it stretches edge-to-edge with the chevron stranded at the
+  far right — reading like an unfinished text input rather than a dropdown
+  (#4443). Cap the control so the selected model and chevron stay grouped,
+  reusing the BYOK picker's 420px width budget (`max-width`, so it still
+  collapses to the card width on narrow dialogs). Applies to both the loaded
+  button and the loading row, which share this wrapper.
+*/
+.agent-card-config .agent-model-select-wrap {
+  max-width: 420px;
+}
 
 .settings-model-select {
   display: block;
