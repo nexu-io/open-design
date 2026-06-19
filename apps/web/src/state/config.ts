@@ -783,9 +783,11 @@ export function mergeDaemonConfig(
   if (daemonConfig.defaultProjectLocationId !== undefined) {
     next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
   }
-  if (daemonConfig.updateInstallMode !== undefined) {
-    next.updateInstallMode = daemonConfig.updateInstallMode;
-  }
+  // Daemon is authoritative for updateInstallMode: a present daemon config
+  // that omits the field means the preference is unset (⇒ automatic), so
+  // clear any stale local value. Otherwise a CLI `od config unset` would be
+  // undone by App.tsx bootstrap re-syncing a stale 'manual' back to the daemon.
+  next.updateInstallMode = daemonConfig.updateInstallMode;
   return next;
 }
 

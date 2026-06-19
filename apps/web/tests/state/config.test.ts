@@ -206,14 +206,18 @@ describe('mergeDaemonConfig — updateInstallMode round-trip', () => {
     expect(merged.updateInstallMode).toBe('manual');
   });
 
-  it('preserves the local updateInstallMode when the daemon config omits the field', () => {
+  it('clears the local updateInstallMode when a present daemon config omits the field', () => {
     const localWithPref = { ...DEFAULT_CONFIG, updateInstallMode: 'manual' as const };
 
     const merged = mergeDaemonConfig(localWithPref, { agentId: 'claude' });
 
-    // The local value must survive — omitted daemon field should not clobber
-    // the local preference to undefined.
-    expect(merged.updateInstallMode).toBe('manual');
+    // When the daemon config is present (successful GET) but omits
+    // updateInstallMode, the daemon is authoritative for this key and omission
+    // means "automatic" (unset). The local value must be cleared to undefined.
+    // Without this, App.tsx bootstrap calls syncConfigToDaemon(next) which
+    // writes stale 'manual' back to the daemon, undoing a CLI `od config unset
+    // updateInstallMode`.
+    expect(merged.updateInstallMode).toBeUndefined();
   });
 });
 
