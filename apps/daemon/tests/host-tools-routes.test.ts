@@ -141,4 +141,73 @@ describe('Warp host tool on Windows', () => {
       fs.rmSync(fakeLOCALAPPDATA, { recursive: true, force: true });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Regression: #4539 — Warp Windows launch must set shell:false
+  //
+  // cmd.exe mis-parses forward-slash exe paths (C:/Users/.../warp.exe) when
+  // the route spawns with shell:true.  The fix: install-path launches set
+  // shell:false so Node's CreateProcess handles the exe path directly.
+  // ---------------------------------------------------------------------------
+
+  it('sets shell:false on the launch plan so cmd.exe never parses the exe path', async () => {
+    // Windows-only: shell:false vs shell:true is a win32 spawn distinction.
+    if (process.platform !== 'win32') return;
+
+    const fakeLOCALAPPDATA = fs.mkdtempSync(path.join(os.tmpdir(), 'od-fake-localappdata-shell-'));
+    const warpDir = path.join(fakeLOCALAPPDATA, 'Programs', 'Warp');
+    fs.mkdirSync(warpDir, { recursive: true });
+    fs.writeFileSync(path.join(warpDir, 'warp.exe'), '');
+
+    const originalLOCALAPPDATA = process.env.LOCALAPPDATA;
+
+    try {
+      process.env.LOCALAPPDATA = fakeLOCALAPPDATA;
+
+      const plan = await resolveHostToolLaunchPlan('warp', 'C:\\some\\project\\dir');
+
+      // Detection must still succeed — this is a combined regression guard.
+      expect(plan.available).toBe(true);
+
+      // KEY ASSERTION (currently RED): install-path Warp launch must carry
+      // shell:false so the resolved forward-slash exe path is passed directly
+      // to CreateProcess rather than through cmd.exe, which would ENOENT it.
+      expect(plan.shell).toBe(false);
+    } finally {
+      if (originalLOCALAPPDATA === undefined) {
+        delete process.env.LOCALAPPDATA;
+      } else {
+        process.env.LOCALAPPDATA = originalLOCALAPPDATA;
+      }
+      fs.rmSync(fakeLOCALAPPDATA, { recursive: true, force: true });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Counter-spec: PATH-shim entries must NOT force shell:false
+  //
+  // Bare-command entries (explorer, code, cursor …) rely on cmd.exe PATH
+  // resolution to find .cmd shims and wrappers.  Setting shell:false on those
+  // would break them.  This test locks the fix as *selective*: a future
+  // "set shell:false everywhere" change must fail here.
+  // ---------------------------------------------------------------------------
+
+  it('leaves shell unset for PATH-shim entries so cmd.exe can resolve .cmd wrappers', async () => {
+    // Shell-selection semantics are win32-specific.
+    if (process.platform !== 'win32') return;
+
+    // explorer.exe is always present on any Windows host via PATH; it is a
+    // safe representative of a bare-command (non-install-path) entry.
+    const plan = await resolveHostToolLaunchPlan('explorer', 'C:\\some\\dir');
+
+    if (!plan.available) {
+      // If the host's catalogue doesn't include explorer as an available tool,
+      // skip rather than fail — the absence itself can't tell us about shell.
+      return;
+    }
+
+    // Shell must be absent (undefined) — not false — for PATH-shim entries.
+    // The route's existing win32 default (shell:true) handles .cmd resolution.
+    expect(plan.shell).toBeUndefined();
+  });
 });
