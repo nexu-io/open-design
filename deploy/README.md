@@ -90,6 +90,20 @@ OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL=example-chat-model
 OD_PROVIDER_ORCHESTRATOR_LABEL="Provider orchestrator"
 ```
 
+Gateways that require a per-run authorization record before model egress can
+also expose a server-side run-session bootstrap endpoint:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL=https://provider.example.com/api/runs
+OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD=0.05
+OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD=0.10
+OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS=600
+```
+
+When configured, Open Design calls the run-session endpoint from the daemon
+before OpenAI-compatible chat egress and attaches the returned run identifier as
+provider metadata. The credential stays server-side.
+
 The daemon validates the configured base URL before provider egress and never
 returns the credential from `/api/provider-orchestrator/config` or `od provider
 config`. Model discovery, connection tests, OpenAI-compatible chat proxying, and

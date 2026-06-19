@@ -25,6 +25,9 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
  */
 export interface ProxyContext {
   projectId?: string;
+  providerRunId?: string;
+  providerOperationId?: string;
+  providerRunPurpose?: string;
   byokImageModel?: string;
   byokVideoModel?: string;
   byokSpeechModel?: string;
@@ -61,6 +64,9 @@ export async function streamProxyEndpoint(
       maxTokens: effectiveMaxTokens(cfg),
       apiVersion: cfg.apiVersion,
       ...(context?.projectId ? { projectId: context.projectId } : {}),
+      ...(context?.providerRunId ? { providerRunId: context.providerRunId } : {}),
+      ...(context?.providerOperationId ? { providerOperationId: context.providerOperationId } : {}),
+      ...(context?.providerRunPurpose ? { providerRunPurpose: context.providerRunPurpose } : {}),
       ...(context?.byokImageModel
         ? { byokImageModel: context.byokImageModel }
         : {}),

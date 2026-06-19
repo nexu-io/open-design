@@ -4254,6 +4254,9 @@ export function ProjectView({
           onError: handlers.onError,
         }, {
           projectId: project.id,
+          providerRunId: runConversationId,
+          providerOperationId: userMsg.id,
+          providerRunPurpose: 'chat-completion',
           // SenseAudio BYOK chat reads this to pre-fill the tool param's
           // default model. Prefer the live composer override; fall back
           // to the Settings default when the composer dropdown is on

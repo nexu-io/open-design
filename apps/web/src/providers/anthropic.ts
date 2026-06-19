@@ -68,7 +68,7 @@ export async function streamMessage(
     return streamMessageAIHubMix(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
-    return streamMessageOpenAI(cfg, system, history, signal, handlers);
+    return streamMessageOpenAI(cfg, system, history, signal, handlers, context);
   }
 
   if (usesAnthropicProxy(cfg)) {

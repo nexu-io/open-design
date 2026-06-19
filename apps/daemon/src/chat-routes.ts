@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { randomUUID } from 'node:crypto';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
 import {
@@ -38,6 +39,7 @@ import {
   deploymentProviderConfig,
   resolveDeploymentProviderProfile,
   resolveProviderCredentialSource,
+  type DeploymentProviderProfile,
 } from './deployment-provider.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
@@ -73,6 +75,131 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
 
 function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
   return typeof value === 'string' && PROVIDER_PROTOCOLS.has(value as ConnectionTestProtocol);
+}
+
+type DeploymentProviderRunMetadataResult =
+  | { ok: true; metadata?: Record<string, unknown> }
+  | { ok: false; status: number; code: string; message: string };
+
+function cleanProviderRunString(value: unknown, fallback: string): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const candidate = raw || fallback;
+  return candidate.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 128) || fallback;
+}
+
+function existingMetadata(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { ...(value as Record<string, unknown>) };
+}
+
+function validateProviderRunSessionUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return 'Deployment provider run-session URL must use http or https.';
+    }
+    if (parsed.username || parsed.password) {
+      return 'Deployment provider run-session URL must not include user info.';
+    }
+    return null;
+  } catch {
+    return 'Deployment provider run-session URL is invalid.';
+  }
+}
+
+async function deploymentProviderRunMetadata(
+  profile: DeploymentProviderProfile,
+  body: Record<string, unknown>,
+): Promise<DeploymentProviderRunMetadataResult> {
+  if (!profile.runSessionUrl) return { ok: true };
+  if (profile.runCostCapUsd === undefined) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: 'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.',
+    };
+  }
+  const runSessionUrlError = validateProviderRunSessionUrl(profile.runSessionUrl);
+  if (runSessionUrlError) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: runSessionUrlError,
+    };
+  }
+
+  const projectId = cleanProviderRunString(body.projectId, `project-${randomUUID()}`);
+  const runId = cleanProviderRunString(body.providerRunId, `run-${randomUUID()}`);
+  const operationId = cleanProviderRunString(body.providerOperationId, `operation-${randomUUID()}`);
+  const purpose = cleanProviderRunString(body.providerRunPurpose, 'chat-completion');
+  const requestBody: Record<string, unknown> = {
+    od_project_id: projectId,
+    od_run_id: runId,
+    purpose,
+    allowed_surfaces: ['reasoning'],
+    max_total_cost_usd: profile.runMaxTotalCostUsd ?? profile.runCostCapUsd,
+  };
+  if (profile.runTtlSeconds !== undefined) {
+    requestBody.ttl_seconds = Math.trunc(profile.runTtlSeconds);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(profile.runSessionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${profile.apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+      redirect: 'error',
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 502,
+      code: 'BAD_GATEWAY',
+      message: 'Deployment provider run session endpoint was unreachable.',
+    };
+  }
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      code: response.status === 401 || response.status === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
+      message: `Deployment provider run session failed: ${response.status}`,
+    };
+  }
+  const session = await response.json().catch((): unknown => null);
+  const runSessionId = (
+    session &&
+    typeof session === 'object' &&
+    !Array.isArray(session) &&
+    typeof (session as { run_session_id?: unknown }).run_session_id === 'string'
+  )
+    ? (session as { run_session_id: string }).run_session_id.trim()
+    : '';
+  if (!runSessionId) {
+    return {
+      ok: false,
+      status: 502,
+      code: 'BAD_GATEWAY',
+      message: 'Deployment provider run session response did not include run_session_id.',
+    };
+  }
+
+  return {
+    ok: true,
+    metadata: {
+      ...existingMetadata(body.metadata),
+      opendesign_run_session_id: runSessionId,
+      opendesign_cost_cap_usd: profile.runCostCapUsd,
+      opendesign_idempotency_key: operationId,
+      opendesign_operation_nonce: `nonce-${randomUUID()}`,
+    },
+  };
 }
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
@@ -1044,6 +1171,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
       effectiveBaseUrl = resolved.profile.baseUrl;
       effectiveApiKey = resolved.profile.apiKey;
+      const metadata = await deploymentProviderRunMetadata(
+        resolved.profile,
+        proxyBody as Record<string, unknown>,
+      );
+      if (!metadata.ok) {
+        return sendApiError(res, metadata.status, metadata.code, metadata.message);
+      }
+      if (metadata.metadata) {
+        proxyBody.metadata = metadata.metadata;
+      }
     }
     if (!effectiveBaseUrl || !effectiveApiKey || !model) {
       return sendApiError(
@@ -1085,6 +1222,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const payload: any = {
       model,
       messages: payloadMessages,
+      ...(proxyBody.metadata && typeof proxyBody.metadata === 'object'
+        ? { metadata: proxyBody.metadata }
+        : {}),
       ...buildOpenAIChatTokenParam(
         model,
         typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,

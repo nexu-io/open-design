@@ -7,7 +7,7 @@
  */
 import type { AppConfig, ChatMessage } from '../types';
 import type { StreamHandlers } from './anthropic';
-import { streamProxyEndpoint } from './api-proxy';
+import { streamProxyEndpoint, type ProxyContext } from './api-proxy';
 
 export async function streamMessageOpenAI(
   cfg: AppConfig,
@@ -15,8 +15,9 @@ export async function streamMessageOpenAI(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
+  context?: ProxyContext,
 ): Promise<void> {
-  return streamProxyEndpoint('/api/proxy/openai/stream', cfg, system, history, signal, handlers);
+  return streamProxyEndpoint('/api/proxy/openai/stream', cfg, system, history, signal, handlers, context);
 }
 
 /**

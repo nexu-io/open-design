@@ -14,6 +14,10 @@ export interface DeploymentProviderProfile {
   apiKey: string;
   label: string;
   defaultModel?: string;
+  runSessionUrl?: string;
+  runCostCapUsd?: number;
+  runMaxTotalCostUsd?: number;
+  runTtlSeconds?: number;
 }
 
 export type DeploymentProviderResolution =
@@ -36,6 +40,13 @@ function displayHost(baseUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function optionalPositiveNumber(value: string | undefined): number | undefined {
+  const raw = cleanEnvValue(value);
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 export function deploymentProviderConfig(
@@ -127,15 +138,25 @@ export function resolveDeploymentProviderProfile(
     };
   }
 
+  const profile: DeploymentProviderProfile = {
+    credentialSource: 'deployment',
+    protocol: 'openai',
+    baseUrl: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_BASE_URL),
+    apiKey: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_API_KEY),
+    label: config.label,
+  };
+  if (config.defaultModel) profile.defaultModel = config.defaultModel;
+  const runSessionUrl = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL);
+  if (runSessionUrl) profile.runSessionUrl = runSessionUrl;
+  const runCostCapUsd = optionalPositiveNumber(env.OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD);
+  if (runCostCapUsd !== undefined) profile.runCostCapUsd = runCostCapUsd;
+  const runMaxTotalCostUsd = optionalPositiveNumber(env.OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD);
+  if (runMaxTotalCostUsd !== undefined) profile.runMaxTotalCostUsd = runMaxTotalCostUsd;
+  const runTtlSeconds = optionalPositiveNumber(env.OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS);
+  if (runTtlSeconds !== undefined) profile.runTtlSeconds = runTtlSeconds;
+
   return {
     ok: true,
-    profile: {
-      credentialSource: 'deployment',
-      protocol: 'openai',
-      baseUrl: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_BASE_URL),
-      apiKey: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_API_KEY),
-      label: config.label,
-      ...(config.defaultModel ? { defaultModel: config.defaultModel } : {}),
-    },
+    profile,
   };
 }
