@@ -1139,6 +1139,7 @@ export function SettingsDialog({
   // isn't stuck blocking the live model fetch until the user re-selects the tab.
   const [cfg, setCfg] = useState<AppConfig>(() => ({
     ...initial,
+    apiCredentialSource: initial.apiCredentialSource ?? 'user',
     baseUrl: resolveFixedOriginBaseUrl(initial.apiProtocol ?? 'anthropic', initial.baseUrl),
   }));
   const [maxTokensInput, setMaxTokensInput] = useState(
