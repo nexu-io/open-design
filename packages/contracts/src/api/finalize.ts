@@ -1,4 +1,5 @@
 import type { ConnectionTestProtocol } from './connectionTest';
+import type { ProviderCredentialSourceRequestFields } from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
@@ -29,13 +30,14 @@ export type FinalizeProviderProtocol = ConnectionTestProtocol;
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-export interface FinalizeProviderRequest extends ReasoningExecutionRequestFields {
+export interface FinalizeProviderRequest
+  extends ReasoningExecutionRequestFields, ProviderCredentialSourceRequestFields {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.
    */
   protocol?: FinalizeProviderProtocol;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   model: string;
   maxTokens?: number;

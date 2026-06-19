@@ -9,6 +9,32 @@ import { AIHUBMIX_APP_CODE } from '../src/aihubmix.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
+const DEPLOYMENT_PROVIDER_ENV_KEYS = [
+  'OD_PROVIDER_ORCHESTRATOR_BASE_URL',
+  'OD_PROVIDER_ORCHESTRATOR_API_KEY',
+] as const;
+
+async function withDeploymentProviderEnv<T>(
+  env: Partial<Record<typeof DEPLOYMENT_PROVIDER_ENV_KEYS[number], string | undefined>>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    const value = env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await run();
+  } finally {
+    for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+      const value = previous.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
 
 describe('API proxy routes', () => {
   const realFetch = globalThis.fetch;
@@ -69,6 +95,74 @@ describe('API proxy routes', () => {
         redirect: 'error',
       }),
     );
+  });
+
+  it('routes OpenAI-compatible proxy requests through the deployment provider credential', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.example.test/root/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        expect(init?.headers).not.toMatchObject({
+          Authorization: 'Bearer caller-secret',
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          baseUrl: 'https://caller.example.test/v1',
+          apiKey: 'caller-secret',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+    });
+  });
+
+  it('redacts deployment provider credentials from OpenAI-compatible upstream errors', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(new Response(
+          JSON.stringify({ error: { message: 'bad key deployment-secret' } }),
+          { status: 401, headers: { 'content-type': 'application/json' } },
+        ));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('[REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
   });
 
   it.each([

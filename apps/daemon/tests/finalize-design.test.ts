@@ -973,6 +973,10 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
 describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', () => {
   let server: http.Server;
   let serverBaseUrl: string;
+  const deploymentProviderEnvKeys = [
+    'OD_PROVIDER_ORCHESTRATOR_BASE_URL',
+    'OD_PROVIDER_ORCHESTRATOR_API_KEY',
+  ] as const;
 
   beforeAll(async () => {
     const { startServer } = await import('../src/server.js');
@@ -994,6 +998,28 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+  }
+
+  async function withDeploymentProviderEnv<T>(
+    env: Partial<Record<typeof deploymentProviderEnvKeys[number], string | undefined>>,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const previous = new Map<string, string | undefined>();
+    for (const key of deploymentProviderEnvKeys) {
+      previous.set(key, process.env[key]);
+      const value = env[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try {
+      return await run();
+    } finally {
+      for (const key of deploymentProviderEnvKeys) {
+        const value = previous.get(key);
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   }
 
   it('400 BAD_REQUEST when baseUrl is not a valid URL (test #13)', async () => {
@@ -1031,6 +1057,29 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
     const body = await res.json();
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message.toLowerCase()).toContain('apikey');
+  });
+
+  it('400 BAD_REQUEST when deployment provider credentials are incomplete before project lookup on OpenAI finalize', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: undefined,
+    }, async () => {
+      const res = await fetch(`${serverBaseUrl}/api/projects/p1/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.message).toContain('Deployment provider');
+      expect(JSON.stringify(body)).not.toContain('gateway.example.test/v1');
+    });
   });
 
   it('400 BAD_REQUEST when :id contains characters outside the safe-id regex (test #16)', async () => {

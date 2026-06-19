@@ -38,6 +38,12 @@ const realFetch = globalThis.fetch;
 let baseUrl: string;
 let server: http.Server;
 const FAKE_VELA_FIXTURE = path.resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
+const DEPLOYMENT_PROVIDER_ENV_KEYS = [
+  'OD_PROVIDER_ORCHESTRATOR_BASE_URL',
+  'OD_PROVIDER_ORCHESTRATOR_API_KEY',
+  'OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL',
+  'OD_PROVIDER_ORCHESTRATOR_LABEL',
+] as const;
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -59,6 +65,28 @@ function passThroughOrUpstream(handler: (url: string, init?: FetchInit) => Respo
     if (url.startsWith(baseUrl)) return realFetch(input, init);
     return Promise.resolve(handler(url, init));
   });
+}
+
+async function withDeploymentProviderEnv<T>(
+  env: Partial<Record<typeof DEPLOYMENT_PROVIDER_ENV_KEYS[number], string | undefined>>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    const value = env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await run();
+  } finally {
+    for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+      const value = previous.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 }
 
 async function withFakeAgent<T>(
@@ -193,6 +221,58 @@ afterEach(() => {
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
 describe('POST /api/provider/models', () => {
+  it('reports sanitized deployment provider availability without the credential', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL: 'gpt-routed',
+      OD_PROVIDER_ORCHESTRATOR_LABEL: 'Deployment provider',
+    }, async () => {
+      const res = await realFetch(`${baseUrl}/api/provider-orchestrator/config`);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Deployment provider',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      });
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+    });
+  });
+
+  it('reports missing deployment provider config without contacting upstream', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: undefined,
+    }, async () => {
+      const fetchMock = passThroughOrUpstream(() => {
+        throw new Error('unexpected upstream fetch');
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json() as { error: { message: string } };
+      expect(body.error.message).toContain('base URL and credential');
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        expect.stringContaining('gateway.example.test'),
+        expect.anything(),
+      );
+    });
+  });
+
   it('lists OpenAI-compatible models from /models', async () => {
     const fetchMock = passThroughOrUpstream((url, init) => {
       expect(url).toBe('https://api.openai.com/v1/models');
@@ -227,6 +307,42 @@ describe('POST /api/provider/models', () => {
         { id: 'gpt-4o', label: 'gpt-4o' },
         { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
       ],
+    });
+  });
+
+  it('uses deployment provider config for OpenAI-compatible model discovery', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/base',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        expect(url).toBe('https://gateway.example.test/base/v1/models');
+        expect((init?.headers as Record<string, string>).authorization).toBe(
+          'Bearer deployment-secret',
+        );
+        return jsonResponse({
+          data: [{ id: 'gpt-routed', object: 'model' }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          baseUrl: 'https://caller.example.test/v1',
+          apiKey: 'caller-secret',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        models: [{ id: 'gpt-routed', label: 'gpt-routed' }],
+      });
     });
   });
 
@@ -591,6 +707,45 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.kind).toBe('success');
     expect(body.model).toBe('claude-sonnet-4-5');
     expect(body.sample).toBe('ok');
+  });
+
+  it('uses deployment provider config for OpenAI-compatible connection tests', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        expect((init?.headers as Record<string, string>).authorization).toBe(
+          'Bearer deployment-secret',
+        );
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          baseUrl: 'https://caller.example.test/v1',
+          apiKey: 'caller-secret',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        model: 'gpt-routed',
+        sample: 'ok',
+      });
+    });
   });
 
   it('redacts submitted keys from success samples', async () => {

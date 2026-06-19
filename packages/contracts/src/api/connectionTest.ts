@@ -3,6 +3,7 @@
 // and returns it inside a JSON envelope (always HTTP 200 — see notes in the
 // daemon module for why).
 import type { AgentCliEnvPrefs } from './app-config';
+import type { ProviderCredentialSourceRequestFields } from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 export interface BaseUrlValidationResult {
@@ -181,10 +182,11 @@ export interface ConnectionTestDiagnostics {
 
 export type ConnectionTestProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
 
-export interface ProviderTestRequest extends ReasoningExecutionRequestFields {
+export interface ProviderTestRequest
+  extends ReasoningExecutionRequestFields, ProviderCredentialSourceRequestFields {
   protocol: ConnectionTestProtocol;
-  baseUrl: string;
-  apiKey: string;
+  baseUrl?: string;
+  apiKey?: string;
   model: string;
   // Azure only. When omitted, the daemon falls back to its default api-version.
   apiVersion?: string;

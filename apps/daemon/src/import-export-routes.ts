@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA } from '@open-design/contracts';
+import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
 import nodePath from 'node:path';
 import type { RouteDeps } from './server-context.js';
 import {
@@ -9,6 +10,10 @@ import {
   type InlineAssetReader,
 } from './inline-assets.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
+import {
+  resolveDeploymentProviderProfile,
+  resolveProviderCredentialSource,
+} from './deployment-provider.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
@@ -962,7 +967,16 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
+    const {
+      apiKey,
+      baseUrl,
+      model,
+      maxTokens,
+      apiVersion,
+      protocol: bodyProtocol,
+      reasoningExecution,
+      credentialSource: rawCredentialSource,
+    } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -986,19 +1000,33 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
       }
+      const credentialSource = resolveProviderCredentialSource(rawCredentialSource);
+      if (!credentialSource) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'credentialSource must be user or deployment');
+      }
 
-      if (typeof apiKey !== 'string' || !apiKey.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
-      }
-      if (typeof model !== 'string' || !model.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
-      }
+      let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       if (baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
         }
         effectiveBaseUrl = baseUrl.trim();
+      }
+      if (credentialSource === 'deployment') {
+        const resolved = resolveDeploymentProviderProfile(protocol as ConnectionTestProtocol);
+        if (!resolved.ok) {
+          return sendApiError(res, resolved.status, resolved.code, resolved.message);
+        }
+        effectiveApiKey = resolved.profile.apiKey;
+        effectiveBaseUrl = resolved.profile.baseUrl;
+      }
+
+      if (!effectiveApiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
       }
       if (!effectiveBaseUrl) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
@@ -1047,7 +1075,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           req.params.id,
           {
             protocol,
-            apiKey,
+            apiKey: effectiveApiKey,
             baseUrl: effectiveBaseUrl,
             model,
             maxTokens,

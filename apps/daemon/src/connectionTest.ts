@@ -676,7 +676,11 @@ export function redactSecrets(
   return redacted;
 }
 
-type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
+type ProviderConnectionInput = Omit<ProviderTestRequest, 'baseUrl' | 'apiKey'> & {
+  baseUrl: string;
+  apiKey: string;
+  signal?: AbortSignal;
+};
 type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {

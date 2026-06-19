@@ -12,7 +12,9 @@ import { redactSecrets, validateBaseUrlResolved } from './connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 
-type ProviderModelsInput = ProviderModelsRequest & {
+type ProviderModelsInput = Omit<ProviderModelsRequest, 'baseUrl' | 'apiKey'> & {
+  baseUrl: string;
+  apiKey: string;
   signal?: AbortSignal;
   requestInit?: Pick<RequestInit, 'dispatcher'>;
 };

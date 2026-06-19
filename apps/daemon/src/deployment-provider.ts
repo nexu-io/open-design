@@ -1,0 +1,141 @@
+import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import type {
+  DeploymentProviderConfigResponse,
+  ProviderCredentialSource,
+} from '@open-design/contracts/api/providerCredential';
+import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+
+const DEFAULT_LABEL = 'Provider orchestrator';
+
+export interface DeploymentProviderProfile {
+  credentialSource: 'deployment';
+  protocol: 'openai';
+  baseUrl: string;
+  apiKey: string;
+  label: string;
+  defaultModel?: string;
+}
+
+export type DeploymentProviderResolution =
+  | { ok: true; profile: DeploymentProviderProfile }
+  | {
+      ok: false;
+      status: 400;
+      code: 'BAD_REQUEST';
+      message: string;
+      config: DeploymentProviderConfigResponse;
+    };
+
+function cleanEnvValue(value: string | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function displayHost(baseUrl: string): string | undefined {
+  try {
+    return new URL(baseUrl).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+export function deploymentProviderConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): DeploymentProviderConfigResponse {
+  const baseUrl = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_BASE_URL);
+  const apiKey = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_API_KEY);
+  const label = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_LABEL) || DEFAULT_LABEL;
+  const defaultModel = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL);
+
+  if (!baseUrl && !apiKey) {
+    return {
+      available: false,
+      credentialSource: 'deployment',
+      protocol: 'openai',
+      label,
+      kind: 'not_configured',
+      ...(defaultModel ? { defaultModel } : {}),
+    };
+  }
+
+  if (!baseUrl || !apiKey) {
+    const host = baseUrl ? displayHost(baseUrl) : undefined;
+    return {
+      available: false,
+      credentialSource: 'deployment',
+      protocol: 'openai',
+      label,
+      kind: 'missing_config',
+      detail: 'Deployment provider requires both base URL and credential.',
+      ...(defaultModel ? { defaultModel } : {}),
+      ...(host ? { displayHost: host } : {}),
+    };
+  }
+
+  const validated = validateBaseUrl(baseUrl);
+  if (validated.error || !validated.parsed) {
+    const host = displayHost(baseUrl);
+    return {
+      available: false,
+      credentialSource: 'deployment',
+      protocol: 'openai',
+      label,
+      kind: 'invalid_base_url',
+      detail: validated.error ?? 'Invalid deployment provider base URL.',
+      ...(defaultModel ? { defaultModel } : {}),
+      ...(host ? { displayHost: host } : {}),
+    };
+  }
+
+  return {
+    available: true,
+    credentialSource: 'deployment',
+    protocol: 'openai',
+    label,
+    kind: 'available',
+    displayHost: validated.parsed.hostname,
+    ...(defaultModel ? { defaultModel } : {}),
+  };
+}
+
+export function resolveProviderCredentialSource(value: unknown): ProviderCredentialSource | null {
+  if (value === undefined || value === 'user') return 'user';
+  if (value === 'deployment') return 'deployment';
+  return null;
+}
+
+export function resolveDeploymentProviderProfile(
+  protocol: ConnectionTestProtocol,
+  env: NodeJS.ProcessEnv = process.env,
+): DeploymentProviderResolution {
+  const config = deploymentProviderConfig(env);
+  if (protocol !== 'openai') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: 'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+      config,
+    };
+  }
+  if (!config.available) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'BAD_REQUEST',
+      message: config.detail ?? 'Deployment provider is not configured.',
+      config,
+    };
+  }
+
+  return {
+    ok: true,
+    profile: {
+      credentialSource: 'deployment',
+      protocol: 'openai',
+      baseUrl: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_BASE_URL),
+      apiKey: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_API_KEY),
+      label: config.label,
+      ...(config.defaultModel ? { defaultModel: config.defaultModel } : {}),
+    },
+  };
+}
