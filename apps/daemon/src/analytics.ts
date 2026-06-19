@@ -164,10 +164,23 @@ export function createAnalyticsService(args: {
   // flushAt: 1 keeps the daemon-emit-then-respond pattern simple at the cost
   // of one network round-trip per event; flushInterval: 1000 still batches
   // bursts so a streaming run doesn't fire one HTTP per event.
+  //
+  // disableGeoip: false REVERSES posthog-node's default (true). The library
+  // assumes a server deployment where the ingestion request originates from a
+  // datacenter IP, so GeoIP would mis-attribute every user to the server's
+  // location — hence it stamps `$geoip_disable: true` and PostHog skips
+  // country enrichment. Open Design's daemon runs on the USER'S OWN machine,
+  // so the request's source IP is the user's real public IP, identical to what
+  // posthog-js already sends. Leaving the default on stripped country from
+  // every daemon-emitted event (run_created, run_finished, *_result, …) —
+  // they all landed in the null bucket on any country breakdown while web
+  // events were 100% enriched. Same reason we hand-stamp `$os` below:
+  // posthog-node does not auto-enrich what posthog-js gets for free.
   const client = new PostHog(cfg.key, {
     host: cfg.host,
     flushAt: 1,
     flushInterval: 1000,
+    disableGeoip: false,
   });
 
   // Suppress posthog-node's own internal error spam — analytics failures
