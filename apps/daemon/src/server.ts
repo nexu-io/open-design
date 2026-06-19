@@ -5570,8 +5570,10 @@ export async function startServer({
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
   // `validateBaseUrlResolved` here so every proxy and finalize handler runs
-  // the same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
+  // the same resolved-IP check before issuing the upstream request. Deployment
+  // provider routes may pass a narrower administrator-configured allowance.
+  const validateExternalApiBaseUrl = (baseUrl, options) =>
+    validateBaseUrlResolved(baseUrl, undefined, options);
 
   const resolvedPortRef = {
     get current() {

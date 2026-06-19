@@ -380,6 +380,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (!credentialSource) return;
     let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
     let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+    let allowPrivateNetworkBaseUrl = false;
     if (credentialSource === 'deployment') {
       const resolved = resolveDeploymentProviderProfile(protocol);
       if (!resolved.ok) {
@@ -387,6 +388,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
       effectiveBaseUrl = resolved.profile.baseUrl;
       effectiveApiKey = resolved.profile.apiKey;
+      allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
     // model list loads without a key. Every other protocol needs the key to
@@ -421,6 +423,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
           signal: controller.signal,
           requestInit: proxyDispatcher.requestInit,
+          allowPrivateNetworkBaseUrl,
         });
         return res.json(result);
       } finally {
@@ -471,6 +474,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!credentialSource) return;
         let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
         let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+        let allowPrivateNetworkBaseUrl = false;
         if (credentialSource === 'deployment') {
           const resolved = resolveDeploymentProviderProfile(protocol);
           if (!resolved.ok) {
@@ -478,6 +482,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           }
           effectiveBaseUrl = resolved.profile.baseUrl;
           effectiveApiKey = resolved.profile.apiKey;
+          allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
         }
         if (
           typeof body.model !== 'string' ||
@@ -509,6 +514,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
             signal: controller.signal,
+            allowPrivateNetworkBaseUrl,
           });
           return res.json(result);
         } catch (err: any) {
@@ -622,9 +628,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
   // `validateBaseUrlResolved` here so every proxy/stream handler runs the
-  // same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl: string) => {
-    return validateBaseUrlResolved(baseUrl);
+  // same resolved-IP check before issuing the upstream request. Deployment
+  // provider routes may pass a narrower administrator-configured allowance.
+  const validateExternalApiBaseUrl = (
+    baseUrl: string,
+    options: { allowPrivateNetwork?: boolean } = {},
+  ) => {
+    return validateBaseUrlResolved(baseUrl, undefined, options);
   };
 
   const proxyErrorCode = (status: number) => {
@@ -1164,6 +1174,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (!credentialSource) return;
     let effectiveBaseUrl = typeof baseUrl === 'string' ? baseUrl : '';
     let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
+    let allowPrivateNetworkBaseUrl = false;
     if (credentialSource === 'deployment') {
       const resolved = resolveDeploymentProviderProfile('openai');
       if (!resolved.ok) {
@@ -1171,6 +1182,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
       effectiveBaseUrl = resolved.profile.baseUrl;
       effectiveApiKey = resolved.profile.apiKey;
+      allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
       const metadata = await deploymentProviderRunMetadata(
         resolved.profile,
         proxyBody as Record<string, unknown>,
@@ -1191,7 +1203,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
 
-    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+    const validated = await validateExternalApiBaseUrl(
+      effectiveBaseUrl,
+      { allowPrivateNetwork: allowPrivateNetworkBaseUrl },
+    );
     if (validated.error) {
       return sendApiError(
         res,

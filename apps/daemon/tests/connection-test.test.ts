@@ -346,6 +346,55 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('allows deployment provider model discovery against an administrator private-network hostname', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/base',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const dnsSpy = vi
+        .spyOn(dnsPromises, 'lookup')
+        .mockImplementation((async (hostname: string) => {
+          if (hostname === 'gateway.private.example.test') {
+            return [{ address: '100.90.158.89', family: 4 }];
+          }
+          const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+          err.code = 'ENOTFOUND';
+          throw err;
+        }) as unknown as typeof dnsPromises.lookup);
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        expect(url).toBe('https://gateway.private.example.test/base/v1/models');
+        expect((init?.headers as Record<string, string>).authorization).toBe(
+          'Bearer deployment-secret',
+        );
+        return jsonResponse({
+          data: [{ id: 'gpt-routed', object: 'model' }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const res = await realFetch(`${baseUrl}/api/provider/models`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            protocol: 'openai',
+            credentialSource: 'deployment',
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: true,
+          kind: 'success',
+          models: [{ id: 'gpt-routed', label: 'gpt-routed' }],
+        });
+        expect(dnsSpy).not.toHaveBeenCalled();
+      } finally {
+        dnsSpy.mockRestore();
+      }
+    });
+  });
+
   it('routes provider model discovery through the live proxy dispatcher', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
       HTTP_PROXY: 'http://proxy.example.test:8080',
@@ -745,6 +794,58 @@ describe('POST /api/test/connection provider mode', () => {
         model: 'gpt-routed',
         sample: 'ok',
       });
+    });
+  });
+
+  it('allows deployment provider connection tests against an administrator private-network hostname', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const dnsSpy = vi
+        .spyOn(dnsPromises, 'lookup')
+        .mockImplementation((async (hostname: string) => {
+          if (hostname === 'gateway.private.example.test') {
+            return [{ address: '100.90.158.89', family: 4 }];
+          }
+          const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+          err.code = 'ENOTFOUND';
+          throw err;
+        }) as unknown as typeof dnsPromises.lookup);
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        expect(url).toBe('https://gateway.private.example.test/v1/chat/completions');
+        expect((init?.headers as Record<string, string>).authorization).toBe(
+          'Bearer deployment-secret',
+        );
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'provider',
+            protocol: 'openai',
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: true,
+          kind: 'success',
+          model: 'gpt-routed',
+          sample: 'ok',
+        });
+        expect(dnsSpy).not.toHaveBeenCalled();
+      } finally {
+        dnsSpy.mockRestore();
+      }
     });
   });
 

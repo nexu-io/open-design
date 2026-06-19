@@ -1007,6 +1007,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
 
       let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
+      let allowPrivateNetworkBaseUrl = false;
       if (baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
@@ -1020,6 +1021,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         }
         effectiveApiKey = resolved.profile.apiKey;
         effectiveBaseUrl = resolved.profile.baseUrl;
+        allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
       }
 
       if (!effectiveApiKey.trim()) {
@@ -1031,7 +1033,10 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       if (!effectiveBaseUrl) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
       }
-      const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+      const validated = await validateExternalApiBaseUrl(
+        effectiveBaseUrl,
+        { allowPrivateNetwork: allowPrivateNetworkBaseUrl },
+      );
       if (validated.error) {
         return sendApiError(
           res,

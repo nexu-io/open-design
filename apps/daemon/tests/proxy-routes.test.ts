@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { promises as dnsPromises } from 'node:dns';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -134,6 +135,52 @@ describe('API proxy routes', () => {
 
       expect(res.status).toBe(200);
       await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+    });
+  });
+
+  it('allows deployment provider proxy requests to an administrator private-network hostname', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const dnsSpy = vi
+        .spyOn(dnsPromises, 'lookup')
+        .mockImplementation((async (hostname: string) => {
+          if (hostname === 'gateway.private.example.test') {
+            return [{ address: '100.90.158.89', family: 4 }];
+          }
+          const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+          err.code = 'ENOTFOUND';
+          throw err;
+        }) as unknown as typeof dnsPromises.lookup);
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.private.example.test/root/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+        expect(dnsSpy).not.toHaveBeenCalled();
+      } finally {
+        dnsSpy.mockRestore();
+      }
     });
   });
 

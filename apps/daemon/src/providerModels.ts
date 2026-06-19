@@ -17,6 +17,7 @@ type ProviderModelsInput = Omit<ProviderModelsRequest, 'baseUrl' | 'apiKey'> & {
   apiKey: string;
   signal?: AbortSignal;
   requestInit?: Pick<RequestInit, 'dispatcher'>;
+  allowPrivateNetworkBaseUrl?: boolean;
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
@@ -223,7 +224,11 @@ export async function listProviderModels(
     };
   }
 
-  const validated = await validateBaseUrlResolved(input.baseUrl);
+  const validated = await validateBaseUrlResolved(
+    input.baseUrl,
+    undefined,
+    { allowPrivateNetwork: input.allowPrivateNetworkBaseUrl === true },
+  );
   if (validated.error || !validated.parsed) {
     return {
       ok: false,

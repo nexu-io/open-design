@@ -10,6 +10,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type http from 'node:http';
+import { promises as dnsPromises } from 'node:dns';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1079,6 +1080,46 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
       expect(body.error.code).toBe('BAD_REQUEST');
       expect(body.error.message).toContain('Deployment provider');
       expect(JSON.stringify(body)).not.toContain('gateway.example.test/v1');
+    });
+  });
+
+  it('allows deployment provider finalize validation for an administrator private-network hostname', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const dnsSpy = vi
+        .spyOn(dnsPromises, 'lookup')
+        .mockImplementation((async (hostname: string) => {
+          if (hostname === 'gateway.private.example.test') {
+            return [{ address: '100.90.158.89', family: 4 }];
+          }
+          const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+          err.code = 'ENOTFOUND';
+          throw err;
+        }) as unknown as typeof dnsPromises.lookup);
+
+      try {
+        const res = await fetch(`${serverBaseUrl}/api/projects/p1/finalize/openai`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            protocol: 'openai',
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            maxTokens: 0,
+          }),
+        });
+
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error.code).toBe('BAD_REQUEST');
+        expect(body.error.message).toContain('maxTokens');
+        expect(JSON.stringify(body)).not.toContain('Internal IPs blocked');
+        expect(dnsSpy).not.toHaveBeenCalled();
+      } finally {
+        dnsSpy.mockRestore();
+      }
     });
   });
 

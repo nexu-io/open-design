@@ -96,6 +96,9 @@ export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 export type DnsLookupAddress = { address: string; family: number };
 export type DnsLookupFn = (hostname: string) => Promise<DnsLookupAddress[]>;
+export interface ResolvedBaseUrlValidationOptions {
+  allowPrivateNetwork?: boolean;
+}
 
 const defaultDnsLookup: DnsLookupFn = async (hostname) => {
   const result = await dnsPromises.lookup(hostname, { all: true, family: 0 });
@@ -110,12 +113,29 @@ function looksLikeIpLiteral(hostname: string): boolean {
   return host.includes(':');
 }
 
+function validateConfiguredBaseUrl(baseUrl: string): BaseUrlValidationResult {
+  let parsed: ParsedBaseUrl;
+  try {
+    parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
+  } catch {
+    return { error: 'Invalid baseUrl' };
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return { error: 'Only http/https allowed' };
+  }
+  return { parsed };
+}
+
 export async function validateBaseUrlResolved(
   baseUrl: string,
   lookup: DnsLookupFn = defaultDnsLookup,
+  options: ResolvedBaseUrlValidationOptions = {},
 ): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl);
+  const sync = options.allowPrivateNetwork
+    ? validateConfiguredBaseUrl(baseUrl)
+    : validateBaseUrl(baseUrl);
   if (sync.error || !sync.parsed) return sync;
+  if (options.allowPrivateNetwork) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
   if (isLoopbackApiHost(hostname)) return sync;
@@ -680,6 +700,7 @@ type ProviderConnectionInput = Omit<ProviderTestRequest, 'baseUrl' | 'apiKey'> &
   baseUrl: string;
   apiKey: string;
   signal?: AbortSignal;
+  allowPrivateNetworkBaseUrl?: boolean;
 };
 type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
 
@@ -1233,7 +1254,11 @@ export async function testProviderConnection(
   const start = Date.now();
   const model = String(input.model ?? '');
   const normalizedInput = normalizeProviderTestInput(input);
-  const validated = await validateBaseUrlResolved(normalizedInput.baseUrl);
+  const validated = await validateBaseUrlResolved(
+    normalizedInput.baseUrl,
+    undefined,
+    { allowPrivateNetwork: input.allowPrivateNetworkBaseUrl === true },
+  );
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {

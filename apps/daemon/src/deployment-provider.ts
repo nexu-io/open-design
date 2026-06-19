@@ -13,6 +13,7 @@ export interface DeploymentProviderProfile {
   baseUrl: string;
   apiKey: string;
   label: string;
+  allowPrivateNetworkBaseUrl: true;
   defaultModel?: string;
   runSessionUrl?: string;
   runCostCapUsd?: number;
@@ -144,6 +145,7 @@ export function resolveDeploymentProviderProfile(
     baseUrl: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_BASE_URL),
     apiKey: cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_API_KEY),
     label: config.label,
+    allowPrivateNetworkBaseUrl: true,
   };
   if (config.defaultModel) profile.defaultModel = config.defaultModel;
   const runSessionUrl = cleanEnvValue(env.OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL);
