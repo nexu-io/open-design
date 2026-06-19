@@ -28,6 +28,19 @@ function writeCursorAgent(dir: string, statusOutput: string): void {
   chmodSync(bin, 0o755);
 }
 
+function writeOpenCode(dir: string): string {
+  const bin = join(dir, 'opencode');
+  writeFileSync(
+    bin,
+    `#!/bin/sh\n` +
+      `if [ "$1" = "--version" ]; then echo "opencode 1.17.3"; exit 0; fi\n` +
+      `if [ "$1" = "models" ]; then echo "openai/gpt-5"; exit 0; fi\n` +
+      `exit 0\n`,
+  );
+  chmodSync(bin, 0o755);
+  return bin;
+}
+
 function writeNonExecutableCursorAgent(dir: string): string {
   const bin = join(dir, 'cursor-agent');
   writeFileSync(
@@ -64,6 +77,28 @@ posixTest('detectAgents emits a not-on-path diagnostic with searched dirs + fix 
       const intents = (diagnostic?.fixActions ?? []).map((a) => a.kind);
       assert.ok(intents.includes('openInstall'), 'expected openInstall fix intent');
       assert.ok(intents.includes('rescan'), 'expected rescan fix intent');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+posixTest('detectAgents finds OpenCode when npm exposes only the opencode binary', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-opencode-npm-bin-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = writeOpenCode(dir);
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const opencode = agents.find((agent) => agent.id === 'opencode');
+
+      assert.equal(opencode?.available, true);
+      assert.equal(opencode?.bin, 'opencode-cli');
+      assert.equal(opencode?.path, bin);
+      assert.equal(opencode?.version, 'opencode 1.17.3');
+      assert.equal(opencode?.diagnostics, undefined);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
