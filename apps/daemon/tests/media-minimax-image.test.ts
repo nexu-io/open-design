@@ -168,4 +168,44 @@ describe('minimax image generation', () => {
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'minimax-i2i.png'));
     expect(bytes.length).toBeGreaterThan(0);
   });
+
+  it('surfaces base_resp.status_code failures with status_msg as the error', async () => {
+    await writeConfig({
+      providers: {
+        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
+      },
+    });
+
+    // MiniMax wraps every response in base_resp; an HTTP 200 can still be a
+    // logical failure (e.g. status_code 1008 = insufficient balance). The
+    // renderer must surface this as a thrown Error rather than silently
+    // returning empty bytes.
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      base_resp: {
+        status_code: 1008,
+        status_msg: 'Insufficient account balance',
+      },
+      // No data.image_base64 — the renderer should reject on base_resp before
+      // ever reaching the decode path.
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).rejects.toThrow(/minimax image api error 1008: Insufficient account balance/);
+
+    // Renderer must NOT have written any output file when the upstream
+    // rejected the request, even though HTTP 200 was returned.
+    const outPath = path.join(projectsRoot, 'project-1', 'minimax.png');
+    await expect(readFile(outPath)).rejects.toThrow();
+  });
 });
