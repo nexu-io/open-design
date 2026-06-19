@@ -14,13 +14,15 @@ Before starting:
    cp .env.example .env
    ```
 
-2. Generate a secure token:
+2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `OPEN_DESIGN_DISABLE_API_AUTH=1`):
 
    ```bash
    openssl rand -hex 32
    ```
 
-3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+3. Open `.env` in your editor and choose one auth mode:
+   - default: paste the token into `OD_API_TOKEN=`
+   - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
 
 Then pull and start the service:
 
@@ -47,12 +49,24 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the browser origins that should be
-allowed to call `/api`:
+proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
+be allowed to call `/api`:
 
 ```bash
 OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
+
+If the reverse proxy already authenticates every request and you do not want it
+to inject `Authorization: Bearer <OD_API_TOKEN>` upstream, set:
+
+```bash
+OPEN_DESIGN_DISABLE_API_AUTH=1
+```
+
+Use this only for trusted deployments where the daemon is reachable strictly
+through that authenticated proxy. It disables daemon-side bearer enforcement for
+all `/api/*` requests, so direct access to the daemon must remain blocked. The
+Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
 
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 

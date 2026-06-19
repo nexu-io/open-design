@@ -539,6 +539,7 @@ import {
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
 } from './origin-validation.js';
+import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -4423,12 +4424,14 @@ export async function startServer({
   // purely additive: when present, every /api/* request must carry a
   // matching `Authorization: Bearer <token>` header (loopback origins
   // are exempted so the desktop UI keeps working).
-  const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
-  if (!isLoopbackHostname(host) && apiToken.length === 0) {
+  const apiToken = apiTokenFromEnv();
+  const apiAuthDisabled = isApiAuthDisabled();
+  if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
     throw new Error(
       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
-      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
+      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.) ` +
+      `Set OD_DISABLE_API_AUTH=1 only when a trusted reverse proxy already authenticates every request.`,
     );
   }
 
@@ -4439,7 +4442,8 @@ export async function startServer({
 
   // Plan §3.K1 — bearer-token middleware.
   //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
+  // Active only when OD_API_TOKEN is set and API auth is not disabled.
+  // Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
   // value matching `OD_API_TOKEN`. Health / readiness / version remain
@@ -4448,7 +4452,7 @@ export async function startServer({
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
-  if (apiToken.length > 0) {
+  if (isApiTokenMiddlewareEnabled()) {
     const openProbePaths = new Set([
       '/health',
       '/api/health',
