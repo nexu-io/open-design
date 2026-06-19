@@ -1113,6 +1113,88 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
   });
 
+  it('automatically fetches deployment provider models and tests without browser credentials', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        expect(body).toMatchObject({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+        });
+        expect(body).not.toHaveProperty('apiKey');
+        expect(body).not.toHaveProperty('baseUrl');
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'deployment-one', label: 'Deployment One' },
+            { id: 'deployment-two', label: 'Deployment Two' },
+          ],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        expect(body).toMatchObject({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'deployment-one',
+        });
+        expect(body).not.toHaveProperty('apiKey');
+        expect(body).not.toHaveProperty('baseUrl');
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'deployment-one',
+          sample: 'Connected',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Provider orchestrator',
+        kind: 'available',
+        displayHost: 'provider.example.com',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Provider orchestrator/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 12 ms/i)).toBeTruthy();
+    });
+    const providerModelCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/provider/models'),
+    );
+    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/test/connection'),
+    );
+    expect(providerModelCalls).toHaveLength(1);
+    expect(connectionTestCalls).toHaveLength(1);
+    expect(props.onApiModelChange).toHaveBeenCalledWith('deployment-one');
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-one',
+    });
+  });
+
   it('automatically selects a cached BYOK model before testing in onboarding', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

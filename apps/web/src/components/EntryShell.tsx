@@ -1596,7 +1596,7 @@ function OnboardingView({
     const current = providerModelAutoSelectRef.current;
     if (
       !firstModel ||
-      current.runtime !== 'byok' ||
+      (current.runtime !== 'byok' && current.runtime !== 'deployment') ||
       current.step !== 0 ||
       current.providerModelsInputKey !== expectedInputKey ||
       current.model.trim()
@@ -2092,7 +2092,7 @@ function OnboardingView({
   }
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if ((runtime !== 'byok' && runtime !== 'deployment') || step !== 0) return;
     if (!canFetchProviderModels) return;
     if (providerModelsState.status === 'running') return;
     if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
@@ -2109,7 +2109,7 @@ function OnboardingView({
   ]);
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if ((runtime !== 'byok' && runtime !== 'deployment') || step !== 0) return;
     if (!canTestProvider) return;
     if (providerTestState.status === 'running') return;
     if (providerAutoTestKeyRef.current === providerTestInputKey) return;
