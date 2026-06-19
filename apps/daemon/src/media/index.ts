@@ -2905,7 +2905,20 @@ async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig
       'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
     );
   }
-  const baseUrl = (credentials.baseUrl || MINIMAX_IMAGE_DEFAULT_BASE_URL).replace(/\/$/, '');
+  // Base URL precedence:
+  //   OD_MINIMAX_IMAGE_BASE_URL env var (operator override for proxies)
+  //   -> MINIMAX_IMAGE_DEFAULT_BASE_URL (api.minimax.io)
+  //
+  // We deliberately ignore credentials.baseUrl here. The 'minimax' provider
+  // slot is shared with TTS, whose stored baseUrl is the legacy
+  // api.minimaxi.chat/v1 host. Naively appending '/v1/image_generation'
+  // would produce https://api.minimaxi.chat/v1/v1/image_generation — a
+  // 404 against the wrong host. Adding a per-surface baseUrl to the
+  // provider schema would be a cleaner long-term fix; until then, image
+  // stays pinned to its own host and operators route via the env var.
+  const baseUrl = (
+    process.env.OD_MINIMAX_IMAGE_BASE_URL?.trim() || MINIMAX_IMAGE_DEFAULT_BASE_URL
+  ).replace(/\/+$/, '');
   // Precedence: credentials.model (user override in stored config) ->
   // ctx.wireModel (alias-aware from OD_MEDIA_MODEL_ALIASES) ->
   // MINIMAX_IMAGE_MODEL_MAP (resolves the vendor-prefixed catalog id

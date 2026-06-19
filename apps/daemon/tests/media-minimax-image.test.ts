@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateMedia } from '../src/media.js';
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
-const TEST_MINIMAX_BASE_URL = 'https://minimax-gateway.example.test';
 const TEST_MINIMAX_DEFAULT_BASE_URL = 'https://api.minimax.io';
+const TEST_MINIMAX_TTS_BASE_URL = 'https://api.minimaxi.chat/v1';
 
 describe('minimax image generation', () => {
   let root: string;
@@ -17,6 +17,7 @@ describe('minimax image generation', () => {
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
   const originalMinimaxApiKey = process.env.OD_MINIMAX_API_KEY;
+  const originalImageBaseUrl = process.env.OD_MINIMAX_IMAGE_BASE_URL;
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-minimax-image-'));
@@ -25,6 +26,7 @@ describe('minimax image generation', () => {
     await mkdir(projectsRoot, { recursive: true });
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    delete process.env.OD_MINIMAX_IMAGE_BASE_URL;
     process.env.OD_MINIMAX_API_KEY = 'minimax-test-key';
   });
 
@@ -45,6 +47,11 @@ describe('minimax image generation', () => {
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
     }
+    if (originalImageBaseUrl == null) {
+      delete process.env.OD_MINIMAX_IMAGE_BASE_URL;
+    } else {
+      process.env.OD_MINIMAX_IMAGE_BASE_URL = originalImageBaseUrl;
+    }
     await rm(root, { recursive: true, force: true });
   });
 
@@ -55,17 +62,18 @@ describe('minimax image generation', () => {
   }
 
   it('renders MiniMax images through the image_generation endpoint', async () => {
+    // Stored credentials.model overrides the catalog id wire-model mapping.
+    // Stored credentials.baseUrl is intentionally NOT honored for image
+    // (see "ignores credentials.baseUrl for image" test below); the
+    // renderer always uses the image-specific host.
     await writeConfig({
       providers: {
-        minimax: {
-          baseUrl: TEST_MINIMAX_BASE_URL,
-          model: 'image-01-custom',
-        },
+        minimax: { model: 'image-01-custom' },
       },
     });
 
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
-      expect(String(input)).toBe(`${TEST_MINIMAX_BASE_URL}/v1/image_generation`);
+      expect(String(input)).toBe(`${TEST_MINIMAX_DEFAULT_BASE_URL}/v1/image_generation`);
       expect(init?.method).toBe('POST');
       expect(init?.headers).toMatchObject({
         authorization: 'Bearer minimax-test-key',
@@ -112,9 +120,7 @@ describe('minimax image generation', () => {
 
   it('forwards --image as subject_reference[0].image_file for I2I', async () => {
     await writeConfig({
-      providers: {
-        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
-      },
+      providers: { minimax: {} },
     });
 
     // Write a real reference PNG inside the project so resolveProjectImage
@@ -124,7 +130,10 @@ describe('minimax image generation', () => {
     const refPath = path.join(projectDir, 'ref.png');
     await writeFile(refPath, Buffer.from(PNG_BASE64, 'base64'));
 
-    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      // Confirm the renderer hits the image-specific host even when no
+      // custom baseUrl is supplied.
+      expect(String(input)).toBe(`${TEST_MINIMAX_DEFAULT_BASE_URL}/v1/image_generation`);
       const body = JSON.parse(String(init?.body));
       // Subject reference must be present and carry the data URL of the
       // --image file (we don't assert exact bytes because the data URL is
@@ -170,11 +179,7 @@ describe('minimax image generation', () => {
   });
 
   it('surfaces base_resp.status_code failures with status_msg as the error', async () => {
-    await writeConfig({
-      providers: {
-        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
-      },
-    });
+    await writeConfig({ providers: { minimax: {} } });
 
     // MiniMax wraps every response in base_resp; an HTTP 200 can still be a
     // logical failure (e.g. status_code 1008 = insufficient balance). The
@@ -210,11 +215,7 @@ describe('minimax image generation', () => {
   });
 
   it('surfaces upstream HTTP errors with status code and body excerpt', async () => {
-    await writeConfig({
-      providers: {
-        minimax: { baseUrl: TEST_MINIMAX_BASE_URL },
-      },
-    });
+    await writeConfig({ providers: { minimax: {} } });
 
     // 401 with a non-JSON body — the renderer must report both the HTTP
     // status and the body excerpt in the thrown Error.
@@ -237,9 +238,9 @@ describe('minimax image generation', () => {
 
   it('uses the image-specific default base URL and wire model when no config is provided', async () => {
     // No writeConfig() call — the provider slot exists but has no stored
-    // baseUrl/model override. resolveProviderConfig still returns a config
-    // (apiKey from OD_MINIMAX_API_KEY), but baseUrl and model come from
-    // the renderer's defaults.
+    // config. resolveProviderConfig still returns apiKey from
+    // OD_MINIMAX_API_KEY, but baseUrl and model come from the renderer's
+    // image-specific defaults.
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       // Default image base URL is the api.minimax.io host, distinct from
       // the legacy TTS api.minimaxi.chat. Verifies the renderer does not
@@ -272,5 +273,75 @@ describe('minimax image generation', () => {
 
     expect(result.providerId).toBe('minimax');
     expect(result.providerNote).toContain('minimax/image-01');
+  });
+
+  it('ignores credentials.baseUrl for image even when it points at the legacy TTS host', async () => {
+    // Regression test for the user's reported 404. The 'minimax' provider
+    // slot is shared with TTS, whose stored baseUrl is the legacy
+    // api.minimaxi.chat/v1 host. Naively appending '/v1/image_generation'
+    // produces https://api.minimaxi.chat/v1/v1/image_generation — a 404
+    // against the wrong host. The image renderer must ignore
+    // credentials.baseUrl entirely and pin to its own host.
+    await writeConfig({
+      providers: { minimax: { baseUrl: TEST_MINIMAX_TTS_BASE_URL } },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown) => {
+      // Must hit the image-specific host, NOT the doubled TTS URL.
+      expect(String(input)).toBe(`${TEST_MINIMAX_DEFAULT_BASE_URL}/v1/image_generation`);
+      expect(String(input)).not.toContain('/v1/v1/');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).resolves.toMatchObject({ providerId: 'minimax' });
+  });
+
+  it('honors OD_MINIMAX_IMAGE_BASE_URL as an operator override', async () => {
+    // Operators running a proxy or staging gateway can pin the image
+    // endpoint via OD_MINIMAX_IMAGE_BASE_URL. Stored credentials.baseUrl
+    // is ignored either way; only the env var wins over the default.
+    process.env.OD_MINIMAX_IMAGE_BASE_URL = 'https://minimax-gateway.example.test';
+    await writeConfig({
+      providers: { minimax: { baseUrl: TEST_MINIMAX_TTS_BASE_URL } },
+    });
+
+    const fetchMock = vi.fn(async (input: unknown) => {
+      expect(String(input)).toBe('https://minimax-gateway.example.test/v1/image_generation');
+      // Trailing slash on the env var must NOT produce a doubled slash.
+      expect(String(input)).not.toContain('//v1/');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    })).resolves.toMatchObject({ providerId: 'minimax' });
   });
 });
