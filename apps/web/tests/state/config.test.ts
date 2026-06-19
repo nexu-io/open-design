@@ -154,6 +154,24 @@ describe('syncConfigToDaemon', () => {
       telemetry: { metrics: true, content: true, artifactManifest: false },
     });
   });
+
+  it('includes updateInstallMode in the PUT body when set to manual', async () => {
+    // Blocker A: syncConfigToDaemon must include updateInstallMode in the
+    // prefs object it PUTs. Without the fix the field is absent from the
+    // assembled prefs and this assertion fails.
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await syncConfigToDaemon({
+      ...DEFAULT_CONFIG,
+      updateInstallMode: 'manual',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      updateInstallMode: 'manual',
+    });
+  });
 });
 
 describe('syncMediaProvidersToDaemon', () => {
@@ -168,6 +186,34 @@ describe('syncMediaProvidersToDaemon', () => {
     await expect(
       syncMediaProvidersToDaemon({}, { force: true, throwOnError: true }),
     ).rejects.toThrow('Media config save failed');
+  });
+});
+
+describe('mergeDaemonConfig — updateInstallMode round-trip', () => {
+  // Blocker A: mergeDaemonConfig must carry updateInstallMode from the daemon
+  // config into the local config. Without the implementation the field is
+  // simply absent from AppConfigPrefs and the merge function never touches it.
+
+  it('copies updateInstallMode from daemon config when the daemon sets it to manual', () => {
+    // Cast the daemon fixture to any so that the missing contract type field
+    // doesn't cause a compile error — the test must be a runtime assertion
+    // failure, not a type error.
+    const merged = mergeDaemonConfig(DEFAULT_CONFIG, {
+      agentId: 'claude',
+      updateInstallMode: 'manual',
+    } as Parameters<typeof mergeDaemonConfig>[1]);
+
+    expect(merged.updateInstallMode).toBe('manual');
+  });
+
+  it('preserves the local updateInstallMode when the daemon config omits the field', () => {
+    const localWithPref = { ...DEFAULT_CONFIG, updateInstallMode: 'manual' as const };
+
+    const merged = mergeDaemonConfig(localWithPref, { agentId: 'claude' });
+
+    // The local value must survive — omitted daemon field should not clobber
+    // the local preference to undefined.
+    expect(merged.updateInstallMode).toBe('manual');
   });
 });
 

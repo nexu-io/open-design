@@ -4748,7 +4748,7 @@ export function SettingsDialog({
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
-              {updaterModel.canApplyInPlace ? (
+              {updaterModel.payloadCapable ? (
                 <div className="settings-about-update-install-mode">
                   <label htmlFor="update-install-mode-toggle">{t('settings.updateInstallMode')}</label>
                   <select

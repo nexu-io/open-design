@@ -783,6 +783,9 @@ export function mergeDaemonConfig(
   if (daemonConfig.defaultProjectLocationId !== undefined) {
     next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
   }
+  if (daemonConfig.updateInstallMode !== undefined) {
+    next.updateInstallMode = daemonConfig.updateInstallMode;
+  }
   return next;
 }
 
@@ -900,6 +903,7 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
+    ...(config.updateInstallMode !== undefined && { updateInstallMode: config.updateInstallMode }),
   };
   try {
     const response = await fetch('/api/app-config', {

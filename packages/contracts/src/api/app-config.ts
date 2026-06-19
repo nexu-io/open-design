@@ -60,6 +60,11 @@ export interface AppConfigPrefs {
    * most-recent-first and capped by the daemon.
    */
   recentLinkedDirs?: string[];
+  /**
+   * Whether the updater applies payload updates automatically or waits for the
+   * user to trigger them manually. Only meaningful on package-launcher runtimes.
+   */
+  updateInstallMode?: 'automatic' | 'manual';
 }
 
 export interface AppConfigResponse {

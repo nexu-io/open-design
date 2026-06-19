@@ -43,6 +43,10 @@ export type UpdaterModel = {
   hasDownloadedInstaller: boolean;
   installerOpened: boolean;
   updateKind: 'installer' | 'payload' | 'unknown';
+  /** True when the host runtime supports in-place payload updates regardless of
+   * whether a payload artifact is currently selected or downloaded. Gate the
+   * updateInstallMode preference toggle on this, not on canApplyInPlace. */
+  payloadCapable: boolean;
   promptKey: string | null;
   requiresManualInstall: boolean;
   upToDate: boolean;
@@ -131,6 +135,11 @@ export function deriveUpdaterModel(
           status.downloadPath ?? status.artifactUrl ?? status.artifact?.url ?? 'unknown-artifact',
         ].join(':');
   const canQuitAfterInstallerOpen = hostAvailable && installerOpened;
+  // Stable payload-capable signal: true when the runtime itself supports
+  // in-place payload updates, independent of the currently selected artifact.
+  const payloadCapable = Boolean(
+    hostAvailable && status?.supported === true && status?.mode === 'package-launcher',
+  );
 
   return {
     availableVersion,
@@ -148,6 +157,7 @@ export function deriveUpdaterModel(
     hasDownloadedInstaller,
     installerOpened,
     updateKind,
+    payloadCapable,
     promptKey,
     requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
     upToDate,

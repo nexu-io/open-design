@@ -85,8 +85,37 @@ function payloadCapableStatus(): OpenDesignHostUpdaterStatusSnapshot {
   };
 }
 
-// A status snapshot that is NOT payload-capable (standard installer, no payload).
-function installerOnlyStatus(): OpenDesignHostUpdaterStatusSnapshot {
+// A status snapshot from a payload-capable runtime that is IDLE with no
+// artifact yet selected. canApplyInPlace will be false (no artifact to apply),
+// but the toggle must still appear because the runtime itself is payload-capable.
+// This is the key case for Blocker B: the toggle must be visible on the
+// preference screen even before any update check is run.
+function idlePayloadCapableStatus(): OpenDesignHostUpdaterStatusSnapshot {
+  return {
+    arch: 'x64',
+    availableVersion: undefined,
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: 'beta',
+    currentVersion: '1.2.3-beta.3',
+    enabled: true,
+    mode: 'package-launcher',
+    platform: 'win32',
+    state: 'idle',
+    supported: true,
+  };
+}
+
+// A payload-CAPABLE runtime (package-launcher + supported) where the currently
+// selected artifact happens to be an installer/DMG (requiresManualInstall: true,
+// canApplyInPlace: false). Visibility must NOT depend on the selected artifact —
+// this is a payload-capable platform, so the toggle must still appear. (If the
+// gate keyed on canApplyInPlace/artifact state, this case would wrongly hide it.)
+function payloadCapableInstallerPendingStatus(): OpenDesignHostUpdaterStatusSnapshot {
   return {
     arch: 'arm64',
     artifact: {
@@ -110,6 +139,30 @@ function installerOnlyStatus(): OpenDesignHostUpdaterStatusSnapshot {
     platform: 'darwin',
     state: 'downloaded',
     supported: true,
+  };
+}
+
+// A genuinely NOT-payload-capable runtime: not a package-launcher. The in-app
+// payload path only exists for supported package-launcher runtimes, so the
+// preference is meaningless here and the toggle must be absent — regardless of
+// any artifact/capability state.
+function nonPayloadCapableStatus(): OpenDesignHostUpdaterStatusSnapshot {
+  return {
+    arch: 'x64',
+    availableVersion: '1.2.3-beta.4',
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: 'beta',
+    currentVersion: '1.2.3-beta.3',
+    enabled: true,
+    mode: 'js-incremental',
+    platform: 'win32',
+    state: 'available',
+    supported: false,
   };
 }
 
@@ -160,12 +213,60 @@ describe('SettingsDialog update-install-mode toggle', () => {
     expect(screen.getByTestId('update-install-mode-toggle')).toBeTruthy();
   });
 
-  it("hides the update-install-mode toggle when the runtime is NOT payload-capable", async () => {
-    // Not payload-capable: canApplyInPlace: false. The toggle must be absent.
+  it("shows the update-install-mode toggle when the runtime is payload-capable but idle with no artifact", async () => {
+    // Blocker B key case: runtime is package-launcher + supported + idle,
+    // but no artifact has been selected yet so canApplyInPlace is false.
+    // The toggle must still appear — the preference controls future update
+    // behaviour on the platform, not the current download state.
+    // Under the existing canApplyInPlace gate this test fails because the
+    // toggle is hidden whenever canApplyInPlace is false.
     restoreHost = installMockOpenDesignHost({
       host: {
         updater: {
-          status: vi.fn(async () => installerOnlyStatus()),
+          status: vi.fn(async () => idlePayloadCapableStatus()),
+        },
+      },
+    });
+
+    renderSettingsWithSection('about');
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // The toggle must be visible on a payload-capable platform even when
+    // no update artifact is currently downloaded or available.
+    expect(screen.getByTestId('update-install-mode-toggle')).toBeTruthy();
+  });
+
+  it("shows the update-install-mode toggle on a payload-capable runtime even when the pending artifact is an installer", async () => {
+    // Artifact-independence: a supported package-launcher runtime is
+    // payload-capable even if the currently selected/downloaded artifact is an
+    // installer/DMG (canApplyInPlace: false, requiresManualInstall: true). The
+    // toggle must remain visible so the user can switch back to automatic.
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => payloadCapableInstallerPendingStatus()),
+        },
+      },
+    });
+
+    renderSettingsWithSection('about');
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('update-install-mode-toggle')).toBeTruthy();
+  });
+
+  it("hides the update-install-mode toggle when the runtime is NOT payload-capable", async () => {
+    // Not a supported package-launcher (no in-app payload path) — toggle absent.
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => nonPayloadCapableStatus()),
         },
       },
     });
