@@ -1,4 +1,5 @@
 import type { ConnectionTestKind, ConnectionTestProtocol } from './connectionTest';
+import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 import type { AgentModelOption } from './registry';
 
 export type ProviderModelsKind =
@@ -6,7 +7,7 @@ export type ProviderModelsKind =
   | 'no_models'
   | 'unsupported_protocol';
 
-export interface ProviderModelsRequest {
+export interface ProviderModelsRequest extends ReasoningExecutionRequestFields {
   protocol: ConnectionTestProtocol;
   baseUrl: string;
   apiKey: string;

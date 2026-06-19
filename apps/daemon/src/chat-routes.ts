@@ -35,6 +35,7 @@ import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from './connectionTest.js';
 import { googleStreamGenerateContentUrl } from './google-models.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
+import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -239,6 +240,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         apiKeyRequired ? 'baseUrl and apiKey are required' : 'baseUrl is required',
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: body.reasoningExecution,
+      routeKind: 'provider_models',
+      provider: protocol,
+      resolvedBaseUrl: body.baseUrl,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
     try {
       const proxyDispatcher = proxyDispatcherRequestInit();
       try {
@@ -308,6 +316,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'baseUrl, apiKey, and model are required',
           );
         }
+        const reasoningDenial = authorizeReasoningEgress({
+          policy: body.reasoningExecution,
+          routeKind: 'connection_test',
+          provider: protocol,
+          resolvedBaseUrl: body.baseUrl,
+          model: body.model,
+        });
+        if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
         try {
           const result = await testProviderConnection({
             protocol,
@@ -934,6 +950,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'anthropic',
+      resolvedBaseUrl: baseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     const url = appendVersionedApiPath(baseUrl, '/messages');
     console.log(
@@ -972,6 +996,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'openai',
+      resolvedBaseUrl: baseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     const url = appendVersionedApiPath(baseUrl, '/chat/completions');
     console.log(
@@ -1087,6 +1119,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'azure',
+      resolvedBaseUrl: baseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     const url = new URL(baseUrl);
     const basePath = url.pathname.replace(/\/+$/, '');
@@ -1241,6 +1281,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'google',
+      resolvedBaseUrl: effectiveBaseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     const url = googleStreamGenerateContentUrl(effectiveBaseUrl, model);
     console.log(
@@ -1274,6 +1322,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: 'ollama',
+      resolvedBaseUrl: effectiveBaseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     const clean = effectiveBaseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
     const url = `${clean}/api/chat`;
@@ -1452,6 +1508,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         validated.error,
       );
     }
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider: opts.providerId,
+      resolvedBaseUrl: effectiveBaseUrl,
+      model,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
     // AIHubMix routes by model name to the native protocol wire (claude →
     // Anthropic /v1/messages, gemini/imagen → Gemini generateContent). That
@@ -2182,6 +2246,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     runSpeech: executeAIHubMixGenerateSpeech,
     runVideo: executeAIHubMixGenerateVideo,
     routeByModel: true,
+  });
+
+  app.post('/api/proxy/:provider/stream', (req, res) => {
+    const proxyBody = req.body || {};
+    const provider = typeof req.params.provider === 'string' ? req.params.provider : 'unknown';
+    const reasoningDenial = authorizeReasoningEgress({
+      policy: proxyBody.reasoningExecution,
+      routeKind: 'proxy',
+      provider,
+      resolvedBaseUrl: typeof proxyBody.baseUrl === 'string' ? proxyBody.baseUrl : undefined,
+      model: typeof proxyBody.model === 'string' ? proxyBody.model : undefined,
+    });
+    if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+    return sendApiError(res, 404, 'NOT_FOUND', 'unknown proxy provider');
   });
 
 }
