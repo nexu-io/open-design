@@ -693,13 +693,13 @@ describe("createPackageManagerInvocation", () => {
     ]);
   });
 
-  it("returns plain pnpm invocation on POSIX without npm_execpath", () => {
+  it("returns corepack pnpm invocation on POSIX without npm_execpath", () => {
     setPlatform("linux");
     const invocation = createPackageManagerInvocation(["install"], {} as NodeJS.ProcessEnv);
-    expect(invocation).toEqual({ args: ["install"], command: "pnpm" });
+    expect(invocation).toEqual({ args: ["pnpm", "install"], command: "corepack" });
   });
 
-  it("wraps pnpm through cmd.exe with verbatim arguments on Windows", () => {
+  it("wraps corepack pnpm through cmd.exe with verbatim arguments on Windows", () => {
     setPlatform("win32");
     const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], {
       ComSpec: "cmd.exe",
@@ -710,7 +710,7 @@ describe("createPackageManagerInvocation", () => {
       "/d",
       "/s",
       "/c",
-      '"pnpm --filter @open-design/desktop build"',
+      '"corepack pnpm --filter @open-design/desktop build"',
     ]);
   });
 });
