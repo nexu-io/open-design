@@ -17,6 +17,7 @@ import {
   getProjectBuilderRunApprovals,
   getProjectBuilderRuns,
   rejectProjectBuilderApproval,
+  startProjectBuilderSkillRun,
 } from '../state/projects';
 import type { SkillSummary } from '../types';
 import styles from './CanvasRunPanel.module.css';
@@ -71,6 +72,9 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
   });
   const [actionApprovalId, setActionApprovalId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
+  const [startMessage, setStartMessage] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const ledgerRequestRef = useRef(0);
 
   const loadLedger = useCallback(async (options?: { showLoading?: boolean }) => {
@@ -78,7 +82,7 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
     ledgerRequestRef.current = requestId;
     if (options?.showLoading !== false) {
       setLedger((current) => ({ ...current, loading: true }));
-    };
+    }
     const [processesResponse, runsResponse, approvalsResponse] = await Promise.all([
       getProjectBuilderProcesses(projectId),
       getProjectBuilderRuns(projectId),
@@ -134,6 +138,23 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
 
   const registrySkill = findCanvasDemoSkill(skills);
   const skill = builderSkillSummaryFromRegistry(registrySkill);
+  const handleStartSkillRun = useCallback(async () => {
+    setStartBusy(true);
+    setStartError(null);
+    setStartMessage(null);
+    const { response, error } = await startProjectBuilderSkillRun(projectId, {
+      skillId: skill.id,
+    });
+    if (!response) {
+      setStartError(error ?? 'Could not start skill run.');
+      setStartBusy(false);
+      return;
+    }
+    setStartMessage(`Started ${response.run.id}`);
+    await loadLedger({ showLoading: false });
+    setStartBusy(false);
+  }, [loadLedger, projectId, skill.id]);
+
   const process = ledger.processes[0] ?? demoHarnessProcess(projectId, skill);
   const run = ledger.runs[0] ?? demoBuilderRun(projectId, skill, process);
   const approval = selectDisplayApproval(ledger.approvals)
@@ -161,9 +182,27 @@ export function CanvasRunPanel({ projectId, skills }: CanvasRunPanelProps) {
           <p className={styles.kicker}>Builder Canvas Run</p>
           <h2>Skill-backed automations</h2>
         </div>
-        <div className={styles.headerMeta} aria-label="Canvas run data source">
-          <span>{ledger.loading ? 'Loading' : ledger.apiAvailable ? 'API-backed' : 'Demo-gated'}</span>
-          <strong>{sourceMode}</strong>
+        <div className={styles.headerActions}>
+          <div className={styles.startControl}>
+            <Button
+              variant="primary"
+              disabled={startBusy}
+              data-testid="canvas-run-start-skill"
+              onClick={handleStartSkillRun}
+            >
+              {startBusy ? 'Starting' : 'Run Skill'}
+            </Button>
+            <span
+              className={startError ? styles.startError : styles.startHint}
+              data-testid="canvas-run-start-status"
+            >
+              {startError ?? startMessage ?? skill.id}
+            </span>
+          </div>
+          <div className={styles.headerMeta} aria-label="Canvas run data source">
+            <span>{ledger.loading ? 'Loading' : ledger.apiAvailable ? 'API-backed' : 'Demo-gated'}</span>
+            <strong>{sourceMode}</strong>
+          </div>
         </div>
       </div>
 

@@ -23,6 +23,8 @@ import type {
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
+  StartBuilderSkillRunRequest,
+  StartBuilderSkillRunResponse,
   TerminalSession,
 } from '@open-design/contracts';
 import { randomUUID } from '../utils/uuid';
@@ -763,6 +765,25 @@ export async function rejectProjectBuilderApproval(
     return (await resp.json()) as BuilderApprovalResponse;
   } catch {
     return null;
+  }
+}
+
+export async function startProjectBuilderSkillRun(
+  projectId: string,
+  input: StartBuilderSkillRunRequest,
+): Promise<{ response: StartBuilderSkillRunResponse | null; error: string | null }> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/builder/skill-runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      return { response: null, error: await readErrorMessage(resp) };
+    }
+    return { response: (await resp.json()) as StartBuilderSkillRunResponse, error: null };
+  } catch {
+    return { response: null, error: 'Could not start skill run.' };
   }
 }
 
