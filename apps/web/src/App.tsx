@@ -67,6 +67,7 @@ import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
+  fetchDeploymentProviderConfigFromDaemon,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
   fetchComposioConfigFromDaemon,
@@ -108,6 +109,7 @@ import type {
   AppConfig,
   AppVersionInfo,
   ChatAttachment,
+  DeploymentProviderConfig,
   DesignSystemGenerationJob,
   DesignSystemSummary,
   Project,
@@ -375,6 +377,8 @@ function AppInner() {
   const [providerModelsCache, setProviderModelsCache] = useState<
     Record<string, ProviderModelOption[]>
   >({});
+  const [deploymentProviderConfig, setDeploymentProviderConfig] =
+    useState<DeploymentProviderConfig | null>(null);
   // Functional skills (capabilities the agent invokes mid-task) — stays
   // small and lives under the Settings → Skills surface.
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -597,10 +601,15 @@ function AppInner() {
   useEffect(() => {
     if (agentsLoading) return;
     const byokConfigured = (() => {
+      if (config.apiCredentialSource === 'deployment') {
+        return Boolean(deploymentProviderConfig?.available && config.model?.trim());
+      }
       const protocols = config.apiProtocolConfigs;
       if (!protocols) return Boolean(config.apiKey?.trim());
       return Object.values(protocols).some(
-        (cfg) => Boolean(cfg?.apiKey?.trim()),
+        (cfg) =>
+          cfg?.apiCredentialSource === 'deployment' ||
+          Boolean(cfg?.apiKey?.trim()),
       );
     })();
     const globals = deriveConfigureGlobals({
@@ -618,7 +627,10 @@ function AppInner() {
     config.mode,
     config.agentId,
     config.apiKey,
+    config.apiCredentialSource,
     config.apiProtocolConfigs,
+    config.model,
+    deploymentProviderConfig?.available,
     agents,
   ]);
 
@@ -871,12 +883,15 @@ function AppInner() {
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
         fetchMediaProvidersFromDaemon(),
+        fetchDeploymentProviderConfigFromDaemon(),
       ]).then(([
         daemonConfig,
         daemonComposioConfig,
         daemonMediaProvidersResult,
+        daemonDeploymentProviderConfig,
       ]) => {
         if (cancelled) return;
+        setDeploymentProviderConfig(daemonDeploymentProviderConfig);
         const daemonMediaProvidersLoaded =
           daemonMediaProvidersResult.status === 'ok'
             ? daemonMediaProvidersResult.providers
@@ -2158,6 +2173,7 @@ function AppInner() {
         agentsLoading={agentsLoading}
         config={config}
         providerModelsCache={providerModelsCache}
+        deploymentProviderConfig={deploymentProviderConfig}
         onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
         composioConfigLoading={composioConfigLoading}
@@ -2259,6 +2275,7 @@ function AppInner() {
           onDesignSystemsChanged={handleDesignSystemsChanged}
           onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
           providerModelsCache={providerModelsCache}
+          deploymentProviderConfig={deploymentProviderConfig}
           onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}

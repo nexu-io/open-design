@@ -447,6 +447,7 @@ describe('InlineModelSwitcher AMR row', () => {
         protocol: 'aihubmix',
         baseUrl: 'https://aihubmix.com/v1',
         apiKey: '',
+        credentialSource: 'user',
       });
       expect(onProviderModelsCacheChange).toHaveBeenCalled();
     });

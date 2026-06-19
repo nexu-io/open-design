@@ -1,4 +1,5 @@
 import type { ApiProtocol, ProviderModelOption } from '../types';
+import type { ProviderCredentialSource } from '@open-design/contracts';
 
 export type ProviderModelsCache = Record<string, ProviderModelOption[]>;
 
@@ -16,9 +17,11 @@ export function providerModelsCacheKey(
   baseUrl: string,
   apiKey: string,
   apiVersion = '',
+  credentialSource: ProviderCredentialSource = 'user',
 ): string {
   return [
     protocol,
+    credentialSource,
     baseUrl.trim().replace(/\/+$/, ''),
     fingerprintSecret(apiKey.trim()),
     protocol === 'azure' ? apiVersion.trim() : '',

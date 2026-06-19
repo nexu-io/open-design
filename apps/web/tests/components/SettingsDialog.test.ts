@@ -59,6 +59,26 @@ describe('SettingsDialog API protocol switching', () => {
     );
   });
 
+  it('separates deployment-sourced model cache entries from direct BYOK entries', () => {
+    const userKey = providerModelsCacheKey(
+      'openai',
+      'https://api.openai.com/v1',
+      'sk-secret-value',
+      '',
+      'user',
+    );
+    const deploymentKey = providerModelsCacheKey(
+      'openai',
+      'https://api.openai.com/v1',
+      'sk-secret-value',
+      '',
+      'deployment',
+    );
+
+    expect(deploymentKey).not.toBe(userKey);
+    expect(deploymentKey).not.toContain('sk-secret-value');
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
@@ -930,6 +950,40 @@ describe('shouldEnableSettingsSave', () => {
     expect(shouldEnableSettingsSave(validApiCfg, 'execution', [], false)).toBe(false);
   });
 
+  it('on execution + deployment-sourced api: requires daemon availability and model, not browser credentials', () => {
+    const deploymentCfg: AppConfig = {
+      ...baseConfig,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+    };
+
+    expect(shouldEnableSettingsSave(
+      deploymentCfg,
+      'execution',
+      [],
+      false,
+      { deploymentProviderAvailable: true },
+    )).toBe(true);
+    expect(shouldEnableSettingsSave(
+      { ...deploymentCfg, model: '' },
+      'execution',
+      [],
+      false,
+      { deploymentProviderAvailable: true },
+    )).toBe(false);
+    expect(shouldEnableSettingsSave(
+      deploymentCfg,
+      'execution',
+      [],
+      false,
+      { deploymentProviderAvailable: false },
+    )).toBe(false);
+  });
+
   it('on execution: incomplete BYOK still disables save (existing behavior preserved)', () => {
     // Regression guard so that #739's fix only changes the cross-section
     // behavior, not the within-execution-section validity check.
@@ -1018,6 +1072,30 @@ describe('sanitizeSettingsSavePayload', () => {
       'appearance',
       [availableAgent],
       true,
+    );
+
+    expect(sanitized).toEqual(draftWithThemeChange);
+  });
+
+  it('passes a valid deployment-sourced execution config through unchanged', () => {
+    const deploymentInitial: AppConfig = {
+      ...baseConfig,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+    };
+    const draftWithThemeChange: AppConfig = { ...deploymentInitial, theme: 'light' };
+
+    const sanitized = sanitizeSettingsSavePayload(
+      draftWithThemeChange,
+      deploymentInitial,
+      'appearance',
+      [availableAgent],
+      false,
+      { deploymentProviderAvailable: true },
     );
 
     expect(sanitized).toEqual(draftWithThemeChange);

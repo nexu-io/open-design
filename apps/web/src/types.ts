@@ -37,6 +37,7 @@ import type {
   DesignSystemTokenContractRebuildDecision,
   DesignSystemTokenContractRebuildJobRequest,
   DesignSystemTokenContractRebuildJobResponse,
+  DeploymentProviderConfigResponse,
   LiveArtifact,
   LiveArtifactDetailResponse,
   LiveArtifactListResponse,
@@ -52,6 +53,7 @@ import type {
   ProviderTestRequest,
   PersistedAgentEvent,
   ProviderModelOption,
+  ProviderCredentialSource,
   ProviderModelsKind,
   ProviderModelsRequest,
   ProviderModelsResponse,
@@ -236,6 +238,7 @@ export interface ApiProtocolConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  apiCredentialSource?: ProviderCredentialSource;
   apiVersion?: string;
   apiProviderBaseUrl?: string | null;
   /** SenseAudio BYOK only — default image model the daemon-side
@@ -367,6 +370,7 @@ export interface AppConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  apiCredentialSource?: ProviderCredentialSource;
   apiProtocol?: ApiProtocol;
   apiVersion?: string;
   /** SenseAudio BYOK only — default image model for the daemon-side
@@ -445,6 +449,8 @@ export interface AppConfig {
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
 }
+
+export type DeploymentProviderConfig = DeploymentProviderConfigResponse;
 
 export interface TelemetryConfig {
   metrics?: boolean;

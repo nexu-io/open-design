@@ -40,7 +40,8 @@ export async function streamProxyEndpoint(
   handlers: StreamHandlers,
   context?: ProxyContext,
 ): Promise<void> {
-  if (!cfg.apiKey) {
+  const credentialSource = cfg.apiCredentialSource ?? 'user';
+  if (credentialSource !== 'deployment' && !cfg.apiKey) {
     handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
     return;
   }
@@ -49,31 +50,34 @@ export async function streamProxyEndpoint(
 
   try {
     const messages = await buildProxyMessages(endpoint, history, context);
+    const body = {
+      ...(credentialSource === 'deployment'
+        ? {}
+        : { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey }),
+      credentialSource,
+      model: cfg.model,
+      systemPrompt: system,
+      messages,
+      maxTokens: effectiveMaxTokens(cfg),
+      apiVersion: cfg.apiVersion,
+      ...(context?.projectId ? { projectId: context.projectId } : {}),
+      ...(context?.byokImageModel
+        ? { byokImageModel: context.byokImageModel }
+        : {}),
+      ...(context?.byokVideoModel
+        ? { byokVideoModel: context.byokVideoModel }
+        : {}),
+      ...(context?.byokSpeechModel
+        ? { byokSpeechModel: context.byokSpeechModel }
+        : {}),
+      ...(context?.byokSpeechVoice
+        ? { byokSpeechVoice: context.byokSpeechVoice }
+        : {}),
+    };
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        model: cfg.model,
-        systemPrompt: system,
-        messages,
-        maxTokens: effectiveMaxTokens(cfg),
-        apiVersion: cfg.apiVersion,
-        ...(context?.projectId ? { projectId: context.projectId } : {}),
-        ...(context?.byokImageModel
-          ? { byokImageModel: context.byokImageModel }
-          : {}),
-        ...(context?.byokVideoModel
-          ? { byokVideoModel: context.byokVideoModel }
-          : {}),
-        ...(context?.byokSpeechModel
-          ? { byokSpeechModel: context.byokSpeechModel }
-          : {}),
-        ...(context?.byokSpeechVoice
-          ? { byokSpeechVoice: context.byokSpeechVoice }
-          : {}),
-      }),
+      body: JSON.stringify(body),
       signal,
     });
 

@@ -4,6 +4,7 @@ import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
   ApiProtocol,
   AppConfig,
+  DeploymentProviderConfig,
   MediaProviderCredentials,
   NotificationsConfig,
   OrbitConfig,
@@ -63,6 +64,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   apiKey: '',
   baseUrl: 'https://api.anthropic.com',
   model: 'claude-sonnet-4-5',
+  apiCredentialSource: 'user',
   // New configs should be explicit. loadConfig() still detects parsed legacy
   // saved configs that did not have this field and migrates those from their
   // saved baseUrl/model before applying the current migration version.
@@ -489,6 +491,16 @@ interface PublicMediaProviderConfigEntry {
 
 interface PublicMediaProviderConfigResponse {
   providers?: Record<string, PublicMediaProviderConfigEntry>;
+}
+
+export async function fetchDeploymentProviderConfigFromDaemon(): Promise<DeploymentProviderConfig | null> {
+  try {
+    const response = await fetch('/api/provider-orchestrator/config');
+    if (!response.ok) return null;
+    return await response.json() as DeploymentProviderConfig;
+  } catch {
+    return null;
+  }
 }
 
 export type DaemonMediaProvidersFetchResult =

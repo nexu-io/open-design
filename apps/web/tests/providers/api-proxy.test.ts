@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { historyWithApiAttachmentContext } from '../../src/api-attachment-context';
 import { buildProxyMessages, streamProxyEndpoint } from '../../src/providers/api-proxy';
-import type { ChatMessage } from '../../src/types';
+import type { AppConfig, ChatMessage } from '../../src/types';
 
 describe('buildProxyMessages', () => {
   afterEach(() => {
@@ -175,6 +175,57 @@ describe('buildProxyMessages', () => {
         },
       ],
       projectId: 'project-1',
+    });
+  });
+
+  it('lets deployment-sourced OpenAI calls omit browser credentials', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('event: end\ndata: {}\n\n'),
+          );
+          controller.close();
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamProxyEndpoint(
+      '/api/proxy/openai/stream',
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: 'stale-browser-key',
+        baseUrl: 'https://stale.example.test/v1',
+        model: 'gpt-routed',
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      } as AppConfig,
+      'System prompt',
+      [userMessage('Hello', [])],
+      new AbortController().signal,
+      {
+        onDelta: vi.fn(),
+        onDone: vi.fn(),
+        onError: vi.fn(),
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const proxyInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(proxyInit.body))).toMatchObject({
+      credentialSource: 'deployment',
+      model: 'gpt-routed',
+      systemPrompt: 'System prompt',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+    expect(JSON.parse(String(proxyInit.body))).not.toMatchObject({
+      apiKey: 'stale-browser-key',
+      baseUrl: 'https://stale.example.test/v1',
     });
   });
 

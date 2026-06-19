@@ -209,6 +209,7 @@ export function AvatarMenu({
     config.baseUrl ?? '',
     config.apiKey ?? '',
     config.apiVersion ?? '',
+    config.apiCredentialSource ?? 'user',
   );
   const fetchedByokModels = providerModelsCache?.[byokProviderModelsKey] ?? discoveredProviderModels[byokProviderModelsKey] ?? [];
 
@@ -216,14 +217,16 @@ export function AvatarMenu({
     if (!open || config.mode !== 'api') return;
     if (fetchedByokModels.length > 0) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
+    const credentialSource = config.apiCredentialSource ?? 'user';
     const baseUrl = config.baseUrl?.trim() ?? '';
     const apiKey = config.apiKey?.trim() ?? '';
-    if (!baseUrl || !apiKey) return;
+    if (credentialSource !== 'deployment' && (!baseUrl || !apiKey)) return;
     let cancelled = false;
     void fetchProviderModels({
       protocol: apiProtocol,
-      baseUrl,
-      apiKey,
+      credentialSource,
+      baseUrl: credentialSource === 'deployment' ? undefined : baseUrl,
+      apiKey: credentialSource === 'deployment' ? undefined : apiKey,
     }).then((result) => {
       if (cancelled || !result.ok || !result.models?.length) return;
       setDiscoveredProviderModels((current) => ({
@@ -240,6 +243,7 @@ export function AvatarMenu({
     apiProtocol,
     config.baseUrl,
     config.apiKey,
+    config.apiCredentialSource,
     byokProviderModelsKey,
     fetchedByokModels.length,
   ]);

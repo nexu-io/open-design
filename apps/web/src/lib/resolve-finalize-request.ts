@@ -39,6 +39,9 @@ function resolveByokFields(config: AppConfig, protocol: ApiProtocol) {
 export function isFinalizeByokConfigured(config: AppConfig): boolean {
   const protocol = resolveFinalizeProtocol(config);
   const { apiKey, model } = resolveByokFields(config, protocol);
+  if (config.apiCredentialSource === 'deployment') {
+    return protocol === 'openai' && Boolean(model);
+  }
   return Boolean(apiKey && model);
 }
 
@@ -50,12 +53,16 @@ export function buildFinalizeRequest(
     config,
     protocol,
   );
-  if (!apiKey || !model) return null;
+  const credentialSource = config.apiCredentialSource ?? 'user';
+  if (!model) return null;
+  if (credentialSource !== 'deployment' && !apiKey) return null;
+  if (credentialSource === 'deployment' && protocol !== 'openai') return null;
 
   return {
     protocol,
-    apiKey,
-    ...(baseUrl ? { baseUrl } : {}),
+    credentialSource,
+    ...(credentialSource === 'deployment' ? {} : { apiKey }),
+    ...(credentialSource === 'deployment' || !baseUrl ? {} : { baseUrl }),
     model,
     maxTokens: effectiveMaxTokens(config),
     ...(protocol === 'azure' && apiVersion ? { apiVersion } : {}),

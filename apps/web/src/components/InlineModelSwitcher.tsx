@@ -459,8 +459,9 @@ export function InlineModelSwitcher({
         config.baseUrl,
         config.apiKey,
         config.apiVersion ?? '',
+        config.apiCredentialSource ?? 'user',
       ),
-    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+    [apiProtocol, config.apiCredentialSource, config.apiKey, config.apiVersion, config.baseUrl],
   );
   const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
 
@@ -475,9 +476,10 @@ export function InlineModelSwitcher({
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    const credentialSource = config.apiCredentialSource ?? 'user';
+    if (credentialSource !== 'deployment' && apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
-    if (!/^https?:\/\//i.test(baseUrl)) return;
+    if (credentialSource !== 'deployment' && !/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
     if (fetchedApiModelOptions.length) return;
     if (providerModelsFetchingRef.current.has(key)) return;
@@ -485,8 +487,9 @@ export function InlineModelSwitcher({
     let active = true;
     void fetchProviderModels({
       protocol: apiProtocol,
-      baseUrl,
-      apiKey: config.apiKey,
+      credentialSource,
+      baseUrl: credentialSource === 'deployment' ? undefined : baseUrl,
+      apiKey: credentialSource === 'deployment' ? undefined : config.apiKey,
     })
       .then((result) => {
         if (active && result.ok && result.models?.length) {
@@ -508,6 +511,7 @@ export function InlineModelSwitcher({
   }, [
     open,
     config.mode,
+    config.apiCredentialSource,
     config.apiKey,
     config.baseUrl,
     apiProtocol,

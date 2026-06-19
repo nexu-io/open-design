@@ -98,6 +98,7 @@ import type {
   AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
+  DeploymentProviderConfig,
   DesignSystemGenerationJob,
   OrbitRunSummary,
   OrbitStatusResponse,
@@ -203,6 +204,7 @@ interface Props {
   agents: AgentInfo[];
   agentsLoading?: boolean;
   daemonLive: boolean;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   appVersionInfo: AppVersionInfo | null;
   welcome?: boolean;
   initialSection?: SettingsSection;
@@ -422,12 +424,13 @@ export function shouldShowCustomModelInput(
 
 export function canRunProviderConnectionTest(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
-  options: { requiresApiKey?: boolean } = {},
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): boolean {
   const requiresApiKey = options.requiresApiKey ?? true;
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   return (
     (!requiresApiKey || Boolean(config.apiKey.trim())) &&
-    Boolean(config.baseUrl.trim()) &&
+    (!requiresBaseUrl || Boolean(config.baseUrl.trim())) &&
     Boolean(config.model.trim())
   );
 }
@@ -435,24 +438,28 @@ export function canRunProviderConnectionTest(
 export function canFetchProviderModels(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
   protocol: ApiProtocol,
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): boolean {
+  const requiresApiKey = options.requiresApiKey ?? protocol !== 'aihubmix';
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   return (
     protocol !== 'azure' &&
     protocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
-    Boolean(config.baseUrl.trim()) &&
-    isValidApiBaseUrl(config.baseUrl)
+    (!requiresApiKey || Boolean(config.apiKey.trim())) &&
+    (!requiresBaseUrl || Boolean(config.baseUrl.trim())) &&
+    (!config.baseUrl.trim() || isValidApiBaseUrl(config.baseUrl))
   );
 }
 
 function missingByokConnectionFields(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
-  options: { requiresApiKey?: boolean } = {},
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): ByokRequiredField[] {
   const requiresApiKey = options.requiresApiKey ?? true;
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   const missing: ByokRequiredField[] = [];
   if (requiresApiKey && !config.apiKey.trim()) missing.push('api_key');
-  if (!config.baseUrl.trim()) missing.push('base_url');
+  if (requiresBaseUrl && !config.baseUrl.trim()) missing.push('base_url');
   if (!config.model.trim()) missing.push('model');
   return missing;
 }
@@ -460,22 +467,26 @@ function missingByokConnectionFields(
 function missingByokModelFetchFields(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
   protocol?: ApiProtocol,
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): ByokRequiredField[] {
   const missing: ByokRequiredField[] = [];
   // AIHubMix publishes its catalogue on a public endpoint, so its model list
   // loads without a key (the user shouldn't need to paste a key just to browse
   // models). Every other protocol fetches /v1/models behind the key.
-  if (protocol !== 'aihubmix' && !config.apiKey.trim()) missing.push('api_key');
-  if (!config.baseUrl.trim()) missing.push('base_url');
+  const requiresApiKey = options.requiresApiKey ?? protocol !== 'aihubmix';
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
+  if (requiresApiKey && !config.apiKey.trim()) missing.push('api_key');
+  if (requiresBaseUrl && !config.baseUrl.trim()) missing.push('base_url');
   return missing;
 }
 
 function providerConnectionTestKey(
   protocol: ApiProtocol,
-  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'>,
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion' | 'apiCredentialSource'>,
 ): string {
   return [
     protocol,
+    config.apiCredentialSource ?? 'user',
     config.baseUrl.trim().replace(/\/+$/, ''),
     config.apiKey.trim(),
     config.model.trim(),
@@ -682,6 +693,7 @@ function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
     apiKey: '',
     baseUrl: provider?.baseUrl ?? '',
     model: provider?.model ?? '',
+    apiCredentialSource: 'user',
     apiVersion: '',
     apiProviderBaseUrl: provider ? provider.baseUrl : null,
   };
@@ -749,6 +761,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
+    apiCredentialSource: config.apiCredentialSource ?? 'user',
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     byokImageModel: config.byokImageModel ?? '',
@@ -769,6 +782,7 @@ function applyApiProtocolConfig(
     apiKey: apiConfig.apiKey,
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
+    apiCredentialSource: apiConfig.apiCredentialSource ?? 'user',
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
     // byokImageModel applies to the protocols that inject the daemon-side
@@ -997,12 +1011,16 @@ export function shouldEnableSettingsSave(
   activeSection: SettingsSection,
   agents: ReadonlyArray<{ id: string; available: boolean }>,
   isBaseUrlValid: boolean,
+  options: { deploymentProviderAvailable?: boolean } = {},
 ): boolean {
   if (activeSection !== 'execution') return true;
   if (cfg.mode === 'daemon') {
     return Boolean(
       cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
     );
+  }
+  if (cfg.apiCredentialSource === 'deployment') {
+    return Boolean(options.deploymentProviderAvailable && cfg.model.trim());
   }
   return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
 }
@@ -1029,16 +1047,24 @@ export function sanitizeSettingsSavePayload(
   activeSection: SettingsSection,
   agents: ReadonlyArray<{ id: string; available: boolean }>,
   isBaseUrlValid: boolean,
+  options: { deploymentProviderAvailable?: boolean } = {},
 ): AppConfig {
   if (activeSection === 'execution') return cfg;
   // Reuse the existing execution-section validity gate so the two helpers
   // share one source of truth for "execution config is complete enough."
-  const executionValid = shouldEnableSettingsSave(cfg, 'execution', agents, isBaseUrlValid);
+  const executionValid = shouldEnableSettingsSave(
+    cfg,
+    'execution',
+    agents,
+    isBaseUrlValid,
+    options,
+  );
   if (executionValid) return cfg;
   return {
     ...cfg,
     mode: initial.mode,
     apiKey: initial.apiKey,
+    apiCredentialSource: initial.apiCredentialSource,
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
@@ -1083,6 +1109,7 @@ export function SettingsDialog({
   agents,
   agentsLoading = false,
   daemonLive,
+  deploymentProviderConfig,
   appVersionInfo,
   welcome,
   initialSection = 'execution',
@@ -1315,12 +1342,17 @@ export function SettingsDialog({
   const [providerModelsCommittedKey, setProviderModelsCommittedKey] =
     useState<string | null>(() => {
       const protocol = initial.apiProtocol ?? 'anthropic';
+      const initialCredentialSource = initial.apiCredentialSource ?? 'user';
+      const initialUsesDeploymentProvider = initialCredentialSource === 'deployment';
       if (
         initial.mode !== 'api' ||
         protocol === 'azure' ||
         protocol === 'ollama' ||
-        missingByokModelFetchFields(initial, protocol).length > 0 ||
-        !isValidApiBaseUrl(initial.baseUrl)
+        missingByokModelFetchFields(initial, protocol, {
+          requiresApiKey: initialUsesDeploymentProvider ? false : undefined,
+          requiresBaseUrl: !initialUsesDeploymentProvider,
+        }).length > 0 ||
+        (!initialUsesDeploymentProvider && !isValidApiBaseUrl(initial.baseUrl))
       ) {
         return null;
       }
@@ -1329,6 +1361,7 @@ export function SettingsDialog({
         initial.baseUrl,
         initial.apiKey,
         initial.apiVersion ?? '',
+        initialCredentialSource,
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -1488,6 +1521,7 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.model,
     cfg.apiVersion,
+    cfg.apiCredentialSource,
   ]);
   useEffect(() => {
     if (providerModelsFirstResetRef.current) {
@@ -1505,6 +1539,7 @@ export function SettingsDialog({
     cfg.apiKey,
     cfg.baseUrl,
     cfg.apiVersion,
+    cfg.apiCredentialSource,
   ]);
   // Releasing the abort controllers on unmount avoids the "setState after
   // unmount" warning if the dialog closes while a test is still running.
@@ -1546,6 +1581,39 @@ export function SettingsDialog({
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
     setCfg((c) => updateCurrentApiProtocolConfig(c, patch));
+  const selectDeploymentProviderCredentials = () => {
+    if (!deploymentProviderAvailable) return;
+    setApiModelCustomEditing(false);
+    apiModelUserSelectedRef.current = false;
+    setCfg((current) => {
+      const openaiConfig = switchApiProtocolConfig(current, 'openai');
+      return updateCurrentApiProtocolConfig(openaiConfig, {
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        apiProviderBaseUrl: null,
+        apiVersion: '',
+        model: deploymentProviderConfig?.defaultModel ?? openaiConfig.model,
+      });
+    });
+  };
+  const selectUserProviderCredentials = () => {
+    setCfg((current) => {
+      const fallbackProvider = KNOWN_PROVIDERS.find(
+        (provider) => provider.protocol === (current.apiProtocol ?? 'anthropic'),
+      );
+      return updateCurrentApiProtocolConfig(current, {
+        apiCredentialSource: 'user',
+        ...(current.baseUrl.trim()
+          ? {}
+          : {
+              baseUrl: fallbackProvider?.baseUrl ?? '',
+              apiProviderBaseUrl: fallbackProvider?.baseUrl ?? null,
+            }),
+        ...(current.model.trim() ? {} : { model: fallbackProvider?.model ?? '' }),
+      });
+    });
+  };
   const updateMaxTokensInput = (raw: string) => {
     setMaxTokensInput(raw);
     const trimmed = raw.trim();
@@ -1841,8 +1909,9 @@ export function SettingsDialog({
       const result = await testApiProvider(
         {
           protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          credentialSource,
+          baseUrl: usingDeploymentProvider ? undefined : cfg.baseUrl,
+          apiKey: usingDeploymentProvider ? undefined : cleanByokApiKey(cfg.apiKey),
           model: cfg.model,
           apiVersion:
             apiProtocol === 'azure'
@@ -2020,6 +2089,7 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      credentialSource,
     );
     const cachedModels = activeProviderModelsCache[cacheKey];
     if (cachedModels) {
@@ -2057,8 +2127,9 @@ export function SettingsDialog({
       const result = await fetchProviderModels(
         {
           protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
+          credentialSource,
+          baseUrl: usingDeploymentProvider ? undefined : cfg.baseUrl,
+          apiKey: usingDeploymentProvider ? undefined : cleanByokApiKey(cfg.apiKey),
         },
         controller.signal,
       );
@@ -2196,6 +2267,11 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const credentialSource = cfg.apiCredentialSource ?? 'user';
+  const usingDeploymentProvider = credentialSource === 'deployment';
+  const deploymentProviderAvailable =
+    deploymentProviderConfig?.available === true &&
+    deploymentProviderConfig.protocol === 'openai';
   const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const apiProtocolTabGroups = [
     {
@@ -2209,8 +2285,8 @@ export function SettingsDialog({
       tabs: API_PROTOCOL_TABS.filter((tab) => GATEWAY_API_PROTOCOLS.has(tab.id)),
     },
   ];
-  const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
-  const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
+  const baseUrlValid = usingDeploymentProvider || isValidApiBaseUrl(cfg.baseUrl);
+  const baseUrlInvalid = !usingDeploymentProvider && Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const byokRequiredLabel = (field: ByokRequiredField): string => {
     switch (field) {
       case 'api_key':
@@ -2487,15 +2563,20 @@ export function SettingsDialog({
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const showProviderPreset =
-    protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
+    !usingDeploymentProvider &&
+    protocolProviders.length > 0 &&
+    !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
   // user to edit, so hide the field entirely.
-  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
-  const byokRequiresApiKey = byokProviderRequiresApiKey(
-    apiProtocol,
-    selectedProvider,
-    cfg.baseUrl,
-  );
+  const showBaseUrlField = !usingDeploymentProvider && !isFixedOriginGateway(apiProtocol);
+  const byokRequiresApiKey = usingDeploymentProvider
+    ? false
+    : byokProviderRequiresApiKey(
+        apiProtocol,
+        selectedProvider,
+        cfg.baseUrl,
+      );
+  const byokRequiresBaseUrl = !usingDeploymentProvider;
   const byokFirstPartyBaseUrl = useMemo(
     () => byokFirstPartyBaseUrlHint(
       apiProtocol,
@@ -2515,6 +2596,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: byokRequiresBaseUrl,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
     ),
@@ -2522,6 +2604,7 @@ export function SettingsDialog({
       apiProtocol,
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
+      byokRequiresBaseUrl,
       cfg.apiKey,
       cfg.baseUrl,
       cfg.model,
@@ -2544,6 +2627,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: byokRequiresBaseUrl,
         requireModel: false,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
@@ -2552,6 +2636,7 @@ export function SettingsDialog({
       apiProtocol,
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
+      byokRequiresBaseUrl,
       cfg.apiKey,
       cfg.baseUrl,
       cfg.model,
@@ -2563,8 +2648,9 @@ export function SettingsDialog({
       cfg.baseUrl,
       cfg.apiKey,
       cfg.apiVersion ?? '',
+      credentialSource,
     ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion, credentialSource],
   );
   const fetchedApiModelOptions =
     activeProviderModelsCache[providerModelsKey] ?? [];
@@ -2656,7 +2742,11 @@ export function SettingsDialog({
     // debounce-commit — fetch as soon as the tab is selected. Every other
     // protocol waits until the key/baseUrl inputs are committed (on blur) so we
     // don't fire on each keystroke.
-    if (apiProtocol !== 'aihubmix' && providerModelsCommittedKey !== providerModelsKey) return;
+    if (
+      !usingDeploymentProvider &&
+      apiProtocol !== 'aihubmix' &&
+      providerModelsCommittedKey !== providerModelsKey
+    ) return;
     const timer = window.setTimeout(() => {
       void handleFetchProviderModels({ silent: true });
     }, 300);
@@ -2671,6 +2761,7 @@ export function SettingsDialog({
     byokModelFetchDraftValidation,
     providerModelsCommittedKey,
     providerModelsKey,
+    usingDeploymentProvider,
     visualStabilityMode,
   ]);
   const currentProviderModelsResult =
@@ -2794,9 +2885,10 @@ export function SettingsDialog({
     focusByokRequiredField(
       missingByokConnectionFields(cfg, {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: byokRequiresBaseUrl,
       })[0],
     );
-  }, [apiModelCustomActive, cfg, apiProtocol, byokRequiresApiKey]);
+  }, [apiModelCustomActive, cfg, apiProtocol, byokRequiresApiKey, byokRequiresBaseUrl]);
 
   // Header title/subtitle follow the active sidebar section so the dialog
   // header always reflects what the user is looking at, instead of being
@@ -3387,7 +3479,46 @@ export function SettingsDialog({
                   <span className="seg-meta">{t('settings.modeApi')}</span>
                 </button>
               </div>
-              {cfg.mode === 'api' ? (
+              {cfg.mode === 'api' && deploymentProviderAvailable ? (
+                <div
+                  className="seg-control"
+                  role="tablist"
+                  aria-label={t('settings.modeApi')}
+                  style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!usingDeploymentProvider}
+                    className={
+                      'seg-btn seg-btn--inline' +
+                      (!usingDeploymentProvider ? ' active' : '')
+                    }
+                    onClick={selectUserProviderCredentials}
+                  >
+                    <span className="seg-title">{t('settings.onboardingByokTitle')}</span>
+                    <span className="seg-meta">{t('settings.onboardingByokBody')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={usingDeploymentProvider}
+                    className={
+                      'seg-btn seg-btn--inline' +
+                      (usingDeploymentProvider ? ' active' : '')
+                    }
+                    onClick={selectDeploymentProviderCredentials}
+                  >
+                    <span className="seg-title">
+                      {deploymentProviderConfig?.label ?? t('settings.modeApi')}
+                    </span>
+                    <span className="seg-meta">
+                      {deploymentProviderConfig?.displayHost ?? t('settings.modeApi')}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+              {cfg.mode === 'api' && !usingDeploymentProvider ? (
                 <div
                   className="protocol-chips"
                   role="tablist"
@@ -4121,7 +4252,11 @@ export function SettingsDialog({
               <div className="section-head">
                 <div>
                   <div className="settings-byok-title">
-                    <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                    <h3>
+                      {usingDeploymentProvider
+                        ? deploymentProviderConfig?.label ?? API_PROTOCOL_LABELS.openai
+                        : API_PROTOCOL_LABELS[apiProtocol]}
+                    </h3>
                     <span className="settings-byok-info-wrap">
                       <button
                         type="button"
@@ -4147,8 +4282,10 @@ export function SettingsDialog({
                   baseUrlValid={baseUrlValid}
                   canRunConnectionTest={
                     !byokFirstPartyBaseUrl?.hostTypo &&
+                    (!usingDeploymentProvider || deploymentProviderAvailable) &&
                     canRunProviderConnectionTest(cfg, {
                       requiresApiKey: byokRequiresApiKey,
+                      requiresBaseUrl: byokRequiresBaseUrl,
                     })
                   }
                   labels={{
@@ -4206,48 +4343,50 @@ export function SettingsDialog({
                   }}
                 />
               ) : null}
-              <ByokKeyField
-                apiKey={cfg.apiKey}
-                apiKeyConsoleLink={apiKeyConsoleLink}
-                apiProtocol={apiProtocol}
-                inputRef={apiKeyInputRef}
-                labels={{
-                  apiHint: t('settings.apiHint'),
-                  apiKey: t('settings.apiKey'),
-                  apiKeyCleaned: t('settings.apiKeyCleaned'),
-                  apiKeyGetLink: t('settings.apiKeyGetLink', {
-                    host: apiKeyConsoleLink.host,
-                  }),
-                  apiKeyInvalid: t('settings.apiKeyInvalid'),
-                  hide: t('settings.hide'),
-                  hideKey: t('settings.hideKey'),
-                  required: t('settings.required'),
-                  show: t('settings.show'),
-                  showKey: t('settings.showKey'),
-                }}
-                requiresApiKey={byokRequiresApiKey}
-                showApiKeyInvalid={Boolean(
-                  apiKeyFieldAuthFailed ||
-                    byokPreconditionNotice?.field === 'api_key' ||
-                    apiKeyDraftInvalid,
-                )}
-                showApiKey={showApiKey}
-                onBlur={onByokKeyCommit}
-                onChange={(value) => updateApiConfig({ apiKey: value })}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'api_key',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.apiKey?.trim()),
-                    });
-                  }
-                }}
-                onToggleShowApiKey={() => setShowApiKey((v) => !v)}
-              />
+              {!usingDeploymentProvider ? (
+                <ByokKeyField
+                  apiKey={cfg.apiKey}
+                  apiKeyConsoleLink={apiKeyConsoleLink}
+                  apiProtocol={apiProtocol}
+                  inputRef={apiKeyInputRef}
+                  labels={{
+                    apiHint: t('settings.apiHint'),
+                    apiKey: t('settings.apiKey'),
+                    apiKeyCleaned: t('settings.apiKeyCleaned'),
+                    apiKeyGetLink: t('settings.apiKeyGetLink', {
+                      host: apiKeyConsoleLink.host,
+                    }),
+                    apiKeyInvalid: t('settings.apiKeyInvalid'),
+                    hide: t('settings.hide'),
+                    hideKey: t('settings.hideKey'),
+                    required: t('settings.required'),
+                    show: t('settings.show'),
+                    showKey: t('settings.showKey'),
+                  }}
+                  requiresApiKey={byokRequiresApiKey}
+                  showApiKeyInvalid={Boolean(
+                    apiKeyFieldAuthFailed ||
+                      byokPreconditionNotice?.field === 'api_key' ||
+                      apiKeyDraftInvalid,
+                  )}
+                  showApiKey={showApiKey}
+                  onBlur={onByokKeyCommit}
+                  onChange={(value) => updateApiConfig({ apiKey: value })}
+                  onFocus={() => {
+                    const byokProviderId = byokProtocolToTracking(apiProtocol);
+                    if (byokProviderId) {
+                      trackSettingsByokFieldClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'configure_execution_mode_byok',
+                        element: 'api_key',
+                        provider_id: byokProviderId,
+                        has_value: Boolean(cfg.apiKey?.trim()),
+                      });
+                    }
+                  }}
+                  onToggleShowApiKey={() => setShowApiKey((v) => !v)}
+                />
+              ) : null}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}

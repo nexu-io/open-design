@@ -72,6 +72,7 @@ import type {
   ApiProtocolConfig,
   AppConfig,
   AppTheme,
+  DeploymentProviderConfig,
   ConnectionTestResponse,
   DesignSystemSummary,
   ExecMode,
@@ -303,6 +304,7 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -428,6 +430,7 @@ export function EntryShell({
   designSystemsLoading = false,
   projectsLoading = false,
   config,
+  deploymentProviderConfig,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -684,6 +687,7 @@ export function EntryShell({
         <main className="entry-onboarding-modal" aria-label={t('settings.welcomeTitle')}>
           <OnboardingView
             config={config}
+            deploymentProviderConfig={deploymentProviderConfig}
             agents={agents}
             agentsLoading={agentsLoading}
             providerModelsCache={activeProviderModelsCache}
@@ -927,6 +931,7 @@ export function EntryShell({
 
 function OnboardingView({
   config,
+  deploymentProviderConfig,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -942,6 +947,7 @@ function OnboardingView({
   onFinish,
 }: {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -972,7 +978,7 @@ function OnboardingView({
   useEffect(() => {
     setMaxStepReached((reached) => Math.max(reached, step));
   }, [step]);
-  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | 'deployment' | null>(null);
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [cliScanStatus, setCliScanStatus] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
@@ -1046,8 +1052,14 @@ function OnboardingView({
     step,
   });
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const credentialSource = config.apiCredentialSource ?? 'user';
+  const usingDeploymentProvider = credentialSource === 'deployment';
+  const deploymentProviderAvailable =
+    deploymentProviderConfig?.available === true &&
+    deploymentProviderConfig.protocol === 'openai';
   const providerTestInputKey = [
     apiProtocol,
+    credentialSource,
     config.baseUrl.trim(),
     config.model.trim(),
     config.apiKey.trim(),
@@ -1058,6 +1070,7 @@ function OnboardingView({
     config.baseUrl,
     config.apiKey,
     config.apiVersion ?? '',
+    credentialSource,
   );
   providerModelAutoSelectRef.current = {
     model: config.model,
@@ -1066,15 +1079,19 @@ function OnboardingView({
     step,
   };
   const canTestProvider =
-    Boolean(config.apiKey.trim()) &&
-    Boolean(config.baseUrl.trim()) &&
+    (!usingDeploymentProvider || deploymentProviderAvailable) &&
+    (usingDeploymentProvider || Boolean(config.apiKey.trim())) &&
+    (usingDeploymentProvider || Boolean(config.baseUrl.trim())) &&
     Boolean(config.model.trim());
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
-    Boolean(config.baseUrl.trim()) &&
-    isLikelyHttpUrl(config.baseUrl);
+    (!usingDeploymentProvider || deploymentProviderAvailable) &&
+    (usingDeploymentProvider || Boolean(config.apiKey.trim())) &&
+    (usingDeploymentProvider || (
+      Boolean(config.baseUrl.trim()) &&
+      isLikelyHttpUrl(config.baseUrl)
+    ));
   const visibleProviderTestState =
     providerTestState.status !== 'idle' &&
     providerTestState.inputKey === providerTestInputKey
@@ -1133,7 +1150,7 @@ function OnboardingView({
   const connectStepRuntimeReady =
     (runtime === 'amr' && amrSignedIn) ||
     (runtime === 'local' && selectedAgent !== null) ||
-    (runtime === 'byok' && byokConnectionVerified);
+    ((runtime === 'byok' || runtime === 'deployment') && byokConnectionVerified);
   const connectStepBlocked =
     step === 0 && !amrSelectedAndSignedOut && !connectStepRuntimeReady;
   // Which Connect gate is in the way, for the Continue tooltip. The three
@@ -1150,6 +1167,8 @@ function OnboardingView({
             ? 'local_agent_unavailable'
             : runtime === 'byok'
               ? 'byok_unverified'
+              : runtime === 'deployment'
+                ? 'byok_unverified'
               : 'no_runtime'
           : null;
   const connectGateTooltip =
@@ -1402,7 +1421,7 @@ function OnboardingView({
   const isLastStep = step === steps.length - 1;
 
   const runtimeItems: Array<{
-    id: 'local' | 'byok';
+    id: 'local' | 'byok' | 'deployment';
     icon: 'hammer' | 'sliders';
     title: string;
     body: string;
@@ -1420,6 +1439,43 @@ function OnboardingView({
         void scanCliAgents({ preferExisting: true });
       },
     },
+    ...(deploymentProviderAvailable ? [{
+      id: 'deployment' as const,
+      icon: 'sliders' as const,
+      title: deploymentProviderConfig?.label ?? t('settings.modeApi'),
+      body: deploymentProviderConfig?.displayHost ?? t('settings.modeApi'),
+      onSelect: () => {
+        emitOnboardingClick('byok', 'select_runtime', {
+          runtime_type: 'byok',
+        });
+        setRuntime('deployment');
+        const model = deploymentProviderConfig?.defaultModel ?? config.model;
+        const nextProtocolConfig: ApiProtocolConfig = {
+          apiKey: '',
+          baseUrl: '',
+          model,
+          apiCredentialSource: 'deployment',
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+        };
+        const nextConfig: AppConfig = {
+          ...config,
+          mode: 'api',
+          apiProtocol: 'openai',
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model,
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+          apiProtocolConfigs: {
+            ...(config.apiProtocolConfigs ?? {}),
+            openai: nextProtocolConfig,
+          },
+        };
+        void onConfigPersist(nextConfig);
+      },
+    }] : []),
     {
       id: 'byok',
       icon: 'sliders',
@@ -1429,6 +1485,7 @@ function OnboardingView({
         emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
         setRuntime('byok');
         onModeChange('api');
+        updateApiConfig({ apiCredentialSource: 'user' });
       },
     },
   ];
@@ -1505,6 +1562,7 @@ function OnboardingView({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       model: config.model,
+      apiCredentialSource: config.apiCredentialSource ?? 'user',
       apiVersion: config.apiVersion ?? '',
       apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     };
@@ -1519,6 +1577,7 @@ function OnboardingView({
       apiKey: nextProtocolConfig.apiKey,
       baseUrl: nextProtocolConfig.baseUrl,
       model: nextProtocolConfig.model,
+      apiCredentialSource: nextProtocolConfig.apiCredentialSource ?? 'user',
       apiVersion: protocol === 'azure' ? (nextProtocolConfig.apiVersion ?? '') : '',
       apiProviderBaseUrl: nextProtocolConfig.apiProviderBaseUrl ?? null,
       apiProtocolConfigs: {
@@ -1958,8 +2017,9 @@ function OnboardingView({
     try {
       const result = await testApiProvider({
         protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+        credentialSource,
+        baseUrl: usingDeploymentProvider ? undefined : config.baseUrl,
+        apiKey: usingDeploymentProvider ? undefined : config.apiKey,
         model: config.model,
         apiVersion:
           apiProtocol === 'azure'
@@ -2005,8 +2065,9 @@ function OnboardingView({
     try {
       const result = await fetchProviderModels({
         protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
+        credentialSource,
+        baseUrl: usingDeploymentProvider ? undefined : config.baseUrl,
+        apiKey: usingDeploymentProvider ? undefined : config.apiKey,
       });
       if (result.ok && result.models?.length) {
         selectFirstProviderModelWhenEmpty(result.models, inputKey);
@@ -2203,9 +2264,20 @@ function OnboardingView({
                     }}
                   />
                 ) : null}
-                {runtime === 'byok' ? (
+                {runtime === 'byok' || runtime === 'deployment' ? (
                   <OnboardingByokSetupPanel
                     apiProtocol={apiProtocol}
+                    credentialSource={credentialSource}
+                    title={
+                      usingDeploymentProvider
+                        ? deploymentProviderConfig?.label ?? t('settings.modeApi')
+                        : t('settings.modeApiMeta')
+                    }
+                    body={
+                      usingDeploymentProvider
+                        ? deploymentProviderConfig?.displayHost ?? t('settings.modeApi')
+                        : t('settings.modeApi')
+                    }
                     apiKey={config.apiKey}
                     baseUrl={config.baseUrl}
                     model={config.model}
@@ -2214,6 +2286,7 @@ function OnboardingView({
                     apiKeyVisible={apiKeyVisible}
                     onToggleApiKey={() => setApiKeyVisible((current) => !current)}
                     onProtocolChange={(protocol) => {
+                      updateApiConfig({ apiCredentialSource: 'user' });
                       onApiProtocolChange(protocol);
                     }}
                     onProviderChange={(baseUrl) => {
@@ -2223,16 +2296,17 @@ function OnboardingView({
                       updateApiConfig({
                         baseUrl: provider?.baseUrl ?? '',
                         model: provider?.model ?? '',
+                        apiCredentialSource: 'user',
                         apiProviderBaseUrl: provider?.baseUrl ?? null,
                       });
                     }}
-                    onApiKeyChange={(apiKey) => updateApiConfig({ apiKey })}
+                    onApiKeyChange={(apiKey) => updateApiConfig({ apiKey, apiCredentialSource: 'user' })}
                     onModelChange={(model) => {
                       onApiModelChange(model);
                       updateApiConfig({ model });
                     }}
                     onBaseUrlChange={(baseUrl) =>
-                      updateApiConfig({ baseUrl, apiProviderBaseUrl: null })
+                      updateApiConfig({ baseUrl, apiCredentialSource: 'user', apiProviderBaseUrl: null })
                     }
                     modelOptions={byokModelOptions}
                     testState={visibleProviderTestState}
@@ -2575,6 +2649,9 @@ function formatModelToken(token: string): string {
 
 function OnboardingByokSetupPanel({
   apiProtocol,
+  credentialSource,
+  title,
+  body,
   apiKey,
   baseUrl,
   model,
@@ -2596,6 +2673,9 @@ function OnboardingByokSetupPanel({
   onFetchModels,
 }: {
   apiProtocol: ApiProtocol;
+  credentialSource: 'user' | 'deployment';
+  title: string;
+  body: string;
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -2625,12 +2705,13 @@ function OnboardingByokSetupPanel({
   const t = useT();
   const running = testState.status === 'running';
   const fetchingModels = modelsState.status === 'running';
+  const usesDeploymentProvider = credentialSource === 'deployment';
   return (
     <div className="onboarding-view__setup-panel">
       <div className="onboarding-view__setup-head">
         <div>
-          <strong>{t('settings.modeApiMeta')}</strong>
-          <p>{t('settings.modeApi')}</p>
+          <strong>{title}</strong>
+          <p>{body}</p>
         </div>
         <div className="onboarding-view__setup-head-actions">
           <button
@@ -2653,58 +2734,64 @@ function OnboardingByokSetupPanel({
           </button>
         </div>
       </div>
-      <div
-        className="onboarding-view__protocol-strip"
-        role="tablist"
-        aria-label={t('settings.protocolAria')}
-      >
-        {API_PROTOCOL_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={apiProtocol === tab.id}
-            className={apiProtocol === tab.id ? 'is-selected' : ''}
-            onClick={() => onProtocolChange(tab.id)}
+      {!usesDeploymentProvider ? (
+        <>
+          <div
+            className="onboarding-view__protocol-strip"
+            role="tablist"
+            aria-label={t('settings.protocolAria')}
           >
-            {tab.title}
-          </button>
-        ))}
-      </div>
-      <OnboardingDropdown
-        label={t('settings.quickFillProvider')}
-        placeholder={t('settings.customProvider')}
-        value={selectedProvider?.baseUrl ?? ''}
-        options={providerOptions}
-        onChange={onProviderChange}
-        searchable
-        searchPlaceholder={t('settings.quickFillProvider')}
-      />
-      <label className="onboarding-view__inline-field">
-        <span>{t('settings.apiKey')}</span>
-        <span className="onboarding-view__field-row">
-          <input
-            type={apiKeyVisible ? 'text' : 'password'}
-            placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
-            value={apiKey}
-            onChange={(event) => onApiKeyChange(event.target.value)}
+            {API_PROTOCOL_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={apiProtocol === tab.id}
+                className={apiProtocol === tab.id ? 'is-selected' : ''}
+                onClick={() => onProtocolChange(tab.id)}
+              >
+                {tab.title}
+              </button>
+            ))}
+          </div>
+          <OnboardingDropdown
+            label={t('settings.quickFillProvider')}
+            placeholder={t('settings.customProvider')}
+            value={selectedProvider?.baseUrl ?? ''}
+            options={providerOptions}
+            onChange={onProviderChange}
+            searchable
+            searchPlaceholder={t('settings.quickFillProvider')}
           />
-          <button type="button" onClick={onToggleApiKey}>
-            {apiKeyVisible ? t('settings.hide') : t('settings.show')}
-          </button>
-        </span>
-      </label>
+          <label className="onboarding-view__inline-field">
+            <span>{t('settings.apiKey')}</span>
+            <span className="onboarding-view__field-row">
+              <input
+                type={apiKeyVisible ? 'text' : 'password'}
+                placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
+                value={apiKey}
+                onChange={(event) => onApiKeyChange(event.target.value)}
+              />
+              <button type="button" onClick={onToggleApiKey}>
+                {apiKeyVisible ? t('settings.hide') : t('settings.show')}
+              </button>
+            </span>
+          </label>
+        </>
+      ) : null}
       <div className="onboarding-view__compact-fields">
-        <label className="onboarding-view__inline-field">
-          <span>{t('settings.baseUrl')}</span>
-          <input
-            type="url"
-            inputMode="url"
-            value={baseUrl}
-            placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
-            onChange={(event) => onBaseUrlChange(event.target.value)}
-          />
-        </label>
+        {!usesDeploymentProvider ? (
+          <label className="onboarding-view__inline-field">
+            <span>{t('settings.baseUrl')}</span>
+            <input
+              type="url"
+              inputMode="url"
+              value={baseUrl}
+              placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
+              onChange={(event) => onBaseUrlChange(event.target.value)}
+            />
+          </label>
+        ) : null}
         {modelOptions.length > 0 ? (
           <OnboardingDropdown
             label={t('settings.model')}
