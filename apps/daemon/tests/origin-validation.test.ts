@@ -43,7 +43,7 @@ function closeServer(server: http.Server): Promise<void> {
 
 function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/raw\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
   return (req: Request, res: Response, next: NextFunction) => {
     const origin = req.headers.origin;
     if (origin == null || origin === '') return next();
@@ -94,6 +94,9 @@ function makeTestApp(port: number, host = '127.0.0.1') {
       res.header('Access-Control-Allow-Origin', 'null');
     }
     res.type('image/png').send(Buffer.from('fake-sprite'));
+  });
+  app.get('/api/asset-cache', (_req, res) => {
+    res.type('image/png').send(Buffer.from('fake-asset'));
   });
   return app;
 }
@@ -324,6 +327,13 @@ describe('daemon origin validation middleware', () => {
     });
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBe('null');
+  });
+
+  it('allows Origin: null for GET asset-cache routes', async () => {
+    const res = await request(port, 'GET', '/api/asset-cache?url=https%3A%2F%2Fcdn.example.com%2Fhero.webp', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
   });
 
   it('rejects Origin: null on POST to state-changing endpoints', async () => {
