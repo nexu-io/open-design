@@ -649,24 +649,41 @@ export async function runMcpStdio({ daemonUrl, stdin, stdout, idleExit: idleExit
   // process open until the client disconnects (stdin EOF) so the cli.ts
   // top-level `process.exit(0)` doesn't kill us mid-handshake.
   let clientClosedDone: (() => void) | null = null;
+  let requestTransportClose: (() => void) | null = null;
   const clientClosed = new Promise<void>((resolve) => {
+    let closed = false;
+    let transportCloseRequested = false;
+    const existingOnClose = transport.onclose;
     clientClosedDone = () => {
+      if (closed) return;
+      closed = true;
       idleExit.stop();
       resolve();
     };
-    transport.onclose = clientClosedDone;
+    transport.onclose = () => {
+      try {
+        existingOnClose?.();
+      } finally {
+        clientClosedDone?.();
+      }
+    };
+    requestTransportClose = () => {
+      if (transportCloseRequested) return;
+      transportCloseRequested = true;
+      void transport.close().catch(() => clientClosedDone?.());
+    };
     const input = stdin ?? process.stdin;
-    input.once('end', clientClosedDone);
-    input.once('close', clientClosedDone);
+    input.once('end', requestTransportClose);
+    input.once('close', requestTransportClose);
   });
   try {
     await Promise.race([clientClosed, idleExit.waitForIdleExit()]);
   } finally {
     idleExit.stop();
-    if (clientClosedDone) {
+    if (requestTransportClose) {
       const input = stdin ?? process.stdin;
-      input.off('end', clientClosedDone);
-      input.off('close', clientClosedDone);
+      input.off('end', requestTransportClose);
+      input.off('close', requestTransportClose);
     }
     await server.close().catch(() => undefined);
   }
