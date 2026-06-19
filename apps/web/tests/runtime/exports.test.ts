@@ -10,6 +10,8 @@ import {
   exportAsImage,
   exportAsMd,
   exportAsPdf,
+  isUsablePrintSize,
+  reportPrintSizeWhenStable,
   exportProjectAsHtml,
   exportProjectAsPdf,
   openSandboxedPreviewInNewTab,
@@ -20,6 +22,58 @@ import {
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
 }
+
+describe('isUsablePrintSize (#4458)', () => {
+  // The print-ready handshake reports the artifact's own content size so the
+  // desktop bridge can size the PDF page to it. When that size is zero or
+  // invalid, the desktop path falls back to measuring the wrapper viewport,
+  // which (per inferPageSize's own docs) blanks artifacts whose visible
+  // content sits below the fold. Gating on a usable size prevents that.
+  it('treats positive finite dimensions as usable', () => {
+    expect(isUsablePrintSize(1440, 2000)).toBe(true);
+    expect(isUsablePrintSize(1, 1)).toBe(true);
+  });
+
+  it('rejects zero, negative, non-finite, or non-number dimensions', () => {
+    expect(isUsablePrintSize(0, 2000)).toBe(false);
+    expect(isUsablePrintSize(1440, 0)).toBe(false);
+    expect(isUsablePrintSize(-5, 100)).toBe(false);
+    expect(isUsablePrintSize(Number.NaN, 100)).toBe(false);
+    expect(isUsablePrintSize(Number.POSITIVE_INFINITY, 100)).toBe(false);
+    expect(isUsablePrintSize('1440' as unknown as number, 2000)).toBe(false);
+    expect(isUsablePrintSize(undefined as unknown as number, undefined as unknown as number)).toBe(false);
+  });
+});
+
+describe('reportPrintSizeWhenStable (#4458)', () => {
+  it('reports only once the content has a usable size, polling animation frames', () => {
+    // Simulate content that has not finished layout: size is 0 for the first
+    // frames, then becomes positive once laid out. The handshake must not
+    // report the early zero size (which would blank the PDF).
+    const sizes = [
+      { width: 0, height: 0 },
+      { width: 0, height: 0 },
+      { width: 1440, height: 2000 },
+    ];
+    let call = 0;
+    const measure = (): { width: number; height: number } => sizes[Math.min(call++, sizes.length - 1)]!;
+    const reported: Array<{ width: number; height: number }> = [];
+    const raf = (cb: () => void): void => cb(); // run synchronously
+    reportPrintSizeWhenStable(measure, (s) => reported.push(s), 30, raf);
+    expect(reported).toEqual([{ width: 1440, height: 2000 }]);
+  });
+
+  it('reports the last measured size when frames are exhausted (genuinely empty content)', () => {
+    // A truly empty artifact never gains a usable size; rather than hang
+    // forever, report best-effort after the frame budget so the desktop
+    // path is not left waiting on the readiness handshake indefinitely.
+    const measure = (): { width: number; height: number } => ({ width: 0, height: 0 });
+    const reported: Array<{ width: number; height: number }> = [];
+    const raf = (cb: () => void): void => cb();
+    reportPrintSizeWhenStable(measure, (s) => reported.push(s), 3, raf);
+    expect(reported).toEqual([{ width: 0, height: 0 }]);
+  });
+});
 
 describe('archiveRootFromFilePath', () => {
   it('returns the top-level directory name when present', () => {
@@ -669,17 +723,25 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('document.documentElement');
     expect(htmlArg).toContain('scrollHeight');
     expect(htmlArg).toContain('offsetHeight');
-    // ...and it ships the size alongside the readiness signal.
-    expect(htmlArg).toContain('width:w');
-    expect(htmlArg).toContain('height:h');
+    // ...and it ships that size to the parent, but only once the content has a
+    // usable (non-zero) size, by driving the measurement through
+    // reportPrintSizeWhenStable. The polling/gating behavior itself is covered
+    // by the reportPrintSizeWhenStable unit tests above (real-logic behavior
+    // assertions, not string presence); here we assert the handshake is wired
+    // to it so a heavier artifact that lays out late is not reported at size 0,
+    // which would blank the PDF (#4458).
+    expect(htmlArg).toContain('reportPrintSizeWhenStable');
+    expect(htmlArg).toContain('width:size.width');
+    expect(htmlArg).toContain('height:size.height');
     // The parent wrapper caches the reported size for inferPageSize() to read,
-    // validating it as a positive finite number so a malformed/oversized message
+    // gating it through isUsablePrintSize so a malformed/oversized message
     // cannot poison the page size. The finite check matters: `Infinity > 0` is
     // true, so a bare `typeof === 'number'` guard would cache a non-finite
-    // dimension and let it leak into the page size.
+    // dimension and let it leak into the page size. (isUsablePrintSize's own
+    // boundary behavior is covered by its unit tests above.)
     expect(htmlArg).toContain('window.__odPrintSize');
-    expect(htmlArg).toContain('Number.isFinite(e.data.width)');
-    expect(htmlArg).toContain('Number.isFinite(e.data.height)');
+    expect(htmlArg).toContain('__odUsable(e.data.width,e.data.height)');
+    expect(htmlArg).toContain('Number.isFinite(width)');
   });
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
