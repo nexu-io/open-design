@@ -2433,6 +2433,10 @@ export function createDesktopUpdater(
     }
   }
 
+  async function currentUpdateInstallMode(): Promise<'automatic' | 'manual' | undefined> {
+    return readUpdateInstallMode ? await readUpdateInstallMode() : undefined;
+  }
+
   async function restoreStoreState(): Promise<DesktopUpdateStatusSnapshot | null> {
     const opened = await openStore();
     if (!opened.ok) return opened.status;
@@ -2526,7 +2530,7 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
-      const pref = readUpdateInstallMode ? await readUpdateInstallMode() : undefined;
+      const pref = await currentUpdateInstallMode();
       const preferPayload = pref === 'manual' ? false : await hasValidLauncherPayloadContext(config);
       const selected = selectUpdateCandidateWithFallback(body, config, preferPayload);
       if (!selected.ok) return setState(selected.state, selected.error);
@@ -2852,6 +2856,22 @@ export function createDesktopUpdater(
     return { ...result, launchPath };
   }
 
+  async function reconcileManualModeBeforePayloadInstall(): Promise<DesktopUpdateStatusSnapshot | null> {
+    if (activeRelease?.ref.artifact.type !== "payload") return null;
+    const pref = await currentUpdateInstallMode();
+    if (pref !== "manual") return null;
+
+    logUpdateEvent("install-reselect-manual-artifact", {
+      key: activeRelease.ref.key,
+      version: activeRelease.ref.version,
+    });
+    const reselected = await checkForCandidate({ autoDownload: true });
+    if (reselected.state === DESKTOP_UPDATE_STATES.DOWNLOADED && reselected.artifact?.type !== "payload") {
+      return reselected.installResult == null ? null : reselected;
+    }
+    return reselected;
+  }
+
   async function installUpdate(): Promise<DesktopUpdateStatusSnapshot> {
     const unsupported = unsupportedStatus();
     if (unsupported != null) return unsupported;
@@ -2865,6 +2885,8 @@ export function createDesktopUpdater(
         return setState(DESKTOP_UPDATE_STATES.ERROR, createError("update-not-downloaded", "no downloaded update package is available"));
       }
     }
+    const reconciledManualMode = await reconcileManualModeBeforePayloadInstall();
+    if (reconciledManualMode != null) return reconciledManualMode;
     const opened = await openStore();
     if (!opened.ok) return opened.status;
     const resolvedDownload = activeRelease.path;

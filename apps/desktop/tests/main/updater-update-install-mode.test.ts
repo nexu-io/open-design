@@ -271,6 +271,265 @@ describe("desktop updater install-mode candidate selection", () => {
     }
   });
 
+  it("reselects the installer when pref changes to manual after a payload is downloaded", async () => {
+    const root = makeRoot();
+    const fixture = await createPayloadFixtureServer({ version: "1.0.0-beta.2" });
+    const currentVersion = "1.0.0-beta.1";
+    let mode: "automatic" | "manual" = "automatic";
+    let extractCount = 0;
+    const installerLaunches: Array<{ installerPath: string; root: string }> = [];
+    const payloadLaunches: Array<{ launchPath: string; root: string }> = [];
+    try {
+      const { launcherLaunchPath, launcherRoot, launcherRuntimePath, namespace } =
+        await writeValidLauncherContext(root, currentVersion);
+
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          currentVersion,
+          downloadRoot: join(root, "updates"),
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+          launcherLaunchPath,
+          launcherRoot,
+          launcherRuntimePath,
+          namespace,
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        {
+          readUpdateInstallMode: async () => mode,
+          extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+            extractCount += 1;
+            await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+            await writeFile(join(destinationRoot, "payload", "Open Design Beta.exe"), "");
+            await writeFile(
+              join(destinationRoot, "manifest.json"),
+              `${JSON.stringify({
+                channel: "beta",
+                entry: { cwd: "payload", executable: "payload/Open Design Beta.exe" },
+                namespace,
+                payloadRoot: "payload",
+                platform: "win32",
+                schemaVersion: LAUNCHER_SCHEMA_VERSION,
+                version: "1.0.0-beta.2",
+              })}\n`,
+            );
+            await writeFile(
+              join(destinationRoot, "payload", "resources", "open-design-config.json"),
+              "{}\n",
+            );
+          },
+          launchAppAfterQuit: async (input) => {
+            payloadLaunches.push({ launchPath: input.launchPath, root: input.root });
+            return {};
+          },
+          launchInstallerAfterQuit: async (input) => {
+            installerLaunches.push({ installerPath: input.installerPath, root: input.root });
+            return "";
+          },
+          processPid: 4242,
+        },
+      );
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.artifact?.type).toBe("payload");
+
+      mode = "manual";
+      const installed = await updater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.artifact?.type).toBe("installer");
+      expect(installed.capabilities.requiresManualInstall).toBe(true);
+      expect(installed.capabilities.canOpenInstaller).toBe(true);
+      expect(installed.capabilities.canApplyInPlace).toBe(false);
+      expect(installed.installResult?.path).not.toBe(checked.downloadPath);
+      expect(installerLaunches).toHaveLength(1);
+      expect(installed.installResult?.path).toBe(installerLaunches[0]?.installerPath);
+      expect(payloadLaunches).toEqual([]);
+      expect(extractCount).toBe(1);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps the downloaded payload if manual reselect cannot fetch metadata", async () => {
+    const root = makeRoot();
+    const fixture = await createPayloadFixtureServer({ version: "1.0.0-beta.2" });
+    const currentVersion = "1.0.0-beta.1";
+    let mode: "automatic" | "manual" = "automatic";
+    let fixtureClosed = false;
+    try {
+      const { launcherLaunchPath, launcherRoot, launcherRuntimePath, namespace } =
+        await writeValidLauncherContext(root, currentVersion);
+
+      const updater = createDesktopUpdater(
+        {
+          arch: "x64",
+          currentVersion,
+          downloadRoot: join(root, "updates"),
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+          },
+          launcherLaunchPath,
+          launcherRoot,
+          launcherRuntimePath,
+          namespace,
+          source: SIDECAR_SOURCES.PACKAGED,
+        },
+        {
+          readUpdateInstallMode: async () => mode,
+          extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+            await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+            await writeFile(join(destinationRoot, "payload", "Open Design Beta.exe"), "");
+            await writeFile(
+              join(destinationRoot, "manifest.json"),
+              `${JSON.stringify({
+                channel: "beta",
+                entry: { cwd: "payload", executable: "payload/Open Design Beta.exe" },
+                namespace,
+                payloadRoot: "payload",
+                platform: "win32",
+                schemaVersion: LAUNCHER_SCHEMA_VERSION,
+                version: "1.0.0-beta.2",
+              })}\n`,
+            );
+            await writeFile(
+              join(destinationRoot, "payload", "resources", "open-design-config.json"),
+              "{}\n",
+            );
+          },
+        },
+      );
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.artifact?.type).toBe("payload");
+
+      await fixture.close();
+      fixtureClosed = true;
+      mode = "manual";
+      const failed = await updater.installUpdate();
+
+      expect(failed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(failed.error?.code).toBe("metadata-unreachable");
+      expect(failed.artifact?.type).toBe("payload");
+      expect(failed.downloadPath).toBe(checked.downloadPath);
+    } finally {
+      if (!fixtureClosed) await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not double-open the installer when manual reselect auto-opens it", async () => {
+    const root = makeRoot();
+    const fixture = await createPayloadFixtureServer({ version: "1.0.0-beta.2" });
+    const currentVersion = "1.0.0-beta.1";
+    let extractCount = 0;
+    const installerLaunches: Array<{ installerPath: string; root: string }> = [];
+    const payloadLaunches: Array<{ launchPath: string; root: string }> = [];
+    try {
+      const { launcherLaunchPath, launcherRoot, launcherRuntimePath, namespace } =
+        await writeValidLauncherContext(root, currentVersion);
+
+      const commonConfig = {
+        arch: "x64" as const,
+        currentVersion,
+        downloadRoot: join(root, "updates"),
+        launcherLaunchPath,
+        launcherRoot,
+        launcherRuntimePath,
+        namespace,
+        source: SIDECAR_SOURCES.PACKAGED,
+      };
+      const commonDeps = {
+        extractLauncherPayloadArchive: async ({ destinationRoot }: { destinationRoot: string }) => {
+          extractCount += 1;
+          await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+          await writeFile(join(destinationRoot, "payload", "Open Design Beta.exe"), "");
+          await writeFile(
+            join(destinationRoot, "manifest.json"),
+            `${JSON.stringify({
+              channel: "beta",
+              entry: { cwd: "payload", executable: "payload/Open Design Beta.exe" },
+              namespace,
+              payloadRoot: "payload",
+              platform: "win32",
+              schemaVersion: LAUNCHER_SCHEMA_VERSION,
+              version: "1.0.0-beta.2",
+            })}\n`,
+          );
+          await writeFile(
+            join(destinationRoot, "payload", "resources", "open-design-config.json"),
+            "{}\n",
+          );
+        },
+        launchAppAfterQuit: async (input: { launchPath: string; root: string }) => {
+          payloadLaunches.push({ launchPath: input.launchPath, root: input.root });
+          return {};
+        },
+        launchInstallerAfterQuit: async (input: { installerPath: string; root: string }) => {
+          installerLaunches.push({ installerPath: input.installerPath, root: input.root });
+          return "";
+        },
+        processPid: 4242,
+      };
+
+      const initialUpdater = createDesktopUpdater(
+        {
+          ...commonConfig,
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+        },
+        {
+          ...commonDeps,
+          readUpdateInstallMode: async () => "automatic" as const,
+        },
+      );
+
+      const checked = await initialUpdater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.artifact?.type).toBe("payload");
+
+      const manualUpdater = createDesktopUpdater(
+        {
+          ...commonConfig,
+          env: {
+            ...updaterEnv(fixture.metadataUrl, "win32"),
+            [DESKTOP_UPDATE_ENV.AUTO_OPEN]: "1",
+            [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+            [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+          },
+        },
+        {
+          ...commonDeps,
+          readUpdateInstallMode: async () => "manual" as const,
+        },
+      );
+
+      const installed = await manualUpdater.installUpdate();
+
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.artifact?.type).toBe("installer");
+      expect(installed.installResult?.path).not.toBe(checked.downloadPath);
+      expect(installerLaunches).toHaveLength(1);
+      expect(installed.installResult?.path).toBe(installerLaunches[0]?.installerPath);
+      expect(payloadLaunches).toEqual([]);
+      expect(extractCount).toBe(1);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("selects the payload when pref is unset and valid launcher context is present (default = automatic)", async () => {
     const root = makeRoot();
     const fixture = await createPayloadFixtureServer({ version: "1.0.0-beta.2" });
