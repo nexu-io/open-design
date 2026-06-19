@@ -635,6 +635,74 @@ describe("createCommandInvocation", () => {
   });
 });
 
+describe("wellKnownUserToolchainBins Windows fnm node discovery", () => {
+  // Issue #3517: a GUI-launched packaged app on Windows inherits a stripped
+  // PATH and never sees fnm-managed Node. fnm on Windows keeps its installs
+  // under %APPDATA%\fnm\node-versions\<version>\installation, with node.exe
+  // directly in `installation` (no POSIX-style `bin` subdir). The toolchain
+  // bin list only probed ~/.fnm and ~/.local/share/fnm with [installation,
+  // bin] segments, so Windows fnm Node was silently undetected.
+  const originalPlatform = process.platform;
+  function setPlatform(value: NodeJS.Platform): void {
+    Object.defineProperty(process, "platform", { configurable: true, value });
+  }
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+  });
+
+  it("surfaces the Windows fnm installation dir under %APPDATA%\\fnm", () => {
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const appData = mkdtempSync(join(tmpdir(), "od-fnm-appdata-"));
+    const installDir = join(appData, "fnm", "node-versions", "v22.13.1", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { APPDATA: appData } });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(appData, { recursive: true, force: true });
+    }
+  });
+
+  it("honors FNM_DIR over %APPDATA% for the Windows fnm root", () => {
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const fnmDir = mkdtempSync(join(tmpdir(), "od-fnm-dir-"));
+    const installDir = join(fnmDir, "node-versions", "v20.11.0", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: { APPDATA: join(home, "AppData", "Roaming"), FNM_DIR: fnmDir },
+      });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(fnmDir, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces the Windows fnm installation dir under %LOCALAPPDATA%\\fnm", () => {
+    // fnm on Windows can keep its root under %LOCALAPPDATA%\fnm (not only
+    // %APPDATA%\fnm). A globally `npm i -g`'d CLI (e.g. Codex) lands in the
+    // node install's `installation` dir, so probing this root makes that CLI
+    // discoverable from a GUI launch. See issue #3062.
+    const home = mkdtempSync(join(tmpdir(), "od-fnm-home-"));
+    const localAppData = mkdtempSync(join(tmpdir(), "od-fnm-localappdata-"));
+    const installDir = join(localAppData, "fnm", "node-versions", "v22.13.1", "installation");
+    mkdirSync(installDir, { recursive: true });
+    setPlatform("win32");
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: { LOCALAPPDATA: localAppData } });
+      expect(dirs).toContain(installDir);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(localAppData, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("createPackageManagerInvocation", () => {
   const originalPlatform = process.platform;
   function setPlatform(value: NodeJS.Platform): void {
