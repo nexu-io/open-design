@@ -75,6 +75,98 @@ describe('reportPrintSizeWhenStable (#4458)', () => {
   });
 });
 
+describe('injected print-ready parent cache script — runtime behavior (#4458)', () => {
+  // Issue #4458 calls out that the existing coverage only proves script
+  // *strings* are injected, never that the injected script *behaves*. These
+  // specs extract the real parent-cache <script> from a live export, run it,
+  // and drive it with postMessage to assert the runtime size gate: a usable
+  // size is cached for the desktop inferPageSize(); a zero or non-finite size
+  // is rejected so it cannot blank the page (viewport fallback) or poison it.
+  async function extractCacheScript(): Promise<{ body: string; nonce: string }> {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({ host: { pdf: { print: printPdfMock } } });
+    try {
+      await exportAsPdf('<div style="height:4000px">tall artifact</div>', 'Cache Eval');
+    } finally {
+      restoreHost();
+    }
+    const htmlArg = printPdfMock.mock.calls[0]![0] as string;
+    const match = /<script>(window\.__odPrintReady=false;[\s\S]*?)<\/script>/.exec(htmlArg);
+    if (!match) throw new Error('parent cache script not found in exported HTML');
+    const body = match[1]!;
+    const nonceMatch = /nonce===['"]([^'"]+)['"]/.exec(body);
+    if (!nonceMatch) throw new Error('nonce not found in parent cache script');
+    return { body, nonce: nonceMatch[1]! };
+  }
+
+  // This suite runs in the node environment (no DOM), so we drive the real
+  // injected script against a minimal fake `window`: a plain object with a
+  // message-listener registry. The script wires its handler through
+  // `window.addEventListener('message', …)`, so dispatching a message means
+  // invoking the registered handler with a `{ data, source }` event — exactly
+  // what a real `postMessage` delivers, including the source-identity check.
+  type FakeWindow = Record<string, unknown> & {
+    __odPrintReady?: unknown;
+    __odPrintSize?: unknown;
+  };
+
+  function loadCache(body: string): { win: FakeWindow; fire: (event: unknown) => void } {
+    const handlers: Array<(event: unknown) => void> = [];
+    const win: FakeWindow = {
+      addEventListener: (type: string, fn: (event: unknown) => void) => {
+        if (type === 'message') handlers.push(fn);
+      },
+      removeEventListener: () => undefined,
+    };
+    win.frames = [win];
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+    new Function('window', body)(win);
+    return { win, fire: (event) => handlers.slice().forEach((h) => h(event)) };
+  }
+
+  function readyEvent(
+    nonce: string,
+    width: unknown,
+    height: unknown,
+    source: unknown,
+  ): { data: unknown; source: unknown } {
+    return { data: { type: 'OD_PRINT_READY', nonce, width, height }, source };
+  }
+
+  it('caches a usable content size so the desktop bridge sizes the page to the artifact', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, 1440, 2000, win));
+    expect(win.__odPrintReady).toBe(true);
+    expect(win.__odPrintSize).toEqual({ width: 1440, height: 2000 });
+  });
+
+  it('rejects a zero size so the page does not fall back to the wrapper viewport and blank', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, 0, 0, win));
+    // Readiness still resolves (so the desktop bridge never hangs), but the
+    // size is withheld so inferPageSize cannot adopt a blank wrapper viewport.
+    expect(win.__odPrintReady).toBe(true);
+    expect(win.__odPrintSize).toBeNull();
+  });
+
+  it('rejects a non-finite size so Infinity cannot poison the page size', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, Number.POSITIVE_INFINITY, 100, win));
+    expect(win.__odPrintSize).toBeNull();
+  });
+
+  it('ignores a print-ready message carrying the wrong nonce (anti-spoof)', async () => {
+    const { body } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent('not-the-real-nonce', 1440, 2000, win));
+    expect(win.__odPrintReady).toBe(false);
+    expect(win.__odPrintSize).toBeNull();
+  });
+});
+
 describe('archiveRootFromFilePath', () => {
   it('returns the top-level directory name when present', () => {
     expect(archiveRootFromFilePath('ui-design/index.html')).toBe('ui-design');
