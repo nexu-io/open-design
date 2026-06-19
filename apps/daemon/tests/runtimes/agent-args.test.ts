@@ -4,9 +4,23 @@ import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
-test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
+// ---- Cursor Agent --trust capability (issue #4461) -------------------------
+// `--trust` is only honored in `-p`/headless mode and only exists on newer
+// cursor-agent builds. Older installs reject it with "unknown option
+// '--trust'" and exit 1, killing Test and task execution. The flag is gated
+// on the `--help` probe (capabilityFlags) like claude's --add-dir, so the
+// baseline (no probe / probe failed -> caps = {}) must omit it.
+
+test('cursor-agent omits --trust by default until the --help probe confirms support (issue #4461)', () => {
+  // Default state before any capability probe: agentCapabilities has no entry
+  // -> buildArgs gets `caps = {}` -> caps.trust is undefined -> falsy -> no
+  // --trust. This is also the "probe threw" case (timeout, binary missing,
+  // non-zero --help exit), which is exactly the older cursor-agent that
+  // rejects the flag. Omitting it keeps Test working there.
+  agentCapabilities.delete('cursor-agent');
   const args = cursorAgent.buildArgs(
     '',
     [],
@@ -21,10 +35,41 @@ test('cursor-agent args deliver prompts via stdin without passing a literal dash
     'stream-json',
     '--stream-partial-output',
     '--force',
-    '--trust',
     '--workspace',
     '/tmp/od-project',
   ]);
+  assert.equal(args.includes('--trust'), false);
+});
+
+test('cursor-agent passes --trust once the --help probe detects it', () => {
+  agentCapabilities.set('cursor-agent', { trust: true });
+  try {
+    const args = cursorAgent.buildArgs(
+      '',
+      [],
+      [],
+      {},
+      { cwd: '/tmp/od-project' },
+    );
+
+    assert.deepEqual(args, [
+      '--print',
+      '--output-format',
+      'stream-json',
+      '--stream-partial-output',
+      '--force',
+      '--trust',
+      '--workspace',
+      '/tmp/od-project',
+    ]);
+  } finally {
+    agentCapabilities.delete('cursor-agent');
+  }
+});
+
+test('cursor-agent declares the --trust capability probe (issue #4461 root cause)', () => {
+  assert.deepEqual(cursorAgent.helpArgs, ['--help']);
+  assert.equal(cursorAgent.capabilityFlags?.['--trust'], 'trust');
 });
 
 test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
