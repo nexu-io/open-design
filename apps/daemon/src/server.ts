@@ -9499,6 +9499,8 @@ export async function startServer({
     // "agent finished the deliverable and went idle" rather than
     // "agent stalled with nothing to show" (issue #1451).
     let artifactRegistered = false;
+    // Set when sendAgentEvent sees substantive user-visible output.
+    let agentProducedOutput = false;
     // Only daemon-initiated quiet-period termination should be treated
     // as `succeeded` in the close handler. A later unrelated SIGTERM /
     // SIGKILL (external `kill`, OOM, container shutdown) must keep its
@@ -9580,6 +9582,17 @@ export async function startServer({
         // daemon-initiated so an unrelated later signal (external
         // kill, OOM) is NOT silently reclassified to `succeeded` —
         // only signals from this watchdog branch should be.
+        artifactQuietShutdownRequested = true;
+        if (acpSession?.abort) {
+          acpSession.abort();
+        }
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        scheduleForcedChildShutdown();
+        return;
+      }
+      // cursor-agent / prompt-via-stdin: turn finished (usage) but child
+      // may idle on open stdin until the watchdog fires (#3372 family).
+      if (run.turnCompletedCleanly && agentProducedOutput) {
         artifactQuietShutdownRequested = true;
         if (acpSession?.abort) {
           acpSession.abort();
@@ -10165,7 +10178,6 @@ export async function startServer({
     // contribute to this flag; ACP sessions and plain stdout streams are
     // covered by their own success/failure paths and the empty-output
     // guard below skips them via `trackingSubstantiveOutput`.
-    let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
     const looksLikeGeminiJsonEventStream = (text: string) => (
       isGeminiJsonEventStream(parseGeminiJsonEventStreamEvents(text))
@@ -10352,6 +10364,13 @@ export async function startServer({
         agentProducedOutput = true;
       }
       send('agent', ev);
+      // json-event-stream adapters (cursor-agent) keep stdin open; close on
+      // terminal usage so the child exits instead of idle-stalling (#3372).
+      if (def.promptViaStdin || def.id === 'cursor-agent') {
+        try {
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
+        } catch {}
+      }
     };
     const parseBufferedAntigravityGeminiJsonEventStream = () => {
       if (
