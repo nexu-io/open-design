@@ -2936,6 +2936,7 @@ function renderOnboardingProviderModelsMessage(
   result: ProviderModelsResponse,
 ): string {
   if (result.ok) {
+    if (!result.models?.length) return t('settings.fetchModelsEmpty');
     return t('settings.fetchModelsSuccess', {
       count: result.models?.length ?? 0,
     });

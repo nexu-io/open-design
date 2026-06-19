@@ -1158,6 +1158,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
     const props = renderOnboarding({
+      agents: [cliAgent()],
       deploymentProviderConfig: {
         available: true,
         credentialSource: 'deployment',
@@ -1193,6 +1194,47 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       baseUrl: '',
       model: 'deployment-one',
     });
+  });
+
+  it('keeps deployment provider onboarding gated when model discovery returns no models', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [],
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        throw new Error('connection test should not run without a deployment model');
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      agents: [cliAgent()],
+      deploymentProviderConfig: {
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Provider orchestrator',
+        kind: 'available',
+        displayHost: 'provider.example.com',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Provider orchestrator/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('No compatible text models were returned.')).toBeTruthy();
+    });
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/test/connection'))).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('automatically selects a cached BYOK model before testing in onboarding', async () => {
