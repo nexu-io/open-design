@@ -234,4 +234,43 @@ describe('minimax image generation', () => {
       output: 'minimax.png',
     })).rejects.toThrow(/minimax image 401: unauthorized/);
   });
+
+  it('uses the image-specific default base URL and wire model when no config is provided', async () => {
+    // No writeConfig() call — the provider slot exists but has no stored
+    // baseUrl/model override. resolveProviderConfig still returns a config
+    // (apiKey from OD_MINIMAX_API_KEY), but baseUrl and model come from
+    // the renderer's defaults.
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      // Default image base URL is the api.minimax.io host, distinct from
+      // the legacy TTS api.minimaxi.chat. Verifies the renderer does not
+      // inherit the TTS constant.
+      expect(String(input)).toBe(`${TEST_MINIMAX_DEFAULT_BASE_URL}/v1/image_generation`);
+      const body = JSON.parse(String(init?.body));
+      // Default wire model is MiniMax image-01, resolved via the catalog
+      // map from our vendor-prefixed catalog id.
+      expect(body.model).toBe('image-01');
+      expect(body).not.toHaveProperty('subject_reference');
+      return new Response(JSON.stringify({
+        base_resp: { status_code: 0, status_msg: 'success' },
+        data: { image_base64: [PNG_BASE64] },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'minimax-image-01',
+      prompt: 'A watercolor shiba inu',
+      output: 'minimax.png',
+    });
+
+    expect(result.providerId).toBe('minimax');
+    expect(result.providerNote).toContain('minimax/image-01');
+  });
 });
