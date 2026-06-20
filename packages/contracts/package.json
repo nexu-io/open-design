@@ -61,6 +61,10 @@
     "./design-tokens": {
       "types": "./dist/design-tokens.d.ts",
       "default": "./dist/design-tokens.mjs"
+    },
+    "./design-signature": {
+      "types": "./dist/design-signature.d.ts",
+      "default": "./dist/design-signature.mjs"
     }
   },
   "scripts": {
