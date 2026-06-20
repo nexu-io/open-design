@@ -2063,6 +2063,7 @@ export interface Dict {
   'chat.copyErrorDiagnostic': string;
   'chat.errorShowDetails': string;
   'chat.errorHideDetails': string;
+  'chat.errorDetailsLabel': string;
   'chat.copyDone': string;
   'chat.composerPlaceholder': string;
   'chat.activeFileEditingLabel': string;

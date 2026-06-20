@@ -1512,6 +1512,7 @@ export const ko: Dict = {
   'chat.copyErrorDiagnostic': '오류 진단 복사',
   'chat.errorShowDetails': '세부 정보 표시',
   'chat.errorHideDetails': '세부 정보 숨기기',
+  'chat.errorDetailsLabel': '오류 세부 정보',
   'chat.copyDone': '복사됨!',
   'chat.inspect.noEditableTargets': '편집 가능한 텍스트 또는 스타일 대상을 찾을 수 없습니다.',
   'chat.inspect.noCommentTargets': '댓글을 달 수 있는 텍스트 또는 시각적 대상을 찾을 수 없습니다.',

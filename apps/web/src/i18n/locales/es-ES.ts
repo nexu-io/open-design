@@ -1512,6 +1512,7 @@ export const esES: Dict = {
   'chat.copyErrorDiagnostic': 'Copiar diagnóstico del error',
   'chat.errorShowDetails': 'Mostrar detalles',
   'chat.errorHideDetails': 'Ocultar detalles',
+  'chat.errorDetailsLabel': 'Detalles del error',
   'chat.copyDone': '¡Copiado!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

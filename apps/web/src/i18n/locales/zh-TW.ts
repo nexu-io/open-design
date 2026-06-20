@@ -1512,6 +1512,7 @@ export const zhTW: Dict = {
   'chat.copyErrorDiagnostic': '複製錯誤診斷資訊',
   'chat.errorShowDetails': '顯示詳情',
   'chat.errorHideDetails': '收起詳情',
+  'chat.errorDetailsLabel': '錯誤詳情',
   'chat.copyDone': '已複製！',
   'chat.inspect.noEditableTargets': '未找到可編輯的文字或樣式目標。',
   'chat.inspect.noCommentTargets': '未找到可評論的文字或視覺目標。',

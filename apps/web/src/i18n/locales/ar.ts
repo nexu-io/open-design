@@ -1512,6 +1512,7 @@ export const ar: Dict = {
   'chat.copyErrorDiagnostic': 'نسخ تشخيصات الخطأ',
   'chat.errorShowDetails': 'عرض التفاصيل',
   'chat.errorHideDetails': 'إخفاء التفاصيل',
+  'chat.errorDetailsLabel': 'تفاصيل الخطأ',
   'chat.copyDone': 'تم النسخ!',
   'chat.inspect.noEditableTargets': 'لم يُعثر على نصوص قابلة للتحرير أو أهداف نمط.',
   'chat.inspect.noCommentTargets': 'لم يُعثر على نصوص قابلة للتعليق أو أهداف مرئية.',

@@ -1512,6 +1512,7 @@ export const th: Dict = {
   'chat.copyErrorDiagnostic': 'คัดลอกข้อมูลวิเคราะห์ข้อผิดพลาด',
   'chat.errorShowDetails': 'แสดงรายละเอียด',
   'chat.errorHideDetails': 'ซ่อนรายละเอียด',
+  'chat.errorDetailsLabel': 'รายละเอียดข้อผิดพลาด',
   'chat.copyDone': 'คัดลอกแล้ว!',
   'chat.inspect.noEditableTargets': 'ไม่พบข้อความหรือเป้าหมายสไตล์ที่แก้ไขได้',
   'chat.inspect.noCommentTargets': 'ไม่พบข้อความหรือเป้าหมายภาพที่แสดงความคิดเห็นได้',

@@ -1512,6 +1512,7 @@ export const de: Dict = {
   'chat.copyErrorDiagnostic': 'Fehlerdiagnose kopieren',
   'chat.errorShowDetails': 'Details anzeigen',
   'chat.errorHideDetails': 'Details ausblenden',
+  'chat.errorDetailsLabel': 'Fehlerdetails',
   'chat.copyDone': 'Kopiert!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

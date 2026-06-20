@@ -1512,6 +1512,7 @@ export const fr: Dict = {
   'chat.copyErrorDiagnostic': 'Copier le diagnostic d’erreur',
   'chat.errorShowDetails': 'Afficher les détails',
   'chat.errorHideDetails': 'Masquer les détails',
+  'chat.errorDetailsLabel': 'Détails de l’erreur',
   'chat.copyDone': 'Copié !',
   'chat.inspect.noEditableTargets': 'Aucune cible de texte ou de style modifiable trouvée.',
   'chat.inspect.noCommentTargets': 'Aucune cible de texte ou visuelle pouvant recevoir un commentaire n’a été trouvée.',

@@ -1512,6 +1512,7 @@ export const tr: Dict = {
   'chat.copyErrorDiagnostic': 'Hata tanısını kopyala',
   'chat.errorShowDetails': 'Ayrıntıları göster',
   'chat.errorHideDetails': 'Ayrıntıları gizle',
+  'chat.errorDetailsLabel': 'Hata ayrıntıları',
   'chat.copyDone': 'Kopyalandı!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

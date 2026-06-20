@@ -85,20 +85,29 @@ function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
 }
 
 describe('ChatPane error card payload discipline (#3907)', () => {
-  it('clamps an oversized raw payload and offers a details toggle', () => {
+  it('collapses an oversized raw payload to a summary and offers a details toggle', () => {
     const { container } = renderPane({ error: LONG_RAW_ERROR });
 
     const text = container.querySelector('.chat-error-text');
     expect(text).not.toBeNull();
-    // Full payload stays in the DOM (clamp is visual), so copy/inspect still works.
-    expect(text!.textContent).toBe(LONG_RAW_ERROR);
-    expect(text!.getAttribute('data-clamped')).toBe('true');
+    // Collapsed cards must NOT carry the raw blob in the DOM (#4028 design
+    // review): only a short summary, so assistive tech / selection / copy don't
+    // trip over a multi-KB payload before the user opens details.
+    expect(text!.textContent).not.toBe(LONG_RAW_ERROR);
+    expect(text!.textContent).not.toContain('<html>');
+    expect(text!.textContent).not.toContain('responseBody');
+    expect(text!.textContent!.endsWith('…')).toBe(true);
+    // Collapsed text is not a scroll container, so it is not focusable.
+    expect(text!.hasAttribute('tabindex')).toBe(false);
 
     const toggle = screen.getByRole('button', { name: 'chat.errorShowDetails' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // Disclosure pattern: the toggle points at the details region by id.
+    expect(text!.id).not.toBe('');
+    expect(toggle.getAttribute('aria-controls')).toBe(text!.id);
   });
 
-  it('expands to a scrollable details view and collapses back', () => {
+  it('expands to a focusable scrollable details view and collapses back', () => {
     const { container } = renderPane({ error: LONG_RAW_ERROR });
 
     fireEvent.click(screen.getByRole('button', { name: 'chat.errorShowDetails' }));
@@ -106,15 +115,20 @@ describe('ChatPane error card payload discipline (#3907)', () => {
     const card = container.querySelector('.msg.error');
     const text = container.querySelector('.chat-error-text');
     expect(card!.getAttribute('data-error-expanded')).toBe('true');
-    expect(text!.getAttribute('data-clamped')).toBe('false');
+    // Expanded: the full payload is now in the DOM, inside the bounded scroll area.
     expect(text!.textContent).toBe(LONG_RAW_ERROR);
+    // The scroll region owns scrolling, so it is keyboard-focusable and named.
+    expect(text!.getAttribute('tabindex')).toBe('0');
+    expect(text!.getAttribute('aria-label')).toBe('chat.errorDetailsLabel');
 
     const hideToggle = screen.getByRole('button', { name: 'chat.errorHideDetails' });
     expect(hideToggle.getAttribute('aria-expanded')).toBe('true');
 
     fireEvent.click(hideToggle);
     expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('false');
-    expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');
+    const collapsedText = container.querySelector('.chat-error-text');
+    expect(collapsedText!.textContent).not.toBe(LONG_RAW_ERROR);
+    expect(collapsedText!.hasAttribute('tabindex')).toBe(false);
   });
 
   it('renders short errors as-is without a toggle', () => {
@@ -122,7 +136,7 @@ describe('ChatPane error card payload discipline (#3907)', () => {
 
     const text = container.querySelector('.chat-error-text');
     expect(text!.textContent).toBe(SHORT_ERROR);
-    expect(text!.getAttribute('data-clamped')).toBe('false');
+    expect(text!.hasAttribute('tabindex')).toBe(false);
     expect(screen.queryByRole('button', { name: 'chat.errorShowDetails' })).toBeNull();
   });
 
@@ -135,7 +149,7 @@ describe('ChatPane error card payload discipline (#3907)', () => {
     rerender(paneElement({ error: `${LONG_RAW_ERROR} (second attempt)` }));
 
     expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('false');
-    expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');
+    expect(container.querySelector('.chat-error-text')!.textContent).not.toContain('<html>');
   });
 
   it('collapses the expanded view when a new failed run repeats the same payload', () => {
@@ -158,13 +172,26 @@ describe('ChatPane error card payload discipline (#3907)', () => {
     rerender(paneElement({ messages: [failedRunMessage('a2', 'run-2')] }));
 
     expect(container.querySelector('.msg.error')!.getAttribute('data-error-expanded')).toBe('false');
-    expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');
+    expect(container.querySelector('.chat-error-text')!.textContent).not.toBe(LONG_RAW_ERROR);
   });
 
-  it('treats short multiline payloads as clampable', () => {
+  it('summarizes a short multiline payload to its first line', () => {
     const { container } = renderPane({ error: 'line one\nline two\nline three' });
 
-    expect(container.querySelector('.chat-error-text')!.getAttribute('data-clamped')).toBe('true');
+    const text = container.querySelector('.chat-error-text');
+    // Collapsed multiline shows only the first line, not the later lines.
+    expect(text!.textContent).toBe('line one');
+    expect(text!.textContent).not.toContain('line two');
+    expect(screen.getByRole('button', { name: 'chat.errorShowDetails' })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.errorShowDetails' }));
+    expect(container.querySelector('.chat-error-text')!.textContent).toBe('line one\nline two\nline three');
+  });
+
+  it('summarizes the first non-blank line when the payload leads with blank lines', () => {
+    const { container } = renderPane({ error: '   \n\nActual failure detail' });
+
+    expect(container.querySelector('.chat-error-text')!.textContent).toBe('Actual failure detail');
     expect(screen.getByRole('button', { name: 'chat.errorShowDetails' })).not.toBeNull();
   });
 });

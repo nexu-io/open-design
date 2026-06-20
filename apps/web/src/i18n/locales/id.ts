@@ -1512,6 +1512,7 @@ export const id: Dict = {
   'chat.copyErrorDiagnostic': 'Salin diagnostik error',
   'chat.errorShowDetails': 'Tampilkan detail',
   'chat.errorHideDetails': 'Sembunyikan detail',
+  'chat.errorDetailsLabel': 'Detail kesalahan',
   'chat.copyDone': 'Disalin!',
   'chat.inspect.noEditableTargets': 'This page has no editable elements yet.',
   'chat.inspect.noCommentTargets': 'This page has no commentable elements yet.',

@@ -744,15 +744,9 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* Collapsed: show a summary-sized slice of the payload (#3907). The full
-   text stays in the DOM so selection/copy keep working. */
-.chat-error-text[data-clamped='true'] {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-/* Expanded: bounded, scrollable details instead of flooding the column. */
+/* Expanded: bounded, scrollable details instead of flooding the column. The
+   collapsed card renders a short summary directly (#4028 design review), so
+   there is no raw payload to visually clamp here. */
 .msg.error[data-error-expanded='true'] {
   align-items: flex-start;
 }
@@ -763,6 +757,12 @@
   max-height: 240px;
   overflow: auto;
   white-space: pre-wrap;
+}
+/* The expanded region is keyboard-focusable (it owns scrolling), so surface a
+   focus ring matching the rest of the app. */
+.msg.error[data-error-expanded='true'] .chat-error-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .chat-error-details-toggle {
   flex: 0 0 auto;

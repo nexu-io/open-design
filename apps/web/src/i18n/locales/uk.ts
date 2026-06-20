@@ -1512,6 +1512,7 @@ export const uk: Dict = {
   'chat.copyErrorDiagnostic': 'Скопіювати діагностику помилки',
   'chat.errorShowDetails': 'Показати деталі',
   'chat.errorHideDetails': 'Приховати деталі',
+  'chat.errorDetailsLabel': 'Деталі помилки',
   'chat.copyDone': 'Скопійовано!',
   'chat.inspect.noEditableTargets': 'Не знайдено редагованого тексту чи цілей стилю.',
   'chat.inspect.noCommentTargets': 'Не знайдено тексту чи візуальних цілей для коментування.',

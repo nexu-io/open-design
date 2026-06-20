@@ -1512,6 +1512,7 @@ export const ru: Dict = {
   'chat.copyErrorDiagnostic': 'Скопировать диагностику ошибки',
   'chat.errorShowDetails': 'Показать подробности',
   'chat.errorHideDetails': 'Скрыть подробности',
+  'chat.errorDetailsLabel': 'Сведения об ошибке',
   'chat.copyDone': 'Скопировано!',
   'chat.inspect.noEditableTargets': 'Редактируемый текст или объекты стиля не найдены.',
   'chat.inspect.noCommentTargets': 'Текст или визуальные объекты для комментирования не найдены.',

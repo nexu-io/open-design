@@ -1512,6 +1512,7 @@ export const fa: Dict = {
   'chat.copyErrorDiagnostic': 'کپی اطلاعات عیب‌یابی خطا',
   'chat.errorShowDetails': 'نمایش جزئیات',
   'chat.errorHideDetails': 'پنهان کردن جزئیات',
+  'chat.errorDetailsLabel': 'جزئیات خطا',
   'chat.copyDone': 'کپی شد!',
   'chat.inspect.noEditableTargets': 'هیچ متن قابل‌ویرایش یا هدف استایلی یافت نشد.',
   'chat.inspect.noCommentTargets': 'هیچ متن قابل‌نظردهی یا هدف بصری یافت نشد.',

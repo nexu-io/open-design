@@ -4,6 +4,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -948,11 +949,27 @@ export function ChatPane({
     }
   }, []);
   // Unclassified failures fall through to the raw upstream payload, which can
-  // be a multi-KB JSON/HTML blob (#3907). Clamp the card to a short summary
+  // be a multi-KB JSON/HTML blob (#3907). Collapse the card to a short summary
   // and keep the full payload behind an explicit details toggle. Anything
   // multiline or longer than a sentence-ish line gets the toggle.
+  const ERROR_SUMMARY_MAX = 160;
   const errorNeedsClamp =
-    !!displayError && (displayError.length > 160 || displayError.includes('\n'));
+    !!displayError && (displayError.length > ERROR_SUMMARY_MAX || displayError.includes('\n'));
+  // The collapsed card renders only this summary — never the raw blob — so
+  // assistive tech, selection, and copy paths don't hit a multi-KB payload
+  // before the user opens details (#4028 design review). The full text lives in
+  // the expanded scroll region; full diagnostics stay one click away via copy.
+  // Summarize the first non-blank line (payloads sometimes lead with blank
+  // lines) and cap by code point so a multibyte char never splits mid-pair.
+  const errorFirstLine = displayError
+    ? (displayError.split('\n').find((line) => line.trim() !== '') ?? displayError).trim()
+    : '';
+  const errorSummaryChars = Array.from(errorFirstLine);
+  const errorSummary =
+    errorSummaryChars.length > ERROR_SUMMARY_MAX
+      ? `${errorSummaryChars.slice(0, ERROR_SUMMARY_MAX).join('').trimEnd()}…`
+      : errorFirstLine;
+  const errorDetailsId = useId();
   const [errorDetailsExpanded, setErrorDetailsExpanded] = useState(false);
   // Key the reset on the failure identity too: distinct failed runs often
   // render the identical string (same upstream 400 on retry, shared
@@ -2030,11 +2047,18 @@ export function ChatPane({
               />
               {displayError ? (
                 <div className="msg error" data-error-expanded={errorDetailsExpanded ? 'true' : 'false'}>
+                  {/* Collapsed renders only errorSummary (not the raw blob); the
+                      expanded span owns a bounded scroll, so it's keyboard-
+                      focusable and named for assistive tech (#4028 design review). */}
                   <span
+                    id={errorDetailsId}
                     className="chat-error-text"
-                    data-clamped={errorNeedsClamp && !errorDetailsExpanded ? 'true' : 'false'}
+                    tabIndex={errorNeedsClamp && errorDetailsExpanded ? 0 : undefined}
+                    aria-label={
+                      errorNeedsClamp && errorDetailsExpanded ? t('chat.errorDetailsLabel') : undefined
+                    }
                   >
-                    {displayError}
+                    {errorNeedsClamp && !errorDetailsExpanded ? errorSummary : displayError}
                   </span>
                   {/* errorDiagnosticText is non-null whenever displayError is,
                       so this container — and the details toggle inside it —
@@ -2048,6 +2072,7 @@ export function ChatPane({
                           type="button"
                           className="ghost chat-error-details-toggle"
                           aria-expanded={errorDetailsExpanded}
+                          aria-controls={errorDetailsId}
                           onClick={() => setErrorDetailsExpanded((prev) => !prev)}
                         >
                           {errorDetailsExpanded ? t('chat.errorHideDetails') : t('chat.errorShowDetails')}
