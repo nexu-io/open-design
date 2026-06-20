@@ -8,7 +8,7 @@
 //
 //   <cwd>/code/tokens.json
 //
-// The actual text scanner lives in `design-token-evidence.ts` so user
+// The actual text scanner lives in `token-evidence.ts` so user
 // design-system imports and migration atoms share one evidence collector.
 
 import path from 'node:path';
@@ -19,7 +19,7 @@ import {
   type DesignExtractReport,
   type DesignTokenEntry,
   type DesignTokenKind,
-} from '../../design-token-evidence.js';
+} from '../../design-systems/token-evidence.js';
 
 export type {
   DesignExtractReport,

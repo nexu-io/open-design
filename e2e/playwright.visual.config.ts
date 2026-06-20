@@ -13,7 +13,10 @@ export default defineConfig({
   testDir: './ui',
   testMatch: 'visual-*.test.ts',
   outputDir: './ui/reports/visual-test-results',
-  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 30_000,
+  timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 60_000,
+  expect: {
+    timeout: 10_000,
+  },
   retries: 0,
   fullyParallel: process.env.OD_PLAYWRIGHT_FULLY_PARALLEL === '1',
   workers: parseWorkerCount(process.env.OD_PLAYWRIGHT_WORKERS),

@@ -114,6 +114,49 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(settingsDialog.getByRole('button', { name: /show pet picker/i })).toHaveCount(0);
 });
 
+test('[P0] @critical home hero submit creates a project and lands on a usable workspace', async ({ page }) => {
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"home-entry-workspace-smoke"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  await input.fill('Create a risk dashboard workspace smoke.');
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+
+  const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('home-hero-submit').click();
+  const projectRequest = await projectRequestPromise;
+  const projectBody = projectRequest.postDataJSON() as {
+    pendingPrompt?: string;
+    metadata?: { kind?: string };
+  };
+  expect(projectBody.pendingPrompt).toBe('Create a risk dashboard workspace smoke.');
+  expect(typeof projectBody.metadata?.kind).toBe('string');
+
+  await expect(page).toHaveURL(/\/projects\//, { timeout: 15_000 });
+  await expect(page.getByTestId('project-title')).toBeVisible();
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+});
+
 test('[P1] entry top navigation matches the current home tab structure', async ({ page }) => {
   await gotoEntryHome(page);
   await ensureRailOpen(page);
@@ -390,7 +433,7 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/mHAjSMV6gz',
+    'https://discord.gg/9ptkbbqRu',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();

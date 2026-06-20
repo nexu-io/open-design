@@ -1,8 +1,8 @@
 // Normalize ~/.codex/config.toml before launching the Codex CLI.
 //
 // Codex renamed service_tier="priority" → service_tier="fast" in a recent
-// release. The Codex app's own fast-mode toggle still writes the old value
-// on some installations, causing the CLI to exit with:
+// release. Some installations also have the older service_tier="default"
+// value. Both stale values cause the CLI to exit with:
 //
 //   Error loading config.toml: unknown variant 'priority', expected 'fast'
 //   or 'flex' in `service_tier`
@@ -14,7 +14,8 @@
 // field is touched; everything else in config.toml is preserved verbatim.
 //
 // The normalization is idempotent: if the file is absent, already correct,
-// or contains an unknown service_tier value, it is left unchanged.
+// or contains an unknown service_tier value outside the stale map, it is left
+// unchanged.
 
 import { randomBytes } from 'node:crypto';
 import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -47,24 +48,25 @@ export function resolveCodexConfigPath(
 /**
  * Normalize the `service_tier` field in a config.toml string.
  *
- * Replaces any stale/invalid service_tier value (e.g. "priority") with its
- * current valid equivalent ("fast"). Valid values are left unchanged.
- * Unrecognised values are also left unchanged — the Codex CLI will surface
- * a clear error for those.
+ * Replaces any stale/invalid service_tier value (e.g. "priority" or
+ * "default") with its current valid equivalent ("fast"). Valid values are
+ * left unchanged. Unrecognised values are also left unchanged — the Codex CLI
+ * will surface a clear error for those.
  *
  * Returns `null` when no substitution was needed, otherwise returns the
  * patched content.
  */
 export function normalizeCodexConfigContent(content: string): string | null {
   // Match ONLY a standalone service_tier key line, anchored to the start of
-  // the line (multiline `m` flag) so that `priority` appearing inside an
-  // unrelated string value or comment is never touched.
+  // the line (multiline `m` flag) so that `priority` or `default` appearing
+  // inside an unrelated string value or comment is never touched.
   //
   // Pattern breakdown:
   //   ^(\s*)            — leading whitespace / indentation (capture group 1)
   //   service_tier      — literal key name
   //   (\s*=\s*)         — = with optional surrounding whitespace (group 2)
-  //   (["'])priority\3  — quoted "priority" or 'priority' (group 3 back-ref)
+  //   (["'])(priority|default)\3
+  //                    — quoted stale value with matching quote (group 3)
   //   (\s*(?:#.*)?)$    — optional trailing inline comment (group 4)
   //
   // This deliberately avoids matching:
@@ -73,7 +75,7 @@ export function normalizeCodexConfigContent(content: string): string | null {
   //   - `service_tier = "flex"`                     (valid value — not matched)
   //   - `service_tier = "fast"`                     (valid value — not matched)
   const pattern =
-    /^(\s*)service_tier(\s*=\s*)(["'])priority\3(\s*(?:#.*)?)$/gm;
+    /^(\s*)service_tier(\s*=\s*)(["'])(?:priority|default)\3(\s*(?:#.*)?)$/gm;
 
   let changed = false;
   const patched = content.replace(

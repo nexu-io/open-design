@@ -21,7 +21,7 @@ import {
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
-import { postCreateArtifactRequest } from './artifact-create.js';
+import { postCreateArtifactRequest } from './artifacts/create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';

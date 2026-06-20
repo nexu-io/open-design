@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR (Agentic Model Router) — официальный сервис моделей.** Одно пополнение — и GPT, Claude, Gemini и DeepSeek доступны прямо в Open Design: 20+ флагманских моделей, ноль настройки, оплата по реальному расходу токенов. [Попробовать AMR](https://open-design.ai/amr/)
 >
-> 🏅 **Программа Open Design Fellow теперь открыта.** Если вы тоже верите, что дизайн должен быть открытым — станьте Open Design Fellow, формируйте продукт вместе с основной командой и помогайте большему числу людей участвовать в определении будущего дизайна. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Программа Open Design Fellow теперь открыта.** Если вы тоже верите, что дизайн должен быть открытым — станьте Open Design Fellow, формируйте продукт вместе с основной командой и помогайте большему числу людей участвовать в определении будущего дизайна. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и [Discord](https://discord.gg/9ptkbbqRu).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">Сайт</a> ·
   <a href="https://open-design.ai/">Скачать</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
   <a href="https://x.com/nexudotio">Подписаться @nexudotio</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="../../QUICKSTART.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Развертывание на Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Шаблон Sealos App Store запускает опубликованный Docker-образ Open Design с постоянным хранилищем рабочей области и Basic Auth на публичном прокси. Для пользовательских публичных или совместных Docker-развертываний следуйте рекомендациям по обратному прокси и `OPEN_DESIGN_ALLOWED_ORIGINS` в [`deploy/README.md`](../../deploy/README.md#local-compose).
+
 ### 🧑‍💻 Запуск из исходников
 
 ```bash
@@ -588,7 +594,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 За каждым каналом стоят настоящие люди.
 
-- 💬 **Discord** — ежедневный чат, обмен плагинами, вопросы → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 💬 **Discord** — ежедневный чат, обмен плагинами, вопросы → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
 - 🐦 **X / Twitter** — заметки о релизах, вехи, закулисье → [**@nexudotio**](https://x.com/nexudotio)
 - 🗣️ **GitHub Discussions** — глубокие Q&A, RFC, «покажи свою работу» → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — отчёты об ошибках, запросы функций → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -638,7 +644,7 @@ gh pr create --fill
 
 ### 🏅 Программа Open Design Fellow
 
-Мы набираем **Open Design Fellows** по всему миру — Fellows формируют продукт вместе с основной командой, официально представляют Open Design в своём регионе и развивают сообщество локально, при финансовой поддержке ($1,000 / MR), бесплатных кредитах на LLM и прямом треке ревью. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и анонс в [Discord](https://discord.gg/qhbcCH8Am4).
+Мы набираем **Open Design Fellows** по всему миру — Fellows формируют продукт вместе с основной командой, официально представляют Open Design в своём регионе и развивают сообщество локально, при финансовой поддержке ($1,000 / MR), бесплатных кредитах на LLM и прямом треке ревью. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и анонс в [Discord](https://discord.gg/9ptkbbqRu).
 
 ---
 

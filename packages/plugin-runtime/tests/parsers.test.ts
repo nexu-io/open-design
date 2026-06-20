@@ -125,4 +125,27 @@ describe('parseFrontmatter', () => {
     const raw2 = '---\nname: foo\n---foo\nbody';
     expect(parseFrontmatter(raw2)).toEqual({ data: {}, body: raw2 });
   });
+
+  it('coerces plain numbers, booleans, and null', () => {
+    const { data } = parseFrontmatter('---\na: 42\nb: 3.14\nc: true\nd: null\n---\n');
+    expect(data['a']).toBe(42);
+    expect(data['b']).toBe(3.14);
+    expect(data['c']).toBe(true);
+    expect(data['d']).toBe(null);
+  });
+
+  // The YAML 1.2 core schema resolves base-10 numeric scalars as numbers,
+  // including leading-zero forms. We match the schema so frontmatter
+  // consumers keep getting numbers.
+  it('coerces leading-zero integers to numbers (YAML 1.2 core schema)', () => {
+    const { data } = parseFrontmatter('---\nzip: 01234\nid: 007\nzero: 0\n---\n');
+    expect(data['zip']).toBe(1234);
+    expect(data['id']).toBe(7);
+    expect(data['zero']).toBe(0);
+  });
+
+  it('does not treat a lone quote character as an empty quoted string', () => {
+    const { data } = parseFrontmatter('---\na: "\n---\n');
+    expect(data['a']).toBe('"');
+  });
 });
