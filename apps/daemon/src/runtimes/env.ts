@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -142,6 +143,38 @@ export function spawnEnvForAgent(
     // what the AMR path already does for its private OpenCode server.
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
+    }
+    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  }
+  if (agentId === 'hermes') {
+    // macOS desktop launches do not inherit shell-exported env vars, so a
+    // user's `HERMES_HOME` from ~/.zshrc / ~/.bashrc is invisible to the
+    // packaged daemon. Hermes' own `get_hermes_home()` resolves the var
+    // first and then falls back to ~/.hermes/, but the recommended install
+    // script puts the config under ~/.hermes/data/ — so the default
+    // fallback misses every user on the script path and Hermes errors out
+    // with "No LLM provider configured" surfaced as "json-rpc id 2:
+    // Internal error". Backfill the var when neither inherited nor
+    // configured env names it but a recognisable Hermes home is on disk.
+    // See #4407.
+    if (!env.HERMES_HOME?.trim()) {
+      const home = os.homedir();
+      if (home) {
+        const candidates = [
+          path.join(home, '.hermes', 'data'),
+          path.join(home, '.hermes'),
+        ];
+        for (const candidate of candidates) {
+          try {
+            if (existsSync(path.join(candidate, 'config.yaml'))) {
+              env.HERMES_HOME = candidate;
+              break;
+            }
+          } catch {
+            // tolerate fs probe failures; fall through to next candidate
+          }
+        }
+      }
     }
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }

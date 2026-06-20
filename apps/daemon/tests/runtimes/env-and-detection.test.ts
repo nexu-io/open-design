@@ -82,6 +82,85 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+// The macOS desktop launch path does not inherit shell-exported env vars,
+// so HERMES_HOME set in ~/.zshrc / ~/.bashrc is invisible to the packaged
+// daemon. spawnEnvForAgent backfills HERMES_HOME from the install-script
+// default (~/.hermes/data) or Hermes' own default (~/.hermes) when a
+// config.yaml is present, but only when neither the inherited nor the
+// configured env names the var. See issue #4407.
+test('spawnEnvForAgent applies configured Hermes HERMES_HOME without mutating the base env', () => {
+  const base = { PATH: '/usr/bin' };
+  const env = spawnEnvForAgent('hermes', base, {
+    HERMES_HOME: '/Users/test/.hermes-custom',
+  });
+
+  assert.equal(env.HERMES_HOME, '/Users/test/.hermes-custom');
+  assert.equal(env.PATH, '/usr/bin');
+  assert.equal('HERMES_HOME' in base, false);
+});
+
+test('spawnEnvForAgent preserves inherited HERMES_HOME for the hermes adapter', () => {
+  const env = spawnEnvForAgent('hermes', {
+    HERMES_HOME: '/Users/test/.hermes/data',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.HERMES_HOME, '/Users/test/.hermes/data');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+fsTest('spawnEnvForAgent backfills HERMES_HOME from ~/.hermes/data/config.yaml when neither env nor configured env names it', async () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'od-hermes-home-data-'));
+  try {
+    return await withEnvSnapshot(['HOME', 'HERMES_HOME'], () => {
+      mkdirSync(join(fakeHome, '.hermes', 'data'), { recursive: true });
+      writeFileSync(join(fakeHome, '.hermes', 'data', 'config.yaml'), 'providers: {}\n');
+      process.env.HOME = fakeHome;
+      delete process.env.HERMES_HOME;
+
+      const env = spawnEnvForAgent('hermes', { PATH: '/usr/bin' });
+
+      assert.equal(env.HERMES_HOME, join(fakeHome, '.hermes', 'data'));
+    });
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent backfills HERMES_HOME from ~/.hermes/config.yaml when the install-script path is absent', async () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'od-hermes-home-default-'));
+  try {
+    return await withEnvSnapshot(['HOME', 'HERMES_HOME'], () => {
+      mkdirSync(join(fakeHome, '.hermes'), { recursive: true });
+      writeFileSync(join(fakeHome, '.hermes', 'config.yaml'), 'providers: {}\n');
+      process.env.HOME = fakeHome;
+      delete process.env.HERMES_HOME;
+
+      const env = spawnEnvForAgent('hermes', { PATH: '/usr/bin' });
+
+      assert.equal(env.HERMES_HOME, join(fakeHome, '.hermes'));
+    });
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+fsTest('spawnEnvForAgent leaves HERMES_HOME unset when no recognisable Hermes home is on disk', async () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'od-hermes-home-absent-'));
+  try {
+    return await withEnvSnapshot(['HOME', 'HERMES_HOME'], () => {
+      process.env.HOME = fakeHome;
+      delete process.env.HERMES_HOME;
+
+      const env = spawnEnvForAgent('hermes', { PATH: '/usr/bin' });
+
+      assert.equal(env.HERMES_HOME, undefined);
+    });
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
   try {
