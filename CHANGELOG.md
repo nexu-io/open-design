@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - 🧬 **Design Signature and Diff.** New `od signature <file>` command gives every artifact a legible identity: it scores the **palette**, type **rhythm**, spacing **cadence**, and structural **density** from the tokens the design actually uses, with a composite vitality score and a stable fingerprint. With `od signature <file> --against <previous>` it also prints a plain-language list of what changed since the last version (for example "Color changed", "Corner radius increased", "Typography changed") plus the vitality delta. Pure, deterministic, dependency-free; reads a file or stdin and supports `--json`. This lands the engine and CLI; an always-on Signature readout in the workspace is proposed as a follow-up.
+- Design Signature strip: opt-in, collapsed-by-default "what changed since last version" summary above the artifact preview, reusing the `od signature` engine (now shared via `@open-design/contracts`). Enable in Settings → Design Signature. (#4359)
 
 ## [0.9.0] - 2026-05-29
 
