@@ -70,7 +70,9 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
+      const target: 'preview' | 'production' =
+        rawTarget === 'preview' ? 'preview' : 'production';
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
@@ -106,6 +108,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             projectId: req.params.id,
             cloudflarePages,
             priorMetadata: prior?.providerMetadata,
+            target,
           })
         : await deployToVercel({
             config: await readDeployConfig(VERCEL_PROVIDER_ID),
@@ -122,7 +125,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         url: result.url,
         deploymentId: result.deploymentId,
         deploymentCount: (prior?.deploymentCount ?? 0) + 1,
-        target: 'preview',
+        target: result.target ?? target,
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
