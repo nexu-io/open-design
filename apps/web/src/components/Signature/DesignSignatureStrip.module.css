@@ -1,0 +1,26 @@
+.strip {
+  border: 1px solid var(--border, rgba(0,0,0,0.1));
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--surface, transparent);
+}
+.collapsedRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.fingerprint { font-family: ui-monospace, monospace; opacity: 0.7; }
+.changeList { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.changeItem { display: flex; gap: 6px; }
+.dir { width: 1em; text-align: center; }
+.whyGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 6px; }
+.bar { font-family: ui-monospace, monospace; letter-spacing: -1px; }
+/* Disclosure animation honors the repo easing standard. */
+.detail { transition: grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1); }

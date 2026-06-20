@@ -3173,6 +3173,13 @@ export interface Dict {
   'critiqueTheater.settingsEnabledDescription': string;
   'critiqueTheater.settingsEnabledProjectHint': string;
   'critiqueTheater.settingsEnabledNoProjectHint': string;
+  'designSignature.collapsedLabel': string;
+  'designSignature.changesSince': string;
+  'designSignature.changeCount': string;
+  'designSignature.noPrevious': string;
+  'designSignature.whyDetail': string;
+  'designSignature.expand': string;
+  'designSignature.collapse': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;
