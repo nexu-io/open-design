@@ -1,3 +1,11 @@
+/*
+ * Component-owned styles for the Design Signature Strip.
+ * Disclosure animation (expand/collapse) is NOT defined here — it is inherited
+ * from the shared `.accordion-collapsible` + `.accordion-collapsible-inner`
+ * class pair loaded globally via `apps/web/src/index.css` (defined in
+ * `apps/web/src/styles/viewer/composio.css`). Do not add a bespoke transition
+ * here; use the canonical shared classes instead.
+ */
 .strip {
   border: 1px solid var(--border, rgba(0,0,0,0.1));
   border-radius: 8px;
