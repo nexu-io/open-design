@@ -3177,9 +3177,11 @@ export interface Dict {
   'designSignature.changesSince': string;
   'designSignature.changeCount': string;
   'designSignature.noPrevious': string;
+  'designSignature.noChanges': string;
   'designSignature.whyDetail': string;
   'designSignature.expand': string;
   'designSignature.collapse': string;
+  'designSignature.ariaLabel': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import styles from './DesignSignatureStrip.module.css';
 import { useDesignSignatureStripEnabled } from './hooks/useDesignSignatureStripEnabled';
 import { useDesignSignatureDiff } from './hooks/useDesignSignatureDiff';
+import { useI18n } from '../../i18n';
 import { StripCollapsed } from './StripCollapsed';
 import { StripExpanded } from './StripExpanded';
 
@@ -21,18 +22,23 @@ export function DesignSignatureStrip({
   const enabled = useDesignSignatureStripEnabled();
   const [expanded, setExpanded] = useState(false);
   const { signature, diff } = useDesignSignatureDiff(artifactHtml, artifactId);
+  const { t } = useI18n();
 
   if (!enabled || !signature) return null;
 
   return (
-    <div className={styles.strip} aria-label="Design signature">
+    <div className={styles.strip} aria-label={t('designSignature.ariaLabel')}>
       <StripCollapsed
         fingerprint={signature.fingerprint}
         diff={diff}
         expanded={expanded}
         onToggle={() => setExpanded((v) => !v)}
       />
-      {expanded ? <StripExpanded signature={signature} diff={diff} /> : null}
+      <div className={`accordion-collapsible${expanded ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <StripExpanded signature={signature} diff={diff} />
+        </div>
+      </div>
     </div>
   );
 }

@@ -22,5 +22,4 @@
 .dir { width: 1em; text-align: center; }
 .whyGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 6px; }
 .bar { font-family: ui-monospace, monospace; letter-spacing: -1px; }
-/* Disclosure animation honors the repo easing standard. */
-.detail { transition: grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+.whyBtn { margin-top: 6px; }
