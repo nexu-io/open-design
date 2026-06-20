@@ -194,6 +194,31 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
+  it('closes the Search tabs popover when the route flips to onboarding', async () => {
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
+    );
+
+    // Open the Search-tabs popover from the (non-onboarding) home view.
+    fireEvent.click(screen.getByRole('button', { name: 'Search tabs' }));
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Search tabs' })).toBeTruthy();
+    });
+
+    // Onboarding hides the trigger button; the already-open popover must not
+    // survive the route transition (e.g. browser back/forward into
+    // /onboarding), or it floats over the first-run flow with no visible
+    // control to dismiss it.
+    rerender(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'onboarding' }} projects={[project]} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Search tabs' })).toBeNull();
+    });
+    expect(screen.queryByRole('button', { name: 'Search tabs' })).toBeNull();
+  });
+
   it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,

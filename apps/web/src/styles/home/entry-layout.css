@@ -17,14 +17,18 @@
   display: flex;
   align-items: stretch;
   justify-content: stretch;
-  min-height: 100vh;
+  /* 填满标签栏下方的可用区（workspace-shell__body），而非 100vh：
+     onboarding 在标签栏（约 36px）下方，用 100vh 会整体高出一个标签栏的高度，
+     导致底部（含版权 footer）被窗口底边裁掉。 */
+  min-height: 100%;
+  height: 100%;
   padding: 0;
   background: var(--bg);
 }
 
 .entry-onboarding-modal {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   overflow: auto;
   border-radius: 0;
   background: var(--bg);
@@ -1670,6 +1674,226 @@
   justify-items: center;
 }
 
+/* Connect step, cloud sign-in landing. Replaces the grid layout with a
+   centered single column: a top-left language/theme bar, the centered CTA
+   block, and a footer pinned to the bottom. */
+.onboarding-view--cloud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  padding: 72px 24px 64px;
+  gap: 0;
+}
+
+.onboarding-cloud__topbar {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Brand mark above the title. Uses the monochrome brand glyph masked with
+   --text-strong so it reads as black in light mode and white in dark mode. */
+.onboarding-cloud__logo {
+  display: block;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 22px;
+  background-color: var(--text-strong);
+  -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
+  mask: url(/brand-icon.svg) center / contain no-repeat;
+}
+
+/* Compact, icon-only language switcher used in the cloud landing top bar —
+   matches the round theme toggle next to it instead of the labelled foot-pill. */
+.lang-pill--compact {
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+}
+
+.lang-pill--compact:hover {
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__theme:hover:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--text-muted);
+  color: var(--text-strong);
+}
+
+.onboarding-cloud__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(440px, 100%);
+}
+
+.onboarding-cloud__title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.onboarding-cloud__body {
+  margin: 14px 0 0;
+  max-width: 42ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-cloud__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 32px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--text-strong);
+  color: var(--bg);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__primary:hover:not(:disabled) {
+  /* Keep the dark fill on hover — the global `button:hover` rule in
+     primitives.css would otherwise repaint the background to --bg-subtle and
+     wash the white label away. Opacity alone carries the hover feedback. */
+  background: var(--text-strong);
+  border-color: transparent;
+  opacity: 0.88;
+}
+
+.onboarding-cloud__primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.onboarding-cloud__primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.onboarding-cloud__primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.onboarding-cloud__secondary,
+.onboarding-cloud__cancel {
+  margin-top: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-cloud__secondary:hover,
+.onboarding-cloud__cancel:hover {
+  color: var(--text-strong);
+}
+
+/* Two secondary links ("local CLI" or "your own key") on one row. */
+.onboarding-cloud__alts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.onboarding-cloud__alts .onboarding-cloud__secondary {
+  margin-top: 0;
+}
+
+.onboarding-cloud__alts-or {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.onboarding-cloud__error {
+  margin-top: 16px;
+  color: var(--danger-text, #991b1b);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-cloud__footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Back link from the expanded runtime chooser to the cloud landing. */
+.onboarding-view__back-to-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-view__back-to-cloud:hover {
+  color: var(--text-strong);
+}
+
 .onboarding-view__kicker {
   font-size: 11px;
   font-weight: 700;
@@ -2859,7 +3083,71 @@
 .onboarding-view__form-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Profile fields as flat, tappable chips (replaces dropdowns). */
+.onboarding-chip-field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.onboarding-chip-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.onboarding-chip-field__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onboarding-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Override the global button:hover. Unselected chips get a soft accent-tinted
+   wash + accent-leaning border and a slight lift, so the hover reads as "this
+   is pickable" and previews the selected look. Selected chips deepen toward
+   the accent fill instead. */
+.onboarding-chip:hover:not(:disabled) {
+  background: var(--accent-tint);
+  border-color: var(--accent-soft);
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+
+.onboarding-chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.onboarding-chip.is-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.onboarding-chip.is-selected:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .onboarding-view__email-field {

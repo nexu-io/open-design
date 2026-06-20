@@ -11,32 +11,35 @@ import {
   waitForVisualProjects,
 } from '@/playwright/visual';
 
-test('[P2] captures the onboarding runtime selection surface', async ({ page }) => {
+test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
     config: {
       onboardingCompleted: false,
-      agentId: 'amr',
-      agentModels: { amr: { model: 'deepseek-v4-flash', reasoning: 'default' } },
     },
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  // The connect step is now the centered Open Design Cloud sign-in landing.
   await expect(
-    page.getByRole('heading', { name: /Choose a runtime|选择运行方式/i }),
+    page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
-  await expect(page.getByText(/Open Design AMR/i)).toBeVisible();
+  // vela/status is mocked signed-out, so the primary CTA resolves to the
+  // signed-out cloud sign-in copy (past the transient loading state).
   await expect(
-    page
-      .locator('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')
-      .getByRole('button'),
-  ).toContainText(
-    'DeepSeek V4 Flash',
-  );
+    page.getByRole('button', { name: /Sign in to Open Design Cloud|登录 Open Design 云端/i }),
+  ).toBeVisible();
+  // The secondary runtime links remain available beneath the cloud CTA.
+  await expect(
+    page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Bring your own key|自己的模型 Key/i }),
+  ).toBeVisible();
   await waitForVisualFonts(page);
 
-  await captureVisual(page, 'visual-onboarding-runtime');
+  await captureVisual(page, 'visual-onboarding-cloud');
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {

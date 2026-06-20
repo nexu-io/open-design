@@ -240,20 +240,18 @@ describe('onboarding -> home AMR selection (end to end)', () => {
   it('lands on the home agent picker with AMR selected after accepting the AMR default', async () => {
     render(<App />);
 
-    // Bootstrap routes a first-run user into onboarding; the AMR runtime is
-    // the recommended default and the mocked status reports it signed in.
-    // AMR detection lags the first agent probe, so the Connect gate keeps
-    // Continue `aria-disabled` until vela/status confirms the signed-in
-    // account. Wait for the gate to clear — a gated click is a no-op.
-    await waitFor(
-      () => {
-        expect(
-          screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled'),
-        ).not.toBe('true');
-      },
+    // Bootstrap routes a first-run user into onboarding. The Connect step is
+    // now the centered Open Design Cloud sign-in landing. The mocked vela
+    // status reports the account signed in, so once that status resolves the
+    // landing primary CTA reads "Continue (signed in)". AMR detection lags the
+    // first agent probe, so wait for the signed-in copy before clicking it to
+    // advance past the Connect step.
+    const cloudContinue = await screen.findByRole(
+      'button',
+      { name: /Continue \(signed in\)/i },
       { timeout: 5000 },
     );
-    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    fireEvent.click(cloudContinue);
 
     // About-you step is no longer the final step: advance past it to the
     // newsletter step, which now hosts Finish setup.

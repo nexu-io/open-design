@@ -429,6 +429,15 @@
   border-radius: var(--radius-md);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
 }
+/* Compact placement (cloud-landing top bar): the pill sits top-right, so the
+   menu drops DOWN and aligns to the pill's right edge, opening toward the
+   lower-left instead of upward. */
+.lang-menu-popover--compact {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+}
 .lang-menu-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

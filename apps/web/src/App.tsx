@@ -1166,6 +1166,14 @@ function AppInner() {
   const handleThemeChange = useCallback(
     (theme: AppConfig['theme']) => {
       const next = { ...config, theme };
+      // Apply to the DOM synchronously inside the click handler so the theme
+      // flips instantly. Otherwise the visible switch waits on the (heavier)
+      // React re-render of the whole tree before the layout effect re-applies
+      // it — which reads as a perceptible lag after the click.
+      applyAppearanceToDocument({
+        theme: theme ?? 'system',
+        accentColor: config.accentColor,
+      });
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
