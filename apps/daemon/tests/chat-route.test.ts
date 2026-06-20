@@ -298,11 +298,18 @@ process.stdin.on('end', () => {
           };
         };
 
-        expect(parsed.permission?.external_directory).toMatchObject({
-          [effectiveCwd]: 'allow',
-          [`${effectiveCwd}/*`]: 'allow',
-          [`${effectiveCwd}/**`]: 'allow',
-        });
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const cwdAliases = new Set([effectiveCwd]);
+        if (effectiveCwd.startsWith('/private/var/')) {
+          cwdAliases.add(effectiveCwd.replace(/^\/private\/var\//, '/var/'));
+        }
+        const allowedCwd = [...cwdAliases].find(
+          (cwd) =>
+            externalDirectory[cwd] === 'allow' &&
+            externalDirectory[`${cwd}/*`] === 'allow' &&
+            externalDirectory[`${cwd}/**`] === 'allow',
+        );
+        expect(allowedCwd).toBeTruthy();
       },
     );
   });
