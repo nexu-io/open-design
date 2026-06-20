@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import type { SkillInfo } from './skills.js';
-import type { DesignSystemSummary } from './design-systems.js';
+import type { DesignSystemSummary } from './design-systems/index.js';
 import type { RoutineRoutesService } from './routes/routine.js';
 
 export interface HttpDeps {

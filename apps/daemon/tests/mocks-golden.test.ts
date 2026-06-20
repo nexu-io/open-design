@@ -23,8 +23,8 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createClaudeStreamHandler } from '../src/claude-stream.js';
-import { createJsonEventStreamHandler } from '../src/json-event-stream.js';
+import { createClaudeStreamHandler } from '../src/runtimes/claude-stream.js';
+import { createJsonEventStreamHandler } from '../src/runtimes/json-event-stream.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '../../..');

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isBlocked } from './linked-dirs.js';
 import { listSkills, findSkillById } from './skills.js';
-import { listDesignSystems } from './design-systems.js';
+import { listDesignSystems } from './design-systems/index.js';
 
 /** @typedef {{ source: 'github', url: string } | { source: 'local', path: string }} InstallTarget */
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import {
   createDsmlArtifactTextSuppressor,
   type ArtifactTextSuppressor,
-} from './artifact-text-suppression.js';
+} from './artifacts/text-suppression.js';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;

@@ -22,7 +22,7 @@ import {
   AUDIO_MODELS_BY_KIND,
   IMAGE_MODELS,
   VIDEO_MODELS,
-} from '../media-models.js';
+} from '../media/models.js';
 import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {

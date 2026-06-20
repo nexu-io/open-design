@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseFrontmatter } from '../src/frontmatter.js';
+import { parseFrontmatter } from '../src/design-systems/frontmatter.js';
 
 function data(src: string) {
   return parseFrontmatter(`---\n${src}\n---\n`).data;

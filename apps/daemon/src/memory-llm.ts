@@ -59,8 +59,8 @@ import {
   markSuccess,
   markFailed,
 } from './memory-extractions.js';
-import { resolveProviderConfig } from './media-config.js';
-import { AIHUBMIX_APP_CODE } from './aihubmix.js';
+import { resolveProviderConfig } from './media/config.js';
+import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createCommandInvocation } from '@open-design/platform';
@@ -71,7 +71,7 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
