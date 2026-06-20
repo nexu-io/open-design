@@ -55,6 +55,12 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
   return Boolean(cfg.baseUrl && cfg.baseUrl !== 'https://api.anthropic.com');
 }
 
+export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
+  if (cfg.apiProtocol === 'openai' || cfg.apiProtocol === 'azure') return true;
+  if (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl)) return true;
+  return cfg.apiProtocol === 'anthropic' || !cfg.apiProtocol || usesAnthropicProxy(cfg);
+}
+
 export function isAnthropicSupportedImagePath(path: string): boolean {
   const lower = path.toLowerCase();
   return /\.(jpe?g|png|gif|webp)$/.test(lower);

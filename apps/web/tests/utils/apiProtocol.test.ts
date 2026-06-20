@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { apiProtocolLabel, apiProtocolModelLabel } from '../../src/utils/apiProtocol';
+import {
+  apiProtocolLabel,
+  apiProtocolModelLabel,
+  supportsNativeImageAttachments,
+} from '../../src/utils/apiProtocol';
 import {
   agentDisplayName,
   agentModelDisplayName,
@@ -18,6 +22,23 @@ describe('api protocol labels', () => {
       'OpenAI API · google/gemma-4-e4b',
     );
     expect(apiProtocolModelLabel('azure', '  ')).toBe('Azure OpenAI');
+  });
+
+  it('enables native image attachment omission for vision-capable BYOK paths', () => {
+    const baseConfig = {
+      mode: 'api' as const,
+      apiKey: 'test-key',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-opus-4',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+
+    expect(supportsNativeImageAttachments(baseConfig)).toBe(true);
+    expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
+    expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(true);
+    expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'google', model: 'gemini-pro' })).toBe(false);
   });
 
   it('includes explicit local CLI models when labeling agent messages', () => {
