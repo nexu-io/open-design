@@ -39,7 +39,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
+import { agentCliEnvForAgent, appConfigDir, readAppConfig } from './app-config.js';
 import { expandHomePrefix } from './home-expansion.js';
+import { spawnEnvForAgent } from './runtimes/env.js';
 import { resolveXAIBearer } from './xai-credentials.js';
 import { isSandboxModeEnabled } from './sandbox-mode.js';
 
@@ -49,6 +51,7 @@ type ProviderMap = Record<string, ProviderEntry>;
 type ModelAliasMap = Record<string, string>;
 type JsonRecord = Record<string, unknown>;
 type OAuthCredential = { apiKey: string; source: string };
+export type CodexSubscriptionStatus = { available: boolean };
 
 // Single env var carries the full alias map as JSON so we don't have
 // to dynamically lift `OD_MEDIA_MODEL_ALIAS_<id>=value` into a record
@@ -287,6 +290,41 @@ async function readJsonIfPresent(file: string): Promise<JsonRecord | null> {
     // should not break the Settings page or hide stored provider config.
     return null;
   }
+}
+
+export async function resolveCodexImagegenEnv(projectRoot?: string): Promise<NodeJS.ProcessEnv> {
+  if (projectRoot) {
+    const dataDir = appConfigDir(projectRoot);
+    try {
+      const appConfig = await readAppConfig(dataDir);
+      const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'codex');
+      return spawnEnvForAgent('codex', process.env, configuredEnv);
+    } catch {
+      return spawnEnvForAgent('codex', process.env);
+    }
+  }
+  return spawnEnvForAgent('codex', process.env);
+}
+
+function codexHomeFromEnv(env: NodeJS.ProcessEnv): string {
+  const home = env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+  const resolvedHome = home.startsWith('~/')
+    ? path.join(os.homedir(), home.slice(2))
+    : home;
+  return path.resolve(resolvedHome);
+}
+
+export async function resolveCodexSubscriptionStatus(
+  projectRoot?: string,
+): Promise<CodexSubscriptionStatus> {
+  if (isSandboxModeEnabled(process.env)) return { available: false };
+  const env = await resolveCodexImagegenEnv(projectRoot);
+  const codexAuth = await readJsonIfPresent(
+    path.join(codexHomeFromEnv(env), 'auth.json'),
+  );
+  const authMode = readNestedString(codexAuth, ['auth_mode']);
+  const accessToken = readNestedString(codexAuth, ['tokens', 'access_token']);
+  return { available: authMode === 'chatgpt' || Boolean(accessToken) };
 }
 
 function apiKeyFromCodexAuth(data: unknown): string {

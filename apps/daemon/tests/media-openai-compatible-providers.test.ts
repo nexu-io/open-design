@@ -7,6 +7,12 @@ import { generateMedia } from '../src/media.js';
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2uoAAAAASUVORK5CYII=';
 const VIDEO_BASE64 = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112]).toString('base64');
+const OPENAI_ENV_KEYS = [
+  'OD_OPENAI_API_KEY',
+  'OPENAI_API_KEY',
+  'AZURE_API_KEY',
+  'AZURE_OPENAI_API_KEY',
+];
 
 describe('OpenAI-compatible media providers', () => {
   let root: string;
@@ -19,6 +25,11 @@ describe('OpenAI-compatible media providers', () => {
   const originalCodexHome = process.env.CODEX_HOME;
   const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
   const originalDataDir = process.env.OD_DATA_DIR;
+  const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
+  const originalAllowStubs = process.env.OD_MEDIA_ALLOW_STUBS;
+  const originalOpenAIEnv = Object.fromEntries(
+    OPENAI_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'od-openai-compatible-media-'));
@@ -31,6 +42,11 @@ describe('OpenAI-compatible media providers', () => {
     delete process.env.CODEX_HOME;
     delete process.env.OD_MEDIA_CONFIG_DIR;
     delete process.env.OD_DATA_DIR;
+    delete process.env.OD_MEDIA_MODEL_ALIASES;
+    delete process.env.OD_MEDIA_ALLOW_STUBS;
+    for (const key of OPENAI_ENV_KEYS) {
+      delete process.env[key];
+    }
   });
 
   afterEach(async () => {
@@ -66,6 +82,23 @@ describe('OpenAI-compatible media providers', () => {
     } else {
       process.env.OD_DATA_DIR = originalDataDir;
     }
+    if (originalEnvAliases == null) {
+      delete process.env.OD_MEDIA_MODEL_ALIASES;
+    } else {
+      process.env.OD_MEDIA_MODEL_ALIASES = originalEnvAliases;
+    }
+    if (originalAllowStubs == null) {
+      delete process.env.OD_MEDIA_ALLOW_STUBS;
+    } else {
+      process.env.OD_MEDIA_ALLOW_STUBS = originalAllowStubs;
+    }
+    for (const key of OPENAI_ENV_KEYS) {
+      if (originalOpenAIEnv[key] == null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalOpenAIEnv[key];
+      }
+    }
     await rm(root, { recursive: true, force: true });
   });
 
@@ -73,6 +106,69 @@ describe('OpenAI-compatible media providers', () => {
     const file = path.join(projectRoot, '.od', 'media-config.json');
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  async function writeCodexAuth(codexHome: string, data: unknown) {
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(path.join(codexHome, 'auth.json'), JSON.stringify(data), 'utf8');
+  }
+
+  async function installFakeCodex(
+    codexHome: string,
+    threadId: string,
+    options: {
+      expectedConfigIncludes?: string;
+      expectedConfigExcludes?: string;
+      expectedArgsIncludes?: string;
+      expectedArgsExcludes?: string;
+    } = {},
+  ) {
+    const codexBin = path.join(root, `${threadId}.mjs`);
+    await writeFile(codexBin, `#!/usr/bin/env node
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+const pngBase64 = '${PNG_BASE64}';
+const expectedConfigIncludes = ${JSON.stringify(options.expectedConfigIncludes ?? '')};
+const expectedConfigExcludes = ${JSON.stringify(options.expectedConfigExcludes ?? '')};
+const expectedArgsIncludes = ${JSON.stringify(options.expectedArgsIncludes ?? '')};
+const expectedArgsExcludes = ${JSON.stringify(options.expectedArgsExcludes ?? '')};
+const args = process.argv.slice(2);
+const addDirIndex = args.indexOf('--add-dir');
+const generatedRoot = addDirIndex >= 0 ? args[addDirIndex + 1] : '';
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (expectedConfigIncludes || expectedConfigExcludes) {
+    const config = readFileSync(path.join(process.env.CODEX_HOME || '', 'config.toml'), 'utf8');
+    if (expectedConfigIncludes && !config.includes(expectedConfigIncludes)) {
+      process.stderr.write('expected normalized config to include ' + expectedConfigIncludes);
+      process.exit(8);
+    }
+    if (expectedConfigExcludes && config.includes(expectedConfigExcludes)) {
+      process.stderr.write('expected normalized config to exclude ' + expectedConfigExcludes);
+      process.exit(9);
+    }
+  }
+  if (expectedArgsIncludes && !args.includes(expectedArgsIncludes)) {
+    process.stderr.write('expected args to include ' + expectedArgsIncludes);
+    process.exit(10);
+  }
+  if (expectedArgsExcludes && args.some((arg) => arg.includes(expectedArgsExcludes))) {
+    process.stderr.write('expected args to exclude ' + expectedArgsExcludes);
+    process.exit(11);
+  }
+  if (!stdin.includes('$imagegen') || !generatedRoot) process.exit(7);
+  const outDir = path.join(generatedRoot, '${threadId}');
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'ig_0001.png'), Buffer.from(pngBase64, 'base64'));
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${threadId}' }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.CODEX_BIN = codexBin;
+    process.env.CODEX_HOME = codexHome;
   }
 
   it('renders custom /v1/images/generations providers with configured base URL and model', async () => {
@@ -405,6 +501,156 @@ describe('OpenAI-compatible media providers', () => {
     expect(result.providerNote).toContain('imagerouter/xAI/grok-imagine-video');
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'imagerouter.mp4'));
     expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('routes default gpt-image-2 through Codex when a subscription login is available', async () => {
+    const generatedHome = path.join(root, 'subscription-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    await installFakeCodex(generatedHome, 'subscription-codex-thread');
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'subscription-default.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    expect(fetchMock).not.toHaveBeenCalled();
+    const bytes = await readFile(path.join(projectsRoot, 'project-1', 'subscription-default.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('prefers the Codex subscription path for gpt-image-2 even when an OpenAI key is configured', async () => {
+    const generatedHome = path.join(root, 'subscription-before-api-codex-home');
+    await writeCodexAuth(generatedHome, {
+      tokens: { access_token: 'codex-oauth-token' },
+    });
+    await installFakeCodex(generatedHome, 'subscription-before-api-thread');
+    process.env.OPENAI_API_KEY = 'sk-openai-test-key';
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'subscription-before-api.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    expect(result.providerNote).toContain('codex/gpt-image-2');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('normalizes stale Codex service_tier before subscription image generation', async () => {
+    const generatedHome = path.join(root, 'stale-tier-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+      OPENAI_API_KEY: null,
+    });
+    await writeFile(
+      path.join(generatedHome, 'config.toml'),
+      `[model]\nservice_tier = "default"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+    await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
+      expectedConfigIncludes: 'service_tier = "fast"',
+      expectedConfigExcludes: 'service_tier = "default"',
+      expectedArgsExcludes: 'default_permissions',
+    });
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'subscription-stale-tier.png',
+    });
+
+    expect(result.providerId).toBe('codex');
+    const after = await readFile(path.join(generatedHome, 'config.toml'), 'utf8');
+    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('"default"');
+  });
+
+  it('does not reroute OpenAI image models without a Codex twin', async () => {
+    const generatedHome = path.join(root, 'dalle-subscription-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+    });
+    process.env.CODEX_HOME = generatedHome;
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'dall-e-3',
+      prompt: 'A product render on white seamless paper',
+      output: 'dalle.png',
+    })).rejects.toThrow(/codex-gpt-image-2/);
+  });
+
+  it('keeps aliased gpt-image-2 on the explicit OpenAI API path', async () => {
+    const generatedHome = path.join(root, 'aliased-subscription-codex-home');
+    await writeCodexAuth(generatedHome, {
+      auth_mode: 'chatgpt',
+    });
+    process.env.CODEX_HOME = generatedHome;
+    process.env.OPENAI_API_KEY = 'sk-openai-test-key';
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'gpt-image-2': 'custom-gpt-image-2-deployment',
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.openai.com/v1/images/generations');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer sk-openai-test-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        prompt: 'A clean app icon with glass material',
+        model: 'custom-gpt-image-2-deployment',
+      });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: PNG_BASE64 }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'gpt-image-2',
+      prompt: 'A clean app icon with glass material',
+      output: 'aliased-openai.png',
+    });
+
+    expect(result.providerId).toBe('openai');
+    expect(result.providerNote).toContain('openai/custom-gpt-image-2-deployment');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('renders Codex subscription images through the local Codex CLI', async () => {

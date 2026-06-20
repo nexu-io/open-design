@@ -1,4 +1,4 @@
-name: comment
+name: comment.atom
 
 on:
   workflow_run:

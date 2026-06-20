@@ -77,6 +77,15 @@ export function clearExceptionTrackingContext(): void {
   context = null;
 }
 
+// Patches only the appVersion field on an existing context. Safe to call
+// mid-session when the real version arrives after boot (e.g. /api/version
+// resolves after the initial '0.0.0' placeholder). No-op if context hasn't
+// been set yet.
+export function patchExceptionTrackingAppVersion(version: string): void {
+  if (!context || !version) return;
+  context = { ...context, appVersion: version };
+}
+
 // Called once at app boot. Idempotent — repeated calls are no-ops.
 export function installErrorHandlers(): void {
   if (installed) return;

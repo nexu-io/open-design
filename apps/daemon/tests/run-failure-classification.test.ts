@@ -757,4 +757,111 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       user_action: 'retry',
     });
   });
+
+  it('classifies high-confidence Langfuse unknown samples into stable fields', () => {
+    expect(classify(null, 'Invalid API Key')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'invalid_api_key',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
+    });
+
+    expect(classify(null, 'Missing environment variable: `OPENAI_API_KEY`.')).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'missing_api_key',
+      user_action: 'login',
+    });
+
+    expect(
+      classify(
+        null,
+        'Your workspace is out of credits. Ask your workspace owner to refill in order to continue.',
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'workspace_credits_exhausted',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'recharge',
+    });
+
+    expect(
+      classify(
+        null,
+        'Agent "Claude Code" (`claude`) is not installed or not on PATH. Install it and refresh the agent list (GET /api/agents) before retrying.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cli_not_installed',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(
+      classify(
+        null,
+        'Claude Code on Windows requires git-bash (https://git-scm.com/download/win). If installed but not in PATH, set CLAUDE_CODE_GIT_BASH_PATH.',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'git_bash_missing',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, 'spawn failed: spawn EPERM')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'spawn_eperm',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(classify(null, "error: unknown option '--trust'")).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+
+    expect(
+      classify(null, 'Selected model is at capacity. Please try a different model.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_high_demand',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(null, 'json-rpc id 2: AMR model catalog is temporarily unavailable. Please retry.'),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'provider_routing_error',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'Qoder run failed: stop_sequence')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'qoder_stop_sequence',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify(null, 'ACP session exited before completion (code=1, signal=none)')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_protocol_error',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
 });

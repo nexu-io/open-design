@@ -316,8 +316,8 @@ function isVisualRelevantFile(file: string): boolean {
       "pnpm-lock.yaml",
       ".github/scripts/handoff.py",
       ".github/workflows/ci.yml",
-      ".github/workflows/comment.yml",
-      ".github/workflows/report.yml",
+      ".github/workflows/comment.atom.yml",
+      ".github/workflows/report.atom.yml",
       ".github/workflows/visual-baseline.yml",
     ].includes(file)
   );
@@ -352,9 +352,9 @@ function isNixRelevantFile(file: string): boolean {
       "flake.nix",
       "flake.lock",
       ".github/scripts/handoff.py",
-      ".github/workflows/autofix.yml",
+      ".github/workflows/autofix.atom.yml",
       ".github/workflows/ci.yml",
-      ".github/workflows/comment.yml",
+      ".github/workflows/comment.atom.yml",
       "scripts/update-nix-pnpm-deps-hash.ts",
     ].includes(file) ||
     isWorkspaceManifestOrCiFile(file)
@@ -379,9 +379,9 @@ function isWorkspaceValidationExemptFile(file: string): boolean {
       ".github/workflows/blog-indexing-monitor.yml",
       ".github/workflows/blog-3day-report.yml",
       ".github/workflows/seo-daily-report.yml",
-      ".github/workflows/autofix.yml",
-      ".github/workflows/comment.yml",
-      ".github/workflows/report.yml",
+      ".github/workflows/autofix.atom.yml",
+      ".github/workflows/comment.atom.yml",
+      ".github/workflows/report.atom.yml",
       ".github/workflows/docker-image.yml",
     ].includes(file)
   );

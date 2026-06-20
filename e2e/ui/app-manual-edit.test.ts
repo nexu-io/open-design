@@ -164,9 +164,19 @@ async function selectPreviewElementThroughBridge(
   section: string,
 ) {
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await frame.locator(selector).click();
+  // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
+  // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
+  // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
+  // click. That occasionally swallows the first click, which then hangs on
+  // Playwright's post-click stability check until the 30s test timeout. Retry the
+  // click until the element is actually marked selected, with a short per-attempt
+  // timeout so a single dropped click rides through the settle window instead of
+  // failing the whole run.
+  await expect(async () => {
+    await frame.locator(selector).click({ timeout: 5_000 });
+    await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
-  await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
 }
 
 test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {

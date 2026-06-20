@@ -147,12 +147,19 @@ function parseYamlSubset(src: string): FrontmatterObject {
 function coerce(raw: string | undefined): FrontmatterValue {
   if (raw === undefined) return '';
   let v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+  // Require at least two characters so a lone quote (`"`), whose first and
+  // last char are the same, isn't mistaken for an empty quoted string.
+  if (
+    v.length >= 2 &&
+    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+  ) {
     return v.slice(1, -1);
   }
   if (v === 'true') return true;
   if (v === 'false') return false;
   if (v === 'null' || v === '~') return null;
+  // Coerce base-10 numeric scalars to Number, matching the YAML 1.2 core-schema
+  // int/float resolution (including leading-zero decimals like `01234`).
   if (/^-?\d+$/.test(v)) return Number(v);
   if (/^-?\d*\.\d+$/.test(v)) return Number(v);
   return v;

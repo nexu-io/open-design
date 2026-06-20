@@ -113,6 +113,22 @@ describe('chat run service shutdown', () => {
       expect(run.signal).toBe('SIGKILL');
     });
 
+    it('closes child stdin before signaling a canceled run', async () => {
+      const runs = createRuns();
+      const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+      const run = runs.create();
+      run.status = 'running';
+      run.stdinOpen = true;
+      (run as any).child = child;
+
+      await runs.cancel(run);
+
+      expect(child.stdin.end).toHaveBeenCalledTimes(1);
+      expect(run.stdinOpen).toBe(false);
+      expect(child.lifecycle.slice(0, 2)).toEqual(['stdin.end', 'SIGTERM']);
+      expect(child.signals).toEqual(['SIGTERM']);
+    });
+
     it('uses ACP abort before falling back to process signals', async () => {
       vi.useFakeTimers();
       vi.stubEnv('PI_ABORT_GRACE_MS', '30');
@@ -399,6 +415,22 @@ describe('chat run service shutdown', () => {
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
   });
+
+  it('closes child stdin for active runs during shutdown before signaling them', async () => {
+    const runs = createRuns();
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create();
+    run.status = 'running';
+    run.stdinOpen = true;
+    (run as any).child = child;
+
+    await runs.shutdownActive({ graceMs: 10 });
+
+    expect(child.stdin.end).toHaveBeenCalledTimes(1);
+    expect(run.stdinOpen).toBe(false);
+    expect(child.lifecycle.slice(0, 2)).toEqual(['stdin.end', 'SIGTERM']);
+    expect(child.signals).toEqual(['SIGTERM']);
+  });
 });
 
 describe('chat run service stream replay', () => {
@@ -520,6 +552,14 @@ class FakeChildProcess extends EventEmitter {
   signalCode: string | null = null;
   killed = false;
   signals: string[] = [];
+  lifecycle: string[] = [];
+  stdin = {
+    destroyed: false,
+    end: vi.fn(() => {
+      this.lifecycle.push('stdin.end');
+      this.stdin.destroyed = true;
+    }),
+  };
 
   constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL' }) {
     super();
@@ -528,6 +568,7 @@ class FakeChildProcess extends EventEmitter {
   kill(signal: string): boolean {
     this.killed = true;
     this.signals.push(signal);
+    this.lifecycle.push(signal);
     if (signal === this.options.closeOn) {
       this.signalCode = signal;
       queueMicrotask(() => {

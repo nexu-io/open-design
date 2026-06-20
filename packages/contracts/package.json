@@ -34,6 +34,10 @@
       "types": "./dist/api/providerModels.d.ts",
       "default": "./dist/api/providerModels.mjs"
     },
+    "./api/reasoningExecution": {
+      "types": "./dist/api/reasoningExecution.d.ts",
+      "default": "./dist/api/reasoningExecution.mjs"
+    },
     "./api/research": {
       "types": "./dist/api/research.d.ts",
       "default": "./dist/api/research.mjs"

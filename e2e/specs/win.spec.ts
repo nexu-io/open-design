@@ -111,25 +111,25 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    const amrCard = document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__card');
-    const alternativeCards = Array.from(document.querySelectorAll('.onboarding-view__alternatives .onboarding-view__card'));
-    const localCard = alternativeCards[0] ?? null;
-    const byokCard = alternativeCards[1] ?? null;
+    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
+    // secondary runtime links) replaces the old selectable runtime cards.
+    const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
+    const secondaryLinks = Array.from(
+      document.querySelectorAll('.onboarding-cloud__secondary'),
+    );
+    const localLink = secondaryLinks[0] ?? null;
+    const byokLink = secondaryLinks[1] ?? null;
+    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
     const setupPanel = document.querySelector('.onboarding-view__setup-panel');
-    const selectedCard = document.querySelector('.onboarding-view__card.is-selected');
 
     return {
-      amrCardVisible: amrCard instanceof HTMLElement,
-      amrModelPickerVisible: Boolean(document.querySelector('.onboarding-view__amr-cloud-card .onboarding-view__model-picker')),
-      amrSelected: amrCard?.getAttribute('aria-pressed') === 'true',
-      byokCardVisible: byokCard instanceof HTMLElement,
-      byokSelected: byokCard?.getAttribute('aria-pressed') === 'true',
+      backVisible: backToCloud instanceof HTMLElement,
+      byokLinkVisible: byokLink instanceof HTMLElement,
+      cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
       inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localCardVisible: localCard instanceof HTMLElement,
-      localSelected: localCard?.getAttribute('aria-pressed') === 'true',
+      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      selectedText: selectedCard?.textContent?.trim() ?? null,
       setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
@@ -300,20 +300,19 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-type OnboardingRuntime = 'amr' | 'local' | 'byok';
+// The redesigned connect step exposes the two alternative runtimes as
+// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
+// not a selectable link).
+type OnboardingRuntime = 'local' | 'byok';
 
 type PackagedOnboardingEvalValue = {
-  amrCardVisible: boolean;
-  amrModelPickerVisible: boolean;
-  amrSelected: boolean;
-  byokCardVisible: boolean;
-  byokSelected: boolean;
+  backVisible: boolean;
+  byokLinkVisible: boolean;
+  cloudSignInVisible: boolean;
   href: string;
   inputCount: number;
-  localCardVisible: boolean;
-  localSelected: boolean;
+  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  selectedText: string | null;
   setupPanelVisible: boolean;
   text: string | null;
   title: string;
@@ -618,38 +617,40 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
         snapshot.onboardingVisible &&
-        snapshot.amrCardVisible &&
-        snapshot.localCardVisible &&
-        snapshot.byokCardVisible,
-        'fresh packaged Windows onboarding runtime choices',
+        snapshot.cloudSignInVisible &&
+        snapshot.localLinkVisible &&
+        snapshot.byokLinkVisible,
+        'fresh packaged Windows onboarding cloud sign-in landing',
       );
       expect(initial.href).toBe('od://app/');
-      expect(initial.amrCardVisible).toBe(true);
-      expect(initial.localCardVisible).toBe(true);
-      expect(initial.byokCardVisible).toBe(true);
+      expect(initial.cloudSignInVisible).toBe(true);
+      expect(initial.localLinkVisible).toBe(true);
+      expect(initial.byokLinkVisible).toBe(true);
 
+      // Expand the BYOK panel from the landing, then collapse back via Back.
       await clickPackagedOnboardingRuntime('byok');
       const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.byokSelected && snapshot.setupPanelVisible && snapshot.inputCount > 0,
+        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
         'packaged Windows onboarding BYOK setup panel',
       );
-      expect(byok.byokSelected).toBe(true);
       expect(byok.setupPanelVisible).toBe(true);
 
+      // The secondary links only live on the landing, so Back before Local.
+      await clickPackagedOnboardingBack();
       await clickPackagedOnboardingRuntime('local');
       const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.localSelected && snapshot.setupPanelVisible,
+        (snapshot) => snapshot.setupPanelVisible,
         'packaged Windows onboarding Local CLI setup panel',
       );
-      expect(local.localSelected).toBe(true);
       expect(local.setupPanelVisible).toBe(true);
 
-      await clickPackagedOnboardingRuntime('amr');
-      const amr = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.amrSelected && !snapshot.setupPanelVisible,
-        'packaged Windows onboarding AMR selection',
+      // Back once more lands on the cloud sign-in surface for the screenshot.
+      await clickPackagedOnboardingBack();
+      const landing = await waitForPackagedOnboarding(
+        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
+        'packaged Windows onboarding cloud sign-in landing after Back',
       );
-      expect(amr.amrSelected).toBe(true);
+      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -658,10 +659,10 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-win-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        amr,
         byok,
         health,
         initial,
+        landing,
         local,
         namespace,
         screenshot: 'screenshots/open-design-win-onboarding-smoke.png',
@@ -1100,6 +1101,14 @@ async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promi
   }
 }
 
+async function clickPackagedOnboardingBack(): Promise<void> {
+  const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
+  const value = inspect.eval?.value;
+  if (!isRecord(value) || value.clicked !== true) {
+    throw new Error(`failed to click packaged Windows onboarding back: ${formatUnknown(value)}`);
+  }
+}
+
 async function waitForTerminalUpdateState(expectedVersion: string): Promise<WinInspectResult> {
   const timeoutMs = 60_000;
   const startedAt = Date.now();
@@ -1262,15 +1271,15 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 }
 
 function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  const selector =
-    runtime === 'amr'
-      ? '.onboarding-view__amr-cloud-card .onboarding-view__card'
-      : `.onboarding-view__alternatives .onboarding-view__card:nth-child(${runtime === 'local' ? 1 : 2})`;
+  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
+  // [1] BYOK. Clicking one expands its setup panel.
+  const index = runtime === 'local' ? 0 : 1;
   return `
     (async () => {
-      const target = document.querySelector(${JSON.stringify(selector)});
+      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
+      const target = links[${index}] ?? null;
       if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-card', runtime: ${JSON.stringify(runtime)} };
+        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
       }
       target.click();
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -1279,19 +1288,30 @@ function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): s
   `;
 }
 
+function clickPackagedOnboardingBackExpression(): string {
+  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
+  return `
+    (async () => {
+      const target = document.querySelector('.onboarding-view__back-to-cloud');
+      if (!(target instanceof HTMLElement)) {
+        return { clicked: false, reason: 'missing-back' };
+      }
+      target.click();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { clicked: true };
+    })()
+  `;
+}
+
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.amrCardVisible !== 'boolean') return null;
-  if (typeof value.amrModelPickerVisible !== 'boolean') return null;
-  if (typeof value.amrSelected !== 'boolean') return null;
-  if (typeof value.byokCardVisible !== 'boolean') return null;
-  if (typeof value.byokSelected !== 'boolean') return null;
+  if (typeof value.backVisible !== 'boolean') return null;
+  if (typeof value.byokLinkVisible !== 'boolean') return null;
+  if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
   if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localCardVisible !== 'boolean') return null;
-  if (typeof value.localSelected !== 'boolean') return null;
+  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (value.selectedText != null && typeof value.selectedText !== 'string') return null;
   if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;

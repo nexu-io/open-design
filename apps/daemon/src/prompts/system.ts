@@ -1037,6 +1037,13 @@ Only if the built-in result does not return a usable path should you search
 \`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
 source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
 
+When the user asked for one image, produce exactly one final project image
+file. If Codex built-in imagegen returns multiple candidate files, previews, or
+variants, select the single best match and import only that file into
+\`$OD_PROJECT_DIR\`. Do not copy every generated variant, do not keep multiple
+final image files, and do not present multiple outputs unless the user
+explicitly asked for variants or more than one image.
+
 Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
 descriptive filename, then verify the exact destination file exists under
 \`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
