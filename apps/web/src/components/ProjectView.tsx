@@ -99,7 +99,7 @@ import {
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
-  usesAnthropicProxy,
+  supportsNativeImageAttachments,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
@@ -4235,7 +4235,7 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
-          { omitNativeImageAttachments: usesAnthropicProxy(config) },
+          { omitNativeImageAttachments: supportsNativeImageAttachments(config) },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         // BYOK runs stream client-side and never reach the daemon, so the
