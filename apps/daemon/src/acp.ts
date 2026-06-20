@@ -403,6 +403,35 @@ function isAcpArtifactWriteUpdate(update: JsonObject, writeToolCallIds: Set<stri
   return isAcpArtifactWriteLabel(update) || (toolCallId ? writeToolCallIds.has(toolCallId) : false);
 }
 
+// Best-effort file path for an ACP artifact-write tool call. ACP can carry a
+// `locations: [{ path }]` array and/or `content: [{ type:'diff', path }]`
+// entries, but many agents omit both and send only a human `title` ("edit").
+// Returns null when no concrete path is present; the caller then falls back to
+// the toolCallId as a dedup key.
+function acpArtifactWritePath(update: JsonObject): string | null {
+  // 1. ACP `locations: [{ path }]` and `content: [{ path }]` (diff entries).
+  for (const field of [update.locations, update.content]) {
+    if (!Array.isArray(field)) continue;
+    for (const entry of field) {
+      const path = asObject(entry)?.path;
+      if (typeof path === 'string' && path.trim()) return path.trim();
+    }
+  }
+  // 2. Tool input echoed by some agents as `rawInput.{path,file_path,filename}`.
+  const rawInput = asObject(update.rawInput);
+  for (const key of ['path', 'file_path', 'filename']) {
+    const value = rawInput?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  // 3. A filename token embedded in the human title, e.g. "Write index.html".
+  // Keeping the real extension lets `isArtifactPath` correctly EXCLUDE
+  // non-artifact writes (e.g. "edit config.json"), matching the claude path.
+  const title = typeof update.title === 'string' ? update.title : '';
+  const match = title.match(/[\w./-]+\.[A-Za-z0-9]+/);
+  if (match?.[0]) return match[0];
+  return null;
+}
+
 export function createJsonLineStream(onMessage: (message: unknown, rawLine: string) => void) {
   let buffer = '';
   let pendingJson = '';
@@ -822,6 +851,12 @@ export function attachAcpSession({
   let dsmlArtifactSuppressorArmedAfterText = false;
   let dsmlArtifactSuppressorSawIncrementalProse = false;
   const acpArtifactWriteToolCallIds = new Set<string>();
+  // Per artifact-write tool call, accumulate the best concrete file path seen
+  // across its frames and whether we have already mirrored it into canonical
+  // tool_use/tool_result events. Emission is deferred to the terminal frame so
+  // a `locations`/`rawInput` path that ACP only sends on a later update is used
+  // for classification, instead of locking in a first-frame guess.
+  const acpArtifactRunEventState = new Map<string, { path: string | null; emitted: boolean }>();
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -1122,6 +1157,52 @@ export function attachAcpSession({
         const toolCallId = acpToolCallId(update);
         if (toolCallId && isAcpArtifactWriteLabel(update)) {
           acpArtifactWriteToolCallIds.add(toolCallId);
+        }
+        // Mirror artifact-write tool calls into the daemon's canonical
+        // tool_use/tool_result event shape so `countNewArtifacts`
+        // (run-artifacts.ts) can see ACP file writes. Without this, every ACP
+        // agent (AMR, Hermes, Kilo, Kiro, Devin, Vibe, …) reported
+        // run_finished.artifact_count: 0 even when the run wrote artifacts,
+        // because the ACP adapter emitted only text/status/thinking events and
+        // never the tool_use/tool_result pair the counter scans for.
+        //
+        // This path only feeds the NO-PROJECT fallback (project runs use the
+        // filesystem snapshot). Two correctness rules, both learned the hard
+        // way in review:
+        //   1. Defer emission to the TERMINAL frame and accumulate the best
+        //      concrete path across frames — ACP often sends `locations` only
+        //      on the completing update, and emitting on the first frame would
+        //      lock in a wrong/empty guess that a later path can't correct.
+        //   2. Never fabricate an artifact extension. `isArtifactPath` is what
+        //      decides whether a write counts; feeding it a real path lets it
+        //      correctly EXCLUDE non-artifact edits (`config.json`, `README.md`)
+        //      and INCLUDE real artifacts. A write that never carries a concrete
+        //      path stays keyed on its (extension-less) toolCallId, so it is
+        //      simply not counted rather than inflating the metric with a
+        //      synthetic `.html` — under-counting a truly opaque write is
+        //      acceptable; a false-positive artifact is not.
+        if (toolCallId) {
+          const isWriteCall =
+            isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
+          if (isWriteCall) {
+            let st = acpArtifactRunEventState.get(toolCallId);
+            if (!st) {
+              st = { path: null, emitted: false };
+              acpArtifactRunEventState.set(toolCallId, st);
+            }
+            if (!st.path) st.path = acpArtifactWritePath(update);
+            const failed = isAcpTerminalFailureStatus(update);
+            if (!st.emitted && (failed || isAcpCompletedStatus(update))) {
+              st.emitted = true;
+              send('agent', {
+                type: 'tool_use',
+                id: toolCallId,
+                name: 'Write',
+                input: { file_path: st.path ?? toolCallId },
+              });
+              send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
+            }
+          }
         }
         if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
           dsmlArtifactSuppressor = createDsmlArtifactTextSuppressor();
