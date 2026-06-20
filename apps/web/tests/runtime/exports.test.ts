@@ -501,6 +501,8 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
     expect(wrapper).toContain('data-deck-print=&quot;injected&quot;');
     expect(wrapper).toContain('page-break-after: always;');
+    expect(wrapper).toContain('.slide:not(.active)');
+    expect(wrapper).toContain('display: flex !important;');
   });
 
   it('waits for the injected print-ready cache before calling window.print() in the browser fallback', async () => {
@@ -599,6 +601,7 @@ describe('sandboxed preview Blob exports', () => {
     expect(printPdfMock).toHaveBeenCalledTimes(1);
     expect(printPdfMock.mock.calls[0]![2]).toEqual({ deck: true });
     expect(printPdfMock.mock.calls[0]![0]).toContain('data-deck-print=&quot;injected&quot;');
+    expect(printPdfMock.mock.calls[0]![0]).toContain('.slide:not(.active)');
   });
 
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {

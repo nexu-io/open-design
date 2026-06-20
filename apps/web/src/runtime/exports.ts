@@ -1110,7 +1110,17 @@ const DECK_PRINT_CSS = `
     scroll-snap-type: none !important;
     transform: none !important;
   }
-  .slide, [data-screen-label], section.slide, .deck-slide, .ppt-slide {
+  .slide,
+  .slide:not(.active),
+  [data-screen-label],
+  [data-screen-label]:not(.active),
+  section.slide,
+  section.slide:not(.active),
+  .deck-slide,
+  .deck-slide:not(.active),
+  .ppt-slide,
+  .ppt-slide:not(.active) {
+    display: flex !important;
     flex: none !important;
     width: 1920px !important;
     height: 1080px !important;

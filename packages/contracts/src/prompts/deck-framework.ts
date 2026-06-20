@@ -201,6 +201,7 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         page-break-after: always;
         break-after: page;
       }
+      .slide:not(.active) { display: flex !important; }
       .slide:last-child { page-break-after: auto; break-after: auto; }
       .deck-counter, .deck-hint { display: none !important; }
     }
