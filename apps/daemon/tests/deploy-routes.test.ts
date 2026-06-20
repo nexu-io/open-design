@@ -781,7 +781,7 @@ describe('deploy provider routes', () => {
 
   function makeCfPagesMockForRouteTarget(options: {
     previewDeployUrl: string;
-    captureFormData: { branch?: string };
+    captureFormData: { branch: string | undefined };
     expectedPagesProject: string;
   }) {
     const { previewDeployUrl, captureFormData, expectedPagesProject } = options;
@@ -871,7 +871,7 @@ describe('deploy provider routes', () => {
       });
       expect(saveResp.status).toBe(200);
 
-      const captureFormData: { branch?: string } = {};
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
       const fetchMock = makeCfPagesMockForRouteTarget({
         previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
         captureFormData,
@@ -937,7 +937,7 @@ describe('deploy provider routes', () => {
       });
       expect(saveResp.status).toBe(200);
 
-      const captureFormData: { branch?: string } = {};
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
       const fetchMock = makeCfPagesMockForRouteTarget({
         previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
         captureFormData,
@@ -1004,7 +1004,7 @@ describe('deploy provider routes', () => {
       });
       expect(saveResp.status).toBe(200);
 
-      const captureFormData: { branch?: string } = {};
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
       const fetchMock = makeCfPagesMockForRouteTarget({
         previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
         captureFormData,

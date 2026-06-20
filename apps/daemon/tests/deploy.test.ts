@@ -2233,7 +2233,7 @@ describe('cloudflare pages deploys', () => {
     previewDeployUrl?: string;
   } = {}) {
     const previewDeployUrl = options.previewDeployUrl ?? 'https://abc123.demo-pages.pages.dev';
-    const capturedFormData: { branch?: string } = {};
+    const capturedFormData: { branch: string | undefined } = { branch: undefined };
     const indexHash = cloudflarePagesAssetHash({
       file: 'index.html',
       data: Buffer.from('hello'),
