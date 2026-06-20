@@ -22,7 +22,7 @@ import {
   validateBaseUrlResolved,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
-import { listProviderModels } from '../src/providerModels.js';
+import { listProviderModels } from '../src/integrations/provider-models.js';
 import { startServer } from '../src/server.js';
 import { rememberLiveModels } from '../src/runtimes/models.js';
 

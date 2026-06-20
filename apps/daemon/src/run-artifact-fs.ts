@@ -20,7 +20,7 @@ import {
   isArtifactPath,
   isDesignSystemFile,
   isPreviewModulePath,
-} from './run-artifacts.js';
+} from './runtimes/run-artifacts.js';
 
 // A file worth fingerprinting for run-finish bookkeeping: a user-facing
 // artifact (HTML / image / video / audio) OR a design-system marker

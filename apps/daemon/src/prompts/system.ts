@@ -34,7 +34,7 @@ import { DISCOVERY_AND_PHILOSOPHY, renderSharedFramesBlock } from './discovery.j
 import { renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media-models.js';
+import { IMAGE_MODELS } from '../media/models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';

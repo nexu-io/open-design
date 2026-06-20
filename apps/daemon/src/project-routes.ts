@@ -6,10 +6,10 @@ import {
   type ChatSessionMode,
   type PluginManifest,
 } from '@open-design/contracts';
-import { createProjectArtifactFile } from './artifact-create.js';
-import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
-import { ArtifactRegressionError } from './artifact-stub-guard.js';
-import { listDesignSystems } from './design-systems.js';
+import { createProjectArtifactFile } from './artifacts/create.js';
+import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
+import { ArtifactRegressionError } from './artifacts/stub-guard.js';
+import { listDesignSystems } from './design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,

@@ -36,10 +36,10 @@ import {
 } from '@open-design/platform';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
-import { createClaudeStreamHandler } from './claude-stream.js';
+import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
   classifyAgentAuthFailure,
@@ -52,8 +52,8 @@ import {
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
   isUnsupportedMaxTokensError,
-} from './openai-chat-token-params.js';
-import { aihubmixHeaders } from './aihubmix.js';
+} from './integrations/openai-chat-token-params.js';
+import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { resolveModelForAgent } from './runtimes/models.js';
@@ -72,7 +72,7 @@ import {
   type ParsedBaseUrl,
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
-import { googleGenerateContentUrl } from './google-models.js';
+import { googleGenerateContentUrl } from './integrations/google-models.js';
 import { resolveAmrProfile } from './integrations/vela.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';

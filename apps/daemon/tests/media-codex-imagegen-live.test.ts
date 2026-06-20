@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { generateMedia } from '../src/media.js';
-import { resolveCodexSubscriptionStatus } from '../src/media-config.js';
+import { generateMedia } from '../src/media/index.js';
+import { resolveCodexSubscriptionStatus } from '../src/media/config.js';
 
 const liveCodexImagegenEnabled = process.env.OD_LIVE_CODEX_IMAGEGEN === '1';
 const liveDescribe = liveCodexImagegenEnabled ? describe : describe.skip;

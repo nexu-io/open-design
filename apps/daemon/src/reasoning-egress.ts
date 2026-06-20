@@ -3,7 +3,7 @@ import type {
   ReasoningExecutionMode,
   ReasoningExecutionPolicy,
 } from '@open-design/contracts/api/reasoningExecution';
-import { normalizeGoogleModelId } from './google-models.js';
+import { normalizeGoogleModelId } from './integrations/google-models.js';
 
 export type ReasoningEgressRouteKind =
   | 'proxy'
