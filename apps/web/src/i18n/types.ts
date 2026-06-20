@@ -3182,6 +3182,10 @@ export interface Dict {
   'designSignature.expand': string;
   'designSignature.collapse': string;
   'designSignature.ariaLabel': string;
+  'designSignature.settingsNav': string;
+  'designSignature.settingsNavHint': string;
+  'designSignature.settingsEnabledLabel': string;
+  'designSignature.settingsEnabledDescription': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;

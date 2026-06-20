@@ -144,6 +144,10 @@ import {
   useCritiqueTheaterEnabled,
 } from './Theater';
 import {
+  useDesignSignatureStripEnabled,
+  setDesignSignatureStripEnabled,
+} from './Signature';
+import {
   ACCENT_SWATCHES,
   DEFAULT_ACCENT_COLOR,
   applyAppearanceToDocument,
@@ -172,6 +176,7 @@ export type SettingsSection =
   | 'language'
   | 'appearance'
   | 'critiqueTheater'
+  | 'designSignature'
   | 'notifications'
   | 'pet'
   | 'skills'
@@ -2757,6 +2762,10 @@ export function SettingsDialog({
       title: t('critiqueTheater.settingsNav'),
       subtitle: t('critiqueTheater.settingsNavHint'),
     },
+    designSignature: {
+      title: t('designSignature.settingsNav'),
+      subtitle: t('designSignature.settingsNavHint'),
+    },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
@@ -3204,6 +3213,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('critiqueTheater.settingsNav')}</strong>
                 <small>{t('critiqueTheater.settingsNavHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'designSignature' ? ' active' : ''}`}
+              onClick={() => setActiveSection('designSignature')}
+            >
+              <Icon name="comment" size={18} />
+              <span>
+                <strong>{t('designSignature.settingsNav')}</strong>
+                <small>{t('designSignature.settingsNavHint')}</small>
               </span>
             </button>
             <button
@@ -4526,6 +4546,10 @@ export function SettingsDialog({
 
           {activeSection === 'critiqueTheater' ? (
             <CritiqueTheaterSection />
+          ) : null}
+
+          {activeSection === 'designSignature' ? (
+            <DesignSignatureSection />
           ) : null}
 
           {activeSection === 'notifications' ? (
@@ -7230,6 +7254,33 @@ function CritiqueTheaterSection() {
             {t('critiqueTheater.settingsEnabledNoProjectHint')}
           </small>
         )}
+      </label>
+    </section>
+  );
+}
+
+function DesignSignatureSection() {
+  const { t } = useI18n();
+  const enabled = useDesignSignatureStripEnabled();
+  return (
+    <section className="settings-section">
+      <div className="section-head">
+        <div>
+          <h3>{t('designSignature.settingsNav')}</h3>
+          <p className="hint">{t('designSignature.settingsNavHint')}</p>
+        </div>
+      </div>
+      <label className="field">
+        <span className="field-label">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setDesignSignatureStripEnabled(e.target.checked)}
+          />
+          {' '}
+          {t('designSignature.settingsEnabledLabel')}
+        </span>
+        <small className="hint">{t('designSignature.settingsEnabledDescription')}</small>
       </label>
     </section>
   );
