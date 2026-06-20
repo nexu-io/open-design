@@ -6,6 +6,7 @@ import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/acp.js';
+import { countNewArtifacts } from '../src/run-artifacts.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };
 
@@ -436,6 +437,166 @@ test('attachAcpSession suppresses DSML echo after opaque completed write update'
     'Done\n\nTail',
     ' Later docs mention <artifact identifier="example">literal</artifact> syntax.',
   ]);
+});
+
+test('attachAcpSession mirrors artifact-write tool calls into countable tool_use/tool_result events', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  // A file-write tool call: announced as pending, then completes.
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'write-1',
+    title: 'Write index.html',
+    status: 'pending',
+    locations: [{ path: 'index.html' }],
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'write-1',
+    status: 'completed',
+  });
+  // A read-only tool call must NOT surface as an artifact.
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'grep-1',
+    title: 'grep',
+    status: 'completed',
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  // Re-shape into the run.events form (`{ event, data }`) that the daemon
+  // persists and that run-artifacts scans.
+  const runEvents = events
+    .filter((e) => e.event === 'agent')
+    .map((e) => ({ event: 'agent', data: e.payload }));
+
+  const toolUse = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_use');
+  assert.ok(toolUse, 'expected a tool_use event for the ACP write tool call');
+  assert.equal((toolUse.data as { name?: string }).name, 'Write');
+  assert.equal(
+    (toolUse.data as { input?: { file_path?: string } }).input?.file_path,
+    'index.html',
+  );
+
+  const toolResult = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_result');
+  assert.ok(toolResult, 'expected a paired tool_result event');
+  assert.equal((toolResult.data as { isError?: boolean }).isError, false);
+
+  // Before the fix this returned 0 for every ACP run; the read-only grep call
+  // must not inflate the count.
+  assert.equal(countNewArtifacts(runEvents), 1);
+});
+
+test('a truly PATHLESS ACP write is NOT coerced into an artifact (no false positive)', () => {
+  // A write tool call whose only label is "edit" — no locations, no path, ever.
+  // We must not fabricate an artifact extension: without a concrete path the
+  // call carries no evidence it touched an artifact, so it stays uncounted
+  // rather than inflating artifact_count for ordinary non-artifact edits.
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'edit something',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call', toolCallId: 'edit-1', title: 'edit', status: 'pending' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call_update', toolCallId: 'edit-1', status: 'completed' });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const runEvents = events
+    .filter((e) => e.event === 'agent')
+    .map((e) => ({ event: 'agent', data: e.payload }));
+
+  const toolUse = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_use');
+  const filePath = (toolUse?.data as { input?: { file_path?: string } } | undefined)?.input?.file_path ?? '';
+  assert.doesNotMatch(filePath, /\.html$/, 'must not fabricate a synthetic .html extension');
+  assert.equal(countNewArtifacts(runEvents), 0);
+});
+
+test('an ACP artifact path arriving only on the completing frame is still counted', () => {
+  // ACP frequently sends `locations` only on the terminal update. Emission is
+  // deferred to the terminal frame so that late path is used for classification
+  // (emitting on the first/pending frame would have missed it).
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, { sessionUpdate: 'tool_call', toolCallId: 'w-2', title: 'write', status: 'pending' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'w-2',
+    status: 'completed',
+    locations: [{ path: 'landing.html' }], // path only appears here
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const runEvents = events
+    .filter((e) => e.event === 'agent')
+    .map((e) => ({ event: 'agent', data: e.payload }));
+  const toolUse = runEvents.find((e) => (e.data as { type?: string }).type === 'tool_use');
+  assert.equal((toolUse?.data as { input?: { file_path?: string } } | undefined)?.input?.file_path, 'landing.html');
+  assert.equal(countNewArtifacts(runEvents), 1);
+});
+
+test('an ACP write whose title names a NON-artifact file is not counted', () => {
+  // Symmetry with the claude path: a real extension extracted from the title
+  // (e.g. "edit config.json") must be filtered out by isArtifactPath.
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'tweak config',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'cfg-1',
+    title: 'Edit config.json',
+    status: 'completed',
+    locations: [{ path: 'config.json' }],
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 1, outputTokens: 2 } });
+
+  const runEvents = events
+    .filter((e) => e.event === 'agent')
+    .map((e) => ({ event: 'agent', data: e.payload }));
+  assert.equal(countNewArtifacts(runEvents), 0);
 });
 
 test('attachAcpSession suppresses incremental artifact echo after earlier assistant text', () => {

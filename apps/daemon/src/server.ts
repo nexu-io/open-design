@@ -268,6 +268,11 @@ import {
   runAskedUserQuestion,
 } from './run-artifacts.js';
 import {
+  createRunArtifactBaselines,
+  diffRunArtifacts,
+  snapshotProjectArtifacts,
+} from './run-artifact-fs.js';
+import {
   reportRunCompletedFromDaemon,
   reportRunFeedbackFromDaemon,
 } from './langfuse-bridge.js';
@@ -1696,6 +1701,14 @@ const promptFileBootstrap = (fp) =>
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
 const critiqueCfg = loadCritiqueConfigFromEnv();
+// Per-run baselines of the project's artifact files, captured before the agent
+// runs and diffed at run-finish to derive `artifact_count` agent-agnostically
+// (see `run-artifact-fs.ts`). Keyed by run id because the run-start scope and
+// the run-finished analytics scope are different closures. The registry also
+// flags runs that overlapped another run in the same cwd as `contended`; those
+// must not trust the whole-tree diff (it would cross-attribute writes) and fall
+// back to the per-run tool-stream count.
+const runArtifactBaselines = createRunArtifactBaselines();
 // Tracks adapter streamFormat values that have already received a one-time
 // warning explaining why the Critique Theater orchestrator was bypassed.
 // Adapter denylist for orchestrator routing is implicit: anything that is
@@ -7543,6 +7556,18 @@ export async function startServer({
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
+    // Baseline the project's artifact files before the agent runs, so the
+    // run-finished handler can diff against them and report `artifact_count`
+    // for ANY agent (not just claude_code). Only for real project runs: a
+    // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
+    // not the user's artifacts — those fall back to the tool-stream count.
+    if (run?.id && cwd) {
+      try {
+        runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
+      } catch {
+        // Snapshotting is best-effort; finish falls back to the tool-stream count.
+      }
+    }
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -10862,9 +10887,61 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewArtifacts(run.events);
-        const designSystemCreated = didRunCreateDesignSystemFile(run.events);
-        const previewModuleCount = countDesignSystemPreviewModules(run.events);
+        // Agent-agnostic artifact count: diff the project's artifact files
+        // against the baseline captured at run start. A created OR modified
+        // file counts (an edit-only turn still reports >0). Falls back to the
+        // tool-stream counter when no baseline was captured (no-project runs,
+        // or runs that started before this code shipped) — that path is
+        // claude-accurate and was the previous behaviour for everyone.
+        // Tool-stream fallbacks for the no-baseline path (no-project runs, or
+        // runs that started before this code shipped). These are claude-accurate
+        // and were the previous behaviour for every agent.
+        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
+        const toolStreamDesignSystemCreated = (): boolean =>
+          didRunCreateDesignSystemFile(run.events);
+        const toolStreamPreviewModuleCount = (): number =>
+          countDesignSystemPreviewModules(run.events);
+        const artifactBaseline = runArtifactBaselines.take(run.id);
+        let artifactCount: number;
+        let artifactsCreated: number | undefined;
+        let artifactsModified: number | undefined;
+        let designSystemCreated: boolean;
+        let previewModuleCount: number;
+        // Skip the whole-tree diff when this run overlapped another run in the
+        // same cwd: the snapshot cannot tell which run wrote a file, so a
+        // contended diff would cross-attribute artifacts / design_system /
+        // preview / activation milestones. Fall back to the per-run tool-stream
+        // count instead (claude-accurate; a non-claude contended run is a rare
+        // undercount, which beats misattribution).
+        if (artifactBaseline && !artifactBaseline.contended) {
+          // Diff the project's tracked files against the run-start baseline so
+          // artifact_count / design_system_created / preview_module_count are
+          // derived agent-agnostically (not just for claude_code).
+          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
+          try {
+            diff = diffRunArtifacts(
+              artifactBaseline.before,
+              snapshotProjectArtifacts(artifactBaseline.cwd),
+            );
+          } catch {
+            diff = null;
+          }
+          if (diff) {
+            artifactCount = diff.touched;
+            artifactsCreated = diff.created;
+            artifactsModified = diff.modified;
+            designSystemCreated = diff.designSystemCreated;
+            previewModuleCount = diff.previewModuleCount;
+          } else {
+            artifactCount = toolStreamArtifactCount();
+            designSystemCreated = toolStreamDesignSystemCreated();
+            previewModuleCount = toolStreamPreviewModuleCount();
+          }
+        } else {
+          artifactCount = toolStreamArtifactCount();
+          designSystemCreated = toolStreamDesignSystemCreated();
+          previewModuleCount = toolStreamPreviewModuleCount();
+        }
         // First-touch activation milestones (first-artifact / first-design-
         // system observed since this stamp shipped — NOT first-ever; see
         // `deriveActivationMilestones`) written to the PostHog person record
@@ -10923,13 +11000,18 @@ export async function startServer({
             // agent-reported model on terminal state; see
             // `finishedModelId` derivation above.
             model_id: finishedModelId,
-            // Incremental count of `.html` paths the run produced or
-            // modified, deduped per file. Replaces the hard-coded `0`
-            // that masked the "did this run actually generate an
-            // artifact?" funnel on PostHog. See `run-artifacts.ts`
-            // for the dedup semantics; tested in
-            // `tests/run-artifacts.test.ts`.
+            // Distinct artifact files this run produced OR edited, measured by
+            // a filesystem snapshot diff (`run-artifact-fs.ts`) so it works for
+            // every agent — not just claude_code, the only one whose tool
+            // stream the legacy counter recognized. Falls back to the
+            // tool-stream count for no-project runs. An edit-only turn (file
+            // count unchanged) still reports >0.
             artifact_count: artifactCount,
+            // Breakdown of `artifact_count` when a filesystem baseline existed:
+            // created ≈ activation (new artifact), modified ≈ iteration on an
+            // existing one. Omitted on the tool-stream fallback path.
+            ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
+            ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
             // True when the run raised a `<question-form>` clarification.
             // Clarification turns inherently produce no artifact, so the
             // dashboard excludes them from the "run finished -> has artifact"

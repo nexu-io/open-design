@@ -2681,7 +2681,19 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   tool_call_seen?: boolean;
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
+  // Distinct artifact files this run produced OR edited (created + modified),
+  // measured agent-agnostically by a filesystem snapshot diff in the daemon
+  // (`run-artifact-fs.ts`). An edit-only turn that rewrites an existing file
+  // still reports >0 — the directory's file count is unchanged but the run did
+  // produce artifact work. Replaces the tool-stream-derived count, which only
+  // `claude_code` reported in a recognized shape.
   artifact_count: number;
+  // Breakdown of `artifact_count`. `artifacts_created` (new files) approximates
+  // an activation signal; `artifacts_modified` (existing files edited)
+  // approximates an iteration / engagement signal. Optional: emitted only when
+  // the daemon captured a baseline snapshot for the run.
+  artifacts_created?: number;
+  artifacts_modified?: number;
   // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude
