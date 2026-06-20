@@ -1,8 +1,8 @@
 // Regression tests for codex-config-normalize.ts — fixes #4276.
 //
-// Codex CLI rejects `service_tier = "priority"` (renamed to "fast" in a
-// recent release). The Codex app's fast-mode toggle still writes the old
-// value on some installations. These tests assert that:
+// Codex CLI rejects stale service_tier values such as "priority" and
+// "default". "priority" was renamed to "fast" in a recent release, and some
+// installations still carry "default". These tests assert that:
 //
 //   1. normalizeCodexConfigContent coerces "priority" → "fast" in-memory.
 //   2. normalizeCodexConfigFile writes back a patched config.toml only when
@@ -33,6 +33,12 @@ import {
 describe('normalizeCodexConfigContent', () => {
   it('replaces service_tier="priority" with service_tier="fast" (double quotes)', () => {
     const input = `[model]\nservice_tier = "priority"\n`;
+    const result = normalizeCodexConfigContent(input);
+    expect(result).toBe(`[model]\nservice_tier = "fast"\n`);
+  });
+
+  it('replaces service_tier="default" with service_tier="fast"', () => {
+    const input = `[model]\nservice_tier = "default"\n`;
     const result = normalizeCodexConfigContent(input);
     expect(result).toBe(`[model]\nservice_tier = "fast"\n`);
   });
@@ -126,6 +132,14 @@ describe('normalizeCodexConfigContent', () => {
       'service_tier = "fast"',
     ].join('\n');
     // No stale service_tier key — should be a no-op.
+    expect(normalizeCodexConfigContent(input)).toBeNull();
+  });
+
+  it('BLOCKER 1: does NOT rewrite "default" appearing inside an unrelated string value', () => {
+    const input = [
+      'description = "use default service_tier in old configs"',
+      'service_tier = "fast"',
+    ].join('\n');
     expect(normalizeCodexConfigContent(input)).toBeNull();
   });
 
@@ -227,6 +241,22 @@ describe('normalizeCodexConfigFile', () => {
     const after = readFileSync(configPath, 'utf8');
     expect(after).toContain('service_tier = "fast"');
     expect(after).not.toContain('"priority"');
+    expect(after).toContain('model = "gpt-5.5"');
+  });
+
+  it('patches a config.toml that contains service_tier="default"', async () => {
+    const configPath = join(tmpDir, 'config.toml');
+    writeFileSync(
+      configPath,
+      `[model]\nservice_tier = "default"\nmodel = "gpt-5.5"\n`,
+      'utf8',
+    );
+
+    await normalizeCodexConfigFile({ CODEX_HOME: tmpDir });
+
+    const after = readFileSync(configPath, 'utf8');
+    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('"default"');
     expect(after).toContain('model = "gpt-5.5"');
   });
 

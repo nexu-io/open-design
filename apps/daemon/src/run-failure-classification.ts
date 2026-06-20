@@ -117,7 +117,12 @@ function collectFailureText(input: RunFailureClassificationInput): string {
 }
 
 function isHardQuotaText(text: string): boolean {
-  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|funds)|exceeded your current quota)\b/i
+  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits)\b/i
+    .test(text);
+}
+
+function isWorkspaceCreditsText(text: string): boolean {
+  return /\b(?:your )?workspace is out of credits\b|\badd credits to continue\b|\bask your workspace owner to refill\b/i
     .test(text);
 }
 
@@ -144,7 +149,31 @@ function isPluginArtifactMissingText(text: string): boolean {
 
 function isAgentConfigInvalidText(text: string): boolean {
   return /\bError loading config\.toml: unknown variant\b/i.test(text) ||
-    /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text);
+    /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text) ||
+    /\bdefault_permissions requires a `?\[permissions\]`? table\b/i.test(text) ||
+    /\bdefault_permissions refers to undefined profile\b/i.test(text) ||
+    /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text);
+}
+
+function isCliNotInstalledText(text: string): boolean {
+  return /\bnot installed|not on PATH|cannot find the path specified|system cannot find the path specified\b/i
+    .test(text);
+}
+
+function isGitBashMissingText(text: string): boolean {
+  return /\bClaude Code on Windows requires git-bash\b|\bCLAUDE_CODE_GIT_BASH_PATH\b|\bgit-bash\b/i
+    .test(text);
+}
+
+function isSpawnFailureText(text: string): boolean {
+  return /\bspawn failed: spawn\b/i.test(text);
+}
+
+function isAgentProtocolErrorText(text: string): boolean {
+  return /\bjson-rpc id \d+: Internal error\b/i.test(text) ||
+    /\bACP session exited before completion\b/i.test(text) ||
+    /\bQoder run failed: (?:stop_sequence|end_turn)\b/i.test(text) ||
+    /\bfailed to parse request\b/i.test(text);
 }
 
 function isFabricatedRoleMarkerText(text: string): boolean {
@@ -157,7 +186,7 @@ function isPermissionRequestNotFoundText(text: string): boolean {
 }
 
 function isAuthDetailText(text: string): boolean {
-  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*missing|credentials? (?:are )?missing|not logged in)\b/i
+  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required)\b/i
     .test(text);
 }
 
@@ -167,7 +196,7 @@ function isPromptTooLargeText(text: string): boolean {
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|upstream_error|http2: response body closed|AMR model catalog is unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
+  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|AMR model catalog is (?:temporarily )?unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
     .test(text);
 }
 
@@ -177,7 +206,7 @@ function isUpstreamClientErrorText(text: string): boolean {
 }
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
-  if (/\brequires a newer version of codex\b/i.test(text)) {
+  if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }
   if (/\bmodel is disabled\b/i.test(text)) return 'model_disabled';
@@ -202,6 +231,12 @@ function authDetail(text: string): TrackingRunFailureDetail {
     .test(text)) {
     return 'stale_profile';
   }
+  if (/\bcredentials from a different local environment\b/i.test(text)) {
+    return 'stale_profile';
+  }
+  if (/\binvalid api key|api key.*invalid\b/i.test(text)) {
+    return 'invalid_api_key';
+  }
   if (/\bmissing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*missing|credentials? (?:are )?missing\b/i
     .test(text)) {
     return 'missing_api_key';
@@ -210,10 +245,10 @@ function authDetail(text: string): TrackingRunFailureDetail {
 }
 
 function upstreamDetail(text: string): TrackingRunFailureDetail {
-  if (/\b(AMR model catalog is unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
+  if (/\b(AMR model catalog is (?:temporarily )?unavailable|no endpoints found that support tool use|provider routing)\b/i.test(text)) {
     return 'provider_routing_error';
   }
-  if (/\bhigh demand|temporary errors\b/i.test(text)) return 'provider_high_demand';
+  if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
   if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed)\b/i
     .test(text)) {
     return 'stream_disconnected';
@@ -293,21 +328,24 @@ function processExitDetail(
   errorCode: string,
   text: string,
 ): TrackingRunFailureDetail {
-  if (/\bnot installed|not on PATH\b/i.test(text) || errorCode === 'AGENT_UNAVAILABLE') {
+  if (isCliNotInstalledText(text) || errorCode === 'AGENT_UNAVAILABLE') {
     return 'cli_not_installed';
+  }
+  if (isGitBashMissingText(text)) {
+    return 'git_bash_missing';
   }
   if (/\bspawn failed: spawn ENOEXEC\b/i.test(text)) return 'spawn_enoexec';
   if (/\bspawn failed: spawn EBADF\b/i.test(text)) return 'spawn_ebadf';
   if (/\bspawn failed: spawn EPERM\b/i.test(text)) return 'spawn_eperm';
-  if (/\bspawn failed: spawn\b/i.test(text)) return 'spawn_failed';
+  if (isSpawnFailureText(text)) return 'spawn_failed';
   if (/\bstdin: write EOF\b/i.test(text)) return 'stdin_write_eof';
   if (isAgentConfigInvalidText(text)) return 'agent_config_invalid';
   if (isFabricatedRoleMarkerText(text)) return 'fabricated_role_marker';
-  if (/\bjson-rpc id \d+: Internal error\b/i.test(text)) {
-    return 'agent_protocol_error';
-  }
   if (/\bQoder run failed: stop_sequence\b/i.test(text)) {
     return 'qoder_stop_sequence';
+  }
+  if (isAgentProtocolErrorText(text)) {
+    return 'agent_protocol_error';
   }
   if (errorCode.startsWith('AGENT_EXIT_')) return 'exit_code';
   if (errorCode === 'AGENT_TERMINATED_UNKNOWN') return 'terminated_unknown';
@@ -429,6 +467,26 @@ export function classifyRunFailure(
     );
   }
 
+  if (isCliNotInstalledText(text)) {
+    return classification(
+      'process_exit',
+      'cli_not_installed',
+      'spawn',
+      false,
+      'install_cli',
+    );
+  }
+
+  if (isGitBashMissingText(text)) {
+    return classification(
+      'process_exit',
+      'git_bash_missing',
+      'spawn',
+      false,
+      'install_cli',
+    );
+  }
+
   if (isAgentConfigInvalidText(text)) {
     return classification(
       'process_exit',
@@ -436,6 +494,26 @@ export function classifyRunFailure(
       'session_init',
       false,
       'fix_config',
+    );
+  }
+
+  if (isSpawnFailureText(text)) {
+    return classification(
+      'process_exit',
+      processExitDetail(errorCode, text),
+      'spawn',
+      false,
+      'install_cli',
+    );
+  }
+
+  if (isAgentProtocolErrorText(text)) {
+    return classification(
+      'process_exit',
+      processExitDetail(errorCode, text),
+      'child_close',
+      retryableHint ?? true,
+      retryableHint === false ? 'none' : 'retry',
     );
   }
 
@@ -450,14 +528,18 @@ export function classifyRunFailure(
     );
   }
 
-  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED') {
+  if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text)) {
     const retryable = retryableHint ?? !isHardQuotaText(text);
     return classification(
       'rate_limit',
-      isHardQuotaText(text) ? 'hard_quota' : 'rate_limit_429',
+      isWorkspaceCreditsText(text)
+        ? 'workspace_credits_exhausted'
+        : isHardQuotaText(text)
+          ? 'hard_quota'
+          : 'rate_limit_429',
       'session_init',
       retryable,
-      retryable ? 'retry' : 'none',
+      retryable ? 'retry' : isWorkspaceCreditsText(text) ? 'recharge' : 'none',
     );
   }
 

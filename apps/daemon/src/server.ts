@@ -147,7 +147,7 @@ import {
   createPluginAssetCache,
   isCacheableExternalUrl,
 } from './plugin-asset-cache.js';
-import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media-policy.js';
+import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
   ensureSandboxRuntimeDirs,
@@ -168,9 +168,9 @@ import {
   resolveDesignSystemAssets,
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
-} from './design-systems.js';
-import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
-import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
+} from './design-systems/index.js';
+import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -211,9 +211,9 @@ import {
 import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
-import { stageAmrImagePaths } from './amr-image-staging.js';
+import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
-import { createClaudeStreamHandler } from './claude-stream.js';
+import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
@@ -234,7 +234,7 @@ import {
 } from './critique/rollout.js';
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import {
   antigravityAuthGuidance,
   antigravityQuotaGuidance,
@@ -244,17 +244,18 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
-import { createQoderStreamHandler } from './qoder-stream.js';
+import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
-import { renderDesignSystemPreview } from './design-system-preview.js';
-import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { createChatRunService } from './runs.js';
+import { renderDesignSystemPreview } from './design-systems/preview.js';
+import { renderDesignSystemShowcase } from './design-systems/showcase.js';
+import { createChatRunService } from './runtimes/runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
+  runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
 } from './run-analytics-observability.js';
@@ -265,7 +266,12 @@ import {
   deriveActivationMilestones,
   didRunCreateDesignSystemFile,
   runAskedUserQuestion,
-} from './run-artifacts.js';
+} from './runtimes/run-artifacts.js';
+import {
+  createRunArtifactBaselines,
+  diffRunArtifacts,
+  snapshotProjectArtifacts,
+} from './run-artifact-fs.js';
 import {
   reportRunCompletedFromDaemon,
   reportRunFeedbackFromDaemon,
@@ -298,7 +304,7 @@ import {
   validateBaseUrl,
   validateBaseUrlResolved,
 } from './connectionTest.js';
-import { listProviderModels } from './providerModels.js';
+import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import {
   defaultBaseUrlForFinalizeProtocol,
@@ -312,8 +318,8 @@ import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
-import { generateMedia } from './media.js';
-import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
+import { generateMedia } from './media/index.js';
+import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import { openBrowser } from './browser-open.js';
@@ -325,8 +331,8 @@ import {
   MEDIA_PROVIDERS,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
-} from './media-models.js';
-import { readMaskedConfig, writeConfig } from './media-config.js';
+} from './media/models.js';
+import { readMaskedConfig, writeConfig } from './media/config.js';
 import {
   deleteMediaTask,
   getMediaTask,
@@ -335,7 +341,7 @@ import {
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
   updateMediaTask,
-} from './media-tasks.js';
+} from './media/tasks.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -404,8 +410,8 @@ import {
   writeProjectFile,
   reconcileHtmlArtifactManifest,
 } from './projects.js';
-import { validateArtifactManifestInput } from './artifact-manifest.js';
-import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
+import { validateArtifactManifestInput } from './artifacts/manifest.js';
+import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   appendMessageAgentEvent,
@@ -500,10 +506,10 @@ import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRout
 import { registerHandoffRoutes } from './routes/handoff.js';
 import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
-import { registerChatRoutes } from './chat-routes.js';
-import { registerTerminalRoutes } from './terminal-routes.js';
+import { registerChatRoutes } from './routes/chat.js';
+import { registerTerminalRoutes } from './routes/terminal.js';
 import { createTerminalService } from './terminals.js';
-import { registerSocialShareRoutes } from './social-share-routes.js';
+import { registerSocialShareRoutes } from './routes/social-share.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerAtomRoutes, registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
@@ -539,6 +545,7 @@ import {
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
 } from './origin-validation.js';
+import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
 /** @typedef {import('@open-design/contracts').ApiError} ApiError */
@@ -1694,6 +1701,14 @@ const promptFileBootstrap = (fp) =>
 // surfaces immediately as a boot-time RangeError instead of silently at
 // run time. Default: enabled=false (M0 dark launch).
 const critiqueCfg = loadCritiqueConfigFromEnv();
+// Per-run baselines of the project's artifact files, captured before the agent
+// runs and diffed at run-finish to derive `artifact_count` agent-agnostically
+// (see `run-artifact-fs.ts`). Keyed by run id because the run-start scope and
+// the run-finished analytics scope are different closures. The registry also
+// flags runs that overlapped another run in the same cwd as `contended`; those
+// must not trust the whole-tree diff (it would cross-attribute writes) and fall
+// back to the per-run tool-stream count.
+const runArtifactBaselines = createRunArtifactBaselines();
 // Tracks adapter streamFormat values that have already received a one-time
 // warning explaining why the Critique Theater orchestrator was bypassed.
 // Adapter denylist for orchestrator routing is implicit: anything that is
@@ -3396,7 +3411,7 @@ const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-d
 const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
 const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
 const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
-const OPEN_DESIGN_DISCORD_INVITE_CODE = 'mHAjSMV6gz';
+const OPEN_DESIGN_DISCORD_INVITE_CODE = '9ptkbbqRu';
 const OPEN_DESIGN_DISCORD_INVITE_URL = `https://discord.gg/${OPEN_DESIGN_DISCORD_INVITE_CODE}`;
 const OPEN_DESIGN_DISCORD_INVITE_API = `https://discord.com/api/v10/invites/${OPEN_DESIGN_DISCORD_INVITE_CODE}?with_counts=true`;
 const OPEN_DESIGN_DISCORD_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -4423,12 +4438,14 @@ export async function startServer({
   // purely additive: when present, every /api/* request must carry a
   // matching `Authorization: Bearer <token>` header (loopback origins
   // are exempted so the desktop UI keeps working).
-  const apiToken = (process.env.OD_API_TOKEN ?? '').trim();
-  if (!isLoopbackHostname(host) && apiToken.length === 0) {
+  const apiToken = apiTokenFromEnv();
+  const apiAuthDisabled = isApiAuthDisabled();
+  if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
     throw new Error(
       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
       `Generate one with \`openssl rand -hex 32\` and re-launch. ` +
-      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.)`,
+      `(Loopback hosts 127.0.0.1 / ::1 / localhost do not need a token.) ` +
+      `Set OD_DISABLE_API_AUTH=1 only when a trusted reverse proxy already authenticates every request.`,
     );
   }
 
@@ -4439,7 +4456,8 @@ export async function startServer({
 
   // Plan §3.K1 — bearer-token middleware.
   //
-  // Active only when OD_API_TOKEN is set. Loopback origins skip the
+  // Active only when OD_API_TOKEN is set and API auth is not disabled.
+  // Loopback origins skip the
   // check (the desktop UI / local CLI never carry a bearer); every
   // other request must present `Authorization: Bearer <token>` with a
   // value matching `OD_API_TOKEN`. Health / readiness / version remain
@@ -4448,7 +4466,7 @@ export async function startServer({
   // browser iframes can load HTML/CSS/JS without privileged headers.
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
-  if (apiToken.length > 0) {
+  if (isApiTokenMiddlewareEnabled()) {
     const openProbePaths = new Set([
       '/health',
       '/api/health',
@@ -4755,7 +4773,7 @@ export async function startServer({
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$/;
+    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -7538,6 +7556,18 @@ export async function startServer({
     // no-project runs (packaged daemons / service launches do not start
     // their working directory from the workspace root).
     const effectiveCwd = cwd ?? PROJECT_ROOT;
+    // Baseline the project's artifact files before the agent runs, so the
+    // run-finished handler can diff against them and report `artifact_count`
+    // for ANY agent (not just claude_code). Only for real project runs: a
+    // null `cwd` means a no-project run rooted at PROJECT_ROOT, whose churn is
+    // not the user's artifacts — those fall back to the tool-stream count.
+    if (run?.id && cwd) {
+      try {
+        runArtifactBaselines.remember(run.id, cwd, snapshotProjectArtifacts(cwd));
+      } catch {
+        // Snapshotting is best-effort; finish falls back to the tool-stream count.
+      }
+    }
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -10698,6 +10728,13 @@ export async function startServer({
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
+        // Override the BYOK-blind derived runtime_type with the client's
+        // authoritative per-run value when supplied — the daemon can't see a
+        // saved BYOK key, so a BYOK run would otherwise report as local_cli/amr.
+        runtime_type: runtimeTypeForRunAnalytics({
+          derived: configureGlobals.runtime_type,
+          hint: analyticsHints.runtimeType,
+        }),
         ...amrUserIdForRunAnalytics(velaStatusForAnalytics),
         project_id: requestProjectId,
         conversation_id:
@@ -10850,9 +10887,61 @@ export async function startServer({
           telemetry: run.analyticsTelemetry,
           events: run.events,
         });
-        const artifactCount = countNewArtifacts(run.events);
-        const designSystemCreated = didRunCreateDesignSystemFile(run.events);
-        const previewModuleCount = countDesignSystemPreviewModules(run.events);
+        // Agent-agnostic artifact count: diff the project's artifact files
+        // against the baseline captured at run start. A created OR modified
+        // file counts (an edit-only turn still reports >0). Falls back to the
+        // tool-stream counter when no baseline was captured (no-project runs,
+        // or runs that started before this code shipped) — that path is
+        // claude-accurate and was the previous behaviour for everyone.
+        // Tool-stream fallbacks for the no-baseline path (no-project runs, or
+        // runs that started before this code shipped). These are claude-accurate
+        // and were the previous behaviour for every agent.
+        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
+        const toolStreamDesignSystemCreated = (): boolean =>
+          didRunCreateDesignSystemFile(run.events);
+        const toolStreamPreviewModuleCount = (): number =>
+          countDesignSystemPreviewModules(run.events);
+        const artifactBaseline = runArtifactBaselines.take(run.id);
+        let artifactCount: number;
+        let artifactsCreated: number | undefined;
+        let artifactsModified: number | undefined;
+        let designSystemCreated: boolean;
+        let previewModuleCount: number;
+        // Skip the whole-tree diff when this run overlapped another run in the
+        // same cwd: the snapshot cannot tell which run wrote a file, so a
+        // contended diff would cross-attribute artifacts / design_system /
+        // preview / activation milestones. Fall back to the per-run tool-stream
+        // count instead (claude-accurate; a non-claude contended run is a rare
+        // undercount, which beats misattribution).
+        if (artifactBaseline && !artifactBaseline.contended) {
+          // Diff the project's tracked files against the run-start baseline so
+          // artifact_count / design_system_created / preview_module_count are
+          // derived agent-agnostically (not just for claude_code).
+          let diff: ReturnType<typeof diffRunArtifacts> | null = null;
+          try {
+            diff = diffRunArtifacts(
+              artifactBaseline.before,
+              snapshotProjectArtifacts(artifactBaseline.cwd),
+            );
+          } catch {
+            diff = null;
+          }
+          if (diff) {
+            artifactCount = diff.touched;
+            artifactsCreated = diff.created;
+            artifactsModified = diff.modified;
+            designSystemCreated = diff.designSystemCreated;
+            previewModuleCount = diff.previewModuleCount;
+          } else {
+            artifactCount = toolStreamArtifactCount();
+            designSystemCreated = toolStreamDesignSystemCreated();
+            previewModuleCount = toolStreamPreviewModuleCount();
+          }
+        } else {
+          artifactCount = toolStreamArtifactCount();
+          designSystemCreated = toolStreamDesignSystemCreated();
+          previewModuleCount = toolStreamPreviewModuleCount();
+        }
         // First-touch activation milestones (first-artifact / first-design-
         // system observed since this stamp shipped — NOT first-ever; see
         // `deriveActivationMilestones`) written to the PostHog person record
@@ -10911,13 +11000,18 @@ export async function startServer({
             // agent-reported model on terminal state; see
             // `finishedModelId` derivation above.
             model_id: finishedModelId,
-            // Incremental count of `.html` paths the run produced or
-            // modified, deduped per file. Replaces the hard-coded `0`
-            // that masked the "did this run actually generate an
-            // artifact?" funnel on PostHog. See `run-artifacts.ts`
-            // for the dedup semantics; tested in
-            // `tests/run-artifacts.test.ts`.
+            // Distinct artifact files this run produced OR edited, measured by
+            // a filesystem snapshot diff (`run-artifact-fs.ts`) so it works for
+            // every agent — not just claude_code, the only one whose tool
+            // stream the legacy counter recognized. Falls back to the
+            // tool-stream count for no-project runs. An edit-only turn (file
+            // count unchanged) still reports >0.
             artifact_count: artifactCount,
+            // Breakdown of `artifact_count` when a filesystem baseline existed:
+            // created ≈ activation (new artifact), modified ≈ iteration on an
+            // existing one. Omitted on the tool-stream fallback path.
+            ...(artifactsCreated !== undefined ? { artifacts_created: artifactsCreated } : {}),
+            ...(artifactsModified !== undefined ? { artifacts_modified: artifactsModified } : {}),
             // True when the run raised a `<question-form>` clarification.
             // Clarification turns inherently produce no artifact, so the
             // dashboard excludes them from the "run finished -> has artifact"

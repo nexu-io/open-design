@@ -1608,7 +1608,7 @@ OD ships as a single multi-arch Docker image so the full plugin/marketplace syst
 
 ### 15.1 Image shape
 
-- **Tag**: `ghcr.io/nexu-io/od:<version>` plus moving `:latest` and `:edge`.
+- **Tag**: `ghcr.io/nexu-io/od:<version>` plus moving `:latest`.
 - **Architectures**: `linux/amd64` and `linux/arm64` (single manifest list).
 - **Contents**:
   - Node 24 runtime + the daemon `dist/` bundle.
@@ -1849,7 +1849,7 @@ Validation: (a) install a published plugin → export from a real project that u
 
 This phase is independent of Phases 1–4 and can run in parallel as soon as Phase 1 lands (since the headless mode and the daemon contract are stable from Phase 1 on).
 
-- **Container image (week 1):** multi-arch `linux/amd64` + `linux/arm64` Dockerfile with the contents listed in §15.1; CI to push `:edge` on every main commit and `:<version>` on tag.
+- **Container image (week 1):** multi-arch `linux/amd64` + `linux/arm64` Dockerfile with the contents listed in §15.1; release automation publishes `:<version>` and `:latest`, and tag pushes publish matching images.
 - **Reference manifests:** `tools/pack/docker-compose.yml` and `tools/pack/helm/`. The compose file demonstrates the daemon + reverse proxy pattern; the Helm chart parameterizes volume + secret patterns for any cloud.
 - **Bound-API-token guard (new in Phase 5):** daemon refuses to bind `OD_BIND_HOST=0.0.0.0` without `OD_API_TOKEN`; bearer-token middleware on `/api/*` (skipped only when host is loopback).
 - **`ProjectStorage` adapter for S3-compatible blob stores** (works for AWS S3, GCS S3-compat, Azure Blob via shim, Aliyun OSS, Tencent COS, Huawei OBS).

@@ -235,7 +235,15 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       // fails to start — never when a login is already in flight.
       let spawned;
       try {
-        spawned = await spawnVelaLogin({ configuredEnv, attribution: loginAttribution });
+        spawned = await spawnVelaLogin({
+          configuredEnv,
+          attribution: loginAttribution,
+          // Block until the direct attempt reaches device-auth steady state or
+          // exits/errors before it, so a direct failure that arrives AFTER the
+          // 250ms startup grace (the common shape on a broken edge path) still
+          // falls through to the proxy retry below instead of returning 202.
+          waitForActivation: true,
+        });
       } catch (directErr) {
         const directMessage =
           directErr instanceof Error ? directErr.message : String(directErr);
@@ -244,6 +252,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           configuredEnv,
           attribution: loginAttribution,
           defaultApiUrl: velaApiProxyBaseUrl(req, getPublicBaseUrl),
+          waitForActivation: true,
         });
       }
       res.status(202).json(spawned);

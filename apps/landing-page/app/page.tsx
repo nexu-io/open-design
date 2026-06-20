@@ -166,7 +166,7 @@ const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DOCS = `${REPO}#readme`;
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
-const X_TWITTER = 'https://x.com/nexudotio';
+const X_TWITTER = 'https://x.com/OpenDesignHQ';
 const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
 
 // Footer columns mirror the top-nav sections + `site-footer.astro` (the
@@ -638,20 +638,25 @@ export default function Page({
                 >
                   <div className='cap-sticky'>
                     <div className='capabilities-head'>
-                      <h2 className='display'>
-                        {t.capTitle}
-                        {/* Draggable "DONE 👌" mark, 20px after the heading. */}
-                        <img
-                          className='cap-head-icon'
-                          src='/hero-icon-drag.svg'
-                          alt='Done 👌'
-                          width={252}
-                          height={300}
-                          draggable={false}
-                          data-drag-icon
-                          decoding='async'
-                        />
-                      </h2>
+                      <h2 className='display'>{t.capTitle}</h2>
+                      {/* Draggable "DONE 👌" mark. Kept a DIRECT child of
+                          .capabilities-head (not nested in the <h2>) so the
+                          authored layout rules actually bind to it: on desktop
+                          it's a flex item beside the heading (20px column-gap),
+                          and on mobile it's a grid item (grid-area: icon) that
+                          moves next to the two-up steps. Nested inside the
+                          heading, grid-area never applied and the mark stayed
+                          stuck in the title row. */}
+                      <img
+                        className='cap-head-icon'
+                        src='/hero-icon-drag.svg'
+                        alt='Done 👌'
+                        width={252}
+                        height={300}
+                        draggable={false}
+                        data-drag-icon
+                        decoding='async'
+                      />
                       {/* Pipeline-style leads (Brief → … → 记忆沉淀) must hold
                           a single line at every viewport; prose leads keep
                           the normal 36ch wrap. Detected by the arrow glyph. */}

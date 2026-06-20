@@ -9,6 +9,7 @@ import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
   createProjectViaApi,
+  gotoEntryHome,
   gotoProject,
   openSettingsDialog,
   putAppConfig,
@@ -36,7 +37,7 @@ test.beforeAll(async () => {
 });
 
 test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
-  const profile = `balance-${Date.now()}`;
+  const profile = 'local';
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
@@ -78,20 +79,26 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
   await topUp.click();
 
   await expect
-    .poll(() =>
-      page.evaluate(
-        () => (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [],
-      ),
+    .poll(async () =>
+      page.evaluate(() => {
+        const opened = (window as Window & { __openedUrls?: string[] }).__openedUrls ?? [];
+        return opened.find((href) => {
+          const url = new URL(href, window.location.href);
+          return (
+            url.pathname.endsWith('/wallet') &&
+            url.searchParams.get('source') === 'open_design' &&
+            url.searchParams.get('od_origin') === 'open_design' &&
+            url.searchParams.get('od_entry_source') === 'chat_error_recharge'
+          );
+        }) ?? null;
+      }),
     )
-    .toContainEqual(
-      expect.stringMatching(
-        /^https:\/\/open-design\.ai\/amr\/wallet\?.*source=open_design.*od_origin=open_design.*od_entry_source=chat_error_recharge/,
-      ),
-    );
+    .toBeTruthy();
 });
 
-test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR authorization controls', async ({ page }) => {
+test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', async ({ page }) => {
   let loggedIn = false;
+  let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
@@ -114,6 +121,7 @@ test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR auth
     });
   });
   await page.route('**/api/integrations/vela/login', async (route) => {
+    loginRequested = true;
     loggedIn = true;
     await route.fulfill({
       status: 202,
@@ -134,18 +142,244 @@ test('[P0] @critical AMR auth failures offer Authorize & retry and open AMR auth
   await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
   await authorizeAndRetry.click();
 
-  const settings = page.getByRole('dialog');
-  await expect(settings).toBeVisible({ timeout: 10_000 });
-  const authorize = settings.getByRole('button', { name: /^Authorize$|^授权$/i });
-  await expect(authorize).toBeVisible();
-  await authorize.click();
+  // New inline flow: clicking Authorize & retry starts vela login in place (it
+  // POSTs /login directly) instead of bouncing the user out to the Settings
+  // dialog. The run then auto-retries once /status reports signed in.
+  await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
 
-  await expect(settings.getByRole('button', { name: /^Sign out$|^退出登录$/i })).toBeVisible({
-    timeout: 10_000,
+test('[P0] @critical AMR model catalog invalid-key failures route to authorization recovery', async ({ page }) => {
+  let loggedIn = false;
+  let loginRequested = false;
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        loggedIn
+          ? {
+              loggedIn: true,
+              profile: 'prod',
+              configPath: '/tmp/.amr/config.json',
+              user: { id: 'user-1', email: 'ui-amr@example.com', plan: 'free' },
+            }
+          : {
+              loggedIn: false,
+              profile: 'prod',
+              configPath: '/tmp/.amr/config.json',
+              user: null,
+            },
+      ),
+    });
   });
+  await page.route('**/api/integrations/vela/login', async (route) => {
+    loginRequested = true;
+    loggedIn = true;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ pid: 4243, startedAt: new Date().toISOString(), profile: 'prod' }),
+    });
+  });
+
+  const amr = await setupAmrWorkspace(page, {
+    failModelListInvalidApiKey: true,
+    profile: 'prod',
+    requireLoginConfig: false,
+    selectedAgentId: 'amr',
+  });
+  const { conversationId, projectId } = amr;
+
+  const userMsgId = `u-${projectId}`;
+  const userMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMsgId}`,
+    {
+      data: {
+        role: 'user',
+        content: 'please build with AMR',
+        createdAt: Date.now() - 2_000,
+      },
+    },
+  );
+  expect(userMsgRes.ok(), `upsert user msg: ${await userMsgRes.text()}`).toBeTruthy();
+
+  const assistantMsgId = `a-${projectId}`;
+  const assistantMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMsgId}`,
+    {
+      data: {
+        role: 'assistant',
+        content: '',
+        agentId: 'amr',
+        runId: `run-${projectId}`,
+        runStatus: 'failed',
+        createdAt: Date.now() - 1_000,
+        startedAt: Date.now() - 1_000,
+        preTurnFileNames: [],
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: [
+              'json-rpc id 2: AMR model catalog is unavailable.',
+              'Error: list Link models: API request failed with status 401: invalid_api_key',
+            ].join('\n'),
+            code: 'AMR_AUTH_REQUIRED',
+          },
+        ],
+      },
+    },
+  );
+  expect(assistantMsgRes.ok(), `upsert assistant msg: ${await assistantMsgRes.text()}`).toBeTruthy();
+
+  await gotoProject(page, projectId);
+
+  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
+  await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+
+  await authorizeAndRetry.click();
+  await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
+  const profile = 'test';
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        profile,
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'settings-amr-user', email: 'settings-amr@example.com', plan: 'free' },
+      }),
+    });
+  });
+
+  await setupAmrWorkspace(page, {
+    profile,
+    selectedAgentId: 'amr',
+    assistantText: 'AMR settings profile smoke',
+  });
+
+  await gotoEntryHome(page);
+  const settings = await openSettingsDialog(page);
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr@example.com');
+  await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
+
+  await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
+  const modelPopover = page.getByTestId('settings-agent-model-popover-amr');
+  await expect(modelPopover).toBeVisible();
+  await expect(modelPopover.getByRole('option', { name: /glm-5/i })).toBeVisible();
+  await settings.getByRole('heading', { name: /Execution/i }).click();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  const reopened = await openSettingsDialog(page);
+  await expect(reopened.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
+  await expect(reopened.getByTestId('settings-agent-select-amr')).toContainText('settings-amr@example.com');
+  await expect(reopened.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
+});
+
+test('[P0] @critical Settings preserves AMR account, recharge shortcut, and model catalog after switching runtimes', async ({ page }) => {
+  const profile = 'test';
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        profile,
+        configPath: '/tmp/.amr/config.json',
+        user: { id: 'settings-amr-user', email: 'settings-amr-switch@example.com', plan: 'free' },
+      }),
+    });
+  });
+
+  await page.addInitScript(() => {
+    const opened: string[] = [];
+    (window as Window & { __openedUrls?: string[] }).__openedUrls = opened;
+    const originalOpen = window.open.bind(window);
+    window.open = ((...args: Parameters<typeof window.open>) => {
+      if (typeof args[0] === 'string') opened.push(args[0]);
+      return originalOpen(...args);
+    }) as typeof window.open;
+  });
+
+  await setupAmrWorkspace(page, {
+    profile,
+    selectedAgentId: 'amr',
+    assistantText: 'AMR settings switch smoke',
+  });
+
+  await gotoEntryHome(page);
+  const settings = await openSettingsDialog(page);
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
+  await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
+  await expect(settings.getByRole('link', { name: /AMR Console|控制台/i })).toBeVisible();
+
+  await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
+  let modelPopover = page.getByTestId('settings-agent-model-popover-amr');
+  await expect(modelPopover).toBeVisible();
+  await expect(modelPopover.getByRole('option', { name: /glm-5/i })).toBeVisible();
+  await settings.getByRole('heading', { name: /Execution/i }).click();
+  await expect(modelPopover).toHaveCount(0);
+
+  await settings.getByTestId('settings-agent-select-codex').click();
+  await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design AMR');
+
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
+  await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
+  const amrConsole = settings.getByRole('link', { name: /AMR Console|控制台/i });
+  await expect(amrConsole).toBeVisible();
+  await expect(amrConsole).toHaveAttribute('href', /source=open_design/);
+
+  await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
+  modelPopover = page.getByTestId('settings-agent-model-popover-amr');
+  await expect(modelPopover).toBeVisible();
+  await modelPopover.getByRole('option', { name: /glm-5/i }).click();
+
+  await expect
+    .poll(async () => {
+      const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    })
+    .toMatchObject({
+      agentId: 'amr',
+      agentModels: {
+        amr: {
+          model: expect.stringMatching(/glm-5/i),
+        },
+      },
+    });
 });
 
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
+  // AMR_AUTH_REQUIRED means the AMR session is invalid, so /status reports
+  // signed-out — the inline auth card then offers the Authorize & retry action.
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: false,
+        profile: 'local',
+        configPath: '/tmp/.amr/config.json',
+        user: null,
+      }),
+    });
+  });
+
   const amr = await setupAmrWorkspace(page, { failAuthAtPrompt: true, selectedAgentId: 'amr' });
 
   await gotoProject(page, amr.projectId);
@@ -338,6 +572,7 @@ async function setupAmrWorkspace(
   options: {
     failAuthAtPrompt?: boolean;
     failBalanceAtPrompt?: boolean;
+    failModelListInvalidApiKey?: boolean;
     profile?: string;
     requireLoginConfig?: boolean;
     selectedAgentId: 'amr' | 'codex';
@@ -351,6 +586,9 @@ async function setupAmrWorkspace(
     ...(options.assistantText !== undefined ? { assistantText: options.assistantText } : {}),
     ...(options.failAuthAtPrompt !== undefined ? { failAuthAtPrompt: options.failAuthAtPrompt } : {}),
     ...(options.failBalanceAtPrompt !== undefined ? { failBalanceAtPrompt: options.failBalanceAtPrompt } : {}),
+    ...(options.failModelListInvalidApiKey !== undefined
+      ? { failModelListInvalidApiKey: options.failModelListInvalidApiKey }
+      : {}),
     ...(options.requireLoginConfig !== undefined ? { requireLoginConfig: options.requireLoginConfig } : {}),
   });
   await mkdir(homeDir, { recursive: true });
@@ -388,6 +626,6 @@ async function setupAmrWorkspace(
   await putAppConfig(page, config);
 
   const projectId = `amr-ui-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
-  await createProjectViaApi(page, projectId, 'AMR UI failure smoke');
-  return { projectId, homeDir, root, velaBin };
+  const { conversationId } = await createProjectViaApi(page, projectId, 'AMR UI failure smoke');
+  return { projectId, conversationId, homeDir, root, velaBin };
 }

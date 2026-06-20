@@ -1099,6 +1099,7 @@ describe('saveConfig', () => {
       agentCliEnv: {
         claude: {
           ANTHROPIC_API_KEY: 'sk-anthropic',
+          ANTHROPIC_AUTH_TOKEN: 'sk-auth-token',
           ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic',
           CLAUDE_CONFIG_DIR: '~/.claude-2',
         },

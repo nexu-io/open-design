@@ -1603,7 +1603,7 @@ OD 以单个 multi-arch Docker image 发布，使完整 plugin/marketplace syste
 
 ### 15.1 Image shape
 
-- **Tag**：`ghcr.io/nexu-io/od:<version>`，以及 moving `:latest` 与 `:edge`。
+- **Tag**：`ghcr.io/nexu-io/od:<version>`，以及 moving `:latest`。
 - **Architectures**：`linux/amd64` 与 `linux/arm64`（single manifest list）。
 - **Contents**：
   - Node 24 runtime + daemon `dist/` bundle。
@@ -1837,7 +1837,7 @@ Validation：
 
 此 phase 独立于 Phases 1–4；Phase 1 落地后即可并行，因为 headless mode 与 daemon contract 从 Phase 1 起就稳定。
 
-- **Container image（第 1 周）：** multi-arch `linux/amd64` + `linux/arm64` Dockerfile，内容见 §15.1；CI 在每次 main commit 推 `:edge`，tag 时推 `:<version>`。
+- **Container image（第 1 周）：** multi-arch `linux/amd64` + `linux/arm64` Dockerfile，内容见 §15.1；release automation 发布 `:<version>` 与 `:latest`，tag push 发布对应 image。
 - **Reference manifests：** `tools/pack/docker-compose.yml` 与 `tools/pack/helm/`。compose file 展示 daemon + reverse proxy pattern；Helm chart 参数化任意云的 volume + secret patterns。
 - **Bound-API-token guard（Phase 5 新增能力）：** daemon 在没有 `OD_API_TOKEN` 时拒绝绑定 `OD_BIND_HOST=0.0.0.0`；`/api/*` 上 bearer-token middleware（仅 loopback host 跳过）。
 - **S3-compatible blob stores 的 `ProjectStorage` adapter**（适用于 AWS S3、GCS S3-compat、Azure Blob via shim、Aliyun OSS、Tencent COS、Huawei OBS）。

@@ -7,6 +7,7 @@ import {
   importClaudeDesignZip,
   importFolderProject,
   installGeneratedPluginFolder,
+  listProjects,
   listPlugins,
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
@@ -59,6 +60,24 @@ describe('applyPlugin', () => {
       grantCaps: [],
       locale: 'zh-CN',
     });
+  });
+});
+
+describe('listProjects', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the default fail-soft behavior for background app startup', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 503 })));
+
+    await expect(listProjects()).resolves.toEqual([]);
+  });
+
+  it('can reject transport failures for refresh paths that must preserve current state', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(null, { status: 503 })));
+
+    await expect(listProjects({ throwOnError: true })).rejects.toThrow('projects 503');
   });
 });
 
