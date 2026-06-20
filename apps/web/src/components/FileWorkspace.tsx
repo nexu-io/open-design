@@ -70,6 +70,7 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
+import { DesignSignatureStrip } from './Signature';
 import { Icon, type IconName } from './Icon';
 import { Toast } from './Toast';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
@@ -424,6 +425,7 @@ export function FileWorkspace({
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
+  artifactHtml,
   conversationId,
   headerActions,
   questionForm = null,
@@ -2229,63 +2231,71 @@ export function FileWorkspace({
             onClose={() => closeTab(activeTab)}
             onSessionIdChange={handleTerminalSessionChange}
           />
-        ) : activeLiveArtifact ? (
-          <LiveArtifactViewer
-            projectId={projectId}
-            liveArtifact={activeLiveArtifact}
-            liveArtifactEvents={liveArtifactEvents}
-            onRefreshArtifacts={onRefreshFiles}
-          />
-        ) : activeFile ? (
-          <FileViewer
-            projectId={projectId}
-            projectKind={projectKind}
-            file={activeFile}
-            filesRefreshKey={filesRefreshKey}
-            isDeck={isDeck}
-            onExportAsPptx={onExportAsPptx}
-            streaming={streaming}
-            commentQueueOnSend={commentQueueOnSend}
-            commentSendDisabled={commentSendDisabled}
-            previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
-            onSavePreviewComment={onSavePreviewComment}
-            onRemovePreviewComment={onRemovePreviewComment}
-            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-            onFileSaved={onRefreshFiles}
-            onOpenFileReplacing={openFileReplacing}
-            commentPortalId={commentPortalId}
-            onCommentModeChange={onCommentModeChange}
-            shareRequest={
-              shareRequest && shareRequest.name === activeFile.name
-                ? { nonce: shareRequest.nonce }
-                : null
-            }
-            downloadRequest={
-              downloadRequest && downloadRequest.name === activeFile.name
-                ? { nonce: downloadRequest.nonce }
-                : null
-            }
-            slideNavRequest={deliverableSlideNavForActiveFile(
-              slideNavRequest,
-              activeFile.name,
-              slideNavDeliverableNonce,
-            )}
-          />
         ) : (
-          <div className="viewer-empty">
-            {t('workspace.openFromDesignFiles')}{' '}
-            <a
-              className="link"
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab(DESIGN_FILES_TAB);
-              }}
-            >
-              {t('workspace.designFilesLink')}
-            </a>
-            .
-          </div>
+          <>
+            <DesignSignatureStrip
+              artifactHtml={artifactHtml ?? null}
+              artifactId={activeLiveArtifact?.artifactId ?? activeFile?.name ?? 'artifact'}
+            />
+            {activeLiveArtifact ? (
+              <LiveArtifactViewer
+                projectId={projectId}
+                liveArtifact={activeLiveArtifact}
+                liveArtifactEvents={liveArtifactEvents}
+                onRefreshArtifacts={onRefreshFiles}
+              />
+            ) : activeFile ? (
+              <FileViewer
+                projectId={projectId}
+                projectKind={projectKind}
+                file={activeFile}
+                filesRefreshKey={filesRefreshKey}
+                isDeck={isDeck}
+                onExportAsPptx={onExportAsPptx}
+                streaming={streaming}
+                commentQueueOnSend={commentQueueOnSend}
+                commentSendDisabled={commentSendDisabled}
+                previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
+                onSavePreviewComment={onSavePreviewComment}
+                onRemovePreviewComment={onRemovePreviewComment}
+                onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+                onFileSaved={onRefreshFiles}
+                onOpenFileReplacing={openFileReplacing}
+                commentPortalId={commentPortalId}
+                onCommentModeChange={onCommentModeChange}
+                shareRequest={
+                  shareRequest && shareRequest.name === activeFile.name
+                    ? { nonce: shareRequest.nonce }
+                    : null
+                }
+                downloadRequest={
+                  downloadRequest && downloadRequest.name === activeFile.name
+                    ? { nonce: downloadRequest.nonce }
+                    : null
+                }
+                slideNavRequest={deliverableSlideNavForActiveFile(
+                  slideNavRequest,
+                  activeFile.name,
+                  slideNavDeliverableNonce,
+                )}
+              />
+            ) : (
+              <div className="viewer-empty">
+                {t('workspace.openFromDesignFiles')}{' '}
+                <a
+                  className="link"
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveTab(DESIGN_FILES_TAB);
+                  }}
+                >
+                  {t('workspace.designFilesLink')}
+                </a>
+                .
+              </div>
+            )}
+          </>
         )}
       </div>
       <input
