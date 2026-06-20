@@ -2146,6 +2146,7 @@ export const hu: Dict = {
   'fileViewer.exportMd': 'Exportálás Markdown-ként',
   'fileViewer.exportImage': 'Exportálás képként',
   'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
+  'fileViewer.exportImageNotReady': 'Az előnézet még betöltődik. Kérjük, várjon egy pillanatot, és próbálja újra.',
   'fileViewer.exportImageModalSubtitle': 'Válasszon formátumot, majd töltse le az aktuális előnézetet képként.',
   'fileViewer.exportImageFormatLabel': 'Formátum',
   'fileViewer.exportImageSaving': 'Kép mentése…',

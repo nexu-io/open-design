@@ -2146,6 +2146,7 @@ export const th: Dict = {
   'fileViewer.exportMd': 'แปลงข้อความแบบฉบับเป็น Markdown',
   'fileViewer.exportImage': 'ส่งออกเป็นรูปภาพ',
   'fileViewer.exportImageFailed': 'การจับภาพล้มเหลว กรุณาลองอีกครั้งหรือใช้เครื่องมือจับภาพหน้าจอของเบราว์เซอร์',
+  'fileViewer.exportImageNotReady': 'กำลังโหลดตัวอย่าง กรุณารอสักครู่แล้วลองอีกครั้ง',
   'fileViewer.exportImageModalSubtitle': 'เลือกรูปแบบ แล้วดาวน์โหลดตัวอย่างปัจจุบันเป็นรูปภาพ',
   'fileViewer.exportImageFormatLabel': 'รูปแบบ',
   'fileViewer.exportImageSaving': 'กำลังบันทึกรูปภาพ…',

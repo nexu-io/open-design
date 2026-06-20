@@ -2146,6 +2146,7 @@ export const ar: Dict = {
   'fileViewer.exportMd': 'تصدير كـ Markdown',
   'fileViewer.exportImage': 'تصدير كصورة',
   'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
+  'fileViewer.exportImageNotReady': 'المعاينة قيد التحميل. يرجى الانتظار قليلاً ثم المحاولة مرة أخرى.',
   'fileViewer.exportImageModalSubtitle': 'اختر تنسيقًا، ثم نزّل المعاينة الحالية كصورة.',
   'fileViewer.exportImageFormatLabel': 'التنسيق',
   'fileViewer.exportImageSaving': 'جارٍ حفظ الصورة…',

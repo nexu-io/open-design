@@ -2146,6 +2146,7 @@ export const ja: Dict = {
   'fileViewer.exportMd': 'Markdown としてエクスポート',
   'fileViewer.exportImage': '画像としてエクスポート',
   'fileViewer.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショット機能をご利用ください。',
+  'fileViewer.exportImageNotReady': 'プレビューを読み込み中です。少し待ってからもう一度お試しください。',
   'fileViewer.exportImageModalSubtitle': '形式を選択して、現在のプレビューを画像としてダウンロードします。',
   'fileViewer.exportImageFormatLabel': '形式',
   'fileViewer.exportImageSaving': '画像を保存中…',

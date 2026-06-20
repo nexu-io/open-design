@@ -2146,6 +2146,7 @@ export const pl: Dict = {
   'fileViewer.exportMd': 'Eksportuj jako Markdown',
   'fileViewer.exportImage': 'Eksportuj jako obraz',
   'fileViewer.exportImageFailed': 'Przechwytywanie obrazu nie powiodło się. Spróbuj ponownie lub użyj narzędzia do zrzutów ekranu w przeglądarce.',
+  'fileViewer.exportImageNotReady': 'Podgląd jest jeszcze ładowany. Poczekaj chwilę i spróbuj ponownie.',
   'fileViewer.exportImageModalSubtitle': 'Wybierz format, a następnie pobierz bieżący podgląd jako obraz.',
   'fileViewer.exportImageFormatLabel': 'Format',
   'fileViewer.exportImageSaving': 'Zapisywanie obrazu…',

@@ -78,8 +78,10 @@ import {
   imageDataUrlToBlob,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
-  requestPreviewSnapshot,
+  requestPreviewSnapshotResult,
+  resolveExportImageFailureKey,
   type ImageExportFormat,
+  type PreviewSnapshotResult,
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
@@ -914,14 +916,30 @@ function temporarilyExposeIframeForSnapshot(iframe: HTMLIFrameElement): () => vo
   };
 }
 
-async function requestPreviewSnapshotWithRetry(iframe: HTMLIFrameElement): Promise<Awaited<ReturnType<typeof requestPreviewSnapshot>>> {
+// Retry the bridge snapshot at progressively longer timeouts, returning the
+// rich {@link PreviewSnapshotResult} so callers can route the final reason
+// to UX. Pre-#3605 this returned `PreviewSnapshot | null`, which collapsed
+// timeout / render-error / post-message-error into one indistinguishable
+// failure mode and forced the consumer to show one generic alert. We now
+// preserve the LAST attempt's reason so the modal can light up a more
+// specific message (e.g. "preview is still loading") when applicable.
+async function requestPreviewSnapshotResultWithRetry(
+  iframe: HTMLIFrameElement,
+): Promise<PreviewSnapshotResult> {
   const timeouts = [1500, 3000, 6000];
+  let lastResult: PreviewSnapshotResult = { ok: false, reason: 'timeout' };
   for (const timeout of timeouts) {
-    const snapshot = await requestPreviewSnapshot(iframe, timeout);
-    if (snapshot) return snapshot;
+    const result = await requestPreviewSnapshotResult(iframe, timeout);
+    if (result.ok) return result;
+    lastResult = result;
+    // `loading` means the iframe has no contentWindow yet; further retries
+    // won't help in this tick — return early so the consumer can surface
+    // the actionable "preview still loading" hint instead of stalling for
+    // 10+ seconds on doomed retries.
+    if (result.reason === 'loading') return result;
     await waitForAnimationFrame();
   }
-  return null;
+  return lastResult;
 }
 
 function previewViewportStateKey(projectId: string, file: Pick<ProjectFile, 'name' | 'path'>): string {
@@ -7532,7 +7550,14 @@ function HtmlViewer({
     setDownloadMenuOpen(false);
     setDeployMenuOpen((v) => !v);
   };
-  const captureExportImageSnapshot = useCallback(async () => {
+  // Image-export pipeline. Returns the full {@link PreviewSnapshotResult} so
+  // the modal can route the failure reason through
+  // {@link resolveExportImageFailureKey} instead of collapsing every failure
+  // mode (iframe not mounted, postMessage error, render error, timeout) into
+  // a single null. Pre-fix the consumer surfaced one generic alert no matter
+  // what, so a transient "iframe still loading" race looked identical to a
+  // fatal render error. See issue #3605.
+  const captureExportImageSnapshot = useCallback(async (): Promise<PreviewSnapshotResult> => {
     // The host compositor grabs on-screen pixels, so any transient hover chrome
     // over the preview leaks into the capture. The screenshot control's own
     // tooltip is already dismissed by TooltipLayer's pointerdown/click listener,
@@ -7548,29 +7573,29 @@ function HtmlViewer({
     // URL-load previews. Falls through to the bridge on pure web (no host).
     const visibleIframe = iframeRef.current ?? srcDocPreviewIframeRef.current;
     const hostSnapshot = await captureHostIframeSnapshot(visibleIframe);
-    if (hostSnapshot) return hostSnapshot;
+    if (hostSnapshot) return { ok: true, snapshot: hostSnapshot };
 
     if (!useUrlLoadPreview) {
       const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
-      if (!activeIframe) return null;
+      if (!activeIframe) return { ok: false, reason: 'loading' };
       await waitForIframeLoadOrTimeout(activeIframe, 250);
       await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(activeIframe);
+      return requestPreviewSnapshotResultWithRetry(activeIframe);
     }
 
     const urlIframe = iframeRef.current ?? urlPreviewIframeRef.current;
     if (urlIframe) {
       await waitForIframeLoadOrTimeout(urlIframe, 250);
       await waitForAnimationFrame();
-      const urlSnapshot = await requestPreviewSnapshotWithRetry(urlIframe);
-      if (urlSnapshot) return urlSnapshot;
+      const urlResult = await requestPreviewSnapshotResultWithRetry(urlIframe);
+      if (urlResult.ok) return urlResult;
     }
 
     const srcDocIframe = srcDocPreviewIframeRef.current;
     if (!srcDocIframe) {
       const activeIframe = iframeRef.current;
-      if (!activeIframe) return null;
-      return requestPreviewSnapshotWithRetry(activeIframe);
+      if (!activeIframe) return { ok: false, reason: 'loading' };
+      return requestPreviewSnapshotResultWithRetry(activeIframe);
     }
 
     if (useLazySrcDocTransport && !srcDocShellReady) {
@@ -7582,7 +7607,7 @@ function HtmlViewer({
     const restoreVisibility = temporarilyExposeIframeForSnapshot(srcDocIframe);
     try {
       await waitForAnimationFrame();
-      return requestPreviewSnapshotWithRetry(srcDocIframe);
+      return requestPreviewSnapshotResultWithRetry(srcDocIframe);
     } finally {
       restoreVisibility();
     }
@@ -7599,18 +7624,23 @@ function HtmlViewer({
     screenshotInFlightRef.current = true;
     setExportToast({ message: t('fileViewer.screenshotCopying'), tone: 'loading' });
     try {
-      const snap = await captureExportImageSnapshot();
-      if (!snap) {
+      // captureExportImageSnapshot returns the rich PreviewSnapshotResult so
+      // image-export can route per-reason copy (#3605). The screenshot-to-
+      // clipboard flow keeps its single "preview loading" toast — flatten
+      // every failure into the same null-shape behaviour it had before.
+      const result = await captureExportImageSnapshot();
+      if (!result.ok) {
         setExportToast({ message: t('fileViewer.screenshotPreviewLoading'), tone: 'error' });
         return;
       }
-      const result = await copyImageDataUrlToClipboard(snap.dataUrl);
+      const snap = result.snapshot;
+      const clipboardResult = await copyImageDataUrlToClipboard(snap.dataUrl);
       setExportToast(
-        result === 'copied'
+        clipboardResult === 'copied'
           ? { message: t('fileViewer.screenshotCopied'), tone: 'success' }
           : {
               message: t(
-                result === 'denied'
+                clipboardResult === 'denied'
                   ? 'fileViewer.screenshotClipboardDenied'
                   : 'fileViewer.screenshotCaptureFailed',
               ),
@@ -7634,9 +7664,25 @@ function HtmlViewer({
     try {
       let dataUrl = imageExportSnapshotDataUrlRef.current;
       if (!dataUrl) {
-        const snap = await captureExportImageSnapshot();
-        if (!snap) throw new Error('Snapshot capture returned null');
-        dataUrl = snap.dataUrl;
+        const result = await captureExportImageSnapshot();
+        if (!result.ok) {
+          // Surface a "preview is still loading, try again" hint when the
+          // failure is the transient iframe-not-ready race; keep the
+          // generic copy for fatal failures (timeout, render error,
+          // postMessage error). The precise reason is logged for bug
+          // reports so we never lose signal in the console. See #3605.
+          const failureKey = resolveExportImageFailureKey(result);
+          console.warn(
+            '[exportAsImage] snapshot capture failed:',
+            result.reason,
+            result.error ?? '',
+          );
+          if (imageExportPrepareIdRef.current === prepareId) {
+            setImageExportError(t(failureKey ?? 'fileViewer.exportImageFailed'));
+          }
+          return;
+        }
+        dataUrl = result.snapshot.dataUrl;
         imageExportSnapshotDataUrlRef.current = dataUrl;
       }
       const blob = await imageDataUrlToBlob(dataUrl, format);
@@ -8874,7 +8920,14 @@ function HtmlViewer({
                     active={drawOverlayOpen}
                     onActiveChange={setDrawOverlayOpen}
                     captureViewport
-                    captureSnapshot={captureExportImageSnapshot}
+                    captureSnapshot={async () => {
+                      // PreviewDrawOverlay still expects the legacy null-collapse
+                      // shape; the rich PreviewSnapshotResult was added for the
+                      // image-export modal in #3605. Adapt at the boundary so
+                      // the overlay contract stays unchanged.
+                      const result = await captureExportImageSnapshot();
+                      return result.ok ? result.snapshot : null;
+                    }}
                     captureTarget={null}
                     filePath={file.name}
                     sendDisabled={streaming}

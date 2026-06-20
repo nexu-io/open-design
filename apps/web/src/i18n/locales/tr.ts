@@ -2146,6 +2146,7 @@ export const tr: Dict = {
   'fileViewer.exportMd': 'Markdown olarak dışa aktar',
   'fileViewer.exportImage': 'Görsel olarak dışa aktar',
   'fileViewer.exportImageFailed': 'Görsel yakalama başarısız oldu. Lütfen tekrar deneyin veya tarayıcınızın ekran görüntüsü aracını kullanın.',
+  'fileViewer.exportImageNotReady': 'Önizleme hâlâ yükleniyor. Lütfen biraz bekleyip tekrar deneyin.',
   'fileViewer.exportImageModalSubtitle': 'Bir biçim seçin, ardından geçerli önizlemeyi resim olarak indirin.',
   'fileViewer.exportImageFormatLabel': 'Biçim',
   'fileViewer.exportImageSaving': 'Görsel kaydediliyor…',

@@ -2146,6 +2146,7 @@ export const ptBR: Dict = {
   'fileViewer.exportMd': 'Exportar como Markdown',
   'fileViewer.exportImage': 'Exportar como imagem',
   'fileViewer.exportImageFailed': 'Falha ao capturar a imagem. Tente novamente ou use a ferramenta de captura de tela do seu navegador.',
+  'fileViewer.exportImageNotReady': 'A prévia ainda está carregando. Aguarde um momento e tente novamente.',
   'fileViewer.exportImageModalSubtitle': 'Escolha um formato e baixe a prévia atual como imagem.',
   'fileViewer.exportImageFormatLabel': 'Formato',
   'fileViewer.exportImageSaving': 'Salvando imagem…',

@@ -2146,6 +2146,7 @@ export const ko: Dict = {
   'fileViewer.exportMd': 'Markdown으로 내보내기',
   'fileViewer.exportImage': '이미지로 내보내기',
   'fileViewer.exportImageFailed': '이미지 캡처에 실패했습니다. 다시 시도하거나 브라우저의 스크린샷 도구를 사용하세요.',
+  'fileViewer.exportImageNotReady': '미리보기를 로드 중입니다. 잠시 기다린 후 다시 시도해 주세요.',
   'fileViewer.exportImageModalSubtitle': '형식을 선택한 다음 현재 미리보기를 이미지로 다운로드합니다.',
   'fileViewer.exportImageFormatLabel': '형식',
   'fileViewer.exportImageSaving': '이미지 저장 중…',
