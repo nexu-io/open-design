@@ -322,6 +322,65 @@ describe('API proxy routes', () => {
     }
   });
 
+  it('forwards OpenAI-compatible length finish reasons on proxy end events', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}',
+        '',
+        'data: {"choices":[{"delta":{},"finish_reason":"length"}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')));
+    }));
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end\ndata: {"finishReason":"length"}');
+  });
+
+  it('forwards Anthropic max_tokens stop reasons on proxy end events', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'event: content_block_delta',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"partial"}}',
+        '',
+        'event: message_delta',
+        'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}',
+        '',
+        'event: message_stop',
+        'data: {"type":"message_stop"}',
+        '',
+      ].join('\n')));
+    }));
+
+    const res = await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-test',
+        model: 'claude-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end\ndata: {"finishReason":"max_tokens"}');
+  });
+
   // Regression: appendVersionedApiPath needs to thread three shapes:
   //   * bare host                  → inject /v1 (api.openai.com)
   //   * sub-path containing /vN    → no inject (api.deepinfra.com/v1/openai)

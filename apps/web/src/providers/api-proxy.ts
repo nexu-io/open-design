@@ -1,5 +1,5 @@
 import { effectiveMaxTokens } from '../state/maxTokens';
-import type { AppConfig, ChatMessage } from '../types';
+import type { ApiProtocol, AppConfig, ChatMessage } from '../types';
 import type {
   ProxyImageContentBlock,
   ProxyMessage,
@@ -10,6 +10,25 @@ import { projectFileUrl } from './registry';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
+
+type ProxyStreamResult =
+  | { kind: 'done'; finishReason: string | null }
+  | { kind: 'aborted' }
+  | { kind: 'error' };
+
+const TRUNCATED_FINISH_REASONS = new Set([
+  'length',
+  'max_tokens',
+  'MAX_TOKENS',
+]);
+
+const PREFILL_CONTINUATION_PROTOCOLS = new Set<ApiProtocol>(['anthropic']);
+const MAX_TRUNCATION_CONTINUATIONS = 8;
+const EXPLICIT_CONTINUATION_PROMPT = [
+  'Continue exactly from where your previous response stopped.',
+  'Do not repeat earlier text or add a preamble.',
+  'If you were writing an artifact, continue the same artifact and close it normally.',
+].join(' ');
 
 /**
  * Optional per-request context that some protocols thread into the
@@ -48,81 +67,37 @@ export async function streamProxyEndpoint(
   let acc = '';
 
   try {
-    const messages = await buildProxyMessages(endpoint, history, context);
-    const resp = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        model: cfg.model,
-        systemPrompt: system,
-        messages,
-        maxTokens: effectiveMaxTokens(cfg),
-        apiVersion: cfg.apiVersion,
-        ...(context?.projectId ? { projectId: context.projectId } : {}),
-        ...(context?.byokImageModel
-          ? { byokImageModel: context.byokImageModel }
-          : {}),
-        ...(context?.byokVideoModel
-          ? { byokVideoModel: context.byokVideoModel }
-          : {}),
-        ...(context?.byokSpeechModel
-          ? { byokSpeechModel: context.byokSpeechModel }
-          : {}),
-        ...(context?.byokSpeechVoice
-          ? { byokSpeechVoice: context.byokSpeechVoice }
-          : {}),
-      }),
-      signal,
-    });
-
-    if (!resp.ok || !resp.body) {
-      const text = await resp.text().catch(() => '');
-      handlers.onError(new Error(`proxy ${resp.status}: ${text || 'no body'}`));
-      return;
-    }
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+    let requestMessages = await buildProxyMessages(endpoint, history, context);
+    let continuations = 0;
 
     while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
+      const result = await streamProxyAttempt({
+        endpoint,
+        cfg,
+        system,
+        messages: requestMessages,
+        signal,
+        handlers,
+        context,
+        onDelta: (text) => {
+          acc += text;
+          handlers.onDelta(text);
+        },
+      });
 
-      while (true) {
-        const match = buf.match(/\r?\n\r?\n/);
-        if (!match || match.index === undefined) break;
-        const frame = buf.slice(0, match.index);
-        buf = buf.slice(match.index + match[0].length);
-
-        const parsed = parseSseFrame(frame);
-        if (!parsed || parsed.kind !== 'event') continue;
-
-        if (parsed.event === 'delta') {
-          const text = String(parsed.data.delta ?? parsed.data.text ?? '');
-          if (text) {
-            acc += text;
-            handlers.onDelta(text);
-          }
-          continue;
-        }
-
-        if (parsed.event === 'error') {
-          handlers.onError(new Error(proxyErrorMessage(parsed.data)));
-          return;
-        }
-
-        if (parsed.event === 'end') {
-          handlers.onDone(acc);
-          return;
-        }
+      if (result.kind === 'aborted' || result.kind === 'error') return;
+      if (!isTruncatedFinishReason(result.finishReason)) {
+        handlers.onDone(acc);
+        return;
       }
-    }
 
-    handlers.onDone(acc);
+      if (continuations >= MAX_TRUNCATION_CONTINUATIONS) {
+        handlers.onError(new Error('Response was truncated repeatedly before the provider returned a final stop reason.'));
+        return;
+      }
+      continuations += 1;
+      requestMessages = buildContinuationMessages(requestMessages, acc, cfg.apiProtocol);
+    }
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
@@ -271,6 +246,115 @@ function bytesToBase64(bytes: Uint8Array): string {
   return out;
 }
 
+async function streamProxyAttempt({
+  endpoint,
+  cfg,
+  system,
+  messages,
+  signal,
+  handlers,
+  context,
+  onDelta,
+}: {
+  endpoint: string;
+  cfg: AppConfig;
+  system: string;
+  messages: ProxyMessage[];
+  signal: AbortSignal;
+  handlers: StreamHandlers;
+  context?: ProxyContext;
+  onDelta: (text: string) => void;
+}): Promise<ProxyStreamResult> {
+  const resp = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      systemPrompt: system,
+      messages,
+      maxTokens: effectiveMaxTokens(cfg),
+      apiVersion: cfg.apiVersion,
+      ...(context?.projectId ? { projectId: context.projectId } : {}),
+      ...(context?.byokImageModel
+        ? { byokImageModel: context.byokImageModel }
+        : {}),
+      ...(context?.byokVideoModel
+        ? { byokVideoModel: context.byokVideoModel }
+        : {}),
+      ...(context?.byokSpeechModel
+        ? { byokSpeechModel: context.byokSpeechModel }
+        : {}),
+      ...(context?.byokSpeechVoice
+        ? { byokSpeechVoice: context.byokSpeechVoice }
+        : {}),
+    }),
+    signal,
+  });
+
+  if (!resp.ok || !resp.body) {
+    const text = await resp.text().catch(() => '');
+    handlers.onError(new Error(`proxy ${resp.status}: ${text || 'no body'}`));
+    return { kind: 'error' };
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    while (true) {
+      const match = buf.match(/\r?\n\r?\n/);
+      if (!match || match.index === undefined) break;
+      const frame = buf.slice(0, match.index);
+      buf = buf.slice(match.index + match[0]!.length);
+
+      const parsed = parseSseFrame(frame);
+      if (!parsed || parsed.kind !== 'event') continue;
+
+      if (parsed.event === 'delta') {
+        const text = String(parsed.data.delta ?? parsed.data.text ?? '');
+        if (text) {
+          onDelta(text);
+        }
+        continue;
+      }
+
+      if (parsed.event === 'error') {
+        handlers.onError(new Error(proxyErrorMessage(parsed.data)));
+        return { kind: 'error' };
+      }
+
+      if (parsed.event === 'end') {
+        return { kind: 'done', finishReason: finishReasonFromEndPayload(parsed.data) };
+      }
+    }
+  }
+
+  const tail = buf.trim();
+  if (tail) {
+    const parsed = parseSseFrame(tail);
+    if (parsed?.kind === 'event') {
+      if (parsed.event === 'delta') {
+        const text = String(parsed.data.delta ?? parsed.data.text ?? '');
+        if (text) onDelta(text);
+      } else if (parsed.event === 'error') {
+        handlers.onError(new Error(proxyErrorMessage(parsed.data)));
+        return { kind: 'error' };
+      } else if (parsed.event === 'end') {
+        return { kind: 'done', finishReason: finishReasonFromEndPayload(parsed.data) };
+      }
+    }
+  }
+
+  return { kind: signal.aborted ? 'aborted' : 'done', finishReason: null };
+}
+
 function proxyErrorMessage(data: Record<string, unknown>): string {
   const nested = data.error;
   if (nested && typeof nested === 'object' && 'message' in nested) {
@@ -278,4 +362,124 @@ function proxyErrorMessage(data: Record<string, unknown>): string {
     if (typeof message === 'string' && message) return message;
   }
   return String(data.message ?? 'proxy error');
+}
+
+function finishReasonFromEndPayload(data: Record<string, unknown>): string | null {
+  return typeof data.finishReason === 'string' && data.finishReason ? data.finishReason : null;
+}
+
+function isTruncatedFinishReason(reason: string | null): boolean {
+  return reason !== null && TRUNCATED_FINISH_REASONS.has(reason);
+}
+
+function canContinueWithAssistantPrefill(protocol?: ApiProtocol): boolean {
+  return protocol !== undefined && PREFILL_CONTINUATION_PROTOCOLS.has(protocol);
+}
+
+function buildContinuationMessages(
+  messages: ProxyMessage[],
+  assistantText: string,
+  protocol?: ApiProtocol,
+): ProxyMessage[] {
+  if (canContinueWithAssistantPrefill(protocol)) {
+    return appendContinuationAssistantMessage(messages, assistantText, protocol);
+  }
+  return appendExplicitContinuationRequest(messages, assistantText, protocol);
+}
+
+function appendContinuationAssistantMessage(
+  messages: ProxyMessage[],
+  assistantText: string,
+  protocol?: ApiProtocol,
+): ProxyMessage[] {
+  const compacted = compactContinuationHistory(messages, protocol);
+  const last = compacted[compacted.length - 1];
+  if (last?.role === 'assistant') {
+    return [
+      ...compacted.slice(0, -1),
+      { ...last, content: assistantText },
+    ];
+  }
+  return [...compacted, { role: 'assistant', content: assistantText }];
+}
+
+function appendExplicitContinuationRequest(
+  messages: ProxyMessage[],
+  assistantText: string,
+  protocol?: ApiProtocol,
+): ProxyMessage[] {
+  const compacted = compactContinuationHistory(messages, protocol);
+  const last = compacted[compacted.length - 1];
+  const previous = compacted[compacted.length - 2];
+  if (
+    last?.role === 'user'
+    && last.content === EXPLICIT_CONTINUATION_PROMPT
+    && previous?.role === 'assistant'
+  ) {
+    return [
+      ...compacted.slice(0, -2),
+      { ...previous, content: assistantText },
+      last,
+    ];
+  }
+
+  if (last?.role === 'assistant') {
+    return [
+      ...compacted.slice(0, -1),
+      { ...last, content: assistantText },
+      { role: 'user', content: EXPLICIT_CONTINUATION_PROMPT },
+    ];
+  }
+
+  return [
+    ...compacted,
+    { role: 'assistant', content: assistantText },
+    { role: 'user', content: EXPLICIT_CONTINUATION_PROMPT },
+  ];
+}
+
+function compactContinuationHistory(
+  messages: ProxyMessage[],
+  protocol?: ApiProtocol,
+): ProxyMessage[] {
+  if (protocol === 'google') return messages;
+  const compacted: ProxyMessage[] = [];
+  for (const message of messages) {
+    const previous = compacted[compacted.length - 1];
+    if (previous?.role === message.role) {
+      compacted[compacted.length - 1] = {
+        ...previous,
+        content: mergeProxyMessageContent(previous.content, message.content),
+      };
+    } else {
+      compacted.push(message);
+    }
+  }
+  return compacted;
+}
+
+function mergeProxyMessageContent(
+  previous: ProxyMessageContent,
+  next: ProxyMessageContent,
+): ProxyMessageContent {
+  if (typeof previous === 'string' && typeof next === 'string') {
+    return `${previous}\n\n${next}`;
+  }
+
+  const previousBlocks = proxyContentBlocks(previous);
+  const nextBlocks = proxyContentBlocks(next);
+  return [
+    ...previousBlocks,
+    ...(previousBlocks.length > 0 && nextBlocks.length > 0
+      ? [{ type: 'text' as const, text: '\n\n' }]
+      : []),
+    ...nextBlocks,
+  ];
+}
+
+function proxyContentBlocks(
+  content: ProxyMessageContent,
+): Array<ProxyTextContentBlock | ProxyImageContentBlock> {
+  if (Array.isArray(content)) return content;
+  return content ? [{ type: 'text', text: content }] : [];
 }
