@@ -1378,3 +1378,48 @@ test('spawnEnvForAgent does not mutate the input env', () => {
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
 });
+
+test('spawnEnvForAgent gives mimo the same OpenCode-style env hardening with OPENCODE_* stripping', () => {
+  const env = spawnEnvForAgent('mimo', {
+    OPENCODE_HOME: '/leak/opencode-home',
+    OPENCODE_BIN: '/leak/opencode',
+    PATH: '/usr/bin',
+    OD_DAEMON_URL: 'http://127.0.0.1:7456',
+  });
+
+  assert.equal('OPENCODE_HOME' in env, false);
+  assert.equal('OPENCODE_BIN' in env, false);
+  assert.equal('OPENCODE_PID' in env, false);
+  assert.equal('OPENCODE_RUN_ID' in env, false);
+  assert.equal('OPENCODE_SERVER_PASSWORD' in env, false);
+  assert.equal(env.OD_DAEMON_URL, 'http://127.0.0.1:7456');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent gives mimo the same DISABLE_PROJECT_CONFIG forcing as opencode', () => {
+  const env = spawnEnvForAgent('mimo', {
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'false',
+    PATH: '/usr/bin',
+  });
+
+  // Must be forced to 'true' to stop workspace env corruption
+  assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, 'true');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves a preset OPENCODE_DISABLE_PROJECT_CONFIG for mimo through configured env', () => {
+  const env = spawnEnvForAgent(
+    'mimo',
+    {
+      OPENCODE_DISABLE_PROJECT_CONFIG: '',
+      PATH: '/usr/bin',
+    },
+    {
+      OPENCODE_DISABLE_PROJECT_CONFIG: '0',
+    },
+  );
+
+  // Configured value wins over internal forcing
+  assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, '0');
+  assert.equal(env.PATH, '/usr/bin');
+});
