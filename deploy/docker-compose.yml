@@ -17,11 +17,6 @@ services:
       - OD_BIND_HOST=0.0.0.0
       - OD_ALLOWED_ORIGINS=${OD_ALLOWED_ORIGINS:-}
       - OD_PORT=7456
-      # Derive from OPEN_DESIGN_PORT so the origin validator always trusts
-      # the host port the user is publishing (OD_WEB_PORT is the externally-
-      # reachable port for CORS checks). Explicitly set OD_WEB_PORT in .env
-      # to override.
-      - OD_WEB_PORT=${OD_WEB_PORT:-${OPEN_DESIGN_PORT:-7456}}
       - OD_API_TOKEN=${OD_API_TOKEN:-}
       # API auth is disabled by default because the host port is locked to
       # 127.0.0.1 (only accessible from the Docker host). Set OD_API_TOKEN
