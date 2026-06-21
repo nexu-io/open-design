@@ -774,6 +774,23 @@ function AppInner() {
         return;
       }
 
+      // Auto-bootstrap: if the daemon has API auth enabled, get the bootstrap
+      // token and exchange it for a session cookie. The daemon only returns a
+      // token when the request comes from a trusted network (loopback or
+      // private subnet). On untrusted networks we skip and the user enters
+      // the token manually if they hit 401 responses.
+      void fetch('/api/auth/bootstrap-token')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && data.token) {
+            fetch('/api/auth/bootstrap', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${data.token}` },
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+
       const agentRequestId = beginAgentStreamRequest();
       void fetchAgentsStream({
         signal: agentStreamAbort.signal,

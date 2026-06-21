@@ -3193,6 +3193,19 @@ function isLoopbackPeerAddress(address) {
   return false;
 }
 
+function isPrivateSubnetAddress(address) {
+  if (typeof address !== 'string') return false;
+  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!normalized) return false;
+  if (normalized.startsWith('::ffff:')) return isPrivateSubnetAddress(normalized.slice('::ffff:'.length));
+  if (net.isIP(normalized) !== 4) return false;
+  const parts = normalized.split('.').map(Number);
+  if (parts[0] === 10) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return false;
+}
+
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
 
@@ -4489,6 +4502,8 @@ export async function startServer({
       '/api/ready',
       '/version',
       '/api/version',
+      '/auth/bootstrap',
+      '/auth/bootstrap-token',
     ]);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
@@ -5027,6 +5042,16 @@ export async function startServer({
   }
 
   if (apiToken) {
+    app.get('/api/auth/bootstrap-token', (req, res) => {
+      const addr = req.socket?.remoteAddress;
+      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
+        return res.status(403).json({
+          error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
+        });
+      }
+      res.json({ token: apiToken });
+    });
+
     app.post('/api/auth/bootstrap', (req, res) => {
       const auth = req.headers.authorization || '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
