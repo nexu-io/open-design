@@ -25,17 +25,10 @@ export function resolveStaticSpaFallbackPath(req: StaticSpaFallbackRequestLike, 
   return indexPath;
 }
 
-export function registerStaticSpaFallback(app: Express, staticDir: string, apiToken?: string): void {
+export function registerStaticSpaFallback(app: Express, staticDir: string): void {
   app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
-    if (apiToken) {
-      res.cookie('od-api-token', apiToken, {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-      });
-    }
     res.sendFile(indexPath);
   });
 }
