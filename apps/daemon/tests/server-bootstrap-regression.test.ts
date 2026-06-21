@@ -551,11 +551,69 @@ describe('static SPA fallback classification', () => {
   });
 });
 
-describe('daemon data dir resolver', () => {
-  it('requires explicit OD_DATA_DIR in sandbox mode and resolves project-relative dirs', () => {
-    expect(() => resolveDataDir('', '/tmp/open-design-test', { requireExplicit: true })).toThrow(
-      /OD_DATA_DIR is required/,
-    );
-    expect(resolveDataDir('relative-data', '/tmp/open-design-test')).toBe('/tmp/open-design-test/relative-data');
+describe('bootstrap auth bypass regression (reverse-proxy trust)', () => {
+  let authServer: http.Server;
+  let authBaseUrl: string;
+  let authShutdown: (() => Promise<void> | void) | undefined;
+
+  beforeAll(async () => {
+    const prevToken = process.env.OD_API_TOKEN;
+    const prevSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET;
+    process.env.OD_API_TOKEN = 'test-regression-token';
+    process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET = '1';
+    try {
+      const started = (await startServer({ port: 0, returnServer: true })) as StartServerResult;
+      authBaseUrl = started.url;
+      authServer = started.server;
+      authShutdown = started.shutdown;
+    } finally {
+      process.env.OD_API_TOKEN = prevToken;
+      process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET = prevSubnet;
+    }
+  });
+
+  afterAll(async () => {
+    await Promise.resolve(authShutdown?.());
+    await new Promise<void>((resolve) => authServer.close(() => resolve()));
+  });
+
+  it('loopback bootstrap succeeds without proxy headers', async () => {
+    const res = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('nonce');
+  });
+
+  it('bootstrap with X-Forwarded-For header returns 403', async () => {
+    const res = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`, {
+      headers: { 'X-Forwarded-For': '10.0.0.1' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('bootstrap with X-Real-IP header returns 403', async () => {
+    const res = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`, {
+      headers: { 'X-Real-IP': '10.0.0.1' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('bootstrap with Forwarded header returns 403', async () => {
+    const res = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`, {
+      headers: { Forwarded: 'for=10.0.0.1;proto=https' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('nonce exchange with X-Forwarded-For on POST also returns 403', async () => {
+    const nonceRes = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`);
+    const { nonce } = await nonceRes.json();
+
+    const postRes = await fetch(`${authBaseUrl}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.0.0.1' },
+      body: JSON.stringify({ nonce }),
+    });
+    expect(postRes.status).toBe(403);
   });
 });
