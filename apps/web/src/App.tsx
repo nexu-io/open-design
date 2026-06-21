@@ -786,9 +786,7 @@ function AppInner() {
       // 10s timeout guards against a hung daemon blocking the entire boot.
       const bootstrapAbort = new AbortController();
       const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
-      const clientTag = crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).slice(2, 10);
+      const clientTag = crypto.randomUUID();
       try {
         const tokenRes = await fetch(`/api/auth/bootstrap-token?clientTag=${clientTag}`, {
           signal: bootstrapAbort.signal,
@@ -804,12 +802,29 @@ function AppInner() {
             });
           }
         }
-      } catch {
-        // daemon may not support bootstrap (older version, or no auth
-        // configured; also catches AbortError after 10s timeout) —
-        // proceed without a cookie.
+      } catch (err) {
+        console.warn('[od] Bootstrap auth failed, proceeding without cookie:', err);
       } finally {
         clearTimeout(bootstrapTimeout);
+      }
+
+      // Fallback: if bootstrap is denied (reverse-proxy, private-subnet
+      // disabled) the operator can still authenticate by injecting the
+      // token via a <meta name="od-api-token"> tag (reverse-proxy HTML
+      // rewrite) or a ?token= query parameter (single-use escape hatch).
+      // Both set the cookie so subsequent API calls succeed.
+      if (!document.cookie.includes('od-api-token=')) {
+        try {
+          const metaToken =
+            document.querySelector('meta[name="od-api-token"]')?.getAttribute('content');
+          const paramToken = new URL(window.location.href).searchParams.get('token');
+          const token = metaToken || paramToken;
+          if (token) {
+            document.cookie = `od-api-token=${encodeURIComponent(token)}; path=/; SameSite=strict; max-age=86400`;
+          }
+        } catch {
+          // ignore — query-string or meta may not exist
+        }
       }
 
       const agentRequestId = beginAgentStreamRequest();

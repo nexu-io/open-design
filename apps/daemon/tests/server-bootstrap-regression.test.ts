@@ -607,7 +607,7 @@ describe('bootstrap auth bypass regression (reverse-proxy trust)', () => {
 
   it('nonce exchange with X-Forwarded-For on POST also returns 403', async () => {
     const nonceRes = await fetch(`${authBaseUrl}/api/auth/bootstrap-token`);
-    const { nonce } = await nonceRes.json();
+    const { nonce } = await nonceRes.json() as { nonce: string };
 
     const postRes = await fetch(`${authBaseUrl}/api/auth/bootstrap`, {
       method: 'POST',

@@ -3203,6 +3203,7 @@ function isPrivateSubnetAddress(address) {
   if (parts[0] === 10) return true;
   if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
   if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 169 && parts[1] === 254) return true;
   return false;
 }
 
@@ -4503,6 +4504,7 @@ export async function startServer({
   }
 
   const app = express();
+  app.disable('x-powered-by');
   installRouteRegistrationGuard(app);
   app.use(express.json({ limit: '4mb' }));
   app.use((_req, res, next) => {
@@ -4510,8 +4512,17 @@ export async function startServer({
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
+  // Configurable trust proxy — enable explicitly for reverse-proxy deployments.
+  // Without this, req.protocol and req.secure always return 'http'/'false',
+  // which breaks the bootstrap cookie Secure flag and OAuth redirect_uri.
+  // Set OD_TRUST_PROXY=1 (or the number of proxy hops) in the environment.
+  if (process.env.OD_TRUST_PROXY) {
+    app.set('trust proxy', Number(process.env.OD_TRUST_PROXY) || 1);
+  }
+
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — bearer-token middleware.
@@ -4552,6 +4563,7 @@ export async function startServer({
       // exposed beyond localhost and must require the bearer token.
       if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
       if (!verifyBearerOrCookieToken(req, apiToken)) {
+        console.warn('[od] API auth rejected:', req.socket?.remoteAddress, req.method, req.path);
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -5061,18 +5073,35 @@ export async function startServer({
     /** @type {Map<string, { createdAt: number, clientTag: string }>} */
     const bootstrapNonces = new Map();
     const BOOTSTRAP_NONCE_TTL_MS = 60_000;
+    /** @type {Map<string, { count: number, resetAt: number }>} */
+    const bootstrapRateBuckets = new Map();
+    const BOOTSTRAP_RATE_LIMIT_MAX = 20;
+    const BOOTSTRAP_RATE_LIMIT_WINDOW_MS = 60_000;
+
+    function checkBootstrapRateLimit(key) {
+      const now = Date.now();
+      const bucket = bootstrapRateBuckets.get(key);
+      if (!bucket || now > bucket.resetAt) {
+        bootstrapRateBuckets.set(key, { count: 1, resetAt: now + BOOTSTRAP_RATE_LIMIT_WINDOW_MS });
+        return true;
+      }
+      if (bucket.count >= BOOTSTRAP_RATE_LIMIT_MAX) return false;
+      bucket.count++;
+      return true;
+    }
+
     const bootstrapNonceCleanup = setInterval(() => {
       const now = Date.now();
       for (const [nonce, entry] of bootstrapNonces) {
         if (now - entry.createdAt > BOOTSTRAP_NONCE_TTL_MS) bootstrapNonces.delete(nonce);
       }
+      for (const [key, entry] of bootstrapRateBuckets) {
+        if (now > entry.resetAt) bootstrapRateBuckets.delete(key);
+      }
     }, 30_000).unref();
 
     const bootstrapAllowPrivateSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET === '1';
     function isBootstrapAllowed(req) {
-      // When forward headers are present the request came through a
-      // reverse proxy — remoteAddress is the proxy, not the real
-      // client — so remoteAddress-based trust is invalid.
       if (isProxiedRequest(req)) return false;
       const addr = req.socket?.remoteAddress;
       if (isLoopbackPeerAddress(addr)) return true;
@@ -5081,8 +5110,16 @@ export async function startServer({
 
     app.get('/api/auth/bootstrap-token', (req, res) => {
       if (!isBootstrapAllowed(req)) {
+        console.warn('[od] Bootstrap-token rejected: not allowed from', req.socket?.remoteAddress);
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
+        });
+      }
+      const rlKey = req.socket?.remoteAddress || 'unknown';
+      if (!checkBootstrapRateLimit(rlKey)) {
+        console.warn('[od] Bootstrap-token rate limited:', rlKey);
+        return res.status(429).json({
+          error: { code: 'RATE_LIMITED', message: 'Too many bootstrap requests. Try again later.' },
         });
       }
       const nonce = randomUUID();
@@ -5093,13 +5130,22 @@ export async function startServer({
 
     app.post('/api/auth/bootstrap', (req, res) => {
       if (!isBootstrapAllowed(req)) {
+        console.warn('[od] Bootstrap rejected: not allowed from', req.socket?.remoteAddress);
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_NOT_AVAILABLE', message: 'Bootstrap not available from this network' },
+        });
+      }
+      const rlKey = req.socket?.remoteAddress || 'unknown';
+      if (!checkBootstrapRateLimit(rlKey)) {
+        console.warn('[od] Bootstrap rate limited:', rlKey);
+        return res.status(429).json({
+          error: { code: 'RATE_LIMITED', message: 'Too many bootstrap requests. Try again later.' },
         });
       }
       const { nonce, clientTag = '' } = req.body || {};
 
       if (!nonce || !bootstrapNonces.has(nonce)) {
+        console.warn('[od] Bootstrap POST invalid nonce from', req.socket?.remoteAddress);
         return res.status(401).json({
           error: { code: 'BOOTSTRAP_NONCE_REQUIRED', message: 'Valid bootstrap nonce required' },
         });
@@ -5107,6 +5153,7 @@ export async function startServer({
       const entry = bootstrapNonces.get(nonce);
       if (entry.clientTag && entry.clientTag !== clientTag) {
         bootstrapNonces.delete(nonce);
+        console.warn('[od] Bootstrap nonce clientTag mismatch from', req.socket?.remoteAddress);
         return res.status(401).json({
           error: { code: 'BOOTSTRAP_NONCE_BOUND', message: 'Bootstrap nonce bound to a different client request' },
         });
@@ -5118,11 +5165,13 @@ export async function startServer({
         });
       }
       bootstrapNonces.delete(nonce);
+      const cookieSecure = process.env.OD_PUBLIC_BASE_URL?.startsWith('https://') ?? (req.secure || false);
       res.cookie('od-api-token', apiToken, {
         httpOnly: true,
         sameSite: 'strict',
         path: '/',
-        secure: req.secure,
+        secure: cookieSecure,
+        maxAge: 24 * 60 * 60 * 1000,
       });
       res.json({ ok: true });
     });
@@ -6069,6 +6118,7 @@ export async function startServer({
     ? (req, res, next) => {
         if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
         if (!verifyBearerOrCookieToken(req, apiToken)) {
+          console.warn('[od] Static guard auth rejected:', req.socket?.remoteAddress, req.method, req.path);
           return res.status(401).json({
             error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
           });
