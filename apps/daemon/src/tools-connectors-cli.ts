@@ -2239,7 +2239,11 @@ function skillHasAgentFrontmatter(text: string): boolean {
 
 function skillHasReusableSections(text: string): boolean {
   if (text.trim().length < 800) return false;
-  const hasInside = (/\*\*What's inside:\*\*/iu.test(text) || /^##\s+(?:What's inside|Contents)\s*$/imu.test(text))
+  // Accept "What's inside", the skill_missing_reuse_sections warning's own
+  // "What is inside" wording, and "Contents" — the validator must accept the
+  // headings the warning tells authors to write or --fail-on-warnings loops
+  // forever re-spelling them (#4435).
+  const hasInside = (/\*\*What(?:'s| is) inside:\*\*/iu.test(text) || /^##\s+(?:What(?:'s| is) inside|Contents)\s*$/imu.test(text))
     && /\b(tokens?|assets?|fonts?|preview|ui\s*kit|components?)\b/iu.test(text);
   const hasSourceContext = (/\*\*Source context:\*\*/iu.test(text) || /^##\s+(?:Source Context|Source)\s*$/imu.test(text))
     && /\b(source|repository|github|local|based on|evidence)\b/iu.test(text);
@@ -2247,7 +2251,9 @@ function skillHasReusableSections(text: string): boolean {
     && /\b(prototypes?|mockups?|interfaces?|artifacts?|production|design|build(?:ing)?)\b/iu.test(text);
   const hasHowToUse = (/\*\*How to use:\*\*/iu.test(text) || /^##\s+(?:How to use|Usage)\s*$/imu.test(text))
     && /\b(README\.md|DESIGN\.md|colors_and_type\.css|preview\/|assets\/|build\/|fonts\/|ui_kits\/app)\b/iu.test(text);
-  const hasHighlights = (/\*\*Design system highlights:\*\*/iu.test(text) || /^##\s+(?:(?:Design System|Design) )?Highlights\s*$/imu.test(text))
+  // Accept "Design system highlights", the warning's hyphenated "design-system
+  // highlights", and bare "Highlights" so following the warning text passes (#4435).
+  const hasHighlights = (/\*\*Design[ -]system highlights:\*\*/iu.test(text) || /^##\s+(?:(?:Design[ -]System|Design) )?Highlights\s*$/imu.test(text))
     && /\b(colors?|typography|spacing|radius|shadows?|icons?|layout|interaction)\b/iu.test(text);
   return hasInside && hasSourceContext && hasWhenToUse && hasHowToUse && hasHighlights;
 }
