@@ -5529,8 +5529,8 @@ describe('LiveArtifactViewer', () => {
     const css = readExpandedIndexCss();
     const rule = css.match(/\.viewer\s+\.present-exit-btn:focus-visible\s*\{[^}]+\}/)?.[0] ?? '';
 
-    expect(rule).toContain('outline:');
-    expect(rule).toContain('var(--accent)');
+    expect(rule).toContain('outline: 2px solid var(--accent)');
+    expect(rule).toContain('outline-offset: 2px');
   });
 
   it('keeps in-tab presentation overlays anchored to the inherited workspace tab height', () => {
