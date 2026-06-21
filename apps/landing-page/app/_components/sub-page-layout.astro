@@ -38,6 +38,7 @@ import {
 } from '../i18n';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { clampDescription } from '../_lib/clamp-description';
 
 export interface Props {
   title: string;
@@ -74,6 +75,9 @@ const {
   localeCanonicalOnly = false,
   suppressLocaleAutoRedirect = false,
 } = Astro.props;
+// Clamp the meta/OG/Twitter description to a search-friendly length (the full
+// string still flows into JSON-LD untouched).
+const metaDescription = clampDescription(description);
 const locale = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
@@ -124,7 +128,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#efe7d2" />
     <title>{title}</title>
-    <meta name="description" content={description} />
+    <meta name="description" content={metaDescription} />
     {keywords && <meta name="keywords" content={keywords} />}
     <link rel="canonical" href={canonical} />
     {alternateLinks.map((entry) => (
@@ -141,7 +145,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
-    <meta property="og:description" content={description} />
+    <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={og} />
     <meta property="og:locale" content={localeDef.ogLocale} />
@@ -151,7 +155,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
-    <meta name="twitter:description" content={description} />
+    <meta name="twitter:description" content={metaDescription} />
     <meta name="twitter:image" content={og} />
 
     {ldArray.map((data) => (
