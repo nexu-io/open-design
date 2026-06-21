@@ -8,6 +8,7 @@ import {
   findSameTurnHtmlWriteForRecoveredArtifact,
   mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
+import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 import type { ChatMessage } from '../../src/types';
 
 const listConversations = vi.fn();
@@ -224,7 +225,15 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
     })).resolves.toBe(indexFile);
   });
 
-  it('does not treat different same-turn HTML files as duplicates', async () => {
+  // #4308: agent-agnostic recovery is the *normalized exact content match* —
+  // it already binds for any filesystem-backed CLI (not just Claude) when the
+  // written file and the echoed artifact are the same document. We deliberately
+  // do NOT bind on a content *mismatch*: a same-turn HTML file whose content
+  // differs from the echo is a genuinely different document and must persist on
+  // its own. (A blind single-file bind also mis-fired across queued runs, where
+  // a prior run's artifact is still reported as "produced this turn" — the
+  // app-restoration regression that motivated dropping it.)
+  it('does not bind a single same-turn HTML file whose content differs from the echo', async () => {
     const indexFile = {
       name: 'index.html',
       path: 'index.html',
@@ -241,6 +250,36 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
     })).resolves.toBeNull();
   });
 
+  // ...and never bind when several same-turn HTML files all differ from the
+  // echo — binding the wrong one could clobber the user's other in-flight work.
+  it('avoids selection when multiple same-turn HTML files differ from the echo', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'a.html' ? html.replace('Demo', 'AAA') : html.replace('Demo', 'BBB'),
+      ),
+    })).resolves.toBeNull();
+  });
+
+  // When multiple same-turn HTML files exist, bind the one whose normalized
+  // content matches the echo — unambiguous regardless of which agent ran.
+  it('binds the exact normalized match among multiple same-turn HTML files', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'b.html' ? `﻿${html}\r\n` : html.replace('Demo', 'AAA'),
+      ),
+    })).resolves.toBe(b);
+  });
+
   it('ignores non-HTML same-turn files', async () => {
     const readProjectHtml = vi.fn(async () => html);
 
@@ -250,6 +289,41 @@ describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
       readProjectHtml,
     })).resolves.toBeNull();
     expect(readProjectHtml).not.toHaveBeenCalled();
+  });
+});
+
+// #4318: when the model emits a prose-only <artifact> next to a complete
+// same-turn <html> document, the call site must resolve the persisted HTML
+// (recovering the preceding document) BEFORE the dedup lookup. Feeding the raw
+// prose summary makes the normalized exact-match miss the same-turn Write file
+// and the recovered document persists a second time as a duplicate artifact.
+describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
+  const realHtml = '<!doctype html><html><head><title>Recovered</title></head><body><main><h1>Recovered</h1></main></body></html>';
+  const proseSummary = '(The complete document above is the delivered artifact.)';
+  const sourceText = `${realHtml}\n<artifact identifier="page" type="text/html">${proseSummary}</artifact>`;
+  const indexFile = { name: 'index.html', path: 'index.html', kind: 'html', mime: 'text/html' };
+  const readProjectHtml = () =>
+    vi.fn(async (name: string) => (name === 'index.html' ? realHtml : null));
+
+  it('binds the same-turn HTML write once the persisted HTML is resolved', async () => {
+    const persistedHtml = resolvePersistedArtifactHtml({
+      artifactHtml: proseSummary,
+      identifier: 'page',
+      sourceText,
+    });
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: persistedHtml,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBe(indexFile);
+  });
+
+  it('misses the match when fed the raw prose summary (the pre-fix regression)', async () => {
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: proseSummary,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBeNull();
   });
 });
 
