@@ -51,11 +51,11 @@ bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
 front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
-proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
+proxy, set `OD_ALLOWED_ORIGINS` to the exact browser origins that should
 be allowed to call `/api`:
 
 ```bash
-OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
+OD_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
 
 API auth is disabled in the compose file by default (`OD_DISABLE_API_AUTH=1`).
