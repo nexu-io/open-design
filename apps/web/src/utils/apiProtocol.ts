@@ -57,8 +57,16 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
 
 export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
   if (cfg.apiProtocol === 'openai' || cfg.apiProtocol === 'azure') return true;
-  if (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl)) return true;
-  return cfg.apiProtocol === 'anthropic' || !cfg.apiProtocol || usesAnthropicProxy(cfg);
+  if (
+    cfg.apiProtocol === 'google' ||
+    cfg.apiProtocol === 'ollama' ||
+    cfg.apiProtocol === 'senseaudio' ||
+    cfg.apiProtocol === 'aihubmix'
+  ) {
+    return false;
+  }
+  if (cfg.apiProtocol === 'anthropic') return true;
+  return !isOpenAICompatible(cfg.model, cfg.baseUrl) || usesAnthropicProxy(cfg);
 }
 
 export function isAnthropicSupportedImagePath(path: string): boolean {

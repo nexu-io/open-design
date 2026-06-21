@@ -39,6 +39,11 @@ describe('api protocol labels', () => {
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-5.5' })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'google', model: 'gemini-pro' })).toBe(false);
+    expect(supportsNativeImageAttachments({
+      ...baseConfig,
+      baseUrl: 'https://custom-openai-compatible.example/v1',
+      model: 'text-only-model',
+    })).toBe(false);
   });
 
   it('includes explicit local CLI models when labeling agent messages', () => {
