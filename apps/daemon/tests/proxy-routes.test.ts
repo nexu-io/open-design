@@ -289,7 +289,12 @@ describe('API proxy routes', () => {
       });
 
       expect(res.status).toBe(400);
-      await expect(res.text()).resolves.toContain('Deployment provider run-session URL is invalid.');
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider run-session URL is invalid.',
+        },
+      });
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
@@ -299,17 +304,19 @@ describe('API proxy routes', () => {
       name: 'times out',
       failure: () => Promise.reject(new DOMException('timed out', 'TimeoutError')),
       status: 504,
+      code: 'UPSTREAM_UNAVAILABLE',
       message: 'Deployment provider run session endpoint timed out.',
     },
     {
       name: 'is unreachable',
       failure: () => Promise.reject(new TypeError('fetch failed')),
       status: 502,
+      code: 'UPSTREAM_UNAVAILABLE',
       message: 'Deployment provider run session endpoint was unreachable.',
     },
   ])(
     'fails closed when the deployment provider run-session endpoint $name before provider egress',
-    async ({ failure, status, message }) => {
+    async ({ failure, status, code, message }) => {
       await withDeploymentProviderEnv({
         OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
         OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
@@ -345,11 +352,136 @@ describe('API proxy routes', () => {
         });
 
         expect(res.status).toBe(status);
-        await expect(res.text()).resolves.toContain(message);
+        await expect(res.json()).resolves.toMatchObject({
+          error: { code, message },
+        });
         expect(seen).toEqual(['https://authority.example.test/api/runs']);
       });
     },
   );
+
+  it.each([
+    {
+      name: 'authenticates unsuccessfully',
+      upstreamStatus: 401,
+      expectedStatus: 401,
+      expectedCode: 'UNAUTHORIZED',
+    },
+    {
+      name: 'is forbidden',
+      upstreamStatus: 403,
+      expectedStatus: 403,
+      expectedCode: 'FORBIDDEN',
+    },
+    {
+      name: 'rejects the request',
+      upstreamStatus: 422,
+      expectedStatus: 422,
+      expectedCode: 'UPSTREAM_UNAVAILABLE',
+    },
+    {
+      name: 'rate limits the request',
+      upstreamStatus: 429,
+      expectedStatus: 429,
+      expectedCode: 'RATE_LIMITED',
+    },
+    {
+      name: 'is unavailable',
+      upstreamStatus: 503,
+      expectedStatus: 503,
+      expectedCode: 'UPSTREAM_UNAVAILABLE',
+    },
+  ])(
+    'maps deployment provider run-session non-2xx responses when the endpoint $name',
+    async ({ upstreamStatus, expectedStatus, expectedCode }) => {
+      await withDeploymentProviderEnv({
+        OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+        OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+        OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+        OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+      }, async () => {
+        const seen: string[] = [];
+        const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+          const url = String(input);
+          if (url.startsWith(baseUrl)) return realFetch(input, init);
+          seen.push(url);
+          if (url === 'https://authority.example.test/api/runs') {
+            expect(init?.headers).toMatchObject({
+              Authorization: 'Bearer deployment-secret',
+            });
+            return Promise.resolve(Response.json({ error: 'session rejected' }, { status: upstreamStatus }));
+          }
+          throw new Error(`unexpected provider egress to ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            projectId: 'project_1',
+            providerRunId: 'conversation_1',
+            providerOperationId: 'message_1',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(expectedStatus);
+        await expect(res.json()).resolves.toMatchObject({
+          error: {
+            code: expectedCode,
+            message: `Deployment provider run session failed: ${upstreamStatus}`,
+          },
+        });
+        expect(seen).toEqual(['https://authority.example.test/api/runs']);
+      });
+    },
+  );
+
+  it('maps malformed deployment provider run-session success responses to upstream unavailable', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const seen: string[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          return Promise.resolve(Response.json({ schema: 'deployment-provider.run-session.v1' }));
+        }
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(502);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'Deployment provider run session response did not include run_session_id.',
+        },
+      });
+      expect(seen).toEqual(['https://authority.example.test/api/runs']);
+    });
+  });
 
   it('redacts deployment provider credentials from OpenAI-compatible upstream errors', async () => {
     await withDeploymentProviderEnv({

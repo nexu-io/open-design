@@ -166,10 +166,17 @@ async function deploymentProviderRunMetadata(
       signal,
     });
     if (!response.ok) {
+      const code = response.status === 401
+        ? 'UNAUTHORIZED'
+        : response.status === 403
+          ? 'FORBIDDEN'
+          : response.status === 429
+            ? 'RATE_LIMITED'
+            : 'UPSTREAM_UNAVAILABLE';
       return {
         ok: false,
         status: response.status,
-        code: response.status === 401 || response.status === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
+        code,
         message: `Deployment provider run session failed: ${response.status}`,
       };
     }
@@ -186,7 +193,7 @@ async function deploymentProviderRunMetadata(
       return {
         ok: false,
         status: 502,
-        code: 'BAD_GATEWAY',
+        code: 'UPSTREAM_UNAVAILABLE',
         message: 'Deployment provider run session response did not include run_session_id.',
       };
     }
@@ -219,7 +226,7 @@ async function deploymentProviderRunMetadata(
     return {
       ok: false,
       status: 502,
-      code: 'BAD_GATEWAY',
+      code: 'UPSTREAM_UNAVAILABLE',
       message: 'Deployment provider run session endpoint was unreachable.',
     };
   } finally {
