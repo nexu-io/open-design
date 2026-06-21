@@ -40,6 +40,11 @@ describe('api protocol labels', () => {
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'chat-gpt-latest' })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'azure', model: 'design-chat-prod' })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'openai', model: 'gpt-3.5-turbo' })).toBe(false);
+    expect(supportsNativeImageAttachments({
+      ...baseConfig,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+    })).toBe(true);
     expect(supportsNativeImageAttachments({ ...baseConfig, apiProtocol: 'google', model: 'gemini-pro' })).toBe(false);
     expect(supportsNativeImageAttachments({
       ...baseConfig,

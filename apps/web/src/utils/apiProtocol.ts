@@ -69,7 +69,10 @@ export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
     return false;
   }
   if (cfg.apiProtocol === 'anthropic') return true;
-  return !isOpenAICompatible(cfg.model, cfg.baseUrl) || usesAnthropicProxy(cfg);
+  if (isOpenAICompatible(cfg.model, cfg.baseUrl)) {
+    return isKnownNativeImageModel(cfg.model);
+  }
+  return true;
 }
 
 function isKnownNativeImageModel(model: string): boolean {
