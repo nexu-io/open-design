@@ -44,6 +44,10 @@ interface CatalogueEntry {
   // to also install their CLI shim.
   macOpenBundle?: string | readonly string[];
   macOpenArgs?: (bundleName: string, resolvedDir: string) => string[];
+  // Windows-only fallback: absolute exe paths (may contain %VAR% tokens)
+  // probed in order when the CLI shim is not on $PATH. Lets us detect
+  // apps like Warp that have no `warp` CLI shim on Windows.
+  winInstallPaths?: string[];
   platforms?: RealPlatform[];
   excludedPlatforms?: RealPlatform[];
 }
@@ -67,7 +71,8 @@ const CATALOGUE: ReadonlyArray<CatalogueEntry> = [
   { id: 'explorer', label: 'Explorer', icon: 'folder', command: 'explorer', platforms: ['win32'] },
   { id: 'file-manager', label: 'File Manager', icon: 'folder', command: 'xdg-open', platforms: ['linux'] },
   { id: 'terminal', label: 'Terminal', icon: 'sliders', macOpenBundle: 'Terminal', platforms: ['darwin'] },
-  { id: 'warp', label: 'Warp', icon: 'sliders', macOpenBundle: 'Warp' },
+  { id: 'warp', label: 'Warp', icon: 'sliders', macOpenBundle: 'Warp',
+    winInstallPaths: ['%LOCALAPPDATA%\\Programs\\Warp\\warp.exe', '%PROGRAMFILES%\\Warp\\warp.exe'] },
 ];
 
 function currentPlatform(): Platform {
@@ -124,6 +129,41 @@ async function probeCommandOnPath(command: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Expand %VAR% tokens in a Windows-style path template using process.env,
+ * then return the resolved path if it exists and is accessible, else null.
+ *
+ * OS-agnostic: does not branch on process.platform. If a referenced %VAR%
+ * is unset or empty, that candidate is skipped (falls through to the next).
+ * Both \ and / separators are accepted.
+ */
+export async function resolveFirstExistingExecutable(candidatePaths: string[]): Promise<string | null> {
+  for (const candidate of candidatePaths) {
+    // Expand all %VAR% tokens from process.env.
+    let expanded = candidate;
+    let skipCandidate = false;
+    expanded = candidate.replace(/%([^%]+)%/g, (_match, varName: string) => {
+      const value = process.env[varName];
+      if (!value) {
+        skipCandidate = true;
+        return '';
+      }
+      return value;
+    });
+    if (skipCandidate) continue;
+
+    // Normalize separators (\ → /) for consistency; Node fs handles both on Windows.
+    const normalized = expanded.replace(/\\/g, '/');
+    try {
+      await access(normalized, fsConstants.X_OK);
+      return normalized;
+    } catch {
+      // not accessible — try next candidate
+    }
+  }
+  return null;
+}
+
 async function resolveMacOpenCommand(): Promise<string> {
   try {
     await access(MAC_OPEN_COMMAND, fsConstants.X_OK);
@@ -160,7 +200,7 @@ async function probeMacBundle(name: string | readonly string[]): Promise<{ name:
 async function resolveEntry(entry: CatalogueEntry): Promise<{
   available: boolean;
   resolvedPath?: string;
-  launch?: { command: string; argsForDir: (resolvedDir: string) => string[] };
+  launch?: { command: string; argsForDir: (resolvedDir: string) => string[]; cwdForDir?: (resolvedDir: string) => string; shell?: boolean };
 }> {
   if (entry.command) {
     const resolved = await probeCommandOnPath(entry.command);
@@ -169,6 +209,25 @@ async function resolveEntry(entry: CatalogueEntry): Promise<{
         available: true,
         resolvedPath: resolved,
         launch: { command: resolved, argsForDir: entry.commandArgs ?? ((resolvedDir) => [resolvedDir]) },
+      };
+    }
+  }
+  if (entry.winInstallPaths && process.platform === 'win32') {
+    const resolved = await resolveFirstExistingExecutable(entry.winInstallPaths);
+    if (resolved) {
+      return {
+        available: true,
+        resolvedPath: resolved,
+        launch: {
+          command: resolved,
+          // Warp has no open-directory CLI argument (warpdotdev/warp#6357); pass no args.
+          argsForDir: () => [],
+          // Best-effort: set cwd so Warp opens in the project directory.
+          cwdForDir: (resolvedDir) => resolvedDir,
+          // shell:false so Node uses CreateProcess directly — cmd.exe mis-parses
+          // forward-slash exe paths (fix #4539).
+          shell: false,
+        },
       };
     }
   }
@@ -195,6 +254,10 @@ export interface HostToolLaunchPlan {
   resolvedPath?: string;
   command?: string;
   args?: string[];
+  /** Working directory for spawn; set when the tool has no dir CLI arg (e.g. Warp on Windows). */
+  cwd?: string;
+  /** When false, bypass cmd.exe and use CreateProcess directly (win32 install-path entries). Unset for PATH/shim entries. */
+  shell?: boolean;
 }
 
 export async function resolveHostToolLaunchPlan(
@@ -210,11 +273,14 @@ export async function resolveHostToolLaunchPlan(
       ...(probe.resolvedPath ? { resolvedPath: probe.resolvedPath } : {}),
     };
   }
+  const cwd = probe.launch.cwdForDir?.(resolvedDir);
   return {
     available: true,
     ...(probe.resolvedPath ? { resolvedPath: probe.resolvedPath } : {}),
     command: probe.launch.command,
     args: probe.launch.argsForDir(resolvedDir),
+    ...(cwd ? { cwd } : {}),
+    ...(probe.launch.shell !== undefined ? { shell: probe.launch.shell } : {}),
   };
 }
 
@@ -313,7 +379,8 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       const child = spawn(launchPlan.command, launchPlan.args, {
         detached: true,
         stdio: 'ignore',
-        shell: process.platform === 'win32',
+        shell: launchPlan.shell ?? (process.platform === 'win32'),
+        ...(launchPlan.cwd ? { cwd: launchPlan.cwd } : {}),
       });
       child.on('error', () => {
         // Swallow — best-effort; the client will see ok:true but the OS
