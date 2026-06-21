@@ -3206,6 +3206,10 @@ function isPrivateSubnetAddress(address) {
   return false;
 }
 
+function isProxiedRequest(req) {
+  return !!(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.headers['forwarded']);
+}
+
 function verifyBearerOrCookieToken(req, apiToken) {
   const auth = req.get('authorization') ?? '';
   const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
@@ -4541,11 +4545,12 @@ export async function startServer({
           return next();
         }
       }
-      // Loopback short-circuit. We ignore the proxied X-Forwarded-For
-      // header here because a reverse proxy MUST always forward the
-      // bearer; the loopback bypass exists for the localhost desktop
-      // UI which has no proxy in the path.
-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+      // Loopback short-circuit — the localhost desktop UI has no
+      // proxy in the path so remoteAddress is the real client.  When
+      // forward headers (X-Forwarded-For etc.) are present the request
+      // came through a reverse proxy, in which case the daemon is
+      // exposed beyond localhost and must require the bearer token.
+      if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
       if (!verifyBearerOrCookieToken(req, apiToken)) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
@@ -5064,14 +5069,18 @@ export async function startServer({
     }, 30_000).unref();
 
     const bootstrapAllowPrivateSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET === '1';
-    function isBootstrapAllowed(addr) {
+    function isBootstrapAllowed(req) {
+      // When forward headers are present the request came through a
+      // reverse proxy — remoteAddress is the proxy, not the real
+      // client — so remoteAddress-based trust is invalid.
+      if (isProxiedRequest(req)) return false;
+      const addr = req.socket?.remoteAddress;
       if (isLoopbackPeerAddress(addr)) return true;
       return bootstrapAllowPrivateSubnet && isPrivateSubnetAddress(addr);
     }
 
     app.get('/api/auth/bootstrap-token', (req, res) => {
-      const addr = req.socket?.remoteAddress;
-      if (!isBootstrapAllowed(addr)) {
+      if (!isBootstrapAllowed(req)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
         });
@@ -5083,8 +5092,7 @@ export async function startServer({
     });
 
     app.post('/api/auth/bootstrap', (req, res) => {
-      const addr = req.socket?.remoteAddress;
-      if (!isBootstrapAllowed(addr)) {
+      if (!isBootstrapAllowed(req)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_NOT_AVAILABLE', message: 'Bootstrap not available from this network' },
         });
@@ -6059,7 +6067,7 @@ export async function startServer({
   });
   const apiTokenStaticGuard = isApiTokenMiddlewareEnabled()
     ? (req, res, next) => {
-        if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+        if (!isProxiedRequest(req) && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
         if (!verifyBearerOrCookieToken(req, apiToken)) {
           return res.status(401).json({
             error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
