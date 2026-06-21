@@ -113,6 +113,10 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: string(appPort)
             }
             {
+              name: 'OD_WEB_PORT'
+              value: string(appPort)
+            }
+            {
               name: 'OD_DATA_DIR'
               value: '/app/.od'
             }

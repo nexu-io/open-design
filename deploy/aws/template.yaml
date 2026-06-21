@@ -452,6 +452,8 @@ Resources:
               Value: "127.0.0.1"
             - Name: OD_PORT
               Value: "7456"
+            - Name: OD_WEB_PORT
+              Value: "7456"
           Secrets:
             - Name: PROXY_API_TOKEN
               ValueFrom: !Ref ApiTokenSecret
@@ -465,7 +467,7 @@ Resources:
                   listen ${PROXY_PORT};
 
                   location / {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_PORT};
+                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -474,7 +476,7 @@ Resources:
                   }
 
                   location /api/ {
-                      proxy_pass http://${OD_BIND_HOST}:${OD_PORT};
+                      proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
                       proxy_set_header Host $host;
                       proxy_set_header X-Real-IP $remote_addr;
                       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -491,7 +493,7 @@ Resources:
                   }
               }
               EOF
-              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
+              envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /tmp/default.conf.template > /etc/nginx/conf.d/default.conf
               exec nginx -g "daemon off;"
           LogConfiguration:
             LogDriver: awslogs
