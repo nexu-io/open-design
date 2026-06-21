@@ -101,6 +101,19 @@ export type DaemonAgentPayload =
   | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
   | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }
+  // The agent is stuck repeating failing tool calls (see tool-loop-guard.ts).
+  // `action: 'warn'` is an early heads-up the run may be looping; `'halt'` means
+  // the daemon terminated the run at the hard ceiling. `signature` is a
+  // truncated, human-readable form of the repeated action; `count` is how many
+  // times it failed (consecutive run, or repeats of this exact action).
+  | {
+      type: 'tool_loop';
+      reason: 'consecutive-errors' | 'repeated-failure';
+      action: 'warn' | 'halt';
+      toolName: string;
+      signature: string;
+      count: number;
+    }
   | { type: 'raw'; line: string };
 
 export type ChatSseEvent =

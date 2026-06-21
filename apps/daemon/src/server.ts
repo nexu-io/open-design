@@ -216,6 +216,7 @@ import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
+import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
@@ -2581,7 +2582,7 @@ function runSseEventToPersistedAgentEvent(event, data) {
   return daemonAgentPayloadToPersistedAgentEvent(data);
 }
 
-function daemonAgentPayloadToPersistedAgentEvent(data) {
+export function daemonAgentPayloadToPersistedAgentEvent(data) {
   const type = data?.type;
   if (type === 'status' && typeof data.label === 'string') {
     const detail =
@@ -2659,6 +2660,20 @@ function daemonAgentPayloadToPersistedAgentEvent(data) {
       label: 'warning',
       detail: `Model emitted fabricated role marker ("${data.marker}"). Response was truncated at this point to prevent unauthorized instruction injection. See issue #3247.`,
     };
+  }
+  // Persist tool-loop warnings/halts so the signal survives a reload or history
+  // replay. Without this the event is transient-only, and in
+  // OD_TOOL_LOOP_GUARD=warn (no terminal TOOL_LOOP_DETECTED error) the user
+  // would lose the only record that a loop was detected. Mirrors the live
+  // mapping in apps/web/src/providers/daemon.ts so replayed and live views match.
+  if (type === 'tool_loop' && typeof data.toolName === 'string') {
+    const toolName = data.toolName;
+    const count = typeof data.count === 'number' ? data.count : 0;
+    const detail =
+      data.action === 'halt'
+        ? `Run stopped: the agent repeated a failing ${toolName} call ${count}× without progress. Re-check the actual target before retrying.`
+        : `Heads up — the agent has repeated a failing ${toolName} call ${count}× and may be stuck.`;
+    return { kind: 'status', label: 'warning', detail };
   }
   if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
   return null;
@@ -9355,6 +9370,85 @@ export async function startServer({
       scheduleForcedChildShutdown();
     }
 
+    // Per-run tool-loop guard. Agents sometimes fixate on a failing tool call
+    // and grind through dozens of identical attempts (e.g. re-running an Edit
+    // whose `old_string` never matches, or a shell assertion against an element
+    // that does not exist). Unlike the BYOK proxy path — bounded by
+    // MAX_BYOK_TOOL_LOOPS — the autonomous chat agents had no such bound. This
+    // guard observes the normalized tool_use/tool_result events EVERY agent
+    // path emits, so one instance covers Claude, Codex/OpenCode, Copilot, ACP,
+    // … It emits a one-shot `tool_loop` warning, then (in halt mode) terminates
+    // the run at a hard ceiling. Mode via OD_TOOL_LOOP_GUARD (halt|warn|off).
+    const toolLoopGuard = createToolLoopGuard({ mode: resolveToolLoopMode() });
+    let toolLoopAbortFired = false;
+
+    // Idempotent — both agent-event paths (sendAgentEvent, the Claude
+    // stream-json callback) can route a halt verdict here.
+    function abortForToolLoop(verdict: ToolLoopVerdict) {
+      if (toolLoopAbortFired) return;
+      toolLoopAbortFired = true;
+      send(
+        'error',
+        createSseErrorPayload(
+          'TOOL_LOOP_DETECTED',
+          `Run terminated: the agent repeated a failing ${verdict.toolName} call ` +
+            `${verdict.count}× without progress (\`${verdict.signature}\`). Re-check the ` +
+            'actual target — the file, the element, the command — before retrying ' +
+            'instead of resubmitting the same turn.',
+          { retryable: true },
+        ),
+      );
+      if (acpSession?.abort) {
+        try {
+          acpSession.abort();
+        } catch {
+          // ignore — best-effort
+        }
+      }
+      // Route through signalChild (not a bare child.kill) so the halt escalates
+      // to the whole process group when one exists, matching abortForRoleMarker,
+      // cancel, and the inactivity watchdog. A bare child.kill leaves Bash/build
+      // grandchildren alive to keep mutating the workspace until the forced
+      // shutdown fires — exactly the loop class this guard is meant to stop.
+      if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+      scheduleForcedChildShutdown();
+    }
+
+    // Feed a normalized agent event into the loop guard and act on a verdict.
+    // Safe to call for every event; non-tool events are ignored. Emit the
+    // `tool_loop` warning to the UI/CLI, and on a halt verdict tear the run
+    // down so it cannot keep grinding.
+    function observeToolEventForLoop(ev: any) {
+      if (!ev || typeof ev !== 'object') return;
+      if (ev.type === 'tool_use' && typeof ev.id === 'string') {
+        toolLoopGuard.observeToolUse(ev.id, typeof ev.name === 'string' ? ev.name : 'tool', ev.input);
+        return;
+      }
+      if (ev.type === 'tool_result' && typeof ev.toolUseId === 'string') {
+        const verdict = toolLoopGuard.observeToolResult(
+          ev.toolUseId,
+          Boolean(ev.isError),
+          typeof ev.content === 'string' ? ev.content : '',
+        );
+        if (verdict) {
+          send('agent', verdict);
+          if (verdict.action === 'halt') abortForToolLoop(verdict);
+        }
+      }
+    }
+
+    // Single choke point for emitting an agent event to the client. EVERY
+    // stream handler (sendAgentEvent, the Claude callback, Copilot, ACP, …)
+    // emits through here, never via a bare send('agent', …), so the tool-loop
+    // guard sees every runtime's tool activity and no handler can drift out of
+    // coverage. observe runs AFTER the send so a `tool_loop` warning/halt
+    // follows the result that triggered it in the stream. (PR #3375 review:
+    // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
+    function emitAgentEvent(ev: any) {
+      send('agent', ev);
+      observeToolEventForLoop(ev);
+    }
+
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -9412,7 +9506,12 @@ export async function startServer({
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
-      send('agent', ev);
+      // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
+      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        emitGuardedTextDelta(ev.delta);
+        return;
+      }
+      emitAgentEvent(ev);
     };
     const parseBufferedAntigravityGeminiJsonEventStream = () => {
       if (
@@ -9486,7 +9585,7 @@ export async function startServer({
           return;
         }
         noteFirstTokenFromAgentEvent(ev);
-        send('agent', ev);
+        emitAgentEvent(ev);
         // Claude uses per-message guards (claude-stream.ts) rather than the
         // run-scoped guard above, so its `fabricated_role_marker` events
         // surface here directly from the stream handler, not via
@@ -9526,7 +9625,7 @@ export async function startServer({
           return;
         }
         noteFirstTokenFromAgentEvent(ev);
-        send('agent', ev);
+        emitAgentEvent(ev);
       });
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
@@ -9621,8 +9720,12 @@ export async function startServer({
             }
             return;
           }
-          if (event === 'agent') noteFirstTokenFromAgentEvent(data);
-          send(event, data);
+          if (event === 'agent') {
+            noteFirstTokenFromAgentEvent(data);
+            emitAgentEvent(data);
+          } else {
+            send(event, data);
+          }
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
