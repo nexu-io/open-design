@@ -38,11 +38,12 @@ services:
       # change the port binding to 0.0.0.0 (LAN/VPN), every browser on
       # that network can mint a session cookie without knowing OD_API_TOKEN.
       # Set this to 0 via .env when publishing on a private subnet.
-      # 0 = only localhost can bootstrap (secure).  Set to 1 only when
-      # running behind a same-host reverse proxy (nginx sidecar, etc.)
-      # where the daemon sees RFC1918 remote addresses but all other
-      # network paths are controlled.
-      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=${OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET:-0}
+      # 1 = allow RFC1918 remote addresses to use the bootstrap flow.
+      # Safe because the published port is bound to 127.0.0.1 (Docker host
+      # only).  If you change the port binding to 0.0.0.0, set this to 0
+      # so every browser on the network cannot mint a session cookie
+      # without knowing OD_API_TOKEN.
+      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=1
       - OD_TRUST_PROXY=${OD_TRUST_PROXY:-}
       - OD_PUBLIC_BASE_URL=${OD_PUBLIC_BASE_URL:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}

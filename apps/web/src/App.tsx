@@ -808,25 +808,6 @@ function AppInner() {
         clearTimeout(bootstrapTimeout);
       }
 
-      // Fallback: if bootstrap is denied (reverse-proxy, private-subnet
-      // disabled) the operator can still authenticate by injecting the
-      // token via a <meta name="od-api-token"> tag (reverse-proxy HTML
-      // rewrite) or a ?token= query parameter (single-use escape hatch).
-      // Both set the cookie so subsequent API calls succeed.
-      if (!document.cookie.includes('od-api-token=')) {
-        try {
-          const metaToken =
-            document.querySelector('meta[name="od-api-token"]')?.getAttribute('content');
-          const paramToken = new URL(window.location.href).searchParams.get('token');
-          const token = metaToken || paramToken;
-          if (token) {
-            document.cookie = `od-api-token=${encodeURIComponent(token)}; path=/; SameSite=strict; max-age=86400`;
-          }
-        } catch {
-          // ignore — query-string or meta may not exist
-        }
-      }
-
       const agentRequestId = beginAgentStreamRequest();
       void fetchAgentsStream({
         signal: agentStreamAbort.signal,
