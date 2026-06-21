@@ -17,6 +17,10 @@ const DEPLOYMENT_PROVIDER_ENV_KEYS = [
   'OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD',
   'OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD',
   'OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
 ] as const;
 
 async function withDeploymentProviderEnv<T>(
@@ -192,6 +196,10 @@ describe('API proxy routes', () => {
       OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
       OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD: '0.10',
       OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS: '600',
+      HTTPS_PROXY: 'http://proxy.example.test:8080',
+      HTTP_PROXY: undefined,
+      ALL_PROXY: undefined,
+      NO_PROXY: undefined,
     }, async () => {
       const seen: string[] = [];
       const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
@@ -199,6 +207,8 @@ describe('API proxy routes', () => {
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         seen.push(url);
         if (url === 'https://authority.example.test/api/runs') {
+          expect(init?.dispatcher).toBeDefined();
+          expect(init?.signal).toBeInstanceOf(AbortSignal);
           expect(init?.headers).toMatchObject({
             Authorization: 'Bearer deployment-secret',
           });
@@ -310,6 +320,67 @@ describe('API proxy routes', () => {
       });
 
       expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('[REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
+  });
+
+  it('redacts deployment provider credentials from OpenAI finalize upstream errors', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const projectId = `finalize-redaction-${Date.now()}`;
+      await realFetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Finalize redaction' }),
+      });
+      await realFetch(`${baseUrl}/api/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'index.html',
+          content: '<main><h1>Draft</h1></main>',
+          artifact: true,
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Draft',
+            entry: 'index.html',
+            renderer: 'html',
+            exports: ['html'],
+            updatedAt: '2026-06-21T00:00:00.000Z',
+          },
+        }),
+      });
+
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer deployment-secret',
+        });
+        return Promise.resolve(new Response(
+          JSON.stringify({ error: { message: 'bad key deployment-secret' } }),
+          { status: 401, headers: { 'content-type': 'application/json' } },
+        ));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/projects/${projectId}/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(401);
       const text = await res.text();
       expect(text).toContain('[REDACTED]');
       expect(text).not.toContain('deployment-secret');

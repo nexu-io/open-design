@@ -81,6 +81,8 @@ type DeploymentProviderRunMetadataResult =
   | { ok: true; metadata?: Record<string, unknown> }
   | { ok: false; status: number; code: string; message: string };
 
+const DEPLOYMENT_PROVIDER_RUN_SESSION_TIMEOUT_MS = 10_000;
+
 function cleanProviderRunString(value: unknown, fallback: string): string {
   const raw = typeof value === 'string' ? value.trim() : '';
   const candidate = raw || fallback;
@@ -110,6 +112,7 @@ function validateProviderRunSessionUrl(value: string): string | null {
 async function deploymentProviderRunMetadata(
   profile: DeploymentProviderProfile,
   body: Record<string, unknown>,
+  requestSignal?: AbortSignal,
 ): Promise<DeploymentProviderRunMetadataResult> {
   if (!profile.runSessionUrl) return { ok: true };
   if (profile.runCostCapUsd === undefined) {
@@ -145,9 +148,14 @@ async function deploymentProviderRunMetadata(
     requestBody.ttl_seconds = Math.trunc(profile.runTtlSeconds);
   }
 
-  let response: Response;
+  const timeoutSignal = AbortSignal.timeout(DEPLOYMENT_PROVIDER_RUN_SESSION_TIMEOUT_MS);
+  const signal = requestSignal
+    ? AbortSignal.any([requestSignal, timeoutSignal])
+    : timeoutSignal;
+  const proxyDispatcher = proxyDispatcherRequestInit();
   try {
-    response = await fetch(profile.runSessionUrl, {
+    const response = await fetch(profile.runSessionUrl, {
+      ...proxyDispatcher.requestInit,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -155,51 +163,68 @@ async function deploymentProviderRunMetadata(
       },
       body: JSON.stringify(requestBody),
       redirect: 'error',
+      signal,
     });
-  } catch {
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        code: response.status === 401 || response.status === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
+        message: `Deployment provider run session failed: ${response.status}`,
+      };
+    }
+    const session = await response.json().catch((): unknown => null);
+    const runSessionId = (
+      session &&
+      typeof session === 'object' &&
+      !Array.isArray(session) &&
+      typeof (session as { run_session_id?: unknown }).run_session_id === 'string'
+    )
+      ? (session as { run_session_id: string }).run_session_id.trim()
+      : '';
+    if (!runSessionId) {
+      return {
+        ok: false,
+        status: 502,
+        code: 'BAD_GATEWAY',
+        message: 'Deployment provider run session response did not include run_session_id.',
+      };
+    }
+
+    return {
+      ok: true,
+      metadata: {
+        ...existingMetadata(body.metadata),
+        opendesign_run_session_id: runSessionId,
+        opendesign_cost_cap_usd: profile.runCostCapUsd,
+        opendesign_idempotency_key: operationId,
+        opendesign_operation_nonce: `nonce-${randomUUID()}`,
+      },
+    };
+  } catch (err) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'name' in err &&
+      ((err as { name?: unknown }).name === 'AbortError' ||
+        (err as { name?: unknown }).name === 'TimeoutError')
+    ) {
+      return {
+        ok: false,
+        status: 504,
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'Deployment provider run session endpoint timed out.',
+      };
+    }
     return {
       ok: false,
       status: 502,
       code: 'BAD_GATEWAY',
       message: 'Deployment provider run session endpoint was unreachable.',
     };
+  } finally {
+    await proxyDispatcher.close();
   }
-  if (!response.ok) {
-    return {
-      ok: false,
-      status: response.status,
-      code: response.status === 401 || response.status === 403 ? 'FORBIDDEN' : 'BAD_REQUEST',
-      message: `Deployment provider run session failed: ${response.status}`,
-    };
-  }
-  const session = await response.json().catch((): unknown => null);
-  const runSessionId = (
-    session &&
-    typeof session === 'object' &&
-    !Array.isArray(session) &&
-    typeof (session as { run_session_id?: unknown }).run_session_id === 'string'
-  )
-    ? (session as { run_session_id: string }).run_session_id.trim()
-    : '';
-  if (!runSessionId) {
-    return {
-      ok: false,
-      status: 502,
-      code: 'BAD_GATEWAY',
-      message: 'Deployment provider run session response did not include run_session_id.',
-    };
-  }
-
-  return {
-    ok: true,
-    metadata: {
-      ...existingMetadata(body.metadata),
-      opendesign_run_session_id: runSessionId,
-      opendesign_cost_cap_usd: profile.runCostCapUsd,
-      opendesign_idempotency_key: operationId,
-      opendesign_operation_nonce: `nonce-${randomUUID()}`,
-    },
-  };
 }
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
@@ -1183,10 +1208,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       effectiveBaseUrl = resolved.profile.baseUrl;
       effectiveApiKey = resolved.profile.apiKey;
       allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
-      const metadata = await deploymentProviderRunMetadata(
-        resolved.profile,
-        proxyBody as Record<string, unknown>,
-      );
+      const runSessionAbort = new AbortController();
+      const abortRunSession = (): void => {
+        if (!runSessionAbort.signal.aborted) runSessionAbort.abort();
+      };
+      res.on('close', abortRunSession);
+      let metadata: DeploymentProviderRunMetadataResult;
+      try {
+        metadata = await deploymentProviderRunMetadata(
+          resolved.profile,
+          proxyBody as Record<string, unknown>,
+          runSessionAbort.signal,
+        );
+      } finally {
+        res.off('close', abortRunSession);
+      }
       if (!metadata.ok) {
         return sendApiError(res, metadata.status, metadata.code, metadata.message);
       }

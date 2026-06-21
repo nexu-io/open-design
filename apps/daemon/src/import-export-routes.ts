@@ -977,6 +977,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       reasoningExecution,
       credentialSource: rawCredentialSource,
     } = req.body || {};
+    let secretsToRedact = [typeof apiKey === 'string' ? apiKey : ''];
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -1023,6 +1024,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         effectiveBaseUrl = resolved.profile.baseUrl;
         allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
       }
+      secretsToRedact = [effectiveApiKey];
 
       if (!effectiveApiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
@@ -1108,7 +1110,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
       // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
-        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const safeDetails = redactSecrets(err.rawText || '', secretsToRedact);
         const init = safeDetails ? { details: safeDetails } : {};
         if (err.status === 401) {
           return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
@@ -1134,7 +1136,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // generic 500 with the shared INTERNAL_ERROR code. Run the message
       // through redactSecrets defensively.
       console.error('[finalize]', err);
-      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      const safeMsg = redactSecrets(String(err?.message || err), secretsToRedact);
       return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
     }
   });
