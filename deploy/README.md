@@ -6,29 +6,31 @@ separate nginx container.
 
 ## Local compose
 
-Before starting:
+Before starting (optional):
 
-1. Copy the environment template:
+```bash
+cp .env.example .env
+```
 
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Generate a secure token (recommended unless your reverse proxy will both authenticate every request and set `OPEN_DESIGN_DISABLE_API_AUTH=1`):
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-3. Open `.env` in your editor and choose one auth mode:
-   - default: paste the token into `OD_API_TOKEN=`
-   - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+> The compose file ships with API auth **disabled by default** because the host port
+> is bound to `127.0.0.1` (local machine only). To enable token-based auth for a
+> remote or LAN deployment, open `docker-compose.yml`, remove the line
+> `OD_DISABLE_API_AUTH=1`, generate a token (`openssl rand -hex 32`), and paste
+> it into `OD_API_TOKEN=` in your `.env`.
 
 Then pull and start the service:
 
 ```bash
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose pull
-OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
+docker compose pull
+docker compose up -d
+```
+
+> **Note for Windows / macOS users:** Docker Desktop may not forward environment variables correctly when using the YAML mapping format (`KEY: value`) in the `environment` block. This compose file uses the list format (`- KEY=value`) which works reliably across all platforms. If the daemon doesn't start, run `docker compose logs open-design` to check for errors.
+
+Use a specific image tag to pin a release:
+
+```bash
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:0.18.0 docker compose up -d --no-build
 ```
 
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
@@ -56,17 +58,13 @@ be allowed to call `/api`:
 OPEN_DESIGN_ALLOWED_ORIGINS=https://od.example.com,http://203.0.113.10:7456 docker compose up -d --no-build
 ```
 
-If the reverse proxy already authenticates every request and you do not want it
-to inject `Authorization: Bearer <OD_API_TOKEN>` upstream, set:
+API auth is disabled in the compose file by default (`OD_DISABLE_API_AUTH=1`).
+The daemon-side token enforcement is off, so direct access to the daemon must
+remain blocked. This is safe because the compose file binds the host port to
+`127.0.0.1` only — only the Docker host machine can reach the daemon.
 
-```bash
-OPEN_DESIGN_DISABLE_API_AUTH=1
-```
-
-Use this only for trusted deployments where the daemon is reachable strictly
-through that authenticated proxy. It disables daemon-side bearer enforcement for
-all `/api/*` requests, so direct access to the daemon must remain blocked. The
-Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
+To enable token-based auth for a remote or LAN deployment, see the note at the
+top of this section.
 
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 

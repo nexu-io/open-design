@@ -8,16 +8,22 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: always
+    # NOTE: list format avoids YAML mapping interpretation issues on
+    # Docker Compose v1/v2 (Windows/macOS/Linux) — every value is passed
+    # through to the container as-is.
     environment:
-      NODE_ENV: production
-      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=192}
-      OD_BIND_HOST: 0.0.0.0
-      OD_ALLOWED_ORIGINS: ${OPEN_DESIGN_ALLOWED_ORIGINS:-}
-      OD_PORT: 7456
-      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
-      OD_API_TOKEN: ${OD_API_TOKEN:-}
-      OD_DISABLE_API_AUTH: ${OPEN_DESIGN_DISABLE_API_AUTH:-}
-      OD_CODEX_SANDBOX: ${OD_CODEX_SANDBOX:-}
+      - NODE_ENV=production
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=192}
+      - OD_BIND_HOST=0.0.0.0
+      - OD_ALLOWED_ORIGINS=${OPEN_DESIGN_ALLOWED_ORIGINS:-}
+      - OD_PORT=7456
+      - OD_WEB_PORT=${OPEN_DESIGN_PORT:-7456}
+      - OD_API_TOKEN=${OD_API_TOKEN:-}
+      # API auth is disabled by default because the host port is locked to
+      # 127.0.0.1 (only accessible from the Docker host). Set OD_API_TOKEN
+      # in your .env and remove this line to enable token-based auth.
+      - OD_DISABLE_API_AUTH=1
+      - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:
       - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"
     volumes:
