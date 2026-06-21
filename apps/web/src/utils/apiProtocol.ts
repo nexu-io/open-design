@@ -56,7 +56,8 @@ export function usesAnthropicProxy(cfg: AppConfig): boolean {
 }
 
 export function supportsNativeImageAttachments(cfg: AppConfig): boolean {
-  if (cfg.apiProtocol === 'openai' || cfg.apiProtocol === 'azure') {
+  if (cfg.apiProtocol === 'azure') return true;
+  if (cfg.apiProtocol === 'openai') {
     return isKnownNativeImageModel(cfg.model);
   }
   if (
