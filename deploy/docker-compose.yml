@@ -23,14 +23,14 @@ services:
       # existing .env files. New deployments should use OD_ALLOWED_ORIGINS.
       - OD_ALLOWED_ORIGINS=${OD_ALLOWED_ORIGINS:-${OPEN_DESIGN_ALLOWED_ORIGINS:-}}
       - OD_API_TOKEN=${OD_API_TOKEN:-}
+      - OD_DISABLE_API_AUTH=${OD_DISABLE_API_AUTH:-${OPEN_DESIGN_DISABLE_API_AUTH:-}}
       # Auth is opt-in: set OD_API_TOKEN and the middleware activates.
       # The host port is bound to 127.0.0.1 (Docker-host only), so the
       # only callers are the host user and the same-machine browser —
       # loopback bypass handles that path.  To force-disable auth even
       # with a token set (shared-host CI, testing), add
-      # OD_DISABLE_API_AUTH=1 to your .env.  Omitting OD_DISABLE_API_AUTH
-      # here means existing .env files with OD_API_TOKEN keep working
-      # after a compose upgrade (no regression).
+      # OD_DISABLE_API_AUTH=1 to your .env.  OPEN_DESIGN_DISABLE_API_AUTH
+      # is accepted as a backward-compat fallback.
       - OD_ADDITIONAL_ALLOWED_DIRS=${OD_ADDITIONAL_ALLOWED_DIRS:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:
