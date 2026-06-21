@@ -11780,7 +11780,7 @@ export async function startServer({
         const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
         const url = `http://${reportHost}:${resolvedPort}`;
         if (!returnServer) {
-          console.log(`[od] daemon listening on ${url}`);
+          console.log(`[od] daemon listening on http://${host}:${resolvedPort}`);
         }
         daemonUrl = url;
         resolve(returnServer ? {
