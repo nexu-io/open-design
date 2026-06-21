@@ -777,8 +777,10 @@ function AppInner() {
       // Auto-bootstrap: if the daemon has API auth enabled, get a single-use
       // nonce and exchange it for a session cookie before the initial API
       // fan-out below.  The nonce expires in 60s, can only be redeemed once,
-      // and is only available on loopback (so non-loopback deployments fall
-      // through and the user enters the token manually if they hit 401s).
+      // is bound to the requesting IP, and is available on loopback or
+      // private-subnet networks (so reverse-proxy deployments work).
+      // Untrusted-network requests 403 and fall through — the user enters
+      // the token manually if they hit 401s.
       // Awaiting the exchange ensures the cookie is visible to the concurrent
       // fetchAgentsStream / fetchSkills / listProjects calls that follow.
       try {

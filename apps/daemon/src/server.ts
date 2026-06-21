@@ -5053,7 +5053,7 @@ export async function startServer({
   }
 
   if (apiToken) {
-    /** @type {Map<string, { createdAt: number }>} */
+    /** @type {Map<string, { createdAt: number, clientAddr: string }>} */
     const bootstrapNonces = new Map();
     const BOOTSTRAP_NONCE_TTL_MS = 60_000;
     const bootstrapNonceCleanup = setInterval(() => {
@@ -5065,19 +5065,19 @@ export async function startServer({
 
     app.get('/api/auth/bootstrap-token', (req, res) => {
       const addr = req.socket?.remoteAddress;
-      if (!isLoopbackPeerAddress(addr)) {
+      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
         });
       }
       const nonce = randomUUID();
-      bootstrapNonces.set(nonce, { createdAt: Date.now() });
+      bootstrapNonces.set(nonce, { createdAt: Date.now(), clientAddr: addr ?? '' });
       res.json({ nonce });
     });
 
     app.post('/api/auth/bootstrap', (req, res) => {
       const addr = req.socket?.remoteAddress;
-      if (!isLoopbackPeerAddress(addr)) {
+      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_NOT_AVAILABLE', message: 'Bootstrap not available from this network' },
         });
@@ -5090,6 +5090,12 @@ export async function startServer({
         });
       }
       const entry = bootstrapNonces.get(nonce);
+      if (entry.clientAddr !== addr) {
+        bootstrapNonces.delete(nonce);
+        return res.status(401).json({
+          error: { code: 'BOOTSTRAP_NONCE_BOUND', message: 'Bootstrap nonce bound to a different client address' },
+        });
+      }
       if (Date.now() - entry.createdAt > BOOTSTRAP_NONCE_TTL_MS) {
         bootstrapNonces.delete(nonce);
         return res.status(401).json({
