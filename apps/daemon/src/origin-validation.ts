@@ -20,19 +20,21 @@ export function configuredAllowedOrigins(env: NodeJS.ProcessEnv = process.env): 
     .map((origin) => origin.trim())
     .filter(Boolean)
     .map((origin) => {
+      let parsed;
       try {
-        const parsed = new URL(origin);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          console.warn('[od] OD_ALLOWED_ORIGINS entry skipped (protocol not http/https):', origin);
-          return null;
-        }
-        return parsed.origin;
+        parsed = new URL(origin);
       } catch {
-        console.warn('[od] OD_ALLOWED_ORIGINS entry skipped (invalid URL):', origin);
-        return null;
+        throw new Error(
+          `OD_ALLOWED_ORIGINS entry rejected: "${origin}" (invalid URL)`,
+        );
       }
-    })
-    .filter((origin) => origin !== null);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(
+          `OD_ALLOWED_ORIGINS entry rejected: "${origin}" (protocol must be http or https)`,
+        );
+      }
+      return parsed.origin;
+    });
 }
 
 export function configuredAllowedHosts(origins = configuredAllowedOrigins()): string[] {

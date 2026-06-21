@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   allowedBrowserPorts,
   configuredAllowedOrigins,
@@ -650,5 +650,65 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
       },
     };
     expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+});
+
+describe('configuredAllowedOrigins: fast-fail on invalid entries', () => {
+  const ORIGINAL = process.env.OD_ALLOWED_ORIGINS;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.OD_ALLOWED_ORIGINS;
+    else process.env.OD_ALLOWED_ORIGINS = ORIGINAL;
+  });
+
+  it('parses valid http/https origins', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com,http://192.168.1.1:7456';
+    expect(configuredAllowedOrigins()).toEqual([
+      'https://od.example.com',
+      'http://192.168.1.1:7456',
+    ]);
+  });
+
+  it('returns empty array when env is unset', () => {
+    delete process.env.OD_ALLOWED_ORIGINS;
+    expect(configuredAllowedOrigins()).toEqual([]);
+  });
+
+  it('returns empty array when env is empty string', () => {
+    process.env.OD_ALLOWED_ORIGINS = '';
+    expect(configuredAllowedOrigins()).toEqual([]);
+  });
+
+  it('throws on malformed URL', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://ok.example,notaurl';
+    expect(() => configuredAllowedOrigins()).toThrow(
+      'OD_ALLOWED_ORIGINS entry rejected: "notaurl" (invalid URL)',
+    );
+  });
+
+  it('throws on non-http protocol (ftp)', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'ftp://files.example';
+    expect(() => configuredAllowedOrigins()).toThrow(
+      'protocol must be http or https',
+    );
+  });
+
+  it('throws on non-http protocol (ws)', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'wss://socket.example';
+    expect(() => configuredAllowedOrigins()).toThrow(
+      'protocol must be http or https',
+    );
+  });
+
+  it('throws on first invalid entry, stops parsing', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://good.example,bad,https://also-good.example';
+    expect(() => configuredAllowedOrigins()).toThrow(
+      'OD_ALLOWED_ORIGINS entry rejected: "bad" (invalid URL)',
+    );
+  });
+
+  it('throws on whitespace-only entry after trim', () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://ok.example,   ';
+    expect(configuredAllowedOrigins()).toEqual(['https://ok.example']);
   });
 });
