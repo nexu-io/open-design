@@ -4,8 +4,6 @@ services:
   open-design:
     container_name: open-design
     image: ${OPEN_DESIGN_IMAGE:-ghcr.io/nexu-io/od:latest}
-    env_file:
-      - ./.env
     build:
       context: ..
       dockerfile: deploy/Dockerfile
