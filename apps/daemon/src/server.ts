@@ -11779,10 +11779,8 @@ export async function startServer({
         // address so remote callers and the sidecar use the correct URL.
         const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
         const url = `http://${reportHost}:${resolvedPort}`;
-        if (!returnServer) {
-          const reachable = host === '0.0.0.0' || host === '::' ? `http://127.0.0.1:${resolvedPort}` : null;
-          console.log(`[od] daemon listening on http://${host}:${resolvedPort}${reachable ? ` (reachable at ${reachable})` : ''}`);
-        }
+        const reachable = host === '0.0.0.0' || host === '::' ? `http://127.0.0.1:${resolvedPort}` : null;
+        console.log(`[od] daemon listening on http://${host}:${resolvedPort}${reachable ? ` (reachable at ${reachable})` : ''}`);
         daemonUrl = url;
         resolve(returnServer ? {
           url,
