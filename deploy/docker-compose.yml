@@ -32,6 +32,7 @@ services:
       # OD_DISABLE_API_AUTH=1 to your .env.  OPEN_DESIGN_DISABLE_API_AUTH
       # is accepted as a backward-compat fallback.
       - OD_ADDITIONAL_ALLOWED_DIRS=${OD_ADDITIONAL_ALLOWED_DIRS:-}
+      - OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET=1
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:
       - "127.0.0.1:${OPEN_DESIGN_PORT:-7456}:7456"

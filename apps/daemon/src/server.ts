@@ -3206,6 +3206,27 @@ function isPrivateSubnetAddress(address) {
   return false;
 }
 
+function verifyBearerOrCookieToken(req, apiToken) {
+  const auth = req.get('authorization') ?? '';
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
+  let presentedToken = match ? match[1] : '';
+  if (!presentedToken) {
+    const cookieHeader = req.headers.cookie || '';
+    for (const part of cookieHeader.split(';')) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      if (part.slice(0, eq).trim() === 'od-api-token') {
+        presentedToken = part.slice(eq + 1).trim();
+        break;
+      }
+    }
+  }
+  if (!presentedToken) return false;
+  const tokenBuf = Buffer.from(presentedToken);
+  const apiTokenBuf = Buffer.from(apiToken);
+  return tokenBuf.length === apiTokenBuf.length && timingSafeEqual(tokenBuf, apiTokenBuf);
+}
+
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
 
@@ -4525,28 +4546,7 @@ export async function startServer({
       // bearer; the loopback bypass exists for the localhost desktop
       // UI which has no proxy in the path.
       if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-      const auth = req.get('authorization') ?? '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      let presentedToken = match ? match[1] : '';
-      if (!presentedToken) {
-        const cookieHeader = req.headers.cookie || '';
-        for (const part of cookieHeader.split(';')) {
-          const eq = part.indexOf('=');
-          if (eq === -1) continue;
-          if (part.slice(0, eq).trim() === 'od-api-token') {
-            presentedToken = part.slice(eq + 1).trim();
-            break;
-          }
-        }
-      }
-      if (!presentedToken) {
-        return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
-        });
-      }
-      const tokenBuf = Buffer.from(presentedToken);
-      const apiTokenBuf = Buffer.from(apiToken);
-      if (tokenBuf.length !== apiTokenBuf.length || !timingSafeEqual(tokenBuf, apiTokenBuf)) {
+      if (!verifyBearerOrCookieToken(req, apiToken)) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -5053,7 +5053,7 @@ export async function startServer({
   }
 
   if (apiToken) {
-    /** @type {Map<string, { createdAt: number, clientAddr: string }>} */
+    /** @type {Map<string, { createdAt: number, clientTag: string }>} */
     const bootstrapNonces = new Map();
     const BOOTSTRAP_NONCE_TTL_MS = 60_000;
     const bootstrapNonceCleanup = setInterval(() => {
@@ -5063,29 +5063,33 @@ export async function startServer({
       }
     }, 30_000).unref();
 
-    const normalizeAddr = (/** @type {string|undefined} */ a) =>
-      typeof a === 'string' ? a.replace(/^::ffff:/i, '') : '';
+    const bootstrapAllowPrivateSubnet = process.env.OD_BOOTSTRAP_ALLOW_PRIVATE_SUBNET === '1';
+    function isBootstrapAllowed(addr) {
+      if (isLoopbackPeerAddress(addr)) return true;
+      return bootstrapAllowPrivateSubnet && isPrivateSubnetAddress(addr);
+    }
 
     app.get('/api/auth/bootstrap-token', (req, res) => {
       const addr = req.socket?.remoteAddress;
-      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
+      if (!isBootstrapAllowed(addr)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
         });
       }
       const nonce = randomUUID();
-      bootstrapNonces.set(nonce, { createdAt: Date.now(), clientAddr: normalizeAddr(addr) });
-      res.json({ nonce });
+      const clientTag = typeof req.query.clientTag === 'string' ? req.query.clientTag : '';
+      bootstrapNonces.set(nonce, { createdAt: Date.now(), clientTag });
+      res.json({ nonce, requireClientTag: !!clientTag });
     });
 
     app.post('/api/auth/bootstrap', (req, res) => {
       const addr = req.socket?.remoteAddress;
-      if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
+      if (!isBootstrapAllowed(addr)) {
         return res.status(403).json({
           error: { code: 'BOOTSTRAP_NOT_AVAILABLE', message: 'Bootstrap not available from this network' },
         });
       }
-      const { nonce } = req.body || {};
+      const { nonce, clientTag = '' } = req.body || {};
 
       if (!nonce || !bootstrapNonces.has(nonce)) {
         return res.status(401).json({
@@ -5093,10 +5097,10 @@ export async function startServer({
         });
       }
       const entry = bootstrapNonces.get(nonce);
-      if (entry.clientAddr !== normalizeAddr(addr)) {
+      if (entry.clientTag && entry.clientTag !== clientTag) {
         bootstrapNonces.delete(nonce);
         return res.status(401).json({
-          error: { code: 'BOOTSTRAP_NONCE_BOUND', message: 'Bootstrap nonce bound to a different client address' },
+          error: { code: 'BOOTSTRAP_NONCE_BOUND', message: 'Bootstrap nonce bound to a different client request' },
         });
       }
       if (Date.now() - entry.createdAt > BOOTSTRAP_NONCE_TTL_MS) {
@@ -6056,28 +6060,7 @@ export async function startServer({
   const apiTokenStaticGuard = isApiTokenMiddlewareEnabled()
     ? (req, res, next) => {
         if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-        const auth = req.get('authorization') ?? '';
-        const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-        let presentedToken = match ? match[1] : '';
-        if (!presentedToken) {
-          const cookieHeader = req.headers.cookie || '';
-          for (const part of cookieHeader.split(';')) {
-            const eq = part.indexOf('=');
-            if (eq === -1) continue;
-            if (part.slice(0, eq).trim() === 'od-api-token') {
-              presentedToken = part.slice(eq + 1).trim();
-              break;
-            }
-          }
-        }
-        if (!presentedToken) {
-          return res.status(401).json({
-            error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
-          });
-        }
-        const tokenBuf = Buffer.from(presentedToken);
-        const apiTokenBuf = Buffer.from(apiToken);
-        if (tokenBuf.length !== apiTokenBuf.length || !timingSafeEqual(tokenBuf, apiTokenBuf)) {
+        if (!verifyBearerOrCookieToken(req, apiToken)) {
           return res.status(401).json({
             error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
           });
@@ -6089,6 +6072,7 @@ export async function startServer({
   app.use('/artifacts', apiTokenStaticGuard, express.static(ARTIFACTS_DIR));
   app.use(
     PLUGIN_PREVIEWS_ROUTE,
+    apiTokenStaticGuard,
     express.static(PLUGIN_PREVIEWS_DIR, { maxAge: '1d', immutable: false }),
   );
   registerDeployRoutes(app, {

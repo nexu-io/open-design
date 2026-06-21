@@ -783,21 +783,33 @@ function AppInner() {
       // the token manually if they hit 401s.
       // Awaiting the exchange ensures the cookie is visible to the concurrent
       // fetchAgentsStream / fetchSkills / listProjects calls that follow.
+      // 10s timeout guards against a hung daemon blocking the entire boot.
+      const bootstrapAbort = new AbortController();
+      const bootstrapTimeout = setTimeout(() => bootstrapAbort.abort(), 10_000);
+      const clientTag = crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2, 10);
       try {
-        const tokenRes = await fetch('/api/auth/bootstrap-token');
+        const tokenRes = await fetch(`/api/auth/bootstrap-token?clientTag=${clientTag}`, {
+          signal: bootstrapAbort.signal,
+        });
         if (tokenRes.ok) {
           const { nonce } = await tokenRes.json();
           if (nonce) {
             await fetch('/api/auth/bootstrap', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nonce }),
+              body: JSON.stringify({ nonce, clientTag }),
+              signal: bootstrapAbort.signal,
             });
           }
         }
       } catch {
         // daemon may not support bootstrap (older version, or no auth
-        // configured) — proceed without a cookie.
+        // configured; also catches AbortError after 10s timeout) —
+        // proceed without a cookie.
+      } finally {
+        clearTimeout(bootstrapTimeout);
       }
 
       const agentRequestId = beginAgentStreamRequest();
