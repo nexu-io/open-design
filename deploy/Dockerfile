@@ -33,8 +33,8 @@ RUN corepack enable && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
-RUN pnpm --filter @open-design/daemon build && \
-    pnpm --filter @open-design/web build && \
+RUN cd apps/daemon && node "$(node -e "process.stdout.write(require.resolve('typescript/bin/tsc'))")" -p tsconfig.json && \
+    cd /app && pnpm --filter @open-design/web build && \
     pnpm --filter @open-design/daemon deploy --legacy --prod /app/deploy/daemon && \
     pnpm store prune && \
     rm -rf \
