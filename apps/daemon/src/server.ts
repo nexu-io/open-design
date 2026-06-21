@@ -4,7 +4,7 @@ import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -4480,6 +4480,13 @@ export async function startServer({
   const app = express();
   installRouteRegistrationGuard(app);
   app.use(express.json({ limit: '4mb' }));
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
   // Plan §3.K1 — bearer-token middleware.
@@ -4497,11 +4504,8 @@ export async function startServer({
   if (isApiTokenMiddlewareEnabled()) {
     const openProbePaths = new Set([
       '/health',
-      '/api/health',
       '/ready',
-      '/api/ready',
       '/version',
-      '/api/version',
       '/auth/bootstrap',
       '/auth/bootstrap-token',
     ]);
@@ -4535,7 +4539,14 @@ export async function startServer({
           }
         }
       }
-      if (!presentedToken || presentedToken !== apiToken) {
+      if (!presentedToken) {
+        return res.status(401).json({
+          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+        });
+      }
+      const tokenBuf = Buffer.from(presentedToken);
+      const apiTokenBuf = Buffer.from(apiToken);
+      if (tokenBuf.length !== apiTokenBuf.length || !timingSafeEqual(tokenBuf, apiTokenBuf)) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -5042,6 +5053,16 @@ export async function startServer({
   }
 
   if (apiToken) {
+    /** @type {Map<string, { createdAt: number }>} */
+    const bootstrapNonces = new Map();
+    const BOOTSTRAP_NONCE_TTL_MS = 60_000;
+    const bootstrapNonceCleanup = setInterval(() => {
+      const now = Date.now();
+      for (const [nonce, entry] of bootstrapNonces) {
+        if (now - entry.createdAt > BOOTSTRAP_NONCE_TTL_MS) bootstrapNonces.delete(nonce);
+      }
+    }, 30_000).unref();
+
     app.get('/api/auth/bootstrap-token', (req, res) => {
       const addr = req.socket?.remoteAddress;
       if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
@@ -5049,21 +5070,31 @@ export async function startServer({
           error: { code: 'BOOTSTRAP_TOKEN_NOT_AVAILABLE', message: 'Token bootstrap not available from this network' },
         });
       }
-      res.json({ token: apiToken });
+      const nonce = randomUUID();
+      bootstrapNonces.set(nonce, { createdAt: Date.now() });
+      res.json({ nonce });
     });
 
     app.post('/api/auth/bootstrap', (req, res) => {
-      const auth = req.headers.authorization || '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      const { nonce } = req.body || {};
+      if (!nonce || !bootstrapNonces.has(nonce)) {
         return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          error: { code: 'BOOTSTRAP_NONCE_REQUIRED', message: 'Valid bootstrap nonce required' },
         });
       }
+      const entry = bootstrapNonces.get(nonce);
+      if (Date.now() - entry.createdAt > BOOTSTRAP_NONCE_TTL_MS) {
+        bootstrapNonces.delete(nonce);
+        return res.status(401).json({
+          error: { code: 'BOOTSTRAP_NONCE_EXPIRED', message: 'Bootstrap nonce expired' },
+        });
+      }
+      bootstrapNonces.delete(nonce);
       res.cookie('od-api-token', apiToken, {
         httpOnly: true,
-        sameSite: 'lax',
+        sameSite: 'strict',
         path: '/',
+        secure: req.secure,
       });
       res.json({ ok: true });
     });
@@ -5147,7 +5178,7 @@ export async function startServer({
   // host / port the server is bound to plus the data dir,
   // so `od daemon status --json` can render a one-shot health snapshot
   // without depending on /api/version's content shape.
-  app.get('/api/daemon/status', async (_req, res) => {
+  app.get('/api/daemon/status', requireLocalDaemonRequest, async (_req, res) => {
     const versionInfo = await readCurrentAppVersionInfo();
     res.json({
       ok: true,
@@ -5177,7 +5208,7 @@ export async function startServer({
   // version (the user_version PRAGMA we use for migrations), and
   // per-table row counts. Useful for ops sanity-checking
   // deployments + comparing 'expected' vs. 'actual' table rosters.
-  app.get('/api/daemon/db', async (_req, res) => {
+  app.get('/api/daemon/db', requireLocalDaemonRequest, async (_req, res) => {
     try {
       const { inspectSqliteDatabase } = await import('./storage/db-inspect.js');
       const file = path.join(RUNTIME_DATA_DIR, 'app.sqlite');
@@ -6006,7 +6037,40 @@ export async function startServer({
     paths: pathDeps,
     projects: { getProject: (id: string) => getProject(db, id) },
   });
-  app.use('/artifacts', express.static(ARTIFACTS_DIR));
+  const apiTokenStaticGuard = apiToken
+    ? (req, res, next) => {
+        if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+        const auth = req.get('authorization') ?? '';
+        const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
+        let presentedToken = match ? match[1] : '';
+        if (!presentedToken) {
+          const cookieHeader = req.headers.cookie || '';
+          for (const part of cookieHeader.split(';')) {
+            const eq = part.indexOf('=');
+            if (eq === -1) continue;
+            if (part.slice(0, eq).trim() === 'od-api-token') {
+              presentedToken = part.slice(eq + 1).trim();
+              break;
+            }
+          }
+        }
+        if (!presentedToken) {
+          return res.status(401).json({
+            error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          });
+        }
+        const tokenBuf = Buffer.from(presentedToken);
+        const apiTokenBuf = Buffer.from(apiToken);
+        if (tokenBuf.length !== apiTokenBuf.length || !timingSafeEqual(tokenBuf, apiTokenBuf)) {
+          return res.status(401).json({
+            error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
+          });
+        }
+        next();
+      }
+    : (_req, _res, next) => next();
+
+  app.use('/artifacts', apiTokenStaticGuard, express.static(ARTIFACTS_DIR));
   app.use(
     PLUGIN_PREVIEWS_ROUTE,
     express.static(PLUGIN_PREVIEWS_DIR, { maxAge: '1d', immutable: false }),

@@ -15,16 +15,22 @@ services:
       - NODE_ENV=production
       - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=192}
       - OD_BIND_HOST=0.0.0.0
-      - OD_ALLOWED_ORIGINS=${OD_ALLOWED_ORIGINS:-}
       - OD_PORT=7456
       # Derive from OPEN_DESIGN_PORT so origin validation always trusts the
       # published host port. Set OD_WEB_PORT in .env to override.
       - OD_WEB_PORT=${OD_WEB_PORT:-${OPEN_DESIGN_PORT:-7456}}
+      # Legacy OPEN_DESIGN_ALLOWED_ORIGINS is supported as a fallback for
+      # existing .env files. New deployments should use OD_ALLOWED_ORIGINS.
+      - OD_ALLOWED_ORIGINS=${OD_ALLOWED_ORIGINS:-${OPEN_DESIGN_ALLOWED_ORIGINS:-}}
       - OD_API_TOKEN=${OD_API_TOKEN:-}
-      # API auth is disabled by default because the host port is locked to
-      # 127.0.0.1 (only accessible from the Docker host). Set OD_API_TOKEN
-      # in your .env and remove this line to enable token-based auth.
-      - OD_DISABLE_API_AUTH=1
+      # Auth is opt-in: set OD_API_TOKEN and the middleware activates.
+      # The host port is bound to 127.0.0.1 (Docker-host only), so the
+      # only callers are the host user and the same-machine browser —
+      # loopback bypass handles that path.  To force-disable auth even
+      # with a token set (shared-host CI, testing), add
+      # OD_DISABLE_API_AUTH=1 to your .env.  Omitting OD_DISABLE_API_AUTH
+      # here means existing .env files with OD_API_TOKEN keep working
+      # after a compose upgrade (no regression).
       - OD_ADDITIONAL_ALLOWED_DIRS=${OD_ADDITIONAL_ALLOWED_DIRS:-}
       - OD_CODEX_SANDBOX=${OD_CODEX_SANDBOX:-}
     ports:

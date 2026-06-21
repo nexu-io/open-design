@@ -28,8 +28,7 @@ COPY tools ./tools
 COPY apps/daemon/package.json ./apps/daemon/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY e2e/package.json ./e2e/package.json
-RUN corepack enable && \
-    corepack prepare pnpm@10.33.2 --activate && \
+RUN npm install -g pnpm@10.33.2 && \
     pnpm install --frozen-lockfile
 
 COPY apps ./apps
