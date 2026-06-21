@@ -442,6 +442,36 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('rejects deployment provider model discovery for non-OpenAI protocols', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/base',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url) => {
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'anthropic',
+          credentialSource: 'deployment',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+        },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('allows deployment provider model discovery against an administrator private-network hostname', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/base',
@@ -890,6 +920,95 @@ describe('POST /api/test/connection provider mode', () => {
         model: 'gpt-routed',
         sample: 'ok',
       });
+    });
+  });
+
+  it('attaches deployment provider run-session metadata before OpenAI-compatible connection-test egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const seen: string[] = [];
+      const fetchMock = passThroughOrUpstream((url, init) => {
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          expect((init?.headers as Record<string, string>).Authorization).toBe(
+            'Bearer deployment-secret',
+          );
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            purpose: 'connection-test',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.05,
+          });
+          return jsonResponse({ run_session_id: 'odrs_connection' }, { status: 201 });
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_connection',
+          opendesign_cost_cap_usd: 0.05,
+        });
+        return jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        model: 'gpt-routed',
+      });
+      expect(seen).toEqual([
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
+      ]);
+    });
+  });
+
+  it('rejects deployment provider connection tests for non-OpenAI protocols', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url) => {
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'anthropic',
+          credentialSource: 'deployment',
+          model: 'claude-sonnet-4-5',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+        },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

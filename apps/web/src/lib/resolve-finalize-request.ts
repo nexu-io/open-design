@@ -42,8 +42,8 @@ export function isFinalizeByokConfigured(config: AppConfig): boolean {
     const model = (config.model ?? '').trim();
     return protocol === 'openai' && Boolean(model);
   }
-  const { apiKey, model } = resolveByokFields(config, protocol);
-  return Boolean(apiKey && model);
+  const { apiKey, baseUrl, model } = resolveByokFields(config, protocol);
+  return Boolean(apiKey && baseUrl && model);
 }
 
 export function buildFinalizeRequest(
@@ -58,14 +58,22 @@ export function buildFinalizeRequest(
   const finalizeModel =
     credentialSource === 'deployment' ? (config.model ?? '').trim() : model;
   if (!finalizeModel) return null;
-  if (credentialSource !== 'deployment' && !apiKey) return null;
-  if (credentialSource === 'deployment' && protocol !== 'openai') return null;
+  if (credentialSource === 'deployment') {
+    if (protocol !== 'openai') return null;
+    return {
+      protocol: 'openai',
+      credentialSource: 'deployment',
+      model: finalizeModel,
+      maxTokens: effectiveMaxTokens(config),
+    };
+  }
+  if (!apiKey || !baseUrl) return null;
 
   return {
     protocol,
-    credentialSource,
-    ...(credentialSource === 'deployment' ? {} : { apiKey }),
-    ...(credentialSource === 'deployment' || !baseUrl ? {} : { baseUrl }),
+    credentialSource: 'user',
+    apiKey,
+    baseUrl,
     model: finalizeModel,
     maxTokens: effectiveMaxTokens(config),
     ...(protocol === 'azure' && apiVersion ? { apiVersion } : {}),

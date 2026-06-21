@@ -1,13 +1,26 @@
 export type ProviderCredentialSource = 'user' | 'deployment';
 
-export interface ProviderCredentialSourceRequestFields {
+export interface UserProviderCredentialRequestFields {
   /**
    * Defaults to `user`, which preserves the existing direct BYOK request
    * shape. `deployment` tells the daemon to resolve the provider endpoint and
    * credential from administrator-managed server configuration.
    */
-  credentialSource?: ProviderCredentialSource;
+  credentialSource?: 'user';
+  apiKey: string;
+  baseUrl: string;
 }
+
+export interface DeploymentProviderCredentialRequestFields {
+  credentialSource: 'deployment';
+  protocol: 'openai';
+  apiKey?: never;
+  baseUrl?: never;
+}
+
+export type ProviderCredentialSourceRequestFields =
+  | UserProviderCredentialRequestFields
+  | DeploymentProviderCredentialRequestFields;
 
 export type DeploymentProviderConfigKind =
   | 'available'

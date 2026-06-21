@@ -1,5 +1,4 @@
 import type { Express } from 'express';
-import { randomUUID } from 'node:crypto';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
 import {
@@ -41,6 +40,10 @@ import {
   resolveProviderCredentialSource,
   type DeploymentProviderProfile,
 } from '../deployment-provider.js';
+import {
+  deploymentProviderRunMetadata,
+  type DeploymentProviderRunMetadataResult,
+} from '../deployment-provider-run-session.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -75,163 +78,6 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
 
 function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
   return typeof value === 'string' && PROVIDER_PROTOCOLS.has(value as ConnectionTestProtocol);
-}
-
-type DeploymentProviderRunMetadataResult =
-  | { ok: true; metadata?: Record<string, unknown> }
-  | { ok: false; status: number; code: string; message: string };
-
-const DEPLOYMENT_PROVIDER_RUN_SESSION_TIMEOUT_MS = 10_000;
-
-function cleanProviderRunString(value: unknown, fallback: string): string {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  const candidate = raw || fallback;
-  return candidate.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 128) || fallback;
-}
-
-function existingMetadata(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return { ...(value as Record<string, unknown>) };
-}
-
-function validateProviderRunSessionUrl(value: string): string | null {
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return 'Deployment provider run-session URL must use http or https.';
-    }
-    if (parsed.username || parsed.password) {
-      return 'Deployment provider run-session URL must not include user info.';
-    }
-    return null;
-  } catch {
-    return 'Deployment provider run-session URL is invalid.';
-  }
-}
-
-async function deploymentProviderRunMetadata(
-  profile: DeploymentProviderProfile,
-  body: Record<string, unknown>,
-  requestSignal?: AbortSignal,
-): Promise<DeploymentProviderRunMetadataResult> {
-  if (!profile.runSessionUrl) return { ok: true };
-  if (profile.runCostCapUsd === undefined) {
-    return {
-      ok: false,
-      status: 400,
-      code: 'BAD_REQUEST',
-      message: 'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.',
-    };
-  }
-  const runSessionUrlError = validateProviderRunSessionUrl(profile.runSessionUrl);
-  if (runSessionUrlError) {
-    return {
-      ok: false,
-      status: 400,
-      code: 'BAD_REQUEST',
-      message: runSessionUrlError,
-    };
-  }
-
-  const projectId = cleanProviderRunString(body.projectId, `project-${randomUUID()}`);
-  const runId = cleanProviderRunString(body.providerRunId, `run-${randomUUID()}`);
-  const operationId = cleanProviderRunString(body.providerOperationId, `operation-${randomUUID()}`);
-  const purpose = cleanProviderRunString(body.providerRunPurpose, 'chat-completion');
-  const requestBody: Record<string, unknown> = {
-    od_project_id: projectId,
-    od_run_id: runId,
-    purpose,
-    allowed_surfaces: ['reasoning'],
-    max_total_cost_usd: profile.runMaxTotalCostUsd ?? profile.runCostCapUsd,
-  };
-  if (profile.runTtlSeconds !== undefined) {
-    requestBody.ttl_seconds = Math.trunc(profile.runTtlSeconds);
-  }
-
-  const timeoutSignal = AbortSignal.timeout(DEPLOYMENT_PROVIDER_RUN_SESSION_TIMEOUT_MS);
-  const signal = requestSignal
-    ? AbortSignal.any([requestSignal, timeoutSignal])
-    : timeoutSignal;
-  const proxyDispatcher = proxyDispatcherRequestInit();
-  try {
-    const response = await fetch(profile.runSessionUrl, {
-      ...proxyDispatcher.requestInit,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${profile.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-      redirect: 'error',
-      signal,
-    });
-    if (!response.ok) {
-      const code = response.status === 401
-        ? 'UNAUTHORIZED'
-        : response.status === 403
-          ? 'FORBIDDEN'
-          : response.status === 429
-            ? 'RATE_LIMITED'
-            : 'UPSTREAM_UNAVAILABLE';
-      return {
-        ok: false,
-        status: response.status,
-        code,
-        message: `Deployment provider run session failed: ${response.status}`,
-      };
-    }
-    const session = await response.json().catch((): unknown => null);
-    const runSessionId = (
-      session &&
-      typeof session === 'object' &&
-      !Array.isArray(session) &&
-      typeof (session as { run_session_id?: unknown }).run_session_id === 'string'
-    )
-      ? (session as { run_session_id: string }).run_session_id.trim()
-      : '';
-    if (!runSessionId) {
-      return {
-        ok: false,
-        status: 502,
-        code: 'UPSTREAM_UNAVAILABLE',
-        message: 'Deployment provider run session response did not include run_session_id.',
-      };
-    }
-
-    return {
-      ok: true,
-      metadata: {
-        ...existingMetadata(body.metadata),
-        opendesign_run_session_id: runSessionId,
-        opendesign_cost_cap_usd: profile.runCostCapUsd,
-        opendesign_idempotency_key: operationId,
-        opendesign_operation_nonce: `nonce-${randomUUID()}`,
-      },
-    };
-  } catch (err) {
-    if (
-      err &&
-      typeof err === 'object' &&
-      'name' in err &&
-      ((err as { name?: unknown }).name === 'AbortError' ||
-        (err as { name?: unknown }).name === 'TimeoutError')
-    ) {
-      return {
-        ok: false,
-        status: 504,
-        code: 'UPSTREAM_UNAVAILABLE',
-        message: 'Deployment provider run session endpoint timed out.',
-      };
-    }
-    return {
-      ok: false,
-      status: 502,
-      code: 'UPSTREAM_UNAVAILABLE',
-      message: 'Deployment provider run session endpoint was unreachable.',
-    };
-  } finally {
-    await proxyDispatcher.close();
-  }
 }
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
@@ -273,6 +119,24 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return null;
     }
     return credentialSource;
+  };
+
+  const rejectNonOpenAiDeploymentCredentialSource = (body: Record<string, unknown>, res: any): boolean => {
+    const credentialSource = resolveProviderCredentialSource(body.credentialSource);
+    if (!credentialSource) {
+      sendApiError(res, 400, 'BAD_REQUEST', 'credentialSource must be user or deployment');
+      return true;
+    }
+    if (credentialSource === 'deployment') {
+      sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+      );
+      return true;
+    }
+    return false;
   };
 
   // The canonical POST /api/runs handler lives in `server.ts` — it ran
@@ -507,6 +371,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
         let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
         let allowPrivateNetworkBaseUrl = false;
+        let metadata: Record<string, unknown> | undefined;
+        let deploymentProfile: DeploymentProviderProfile | null = null;
         if (credentialSource === 'deployment') {
           const resolved = resolveDeploymentProviderProfile(protocol);
           if (!resolved.ok) {
@@ -515,6 +381,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           effectiveBaseUrl = resolved.profile.baseUrl;
           effectiveApiKey = resolved.profile.apiKey;
           allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+          deploymentProfile = resolved.profile;
         }
         if (
           typeof body.model !== 'string' ||
@@ -528,6 +395,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'BAD_REQUEST',
             'baseUrl, apiKey, and model are required',
           );
+        }
+        if (deploymentProfile) {
+          const runMetadata = await deploymentProviderRunMetadata(
+            deploymentProfile,
+            {
+              ...(body as Record<string, unknown>),
+              providerRunPurpose: body.providerRunPurpose ?? 'connection-test',
+            },
+            controller.signal,
+          );
+          if (!runMetadata.ok) {
+            return sendApiError(res, runMetadata.status, runMetadata.code, runMetadata.message);
+          }
+          metadata = runMetadata.metadata;
         }
         const reasoningDenial = authorizeReasoningEgress({
           policy: body.reasoningExecution,
@@ -545,6 +426,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             model: body.model,
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            ...(metadata ? { metadata } : {}),
             signal: controller.signal,
             allowPrivateNetworkBaseUrl,
           });
@@ -1154,6 +1036,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -1364,6 +1247,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -1526,6 +1410,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(
@@ -1572,6 +1457,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/ollama/stream', async (req, res) => {
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');

@@ -89,6 +89,7 @@ export interface FinalizeOptions {
   baseUrl?: string;
   model: string;
   maxTokens?: number;
+  metadata?: Record<string, unknown>;
   apiVersion?: string;
   now?: () => Date;
   fetchImpl?: typeof globalThis.fetch;
@@ -372,6 +373,7 @@ export async function finalizeDesignPackage(
         baseUrl,
         model: options.model,
         maxTokens,
+        ...(options.metadata ? { metadata: options.metadata } : {}),
         systemPrompt,
         userPrompt,
       };
@@ -490,6 +492,7 @@ export interface FinalizeProviderCallParams {
   baseUrl: string;
   model: string;
   maxTokens: number;
+  metadata?: Record<string, unknown>;
   systemPrompt: string;
   userPrompt: string;
   apiVersion?: string;
@@ -567,6 +570,7 @@ function buildFinalizeProviderRequest(params: FinalizeProviderCallParams): Final
       },
       body: {
         model: params.model,
+        ...(params.metadata ? { metadata: params.metadata } : {}),
         messages: payloadMessages,
         max_tokens: params.maxTokens,
         stream: false,

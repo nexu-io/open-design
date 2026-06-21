@@ -244,14 +244,13 @@ export function AvatarMenu({
     const credentialSource = config.apiCredentialSource ?? 'user';
     const baseUrl = config.baseUrl?.trim() ?? '';
     const apiKey = config.apiKey?.trim() ?? '';
+    if (credentialSource === 'deployment' && apiProtocol !== 'openai') return;
     if (credentialSource !== 'deployment' && (!baseUrl || !apiKey)) return;
     let cancelled = false;
-    void fetchProviderModels({
-      protocol: apiProtocol,
-      credentialSource,
-      baseUrl: credentialSource === 'deployment' ? undefined : baseUrl,
-      apiKey: credentialSource === 'deployment' ? undefined : apiKey,
-    }).then((result) => {
+    const request = credentialSource === 'deployment'
+      ? { protocol: 'openai' as const, credentialSource: 'deployment' as const }
+      : { protocol: apiProtocol, credentialSource: 'user' as const, baseUrl, apiKey };
+    void fetchProviderModels(request).then((result) => {
       if (cancelled || !result.ok || !result.models?.length) return;
       if (shouldCacheProviderModels) {
         setDiscoveredProviderModels((current) => ({

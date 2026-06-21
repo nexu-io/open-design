@@ -30,20 +30,17 @@ export type FinalizeProviderProtocol = ConnectionTestProtocol;
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-export interface FinalizeProviderRequest
-  extends ReasoningExecutionRequestFields, ProviderCredentialSourceRequestFields {
+export type FinalizeProviderRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.
    */
   protocol?: FinalizeProviderProtocol;
-  apiKey?: string;
-  baseUrl?: string;
   model: string;
   maxTokens?: number;
   /** Azure OpenAI only. Defaults at the daemon when omitted. */
   apiVersion?: string;
-}
+};
 
 export type FinalizeAnthropicRequest = FinalizeProviderRequest;
 

@@ -26,10 +26,7 @@ export interface ProxyMessage {
   content: ProxyMessageContent;
 }
 
-export interface ProxyStreamRequest
-  extends ReasoningExecutionRequestFields, ProviderCredentialSourceRequestFields {
-  baseUrl?: string;
-  apiKey?: string;
+export type ProxyStreamRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
   model: string;
   systemPrompt?: string;
   messages: ProxyMessage[];
@@ -38,7 +35,7 @@ export interface ProxyStreamRequest
   maxTokens?: number;
   // Azure OpenAI only. Defaults at the daemon when omitted.
   apiVersion?: string;
-}
+};
 
 export interface ProxyStreamStartPayload {
   model?: string;

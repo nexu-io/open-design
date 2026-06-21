@@ -218,6 +218,7 @@ describe('buildProxyMessages', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const proxyInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(proxyInit.body))).toMatchObject({
+      protocol: 'openai',
       credentialSource: 'deployment',
       model: 'gpt-routed',
       systemPrompt: 'System prompt',

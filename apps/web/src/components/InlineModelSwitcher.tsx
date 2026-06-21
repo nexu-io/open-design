@@ -512,6 +512,7 @@ export function InlineModelSwitcher({
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
     const credentialSource = config.apiCredentialSource ?? 'user';
+    if (credentialSource === 'deployment' && apiProtocol !== 'openai') return;
     if (credentialSource !== 'deployment' && apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
     if (credentialSource !== 'deployment' && !/^https?:\/\//i.test(baseUrl)) return;
@@ -520,12 +521,15 @@ export function InlineModelSwitcher({
     if (providerModelsFetchingRef.current.has(key)) return;
     providerModelsFetchingRef.current.add(key);
     let active = true;
-    void fetchProviderModels({
-      protocol: apiProtocol,
-      credentialSource,
-      baseUrl: credentialSource === 'deployment' ? undefined : baseUrl,
-      apiKey: credentialSource === 'deployment' ? undefined : config.apiKey,
-    })
+    const request = credentialSource === 'deployment'
+      ? { protocol: 'openai' as const, credentialSource: 'deployment' as const }
+      : {
+          protocol: apiProtocol,
+          credentialSource: 'user' as const,
+          baseUrl,
+          apiKey: config.apiKey,
+        };
+    void fetchProviderModels(request)
       .then((result) => {
         if (active && result.ok && result.models?.length) {
           if (shouldCacheProviderModels) {

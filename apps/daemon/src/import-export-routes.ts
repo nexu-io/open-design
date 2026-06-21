@@ -13,7 +13,9 @@ import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning
 import {
   resolveDeploymentProviderProfile,
   resolveProviderCredentialSource,
+  type DeploymentProviderProfile,
 } from './deployment-provider.js';
+import { deploymentProviderRunMetadata } from './deployment-provider-run-session.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 
@@ -1009,6 +1011,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       let allowPrivateNetworkBaseUrl = false;
+      let deploymentProfile: DeploymentProviderProfile | null = null;
       if (credentialSource !== 'deployment' && baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
@@ -1023,6 +1026,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         effectiveApiKey = resolved.profile.apiKey;
         effectiveBaseUrl = resolved.profile.baseUrl;
         allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+        deploymentProfile = resolved.profile;
       }
       secretsToRedact = [effectiveApiKey];
 
@@ -1075,6 +1079,22 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
 
       let result;
       try {
+        let metadata: Record<string, unknown> | undefined;
+        if (deploymentProfile) {
+          const runMetadata = await deploymentProviderRunMetadata(
+            deploymentProfile,
+            {
+              ...(req.body as Record<string, unknown>),
+              projectId: req.params.id,
+              providerRunPurpose: 'finalize',
+            },
+            finalizeAbort.signal,
+          );
+          if (!runMetadata.ok) {
+            return sendApiError(res, runMetadata.status, runMetadata.code, runMetadata.message);
+          }
+          metadata = runMetadata.metadata;
+        }
         result = await finalizeDesignPackage(
           db,
           PROJECTS_DIR,
@@ -1086,6 +1106,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
             baseUrl: effectiveBaseUrl,
             model,
             maxTokens,
+            ...(metadata ? { metadata } : {}),
             ...(typeof apiVersion === 'string' && apiVersion.trim()
               ? { apiVersion: apiVersion.trim() }
               : {}),

@@ -5,6 +5,7 @@
 import type { AgentCliEnvPrefs } from './app-config';
 import type { ProviderCredentialSourceRequestFields } from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
+import type { JsonValue } from '../common';
 
 export interface BaseUrlValidationResult {
   parsed?: ParsedBaseUrl;
@@ -182,15 +183,13 @@ export interface ConnectionTestDiagnostics {
 
 export type ConnectionTestProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
 
-export interface ProviderTestRequest
-  extends ReasoningExecutionRequestFields, ProviderCredentialSourceRequestFields {
+export type ProviderTestRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
   protocol: ConnectionTestProtocol;
-  baseUrl?: string;
-  apiKey?: string;
   model: string;
   // Azure only. When omitted, the daemon falls back to its default api-version.
   apiVersion?: string;
-}
+  metadata?: Record<string, JsonValue>;
+};
 
 export interface AgentTestRequest {
   agentId: string;

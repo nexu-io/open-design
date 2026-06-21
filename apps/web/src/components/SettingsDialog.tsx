@@ -1881,21 +1881,23 @@ export function SettingsDialog({
     };
     try {
       const result = await testApiProvider(
-        {
-          protocol: apiProtocol,
-          credentialSource: isDeploymentCredentialMode ? 'deployment' : 'user',
-          ...(isDeploymentCredentialMode
-            ? {}
-            : {
-                baseUrl: cfg.baseUrl,
-                apiKey: cleanByokApiKey(cfg.apiKey),
-              }),
-          model: cfg.model,
-          apiVersion:
-            apiProtocol === 'azure'
-              ? cfg.apiVersion?.trim() || undefined
-              : undefined,
-        },
+        isDeploymentCredentialMode
+          ? {
+              protocol: 'openai',
+              credentialSource: 'deployment',
+              model: cfg.model,
+            }
+          : {
+              protocol: apiProtocol,
+              credentialSource: 'user',
+              baseUrl: cfg.baseUrl,
+              apiKey: cleanByokApiKey(cfg.apiKey),
+              model: cfg.model,
+              apiVersion:
+                apiProtocol === 'azure'
+                  ? cfg.apiVersion?.trim() || undefined
+                  : undefined,
+            },
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -2106,16 +2108,17 @@ export function SettingsDialog({
     };
     try {
       const result = await fetchProviderModels(
-        {
-          protocol: apiProtocol,
-          credentialSource: isDeploymentCredentialMode ? 'deployment' : 'user',
-          ...(isDeploymentCredentialMode
-            ? {}
-            : {
-                baseUrl: cfg.baseUrl,
-                apiKey: cleanByokApiKey(cfg.apiKey),
-              }),
-        },
+        isDeploymentCredentialMode
+          ? {
+              protocol: 'openai',
+              credentialSource: 'deployment',
+            }
+          : {
+              protocol: apiProtocol,
+              credentialSource: 'user',
+              baseUrl: cfg.baseUrl,
+              apiKey: cleanByokApiKey(cfg.apiKey),
+            },
         controller.signal,
       );
       if (controller.signal.aborted) return;

@@ -1083,6 +1083,31 @@ describe('POST /api/projects/:id/finalize/anthropic — HTTP-layer validation', 
     });
   });
 
+  it('rejects deployment provider finalize for non-OpenAI protocols', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const res = await fetch(`${serverBaseUrl}/api/projects/p1/finalize/anthropic`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'anthropic',
+          credentialSource: 'deployment',
+          model: 'claude-sonnet-4-5',
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.message).toBe(
+        'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+      );
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+    });
+  });
+
   it('allows deployment provider finalize validation for an administrator private-network hostname', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/v1',

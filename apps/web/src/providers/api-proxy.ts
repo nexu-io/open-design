@@ -60,7 +60,7 @@ export async function streamProxyEndpoint(
     const messages = await buildProxyMessages(endpoint, history, context);
     const body = {
       ...(credentialSource === 'deployment'
-        ? {}
+        ? { protocol: 'openai' as const }
         : { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey }),
       credentialSource,
       model: cfg.model,

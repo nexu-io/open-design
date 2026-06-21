@@ -699,6 +699,7 @@ export function redactSecrets(
 type ProviderConnectionInput = Omit<ProviderTestRequest, 'baseUrl' | 'apiKey'> & {
   baseUrl: string;
   apiKey: string;
+  metadata?: Record<string, unknown>;
   signal?: AbortSignal;
   allowPrivateNetworkBaseUrl?: boolean;
 };
@@ -1061,6 +1062,11 @@ interface ProviderCallShape {
   retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
+function metadataField(value: unknown): { metadata?: Record<string, unknown> } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { metadata: value as Record<string, unknown> };
+}
+
 function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
   const baseUrl = String(input.baseUrl);
   const apiKey = String(input.apiKey);
@@ -1108,6 +1114,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           model,
+          ...metadataField(input.metadata),
           ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
@@ -1133,6 +1140,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           model,
+          ...metadataField(input.metadata),
           ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,

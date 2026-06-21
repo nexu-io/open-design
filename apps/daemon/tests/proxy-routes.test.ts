@@ -142,6 +142,39 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('rejects deployment provider proxy requests for non-OpenAI protocols', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'claude-test',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+        },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('allows deployment provider proxy requests to an administrator private-network hostname', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/root',
@@ -573,6 +606,94 @@ describe('API proxy routes', () => {
       const text = await res.text();
       expect(text).toContain('[REDACTED]');
       expect(text).not.toContain('deployment-secret');
+    });
+  });
+
+  it('attaches deployment provider run-session metadata before OpenAI finalize egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const projectId = `finalize-session-${Date.now()}`;
+      await realFetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Finalize session' }),
+      });
+      await realFetch(`${baseUrl}/api/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'index.html',
+          content: '<main><h1>Draft</h1></main>',
+          artifact: true,
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Draft',
+            entry: 'index.html',
+            renderer: 'html',
+            exports: ['html'],
+            updatedAt: '2026-06-21T00:00:00.000Z',
+          },
+        }),
+      });
+
+      const seen: string[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer deployment-secret',
+          });
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            od_project_id: projectId,
+            purpose: 'finalize',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.05,
+          });
+          return Promise.resolve(Response.json({ run_session_id: 'odrs_finalize' }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer deployment-secret',
+        });
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_finalize',
+          opendesign_cost_cap_usd: 0.05,
+        });
+        return Promise.resolve(Response.json({
+          choices: [{ message: { content: '# Final design\n' } }],
+          usage: { prompt_tokens: 3, completion_tokens: 4 },
+        }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/projects/${projectId}/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        model: 'gpt-routed',
+        inputTokens: 3,
+        outputTokens: 4,
+      });
+      expect(seen).toEqual([
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
+      ]);
     });
   });
 
