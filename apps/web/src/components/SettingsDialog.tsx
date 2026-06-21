@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
+import type { AgentInventoryResponse } from '@open-design/contracts';
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
@@ -3760,6 +3761,12 @@ export function SettingsDialog({
                                 />
                               ))}
                               {active ? renderAgentModelConfig(a) : null}
+                              {active ? (
+                                <AgentInventoryPanel
+                                  agentId={a.id}
+                                  agentLabel={agentName}
+                                />
+                              ) : null}
                             </div>
                           );
                           if (active && agentTestState.status !== 'idle') {
@@ -6726,6 +6733,182 @@ function CodexInstallToggle(): JSX.Element | null {
           {message.text}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+function AgentInventoryPanel({
+  agentId,
+  agentLabel,
+}: {
+  agentId: string;
+  agentLabel: string;
+}): JSX.Element {
+  const { t } = useI18n();
+  const [inventory, setInventory] = useState<AgentInventoryResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setInventory(null);
+    fetch(`/api/agent-inventory/${encodeURIComponent(agentId)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`daemon ${res.status}`);
+        return (await res.json()) as AgentInventoryResponse;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setInventory(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setInventory(null);
+        setError(String(err && err.message ? err.message : err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, refreshNonce]);
+
+  const hasMcpServers = (inventory?.mcpServers.length ?? 0) > 0;
+  const hasSkills = (inventory?.skills.length ?? 0) > 0;
+
+  return (
+    <section className="agent-inventory-section">
+      <div className="agent-inventory-header">
+        <div>
+          <p className="agent-inventory-title">
+            {t('settings.agentInventoryTitle', { client: agentLabel })}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="ghost agent-inventory-refresh"
+          onClick={() => setRefreshNonce((n) => n + 1)}
+          disabled={loading}
+          aria-label={t('settings.agentInventoryRefresh')}
+        >
+          <Icon name="reload" size={14} />
+          <span>{t('settings.agentInventoryRefresh')}</span>
+        </button>
+      </div>
+
+      {error ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryError', { error })}
+        </div>
+      ) : loading && !inventory ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryLoading')}
+        </div>
+      ) : inventory && !inventory.supported ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryUnsupported', { client: agentLabel })}
+        </div>
+      ) : inventory && !inventory.available ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryUnavailable', { client: agentLabel })}
+        </div>
+      ) : inventory && !hasMcpServers && !hasSkills ? (
+        <div className="agent-inventory-empty">
+          {t('settings.agentInventoryEmpty', { client: agentLabel })}
+        </div>
+      ) : inventory ? (
+        <div className="agent-inventory-groups">
+          <InventoryList
+            kind="mcp"
+            title={t('settings.agentInventoryMcpServers')}
+            items={inventory.mcpServers.map((item) => ({
+              key: item.id,
+              name: item.name,
+              detail: [
+                t('settings.agentInventorySourceUser'),
+                item.transport,
+              ].filter(Boolean).join(' · '),
+              description: item.description,
+            }))}
+            empty={t('settings.agentInventoryNoMcpServers')}
+          />
+          <InventoryList
+            kind="skill"
+            title={t('settings.agentInventorySkills')}
+            items={inventory.skills.map((item) => ({
+              key: item.id,
+              name: item.name,
+              detail: t('settings.agentInventorySourceUser'),
+              description: item.description,
+            }))}
+            empty={t('settings.agentInventoryNoSkills')}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function InventoryList({
+  kind,
+  title,
+  items,
+  empty,
+}: {
+  kind: 'mcp' | 'skill';
+  title: string;
+  items: Array<{ key: string; name: string; detail: string; description?: string }>;
+  empty: string;
+}): JSX.Element {
+  return (
+    <div className="agent-inventory-group">
+      <p className="agent-inventory-group-title">{title} ({items.length})</p>
+      {items.length === 0 ? (
+        <p className="agent-inventory-group-empty">{empty}</p>
+      ) : kind === 'mcp' ? (
+        <ul className="mcp-rows agent-inventory-list agent-inventory-mcp-list">
+          {items.map((item) => (
+            <li key={item.key} className="mcp-row agent-inventory-mcp-row">
+              <div className="mcp-row-head">
+                <span className="mcp-row-summary-title agent-inventory-mcp-summary">
+                  <span className="mcp-row-summary-name">{item.name}</span>
+                  <span className="mcp-row-summary-transport">{item.detail}</span>
+                </span>
+              </div>
+              {item.description ? (
+                <p className="agent-inventory-row-description">{item.description}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className="settings-skills agent-inventory-list agent-inventory-skill-list">
+          {items.map((item) => (
+            <li key={item.key} className="skills-row agent-inventory-skill-row">
+              <div className="skills-row-head">
+                <div className="skills-row-summary-btn agent-inventory-skill-summary">
+                  <span className="skills-row-icon" aria-hidden>
+                    <Icon name="grid" size={14} />
+                  </span>
+                  <span className="skills-row-summary">
+                    <span className="skills-row-summary-line">
+                      <span className="skills-row-summary-name">{item.name}</span>
+                      <span className="skills-row-summary-source">{item.detail}</span>
+                    </span>
+                    {item.description ? (
+                      <span className="skills-row-summary-desc">{item.description}</span>
+                    ) : null}
+                  </span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

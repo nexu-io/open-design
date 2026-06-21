@@ -487,6 +487,7 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
+import { registerAgentInventoryRoutes } from './routes/agent-inventory.js';
 import { registerAutomationRoutes } from './routes/automation.js';
 import { registerGenuiRoutes } from './routes/genui.js';
 import { registerDesignSystemRoutes } from './routes/design-systems.js';
@@ -5803,6 +5804,10 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+  });
+  registerAgentInventoryRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
   });
   registerXaiRoutes(app, {
     http: httpDeps,

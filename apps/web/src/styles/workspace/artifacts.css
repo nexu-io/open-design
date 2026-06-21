@@ -252,6 +252,122 @@
   color: var(--text-muted);
   line-height: 1.5;
 }
+.agent-inventory-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 24px 18px;
+  border-top: 1px solid var(--border);
+}
+.agent-inventory-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agent-inventory-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+.agent-inventory-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.agent-inventory-empty {
+  padding: 9px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.agent-inventory-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(360px, 45vh);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.agent-inventory-group {
+  min-width: 0;
+}
+.agent-inventory-group-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.agent-inventory-group-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.agent-inventory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agent-inventory-mcp-list {
+  gap: 8px;
+}
+.agent-inventory-mcp-row {
+  padding: 8px;
+  gap: 6px;
+}
+.agent-inventory-mcp-summary {
+  cursor: default;
+}
+.agent-inventory-mcp-summary:hover {
+  background: transparent;
+  border-color: transparent;
+}
+.agent-inventory-mcp-summary .mcp-row-summary-transport {
+  max-width: 48%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-inventory-row-description {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.agent-inventory-skill-row {
+  border-radius: var(--radius-sm);
+}
+.agent-inventory-skill-summary {
+  cursor: default;
+}
+.agent-inventory-skill-summary:hover .skills-row-summary-name {
+  color: var(--text);
+}
+.agent-inventory-skill-summary .skills-row-summary-source {
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .agent-inventory-header {
+    flex-direction: column;
+  }
+  .agent-inventory-section {
+    padding-inline: 18px;
+  }
+}
 .settings-about-list > div {
   display: flex;
   align-items: center;

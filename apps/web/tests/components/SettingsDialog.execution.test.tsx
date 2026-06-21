@@ -222,6 +222,28 @@ const sampleDesignSystems = [
   },
 ];
 
+const claudeInventory = {
+  agentId: 'claude',
+  supported: true,
+  available: true,
+  mcpServers: [
+    {
+      id: 'figma',
+      name: 'Figma MCP',
+      source: 'user',
+      transport: 'http',
+    },
+  ],
+  skills: [
+    {
+      id: 'design-audit',
+      name: 'Design Audit',
+      source: 'user',
+      description: 'Review interface quality.',
+    },
+  ],
+};
+
 function renderSettingsDialog(
   initial: Partial<AppConfig> = {},
   options: {
@@ -1815,6 +1837,170 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   });
 
+  it('renders read-only inventory for the selected Claude Code agent', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/agent-inventory/claude') {
+        return {
+          ok: true,
+          json: async () => claudeInventory,
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ supported: false, available: false, mcpServers: [], skills: [] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      {
+        agents: [
+          {
+            id: 'claude',
+            name: 'Claude Code',
+            bin: 'claude',
+            available: true,
+            version: '2.1.143',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+          availableAgents[0]!,
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/agent-inventory/claude');
+    });
+    expect(screen.getByText('Installed in Claude Code')).toBeTruthy();
+    expect(screen.getByText('MCP servers (1)')).toBeTruthy();
+    expect(screen.getByText('Skills (1)')).toBeTruthy();
+    expect(screen.getByText('Figma MCP')).toBeTruthy();
+    expect(screen.getByText('Design Audit')).toBeTruthy();
+    expect(screen.getByText('User')).toBeTruthy();
+  });
+
+  it('clears stale CLI inventory while a refresh is pending', async () => {
+    const refresh = deferred<{
+      ok: boolean;
+      json: () => Promise<typeof claudeInventory>;
+    }>();
+    let nextFetch: Promise<{
+      ok: boolean;
+      json: () => Promise<typeof claudeInventory>;
+    }> | null = null;
+    const fetchMock = vi.fn(() => {
+      if (nextFetch) {
+        const response = nextFetch;
+        nextFetch = null;
+        return response;
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => claudeInventory,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      {
+        agents: [
+          {
+            id: 'claude',
+            name: 'Claude Code',
+            bin: 'claude',
+            available: true,
+            version: '2.1.143',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Figma MCP')).toBeTruthy();
+    });
+    const fetchesBeforeRefresh = fetchMock.mock.calls.length;
+
+    nextFetch = refresh.promise;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(fetchesBeforeRefresh);
+    });
+    expect(screen.getByText(en['settings.agentInventoryLoading'])).toBeTruthy();
+    expect(screen.queryByText('Figma MCP')).toBeNull();
+
+    refresh.resolve({
+      ok: true,
+      json: async () => claudeInventory,
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Figma MCP')).toBeTruthy();
+    });
+  });
+
+  it('shows the selected CLI inventory unsupported state when no provider exists yet', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        agentId: 'codex',
+        supported: false,
+        available: false,
+        mcpServers: [],
+        skills: [],
+        reason: 'unsupported_agent',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ mode: 'daemon', agentId: 'codex' });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/agent-inventory/codex');
+    });
+    expect(screen.getByText(/Inventory detection for Codex CLI is not available yet/i)).toBeTruthy();
+  });
+
+  it('translates unavailable inventory reasons instead of rendering daemon messages', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        agentId: 'claude',
+        supported: true,
+        available: false,
+        mcpServers: [],
+        skills: [],
+        reason: 'config_not_detected',
+        message: 'backend english should not leak',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      {
+        agents: [
+          {
+            id: 'claude',
+            name: 'Claude Code',
+            bin: 'claude',
+            available: true,
+            version: '2.1.143',
+            models: [{ id: 'default', label: 'Default' }],
+          },
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/agent-inventory/claude');
+    });
+    expect(screen.getByText('Claude Code config was not detected.')).toBeTruthy();
+    expect(screen.queryByText('backend english should not leak')).toBeNull();
+  });
+
   it('filters long Local CLI model lists in Settings without hiding the current selection', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex', agentModels: { codex: { model: 'gpt-4.1-mini' } } },
@@ -3136,15 +3322,16 @@ describe('SettingsDialog MCP server interactions', () => {
     nodeExists: true,
     buildHint: null,
   };
-
   let fetchMock: ReturnType<typeof vi.fn>;
   let writeTextMock: ReturnType<typeof vi.fn>;
   let originalClipboard: PropertyDescriptor | undefined;
 
   beforeEach(() => {
-    fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => installInfo,
+    fetchMock = vi.fn().mockImplementation(async () => {
+      return {
+        ok: true,
+        json: async () => installInfo,
+      };
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -3238,7 +3425,16 @@ describe('SettingsDialog MCP server interactions', () => {
   });
 
   it('shows a daemon error state when install paths cannot be resolved', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('network down'));
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/mcp/install-info') {
+        throw new Error('network down');
+      }
+      return {
+        ok: true,
+        json: async () => installInfo,
+      };
+    });
 
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
