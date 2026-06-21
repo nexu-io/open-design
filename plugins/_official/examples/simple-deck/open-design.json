@@ -24,7 +24,7 @@
     "en": "Simple Deck"
   },
   "version": "0.1.1",
-  "description": "Single-file horizontal-swipe HTML deck. Built by copying the seed\n`assets/template.html` (which carries the proven 5-rule iframe nav script)\nand pasting slide layouts from `references/layouts.md`. Pitch decks,\nproduct overviews, study material — when you don't need the magazine\naesthetic of `magazine-web-ppt`.",
+  "description": "Single-file horizontal-swipe HTML deck. Built by copying the seed `assets/template.html` (which carries the proven 5-rule iframe nav script) and pasting slide layouts from `references/layouts.md`. Pitch decks, product overviews, study material — when you don't need the magazine aesthetic of `magazine-web-ppt`.",
   "description_i18n": {
     "zh-CN": "单文件横向滑动 HTML 幻灯片。复制种子文件 assets/template.html（内含经过验证的 5 行 iframe 导航脚本）并粘贴 references/layouts.md 中的幻灯片布局即可。适用于路演、产品介绍、学习资料等场景——当你不需要 magazine-web-ppt 的杂志风格时。",
     "zh-TW": "單檔案橫向滑動 HTML 投影片。複製種子檔案 assets/template.html（內含經過驗證的 5 行 iframe 導航腳本）並貼上 references/layouts.md 中的投影片版面配置即可。適用於提案簡報、產品概覽、學習教材等場景——當你不需要 magazine-web-ppt 的雜誌風格時。",
@@ -43,7 +43,7 @@
     "ar": "عرض تقديمي HTML بالتمرير الأفقي في ملف واحد. يتم إنشاؤه بنسخ assets/template.html (الذي يحتوي على سكريبت التنقل iframe المُثبت من 5 أسطر) ولصق تخطيطات الشرائح من references/layouts.md. لعروض الأعمال والمنتجات والمواد الدراسية — عندما لا تحتاج إلى جمالية المجلة من magazine-web-ppt.",
     "tr": "Tek dosyalı yatay kaydırmalı HTML sunumu. assets/template.html dosyasını (kanıtlanmış 5 satırlık iframe navigasyon scripti içerir) kopyalayarak ve references/layouts.md'den slayt düzenlerini yapıştırarak oluşturulur. Pitch deck'ler, ürün tanıtımları, çalışma materyalleri için — magazine-web-ppt'nin dergi estetiğine ihtiyacınız olmadığında.",
     "uk": "Однофайлова HTML-презентація з горизонтальним свайпом. Створюється копіюванням assets/template.html (з перевіреним 5-рядковим скриптом навігації iframe) та вставкою макетів слайдів із references/layouts.md. Для пітчів, оглядів продуктів, навчальних матеріалів — коли не потрібна журнальна естетика magazine-web-ppt.",
-    "en": "Single-file horizontal-swipe HTML deck. Built by copying the seed\n`assets/template.html` (which carries the proven 5-rule iframe nav script)\nand pasting slide layouts from `references/layouts.md`. Pitch decks,\nproduct overviews, study material — when you don't need the magazine\naesthetic of `magazine-web-ppt`."
+    "en": "Single-file horizontal-swipe HTML deck. Built by copying the seed `assets/template.html` (which carries the proven 5-rule iframe nav script) and pasting slide layouts from `references/layouts.md`. Pitch decks, product overviews, study material — when you don't need the magazine aesthetic of `magazine-web-ppt`."
   },
   "license": "MIT",
   "author": {

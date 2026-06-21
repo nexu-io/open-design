@@ -1,7 +1,7 @@
 import http from 'node:http';
 import express from 'express';
 import { describe, expect, it } from 'vitest';
-import { registerMediaRoutes } from '../src/media-routes.js';
+import { registerMediaRoutes } from '../src/routes/media.js';
 import {
   buildWindowsFolderDialogCommand,
   classifyNativeFolderDialogResult,

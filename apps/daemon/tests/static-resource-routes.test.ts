@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
 
 import { isLocalSameOrigin } from '../src/origin-validation.js';
-import { listDesignSystems } from '../src/design-systems.js';
+import { listDesignSystems } from '../src/design-systems/index.js';
 import { registerStaticResourceRoutes } from '../src/routes/static-resource.js';
 
 describe('static resource mutation routes', () => {
@@ -41,6 +41,7 @@ describe('static resource mutation routes', () => {
           paths: {
             ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
+            CRAFT_DIR: path.join(tempRoot, 'craft'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             OD_BIN: path.join(tempRoot, 'od'),
@@ -204,6 +205,7 @@ describe('design system import catalog lookup', () => {
           paths: {
             ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
+            CRAFT_DIR: path.join(tempRoot, 'craft'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             OD_BIN: path.join(tempRoot, 'od'),

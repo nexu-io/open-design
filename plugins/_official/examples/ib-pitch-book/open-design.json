@@ -24,7 +24,7 @@
     "en": "Ib Pitch Book"
   },
   "version": "0.1.0",
-  "description": "Investment-banking pitch book for strategic alternatives — trading comps,\nprecedent transactions, valuation football field, DCF sensitivity,\nstrategic-options matrix, process recommendation. Built by adapting\n`assets/template.html` so IB-specific chrome, disclosure bands, and source\nlabels are preserved. Use for Board / sell-side discussion materials. Not a\nVC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from\nAnthropic financial-services Pitch Agent (Apache-2.0).",
+  "description": "Investment-banking pitch book for strategic alternatives — trading comps, precedent transactions, valuation football field, DCF sensitivity, strategic-options matrix, process recommendation. Built by adapting `assets/template.html` so IB-specific chrome, disclosure bands, and source labels are preserved. Use for Board / sell-side discussion materials. Not a VC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from Anthropic financial-services Pitch Agent (Apache-2.0).",
   "description_i18n": {
     "zh-CN": "投资银行战略方案路演材料，包含可比公司分析、先例交易、估值区间、DCF敏感性分析、战略选项矩阵和流程建议。基于 assets/template.html 构建，保留投行专用格式、披露条带和数据来源标签。适用于董事会和卖方讨论材料。",
     "zh-TW": "投資銀行策略方案簡報手冊，包含可比公司分析、先例交易、估值區間、DCF敏感性分析、策略選項矩陣和流程建議。基於 assets/template.html 構建，保留投行專用格式、披露條帶和資料來源標籤。適用於董事會和賣方討論材料。",
@@ -43,7 +43,7 @@
     "ar": "كتيب عرض للخدمات المصرفية الاستثمارية للبدائل الاستراتيجية مع مقارنات التداول والمعاملات السابقة وملعب التقييم وحساسية DCF ومصفوفة الخيارات الاستراتيجية وتوصيات العملية. مبني على assets/template.html بتنسيق IB وأشرطة الإفصاح وتسميات المصدر. لمواد مجلس الإدارة وجانب البيع.",
     "tr": "Stratejik alternatifler için yatırım bankacılığı sunum kitabı. Trading karşılaştırmaları, emsal işlemler, değerleme football field, DCF duyarlılık analizi, stratejik seçenekler matrisi ve süreç önerisi içerir. assets/template.html tabanlı IB formatı, açıklama bantları ve kaynak etiketleriyle. Yönetim kurulu ve satış tarafı materyalleri için.",
     "uk": "Пітчбук інвестиційного банку для стратегічних альтернатив з торговими порівняннями, прецедентними угодами, football field оцінки, чутливістю DCF, матрицею стратегічних опцій та рекомендаціями щодо процесу. На основі assets/template.html з форматом IB, смугами розкриття та мітками джерел. Для матеріалів ради директорів та sell-side.",
-    "en": "Investment-banking pitch book for strategic alternatives — trading comps,\nprecedent transactions, valuation football field, DCF sensitivity,\nstrategic-options matrix, process recommendation. Built by adapting\n`assets/template.html` so IB-specific chrome, disclosure bands, and source\nlabels are preserved. Use for Board / sell-side discussion materials. Not a\nVC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from\nAnthropic financial-services Pitch Agent (Apache-2.0)."
+    "en": "Investment-banking pitch book for strategic alternatives — trading comps, precedent transactions, valuation football field, DCF sensitivity, strategic-options matrix, process recommendation. Built by adapting `assets/template.html` so IB-specific chrome, disclosure bands, and source labels are preserved. Use for Board / sell-side discussion materials. Not a VC fundraising deck (see html-ppt-pitch-deck). Workflow adapted from Anthropic financial-services Pitch Agent (Apache-2.0)."
   },
   "license": "MIT",
   "author": {

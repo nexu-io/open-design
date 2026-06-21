@@ -24,7 +24,7 @@
     "en": "Mobile App"
   },
   "version": "0.1.0",
-  "description": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame\non the page. Built by copying the seed `assets/template.html` and pasting\none screen archetype from `references/layouts.md`. Use when the brief asks\nfor \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\".",
+  "description": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame on the page. Built by copying the seed `assets/template.html` and pasting one screen archetype from `references/layouts.md`. Use when the brief asks for \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\".",
   "description_i18n": {
     "zh-CN": "在页面中渲染于像素级精确的 iPhone 15 Pro 框架内的移动应用屏幕。通过复制种子文件 assets/template.html 并粘贴 references/layouts.md 中的一个屏幕原型来构建。当需求提到《移动应用》、《iOS 应用》、《Android 应用》、《手机屏幕》或《应用 UI》时使用。",
     "zh-TW": "在頁面中渲染於像素級精確的 iPhone 15 Pro 框架內的行動應用程式畫面。透過複製種子檔案 assets/template.html 並貼上 references/layouts.md 中的一個畫面原型來建構。當需求提到「行動應用程式」、「iOS 應用程式」、「Android 應用程式」、「手機畫面」或「應用程式 UI」時使用。",
@@ -43,7 +43,7 @@
     "ar": "شاشة تطبيق محمول معروضة داخل إطار iPhone 15 Pro دقيق بالبكسل على الصفحة. يتم إنشاؤها بنسخ ملف البذرة assets/template.html ولصق نموذج شاشة من references/layouts.md. استخدمها عندما يطلب الموجز 'تطبيق محمول' أو 'تطبيق iOS' أو 'تطبيق Android' أو 'شاشة هاتف' أو 'واجهة تطبيق'.",
     "tr": "Sayfada piksel hassasiyetinde bir iPhone 15 Pro çerçevesi içinde oluşturulmuş mobil uygulama ekranı. assets/template.html tohum dosyası kopyalanıp references/layouts.md dosyasından bir ekran arketipi yapıştırılarak oluşturulur. Brief'te 'mobil uygulama', 'iOS uygulaması', 'Android uygulaması', 'telefon ekranı' veya 'uygulama UI' istendiğinde kullanın.",
     "uk": "Екран мобільного додатка, відрендерений у попіксельно точній рамці iPhone 15 Pro на сторінці. Створюється копіюванням вихідного файлу assets/template.html та вставкою одного архетипу екрану з references/layouts.md. Використовуйте, коли у брифі згадується 'мобільний додаток', 'iOS додаток', 'Android додаток', 'екран телефону' або 'UI додатка'.",
-    "en": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame\non the page. Built by copying the seed `assets/template.html` and pasting\none screen archetype from `references/layouts.md`. Use when the brief asks\nfor \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\"."
+    "en": "A mobile-app screen rendered inside a pixel-accurate iPhone 15 Pro frame on the page. Built by copying the seed `assets/template.html` and pasting one screen archetype from `references/layouts.md`. Use when the brief asks for \"mobile app\", \"iOS app\", \"Android app\", \"phone screen\", or \"app UI\"."
   },
   "license": "MIT",
   "author": {

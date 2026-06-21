@@ -422,6 +422,69 @@ describe('Langfuse message finalization gate', () => {
     );
   });
 
+  it('falls back to the run analytics context when final message headers are missing', async () => {
+    const run = {
+      id: 'run-accepted-headerless-finalize',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+      analyticsContext: {
+        deviceId: 'device-from-run',
+        sessionId: 'session-from-run',
+        clientType: 'desktop',
+        locale: 'zh-CN',
+        requestId: 'request-from-run',
+      },
+    };
+    const capture = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        context: run.analyticsContext,
+        insertId: 'run-accepted-headerless-finalize-langfuse-report-final_message-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted-headerless-finalize',
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'final_message',
+        }),
+      }),
+    );
+  });
+
   it('captures skipped Langfuse reporting when a finalized message references a missing run', () => {
     const capture = vi.fn();
     const reporter = createFinalizedMessageTelemetryReporter({

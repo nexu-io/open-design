@@ -4,7 +4,7 @@
 >
 > ⚡ **Open Design AMR (Agentic Model Router) — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [AMR 사용해 보기](https://open-design.ai/amr/)
 >
-> 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4).
+> 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/9ptkbbqRu).
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
@@ -14,14 +14,14 @@
   <a href="https://open-design.ai/">웹사이트</a> ·
   <a href="https://open-design.ai/">다운로드</a> ·
   <a href="https://open-design.ai/amr/">Model Router</a> ·
-  <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
+  <a href="https://discord.gg/9ptkbbqRu">Discord</a> ·
   <a href="https://x.com/nexudotio">@nexudotio 팔로우</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
-  <a href="https://discord.gg/qhbcCH8Am4"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="https://discord.gg/9ptkbbqRu"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
   <a href="QUICKSTART.ko.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
 </p>
 
@@ -326,6 +326,12 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+### 🚀 Sealos에 배포
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store 템플릿은 게시된 Open Design Docker 이미지를 영구 워크스페이스 스토리지 및 공개 프록시의 Basic Auth와 함께 실행합니다. 사용자 지정 공개 또는 공유 Docker 배포에서는 [`deploy/README.md`](../../deploy/README.md#local-compose)의 리버스 프록시와 `OPEN_DESIGN_ALLOWED_ORIGINS` 안내를 따르세요.
+
 ### 🧑‍💻 소스에서 실행
 
 ```bash
@@ -588,7 +594,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 모든 채널 뒤에는 실제 사람이 있습니다.
 
-- 💬 **Discord** — 매일의 대화, 플러그인 공유, 질문 → [**discord.gg/qhbcCH8Am4**](https://discord.gg/qhbcCH8Am4)
+- 💬 **Discord** — 매일의 대화, 플러그인 공유, 질문 → [**discord.gg/9ptkbbqRu**](https://discord.gg/9ptkbbqRu)
 - 🐦 **X / Twitter** — 릴리스 노트, 마일스톤, 비하인드 → [**@nexudotio**](https://x.com/nexudotio)
 - 🗣️ **GitHub Discussions** — 깊이 있는 Q&A, RFC, "당신의 작업을 보여주세요" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
 - 🐛 **GitHub Issues** — 버그 리포트, 기능 요청 → [**Issues**](https://github.com/nexu-io/open-design/issues)
@@ -638,7 +644,7 @@ gh pr create --fill
 
 ### 🏅 Open Design Fellow 프로그램
 
-우리는 전 세계에서 **Open Design Fellow**를 모집하고 있습니다 — Fellow는 핵심 팀과 함께 제품을 빚어내고, 자신의 지역에서 Open Design를 공식적으로 대표하며, 지역 커뮤니티를 키웁니다. 여기에는 자금 지원($1,000 / MR), 무료 LLM 크레딧, 직통 리뷰 트랙이 뒷받침됩니다. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/qhbcCH8Am4)의 공지.
+우리는 전 세계에서 **Open Design Fellow**를 모집하고 있습니다 — Fellow는 핵심 팀과 함께 제품을 빚어내고, 자신의 지역에서 Open Design를 공식적으로 대표하며, 지역 커뮤니티를 키웁니다. 여기에는 자금 지원($1,000 / MR), 무료 LLM 크레딧, 직통 리뷰 트랙이 뒷받침됩니다. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/9ptkbbqRu)의 공지.
 
 ---
 

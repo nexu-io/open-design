@@ -52,7 +52,11 @@ export {
   isAllowedChildWindowUrl,
   isAllowedEmbeddedBrowserUrl,
   isHttpUrl,
+  registerSplashStageTracking,
   resolveDesktopStatusUrl,
+  setSplashStage,
+  type SplashBootStage,
+  type SplashStageSurface,
 } from "./runtime.js";
 
 // Re-export the path-validation helpers for the same reason (#974).
@@ -192,6 +196,27 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
+// Resolve the daemon base URL the same way app-config reads/writes do: an
+// explicit daemon URL, else the web URL (which proxies `/api/*` to the daemon),
+// else sidecar web discovery. Shared by app-config menu actions and the
+// diagnostics export so they all target the same daemon. Throws when none is
+// available.
+function resolveDaemonBaseUrl(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl">,
+): () => Promise<string> {
+  return async () => {
+    const baseUrl =
+      (await options.discoverDaemonUrl?.()) ??
+      (await options.discoverWebUrl?.()) ??
+      (await createWebDiscovery(runtime)());
+    if (!baseUrl) {
+      throw new Error("daemon URL is unavailable");
+    }
+    return baseUrl;
+  };
+}
+
 export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
   if (typeof profile !== "string") return "prod";
   const trimmed = profile.trim();
@@ -309,16 +334,7 @@ function installDesktopMenu(
     dialog.showErrorBox(message, detail);
   };
 
-  const discoverAppConfigBaseUrl = async (): Promise<string> => {
-    const baseUrl =
-      (await options.discoverDaemonUrl?.()) ??
-      (await options.discoverWebUrl?.()) ??
-      (await createWebDiscovery(runtime)());
-    if (!baseUrl) {
-      throw new Error("daemon URL is unavailable");
-    }
-    return baseUrl;
-  };
+  const discoverAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
 
   const readCurrentAmrProfile = async (): Promise<AmrEnvironmentProfile> => {
     const baseUrl = await discoverAppConfigBaseUrl();
@@ -352,7 +368,10 @@ function installDesktopMenu(
 
   const exportDiagnostics = () => {
     const focused = BrowserWindow.getFocusedWindow();
-    void exportDiagnosticsToFile(runtime, focused).catch((error: unknown) => {
+    void exportDiagnosticsToFile(
+      { discoverDaemonBaseUrl: discoverAppConfigBaseUrl },
+      focused,
+    ).catch((error: unknown) => {
       console.error("desktop diagnostics export from menu failed", error);
     });
   };
@@ -453,7 +472,7 @@ function installDesktopMenu(
           {
             label: "Join Discord",
             click() {
-              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
+              void shell.openExternal("https://discord.gg/9ptkbbqRu");
             },
           },
           { type: "separator" },
@@ -604,10 +623,10 @@ export async function runDesktopMain(
     },
     { openPath: (path) => shell.openPath(path) },
   );
-  // Resolve the namespace root the same way the diagnostics export does
-  // (apps/desktop/src/main/diagnostics.ts). In packaged builds `runtime.base`
-  // is `<namespaceRoot>/runtime`, so re-appending the namespace via
-  // `resolveNamespaceRoot` would write renderer.log to a phantom
+  // Resolve the namespace root the same way the daemon diagnostics export does
+  // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged
+  // builds `runtime.base` is `<namespaceRoot>/runtime`, so re-appending the
+  // namespace via `resolveNamespaceRoot` would write renderer.log to a phantom
   // `<namespaceRoot>/runtime/<namespace>/logs/desktop` dir that the export
   // reader never looks in. Keeping both sides on `resolveRuntimeNamespaceRoot`
   // co-locates renderer.log with the desktop log dir AND keeps it captured.
@@ -668,7 +687,9 @@ export async function runDesktopMain(
   });
   options.onDesktopReady?.({ show: () => desktop?.show() });
   disposeMenu = installDesktopMenu(runtime, options);
-  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc(runtime);
+  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
+    discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
+  });
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,
     backoffMaxMs: updater.config.checkBackoffMaxMs,

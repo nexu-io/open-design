@@ -24,7 +24,7 @@
     "en": "Weekly Update"
   },
   "version": "0.1.0",
-  "description": "Single-file horizontal-swipe slide deck for a weekly team update —\nshipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the\nbrief mentions \"weekly update\", \"team update slides\", \"weekly status\",\n\"周报演示\".",
+  "description": "Single-file horizontal-swipe slide deck for a weekly team update — shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the brief mentions \"weekly update\", \"team update slides\", \"weekly status\", \"周报演示\".",
   "description_i18n": {
     "zh-CN": "单文件横向滑动幻灯片，用于团队周报展示——已完成、进行中、受阻、数据指标、需求。6-8 页幻灯片。适用于需要「周报」「团队汇报」「周报演示」等场景。",
     "zh-TW": "單檔案橫向滑動簡報，用於團隊週報呈現——已完成、進行中、受阻、數據指標、需求。6-8 頁投影片。適用於需要「週報」「團隊匯報」「週報演示」等場景。",
@@ -43,7 +43,7 @@
     "ar": "عرض تقديمي أفقي بملف واحد للتحديث الأسبوعي للفريق – تم الشحن، قيد التنفيذ، محظور، المقاييس، الطلبات. 6-8 شرائح. للتقارير والتحديثات الأسبوعية.",
     "tr": "Takım haftalık güncellemesi için tek dosyalı yatay kaydırmalı slayt destesi – teslim edilen, devam eden, engellenen, metrikler, talepler. 6–8 slayt. Haftalık durum ve güncelleme raporları için.",
     "uk": "Презентація з горизонтальним гортанням в одному файлі для тижневого звіту команди – відвантажено, в роботі, заблоковано, метрики, запити. 6–8 слайдів. Для тижневих статусів та оновлень.",
-    "en": "Single-file horizontal-swipe slide deck for a weekly team update —\nshipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the\nbrief mentions \"weekly update\", \"team update slides\", \"weekly status\",\n\"周报演示\"."
+    "en": "Single-file horizontal-swipe slide deck for a weekly team update — shipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the brief mentions \"weekly update\", \"team update slides\", \"weekly status\", \"周报演示\"."
   },
   "license": "MIT",
   "author": {

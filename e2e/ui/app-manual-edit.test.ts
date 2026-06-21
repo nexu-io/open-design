@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
@@ -7,7 +7,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.long });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -164,12 +164,22 @@ async function selectPreviewElementThroughBridge(
   section: string,
 ) {
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await frame.locator(selector).click();
+  // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
+  // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
+  // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
+  // click. That occasionally swallows the first click, which then hangs on
+  // Playwright's post-click stability check until the 30s test timeout. Retry the
+  // click until the element is actually marked selected, with a short per-attempt
+  // timeout so a single dropped click rides through the settle window instead of
+  // failing the whole run.
+  await expect(async () => {
+    await frame.locator(selector).click({ timeout: 5_000 });
+    await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
-  await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
 }
 
-test('preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
+test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
   await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', manualEditHtml());
@@ -194,8 +204,10 @@ test('preview toolbar keeps share, download, comment, and zoom actions reachable
   await expect(downloadMenu).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
-  await expect(downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ })).toBeVisible();
-  await page.keyboard.press('Escape');
+  const htmlDownload = page.waitForEvent('download');
+  await downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  const download = await htmlDownload;
+  expect(download.suggestedFilename()).toMatch(/toolbar-preview.*\.html$/i);
   await expect(downloadMenu).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Comment$/ }).click();
@@ -437,6 +449,69 @@ test('[P0] @critical HTML preview stays rendered after switching from Preview to
   ).toBeVisible();
 });
 
+test('[P0] @critical edited HTML file restores selected tab, source, and preview after reload', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'File edit restore smoke');
+  await seedHtmlArtifact(page, projectId, 'restore-edit.html', manualEditHtml());
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'secondary-preview.html',
+    '<!doctype html><html><body><main><h1>Secondary Preview</h1></main></body></html>',
+  );
+  await page.goto(`/projects/${projectId}/files/secondary-preview.html`);
+  await openDesignFile(page, 'secondary-preview.html');
+  await expect(tabBySuffix(page, 'secondary-preview.html')).toHaveAttribute('aria-selected', 'true');
+
+  await page
+    .getByRole('tablist', { name: 'Design Files' })
+    .getByRole('tab', { name: /^Design Files$/ })
+    .click();
+  await openDesignFile(page, 'restore-edit.html');
+
+  const restoreTab = tabBySuffix(page, 'restore-edit.html');
+  const secondaryTab = tabBySuffix(page, 'secondary-preview.html');
+  await expect(restoreTab).toBeVisible();
+  await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
+  await expect(secondaryTab).toBeVisible();
+  await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
+  const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
+  await expect(fontSizeInput).toBeVisible();
+  await fontSizeInput.fill('52');
+  await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#2563eb');
+  await inspectSaveButton(page).click({ force: true });
+  await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+  await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
+  await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
+
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  const restoredTab = tabBySuffix(page, 'restore-edit.html');
+  await expect(restoredTab).toBeVisible();
+  await expect(restoredTab).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+
+  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }).click();
+  await expect(artifactPreview(page)).toBeVisible();
+  const restoredFrame = artifactPreviewFrame(page);
+  const restoredTitle = restoredFrame.getByRole('heading', { name: 'Original Hero' });
+  await expect(restoredTitle).toBeVisible();
+  await expect.poll(async () => restoredTitle.evaluate((el) => getComputedStyle(el).fontSize)).toBe('52px');
+  await expect(restoredTitle).toHaveCSS('color', 'rgb(37, 99, 235)');
+});
+
 async function routeMockAgents(page: Page) {
   await routeAgents(page, [
     {
@@ -600,18 +675,11 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  try {
-    await preview.waitFor({ state: 'visible', timeout: 5_000 });
-    return;
-  } catch {
-    // Not yet visible; try opening via tab or file list
-  }
-
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
   let tabFound = true;
   try {
-    await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
+    await fileTabButton.waitFor({ state: 'visible', timeout: 5_000 });
   } catch {
     tabFound = false;
   }
@@ -662,6 +730,19 @@ function inspectorSection(page: Page, title: string) {
 
 function inspectSaveButton(page: Page) {
   return page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ });
+}
+
+function tabBySuffix(page: Page, name: string) {
+  return page
+    .getByRole('tab')
+    .filter({
+      hasText: new RegExp(`${escapeRegExp(name)}$`),
+    })
+    .first();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function manualEditHtml(): string {

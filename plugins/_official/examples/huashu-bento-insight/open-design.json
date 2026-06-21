@@ -1,0 +1,148 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-huashu-bento-insight",
+  "title": "Bento Insight Grid",
+  "title_i18n": {
+    "en": "Bento Insight Grid",
+    "zh-CN": "便当格洞见"
+  },
+  "version": "1.0.0",
+  "description": "Apple Keynote / QBR-school bento decks: light-grey #F5F5F7 and cream pages, unequal-height rounded cards with 1px hairlines and micro shadows, one insight per card (giant Geist Mono tabular numeral, linear inline-SVG icon, or SVG sparkline), oversized display headlines with hard weight contrast, Inter/Geist typography on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design design-styles.md bento-grid spec (Bento便当格模块网格, neutral school, 95% fidelity), generated from the spec into a full multi-section deck.",
+  "description_i18n": {
+    "en": "Apple Keynote / QBR-school bento decks: light-grey #F5F5F7 and cream pages, unequal-height rounded cards with 1px hairlines and micro shadows, one insight per card (giant Geist Mono tabular numeral, linear inline-SVG icon, or SVG sparkline), oversized display headlines with hard weight contrast, Inter/Geist typography on a fixed 1920×1080 canvas. Based on https://github.com/alchaincyf/huashu-design design-styles.md bento-grid spec (Bento便当格模块网格, neutral school, 95% fidelity), generated from the spec into a full multi-section deck.",
+    "zh-CN": "Apple Keynote/QBR 流派便当格幻灯片：#F5F5F7 浅灰与奶白底、不等高圆角卡片网格（1px 细描边 + 微阴影）、每卡一个洞见（巨型 Geist Mono 等宽数字 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题强字重对比、Inter/Geist 字体、1920×1080 固定画布、零外部 JS 依赖。基于花叔 huashu-design design-styles.md「Bento便当格模块网格」规格（中性派 · 还原95%）按 spec 生成完整多章节 deck。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "花叔 (alchaincyf)",
+    "url": "https://github.com/alchaincyf"
+  },
+  "homepage": "https://github.com/alchaincyf/huashu-design",
+  "plugin": {
+    "repo": "https://github.com/alchaincyf/huashu-design"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "bento",
+    "keynote",
+    "qbr",
+    "data-report",
+    "minimal",
+    "huashu"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "product",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a bento-grid {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}, using the Bento Insight Grid system (based on the huashu-design design-styles.md Bento Grid spec — Apple Keynote Bento era / MBB Big-Type decks / Stripe metric-card matrices / Pitch.com QBR lineage): a fixed 1920×1080 canvas auto-scaled to the viewport; pages alternating light-grey #F5F5F7 and warm cream #FBFAF7 backgrounds; white/tinted/dark cards with 24–32px border-radius, 1px #E8E8ED hairline, and a micro two-layer shadow; the Inter/Geist + Geist Mono stack from a single Google Fonts @import (the only external reference — no other CDN, no Chart.js, no icon fonts, no emoji); exactly three accents — brand #0071E3 (re-themeable) plus green #1FA958 for positive deltas and orange #F08A24 for caution, never a fourth. Every bento page is an unequal-height CSS grid (6 columns × 1.18fr/1fr rows, mixed spans, one tall span-2 hero card — at most 1 dark #1D1D1F card and 2 tinted cards per page, ≤ 7 cards total); every card holds exactly one insight: a 14px/600 muted label plus one protagonist — a tabular-nums Geist Mono numeral with muted .unit span and rounded ↑/↓ delta pill, a 52px tinted chip with a 1.8-stroke linear inline-SVG icon, or an inline-SVG sparkline (polyline + 14%-opacity area fill). Bar charts are pure CSS flex columns of rounded bars, current period in brand blue, history in #E4E4E9, mono values printed above. Headlines pair 800–900 weight spans with 300–400 thin spans in the same line; kickers are 14px uppercase mono with 3px tracking in brand color. Draw layouts from the locked enumeration: cover (cream, 130–150px display statement + mini KPI card strip) / agenda / master bento / one-insight (300–380px mono numeral, unit glyph in brand) / chart / feature-bento with icon chips / quote (brand SVG quote marks, key phrase in brand) / stats-2x2 / roadmap tracks / closing — use at least 5 distinct layouts across 8–11 pages. Build a single self-contained HTML file by copying example.html and replacing content only — keep its design tokens, grid skeletons, card anatomy, and navigation script (←/→/Space keys, #/N hash routing, click zones, counter pill) intact. Use the user's real numbers, never lorem ipsum or invented data; keep the orange caution treatment for negative metrics; Chinese copy uses 「」 quotes and idiomatic zh-CN; replace all fictional 澄流/ClearFlow demo content.",
+        "zh-CN": "用「便当格洞见」体系为 {{audience}} 做一套关于 {{topic}} 的 {{deckType}}（页数 {{slideCount}}）：1920×1080 固定画布、#F5F5F7 浅灰与奶白底交替、不等高圆角便当卡（1px 细描边 + 微阴影、每页至多 1 张深色卡 2 张浅彩卡）、每卡只装一个洞见（Geist Mono 等宽巨数 + 涨跌胶囊 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题粗细字重同行对比、品牌蓝 #0071E3 + 绿 #1FA958 + 橙 #F08A24 三色封顶，版式从封面/目录/便当主版/单洞见巨数/图表/功能便当/引语/2×2 指标/路线图/结尾枚举中至少取 5 种。从 example.html 复制出单文件、只换内容，保留 token、网格骨架、卡片解剖和导航脚本；用真实数据、负向指标保留橙色警示、替换全部「澄流 ClearFlow」演示内容。完整规格以英文版为准（follow the en query above）。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Bento Insight Grid",
+          "title_i18n": {
+            "en": "Bento Insight Grid",
+            "zh-CN": "便当格洞见"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "QBR / business review deck",
+          "product feature summary deck",
+          "sales results deck",
+          "town hall metrics deck",
+          "annual report deck"
+        ],
+        "default": "QBR / business review deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "你的主题，例如：2026 Q2 业务回顾",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "管理层 / 全员大会 / 客户高层",
+        "default": "leadership"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8 pages",
+          "9-10 pages",
+          "10-11 pages"
+        ],
+        "default": "9-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

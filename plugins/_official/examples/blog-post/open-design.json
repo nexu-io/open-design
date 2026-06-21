@@ -24,7 +24,7 @@
     "en": "Blog Post"
   },
   "version": "0.1.0",
-  "description": "A long-form article / blog post — masthead, hero image placeholder,\narticle body with figures and pull quotes, author byline, related posts.\nUse when the brief asks for \"blog\", \"article\", \"post\", \"essay\", or\n\"case study\".",
+  "description": "A long-form article / blog post — masthead, hero image placeholder, article body with figures and pull quotes, author byline, related posts. Use when the brief asks for \"blog\", \"article\", \"post\", \"essay\", or \"case study\".",
   "description_i18n": {
     "zh-CN": "长篇文章/博客——包含页眉、主图占位符、带插图和引用的正文、作者署名及相关文章推荐。适用于需求中包含'博客'、'文章'、'帖子'、'随笔'或'案例研究'等关键词时。",
     "zh-TW": "長篇文章/部落格——包含頁首、主圖佔位符、帶插圖和引言的正文、作者署名及相關文章推薦。適用於需求中包含'部落格'、'文章'、'貼文'、'隨筆'或'案例研究'等關鍵詞時。",
@@ -43,7 +43,7 @@
     "ar": "مقال طويل / منشور مدونة — يتضمن رأسًا، عنصر نائب لصورة بطولية، نص المقال مع الأشكال والاقتباسات البارزة، توقيع المؤلف، منشورات ذات صلة. استخدم عندما يطلب الموجز 'مدونة' أو 'مقال' أو 'منشور' أو 'مقالة' أو 'دراسة حالة'.",
     "tr": "Uzun makale / blog yazısı — başlık, hero görsel yer tutucu, şekiller ve alıntılarla makale içeriği, yazar imzası, ilgili yazılar içerir. Brief'te 'blog', 'makale', 'yazı', 'deneme' veya 'vaka çalışması' istendiğinde kullanın.",
     "uk": "Довга стаття / запис у блозі — з шапкою, заглушкою для головного зображення, текстом статті з ілюстраціями та цитатами, підписом автора, схожими публікаціями. Використовуйте для запитів зі словами 'блог', 'стаття', 'пост', 'есе' або 'кейс-стаді'.",
-    "en": "A long-form article / blog post — masthead, hero image placeholder,\narticle body with figures and pull quotes, author byline, related posts.\nUse when the brief asks for \"blog\", \"article\", \"post\", \"essay\", or\n\"case study\"."
+    "en": "A long-form article / blog post — masthead, hero image placeholder, article body with figures and pull quotes, author byline, related posts. Use when the brief asks for \"blog\", \"article\", \"post\", \"essay\", or \"case study\"."
   },
   "license": "MIT",
   "author": {

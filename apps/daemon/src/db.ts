@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
 import { migrateCritique } from './critique/persistence.js';
-import { migrateMediaTasks } from './media-tasks.js';
+import { migrateMediaTasks } from './media/tasks.js';
 import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;

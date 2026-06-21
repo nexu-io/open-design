@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
@@ -558,7 +558,10 @@ test('[P0] sending preview comments opens the refreshed follow-up artifact', asy
   expect(revisedFileName).not.toBe('');
   await page.goto(`/projects/${projectId}/files/${revisedFileName}`, { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/files/${revisedFileName.replace('.', '\\.')}$`));
+  const escapedRevisedFileName = revisedFileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/${projectId}(?:/conversations/[^/]+)?/files/${escapedRevisedFileName}$`),
+  );
   await expect(artifactPreview(page)).toBeVisible();
   await expectProjectFileToContain(page, projectId, revisedFileName, 'Revised headline');
   await expectProjectFileToContain(page, projectId, revisedFileName, 'Preview copy refreshed after comment send.');

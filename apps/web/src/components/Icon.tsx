@@ -44,6 +44,7 @@ export type IconName =
   | 'languages'
   | 'lightbulb'
   | 'link'
+  | 'log-out'
   | 'integrations-filled'
   | 'mic'
   | 'minus'
@@ -252,6 +253,14 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M15 3h6v6" />
           <path d="M10 14 21 3" />
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        </svg>
+      );
+    case 'log-out':
+      return (
+        <svg {...common}>
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <path d="m16 17 5-5-5-5" />
+          <path d="M21 12H9" />
         </svg>
       );
     case 'file':
