@@ -6044,7 +6044,7 @@ export async function startServer({
     paths: pathDeps,
     projects: { getProject: (id: string) => getProject(db, id) },
   });
-  const apiTokenStaticGuard = apiToken
+  const apiTokenStaticGuard = isApiTokenMiddlewareEnabled()
     ? (req, res, next) => {
         if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
         const auth = req.get('authorization') ?? '';
