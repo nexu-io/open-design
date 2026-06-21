@@ -1,9 +1,8 @@
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import type {
   DeploymentProviderConfigResponse,
   ProviderCredentialSource,
 } from '@open-design/contracts/api/providerCredential';
-import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import type { ConnectionTestProtocol, ParsedBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 const DEFAULT_LABEL = 'Provider orchestrator';
 
@@ -48,6 +47,19 @@ function optionalPositiveNumber(value: string | undefined): number | undefined {
   if (!raw) return undefined;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function validateDeploymentBaseUrl(baseUrl: string): { parsed?: ParsedBaseUrl; error?: string } {
+  let parsed: ParsedBaseUrl;
+  try {
+    parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
+  } catch {
+    return { error: 'Invalid baseUrl' };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { error: 'Only http/https allowed' };
+  }
+  return { parsed };
 }
 
 function invalidRunSessionDetail(env: NodeJS.ProcessEnv): string | null {
@@ -120,7 +132,7 @@ export function deploymentProviderConfig(
     };
   }
 
-  const validated = validateBaseUrl(baseUrl);
+  const validated = validateDeploymentBaseUrl(baseUrl);
   if (validated.error || !validated.parsed) {
     const host = displayHost(baseUrl);
     return {

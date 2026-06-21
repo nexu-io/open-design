@@ -248,6 +248,27 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  it('reports private-IP deployment provider gateways as available', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'http://10.0.0.5:8080/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_LABEL: 'Private gateway',
+    }, async () => {
+      const res = await realFetch(`${baseUrl}/api/provider-orchestrator/config`);
+      expect(res.status).toBe(200);
+      const body = await res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Private gateway',
+        kind: 'available',
+        displayHost: '10.0.0.5',
+      });
+      expect(JSON.stringify(body)).not.toContain('deployment-secret');
+    });
+  });
+
   it('reports invalid deployment provider run-session config as unavailable', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
