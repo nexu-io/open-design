@@ -36,7 +36,6 @@ export interface ByokDraftValidation {
 
 interface ValidateByokDraftOptions {
   requiresApiKey?: boolean;
-  requiresBaseUrl?: boolean;
   requireModel?: boolean;
   keyValidationBaseUrl?: string;
 }
@@ -124,7 +123,6 @@ export function validateByokDraft(
   options: ValidateByokDraftOptions = {},
 ): ByokDraftValidation {
   const requiresApiKey = options.requiresApiKey ?? true;
-  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   const requireModel = options.requireModel ?? true;
   const issues: ByokDraftIssue[] = [];
   const cleanedApiKey = cleanByokApiKey(config.apiKey);
@@ -157,7 +155,7 @@ export function validateByokDraft(
     if (keyIssue) issues.push(keyIssue);
   }
 
-  if (requiresBaseUrl && !baseUrl) {
+  if (!baseUrl) {
     issues.push({
       field: 'base_url',
       level: 'error',
@@ -165,7 +163,7 @@ export function validateByokDraft(
       message: 'Base URL is required.',
       action: 'focus_base_url',
     });
-  } else if (baseUrl && validateBaseUrl(baseUrl).error) {
+  } else if (validateBaseUrl(baseUrl).error) {
     issues.push({
       field: 'base_url',
       level: 'error',

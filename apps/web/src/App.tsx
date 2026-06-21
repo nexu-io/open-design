@@ -2181,7 +2181,6 @@ function AppInner() {
         agentsLoading={agentsLoading}
         config={config}
         providerModelsCache={providerModelsCache}
-        deploymentProviderConfig={deploymentProviderConfig}
         onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
         composioConfigLoading={composioConfigLoading}
@@ -2283,7 +2282,6 @@ function AppInner() {
           onDesignSystemsChanged={handleDesignSystemsChanged}
           onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
           providerModelsCache={providerModelsCache}
-          deploymentProviderConfig={deploymentProviderConfig}
           onProviderModelsCacheChange={setProviderModelsCache}
         />
       ) : null}

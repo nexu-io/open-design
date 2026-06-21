@@ -491,10 +491,10 @@ function printProviderHelp() {
   console.log(`Usage:
   od provider config [--json] [--daemon-url <url>]
 
-Inspects daemon-managed provider configuration. This is the CLI mirror of
-the Settings execution provider choice: it reports whether a deployment
-provider is available, which protocol it fronts, its display label/host,
-and the default model. Provider credentials are never printed.
+Inspects daemon-managed provider configuration. This mirrors the deployment
+provider status endpoint: it reports whether a deployment provider is available,
+which protocol it fronts, its display label/host, and the default model.
+Provider credentials are never printed.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.

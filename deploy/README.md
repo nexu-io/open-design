@@ -72,9 +72,9 @@ Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
 
 Self-host administrators can optionally configure an OpenAI-compatible provider
 gateway for the deployment. This keeps provider credentials server-side while
-letting users choose "Provider orchestrator" during onboarding or from Settings.
-The existing AMR, local CLI, and direct BYOK paths remain unchanged when these
-variables are unset.
+letting deployment-managed app configuration route provider calls without
+putting shared provider credentials in the browser. The existing AMR, local CLI,
+and direct BYOK paths remain unchanged when these variables are unset.
 
 Set both required values in `.env`:
 
@@ -107,8 +107,8 @@ provider metadata. The credential stays server-side.
 The daemon validates the configured base URL before provider egress and never
 returns the credential from `/api/provider-orchestrator/config` or `od provider
 config`. Model discovery, connection tests, OpenAI-compatible chat proxying, and
-finalize flows use the daemon-held credential when the saved configuration
-selects the deployment provider source.
+finalize flows use the daemon-held credential when the request selects
+`credentialSource: "deployment"`.
 
 Troubleshooting:
 
