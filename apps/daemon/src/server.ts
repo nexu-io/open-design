@@ -5063,6 +5063,9 @@ export async function startServer({
       }
     }, 30_000).unref();
 
+    const normalizeAddr = (/** @type {string|undefined} */ a) =>
+      typeof a === 'string' ? a.replace(/^::ffff:/i, '') : '';
+
     app.get('/api/auth/bootstrap-token', (req, res) => {
       const addr = req.socket?.remoteAddress;
       if (!isLoopbackPeerAddress(addr) && !isPrivateSubnetAddress(addr)) {
@@ -5071,7 +5074,7 @@ export async function startServer({
         });
       }
       const nonce = randomUUID();
-      bootstrapNonces.set(nonce, { createdAt: Date.now(), clientAddr: addr ?? '' });
+      bootstrapNonces.set(nonce, { createdAt: Date.now(), clientAddr: normalizeAddr(addr) });
       res.json({ nonce });
     });
 
@@ -5090,7 +5093,7 @@ export async function startServer({
         });
       }
       const entry = bootstrapNonces.get(nonce);
-      if (entry.clientAddr !== addr) {
+      if (entry.clientAddr !== normalizeAddr(addr)) {
         bootstrapNonces.delete(nonce);
         return res.status(401).json({
           error: { code: 'BOOTSTRAP_NONCE_BOUND', message: 'Bootstrap nonce bound to a different client address' },
