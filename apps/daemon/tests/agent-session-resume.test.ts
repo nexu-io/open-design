@@ -170,4 +170,75 @@ describe('isClaudeResumeFailure', () => {
     expect(isClaudeResumeFailure('rate limit exceeded')).toBe(false);
     expect(isClaudeResumeFailure('')).toBe(false);
   });
+
+  // Captured from the installed Claude Code CLI (v2.1.178) on a bogus
+  // `--resume <id>` with OD's exact stream-json flags. stderr carries the
+  // human string; stdout carries the structured result event. Locks the
+  // real-world shape as a regression guard (#4275).
+  const REAL_CLAUDE_RESUME_FAILURE_STDERR =
+    'No conversation found with session ID: 00000000-0000-0000-0000-000000000000';
+  const REAL_CLAUDE_RESUME_FAILURE_STDOUT =
+    '{"type":"result","subtype":"error_during_execution","duration_ms":0,'
+    + '"duration_api_ms":0,"is_error":true,"num_turns":0,"stop_reason":null,'
+    + '"session_id":"00000000-0000-0000-0000-000000000000","total_cost_usd":0,'
+    + '"errors":["No conversation found with session ID: 00000000-0000-0000-0000-000000000000"]}';
+
+  it('matches the real installed Claude CLI --resume failure output (#4275)', () => {
+    expect(
+      isClaudeResumeFailure(
+        `${REAL_CLAUDE_RESUME_FAILURE_STDERR}\n${REAL_CLAUDE_RESUME_FAILURE_STDOUT}`,
+      ),
+    ).toBe(true);
+  });
+
+  // #4275: the human-readable prose drifts across Claude builds, so a reworded
+  // failure ("...is unavailable" / "conversation ... not found") slips past all
+  // three legacy patterns. The stream-json result event shape is version-stable
+  // and must still flag the dead resume so the stored session id gets cleared.
+  it('detects a resume failure from the stream-json result event when the prose is reworded', () => {
+    const rewordedProse = 'Conversation 00000000-0000-0000-0000-000000000000 is unavailable';
+    // Sanity: the reworded prose alone misses every legacy pattern.
+    expect(isClaudeResumeFailure(rewordedProse)).toBe(false);
+
+    const rewordedResult = JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      duration_ms: 0,
+      duration_api_ms: 0,
+      is_error: true,
+      num_turns: 0,
+      session_id: '00000000-0000-0000-0000-000000000000',
+      errors: [rewordedProse],
+    });
+    expect(isClaudeResumeFailure(rewordedResult)).toBe(true);
+  });
+
+  // Guard against over-clearing: a transient in-turn failure (overload /
+  // network) spends real API time and produces at least one turn, and a
+  // successful run is not an error — neither must read as a dead resume, or a
+  // blip would drop a still-valid session.
+  it('does not treat an in-turn API failure or a successful run as a resume failure', () => {
+    const inTurnApiError = JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      duration_ms: 5200,
+      duration_api_ms: 5000,
+      is_error: true,
+      num_turns: 1,
+      session_id: 'live-session',
+      errors: ['Overloaded'],
+    });
+    expect(isClaudeResumeFailure(inTurnApiError)).toBe(false);
+
+    const success = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 4200,
+      duration_api_ms: 4000,
+      is_error: false,
+      num_turns: 2,
+      session_id: 'live-session',
+    });
+    expect(isClaudeResumeFailure(success)).toBe(false);
+  });
 });
